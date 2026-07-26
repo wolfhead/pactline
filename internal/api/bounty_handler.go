@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"time"
 
 	"bountyboard/internal/domain"
 	"bountyboard/internal/store"
@@ -131,4 +132,93 @@ func (h *bountyHandler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+type transitionRequest struct {
+	To            domain.Status `json:"to"`
+	Retrospective string        `json:"retrospective"`
+	PersonDays    *float64      `json:"person_days"`
+}
+
+// transition moves a bounty along the status graph and applies the side effects
+// tied to each edge. Authorisation depends on the target state: claiming is
+// governed by CanClaim, everything else by CanEdit or by being the claimer.
+func (h *bountyHandler) transition(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorBody{Error: "id is not a UUID"})
+		return
+	}
+	var req transitionRequest
+	if !decodeBody(w, r, &req) {
+		return
+	}
+
+	b, err := h.bounties.GetByID(r.Context(), id)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	me := CurrentUser(r)
+
+	if req.Retrospective != "" {
+		b.Retrospective = req.Retrospective
+	}
+	if req.PersonDays != nil {
+		b.PersonDays = req.PersonDays
+	}
+
+	if err := authorizeTransition(me, b, req.To); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if err := domain.ValidateTransition(b, req.To); err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	from := b.Status
+	applyTransitionEffects(&b, me, req.To)
+	b.Status = req.To
+
+	updated, err := h.bounties.Update(r.Context(), b)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	slog.Info("bounty transitioned",
+		"bounty_id", updated.ID, "from", from, "to", updated.Status,
+		"actor_id", me.ID, "person_days", updated.PersonDays)
+	writeJSON(w, http.StatusOK, updated)
+}
+
+func authorizeTransition(me domain.User, b domain.Bounty, to domain.Status) error {
+	if me.HasRole(domain.UserRoleSteward) {
+		return nil
+	}
+	if to == domain.StatusClaimed {
+		return domain.CanClaim(me, b)
+	}
+	isClaimer := b.ClaimedBy != nil && *b.ClaimedBy == me.ID
+	if domain.CanEdit(me, b) || isClaimer {
+		return nil
+	}
+	return domain.ErrForbidden
+}
+
+func applyTransitionEffects(b *domain.Bounty, me domain.User, to domain.Status) {
+	now := time.Now().UTC()
+	switch to {
+	case domain.StatusClaimed:
+		if b.ClaimedBy == nil {
+			claimer := me.ID
+			b.ClaimedBy = &claimer
+			b.ClaimedAt = &now
+		}
+	case domain.StatusOpen:
+		b.ClaimedBy = nil
+		b.ClaimedAt = nil
+	case domain.StatusCompleted, domain.StatusAbandoned:
+		b.CompletedAt = &now
+	}
 }

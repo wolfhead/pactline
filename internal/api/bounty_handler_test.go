@@ -23,6 +23,8 @@ const (
 	engCID = "00000000-0000-0000-0000-000000000003"
 )
 
+type httptestRecorder = httptest.ResponseRecorder
+
 func newTestServer(t *testing.T) http.Handler {
 	t.Helper()
 	dsn := os.Getenv("DATABASE_URL")

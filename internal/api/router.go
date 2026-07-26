@@ -18,6 +18,7 @@ func NewRouter(users *store.UserStore, bounties *store.BountyStore, credits *sto
 	mux.HandleFunc("POST /api/bounties", bh.create)
 	mux.HandleFunc("GET /api/bounties", bh.list)
 	mux.HandleFunc("GET /api/bounties/{id}", bh.get)
+	mux.HandleFunc("POST /api/bounties/{id}/transition", bh.transition)
 
 	return withIdentity(users, mux)
 }
