@@ -66,7 +66,12 @@ export default function Mine() {
     }
   }
 
-  const nameOf = (id?: string) => (id ? (users.find((u) => u.id === id)?.name ?? id) : '系统')
+  // C3: falls back to the generic '成员' label for a known-but-unresolved
+  // user id, never the raw UUID — a human-facing name must never be a bare
+  // id. Kept consistent with Portfolio.tsx and CreditPanel.tsx. The '系统'
+  // case is distinct: it means no id at all (a system-nominated credit has
+  // no nominator), not an unresolved one.
+  const nameOf = (id?: string) => (id ? (users.find((u) => u.id === id)?.name ?? '成员') : '系统')
 
   if (!me) return <p className="hint">加载中…</p>
 

@@ -4,6 +4,10 @@ import { apiGet, apiPost } from '../api/client'
 import CreditPanel from '../components/CreditPanel'
 import { STATUS_LABELS, type Bounty, type Status } from '../types'
 
+// C1: mirrors `allowedTransitions` in internal/domain/bounty.go. The two must
+// be changed together — this map exists only so the UI can grey out
+// impossible transitions before the round trip; the backend re-validates
+// every one of these via ValidateTransition regardless of what this map says.
 const NEXT_STATES: Record<Status, Status[]> = {
   DRAFT: ['OPEN', 'ABANDONED'],
   OPEN: ['DRAFT', 'CLAIMED', 'ABANDONED'],
@@ -20,19 +24,36 @@ export default function BountyDetail() {
   const [personDays, setPersonDays] = useState('')
   const [error, setError] = useState('')
   const [pending, setPending] = useState<Status | null>(null)
+  // Bumped by `reload()` to force the effect below to re-run against the
+  // same id (e.g. after a successful transition), without giving it its own
+  // separate, unguarded fetch path.
+  const [reloadToken, setReloadToken] = useState(0)
+  const reload = useCallback(() => setReloadToken((t) => t + 1), [])
 
-  const load = useCallback(() => {
+  // Fetches whenever the route id changes or a reload is requested. Guards
+  // against request cancellation (C2): if the id changes again — e.g. the
+  // user navigates to a different bounty — before this request resolves,
+  // `cancelled` is set in the cleanup below, so a slow stale response can
+  // never overwrite a newer one's result. Mirrors the cancelled-flag idiom
+  // in identity.tsx.
+  useEffect(() => {
     if (!id) return
+    let cancelled = false
     apiGet<Bounty>(`/api/bounties/${id}`)
       .then((b) => {
+        if (cancelled) return
         setBounty(b)
         setRetro(b.retrospective ?? '')
         setPersonDays(b.person_days != null ? String(b.person_days) : '')
       })
-      .catch((err) => setError(String(err.message ?? err)))
-  }, [id])
-
-  useEffect(load, [load])
+      .catch((err) => {
+        if (cancelled) return
+        setError(String(err.message ?? err))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [id, reloadToken])
 
   async function move(to: Status) {
     setError('')
@@ -59,7 +80,7 @@ export default function BountyDetail() {
         retrospective: to === 'ABANDONED' ? (retro || undefined) : undefined,
         person_days: personDaysValue,
       })
-      load()
+      reload()
     } catch (err) {
       setError(String((err as Error).message))
     } finally {
@@ -106,7 +127,7 @@ export default function BountyDetail() {
 
       {error && <p className="error">{error}</p>}
 
-      <CreditPanel bounty={bounty} onChanged={load} />
+      <CreditPanel bounty={bounty} onChanged={reload} />
     </section>
   )
 }

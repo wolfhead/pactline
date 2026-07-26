@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { render, screen, cleanup, waitFor, within } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react'
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import Portfolio from './Portfolio'
 import { apiGet } from '../api/client'
 import { useIdentity } from '../identity'
@@ -59,6 +59,27 @@ function mockIdentity() {
 function renderPortfolio() {
   return render(
     <MemoryRouter initialEntries={[`/users/${NOMINEE}/portfolio`]}>
+      <Routes>
+        <Route path="/users/:id/portfolio" element={<Portfolio />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
+
+// Navigates within the same MemoryRouter to another user's portfolio, on
+// click. React Router keeps the Portfolio component instance mounted across
+// this navigation (only the :id param changes for the same matched route),
+// so the component's own effect — not a remount — is what has to guard
+// against the stale-response race (C2).
+function NavigateButton({ to }: { to: string }) {
+  const navigate = useNavigate()
+  return <button onClick={() => navigate(to)}>go-to-other</button>
+}
+
+function renderPortfolioWithNav() {
+  return render(
+    <MemoryRouter initialEntries={[`/users/${NOMINEE}/portfolio`]}>
+      <NavigateButton to={`/users/${OTHER}/portfolio`} />
       <Routes>
         <Route path="/users/:id/portfolio" element={<Portfolio />} />
       </Routes>
@@ -190,5 +211,74 @@ describe('Portfolio', () => {
     // text (which carries a count) rather than the bare role label.
     expect(screen.queryByText('主交付（1）')).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { level: 3, name: /^主交付/ })).not.toBeInTheDocument()
+  })
+
+  it("does not let a stale response for a previous route id overwrite the current id's works (C2: request cancellation on id change)", async () => {
+    mockIdentity()
+
+    let resolveNominee!: (works: WorkView[]) => void
+    let resolveOther!: (works: WorkView[]) => void
+
+    // Two independent, individually controllable requests: one for the
+    // initial route (NOMINEE), one for the route navigated to (OTHER).
+    mockedApiGet.mockImplementation((path: unknown) => {
+      if (typeof path === 'string' && path === `/api/users/${NOMINEE}/portfolio`) {
+        return new Promise<WorkView[]>((resolve) => {
+          resolveNominee = resolve
+        })
+      }
+      if (typeof path === 'string' && path === `/api/users/${OTHER}/portfolio`) {
+        return new Promise<WorkView[]>((resolve) => {
+          resolveOther = resolve
+        })
+      }
+      return Promise.resolve([])
+    })
+
+    renderPortfolioWithNav()
+
+    // The initial render fires the request for NOMINEE.
+    await waitFor(() => expect(resolveNominee).toBeDefined())
+
+    // Navigate to OTHER's portfolio before NOMINEE's request resolves. React
+    // Router updates the :id param without unmounting Portfolio, so this
+    // exercises the component's own id-change effect, not a fresh mount.
+    fireEvent.click(screen.getByText('go-to-other'))
+
+    await waitFor(() => expect(resolveOther).toBeDefined())
+
+    const othersWork: WorkView = {
+      bounty: makeBounty({ id: 'b-other', title: 'OTHER的作品' }),
+      credits: [
+        {
+          credit: {
+            id: 'c-other',
+            bounty_id: 'b-other',
+            user_id: OTHER,
+            role: 'DEFINE',
+            status: 'CONFIRMED',
+            created_at: '2026-01-01T00:00:00Z',
+          },
+          user_name: '研发 E',
+        },
+      ],
+    }
+
+    // The later (OTHER) request — for the page as currently displayed —
+    // resolves first.
+    resolveOther([othersWork])
+    await waitFor(() => expect(screen.getByText('OTHER的作品')).toBeInTheDocument())
+
+    // The earlier (NOMINEE) request — for a route already navigated away
+    // from — resolves late, with an empty result. Without the cancellation
+    // guard this overwrites `works`, wiping OTHER's already-rendered work
+    // off the page OTHER's own heading is displaying (the wrong person's
+    // — here, empty — data rendered under the current person's heading).
+    resolveNominee([])
+
+    // Give the late .then a tick to run (and, if unguarded, overwrite
+    // state) before asserting nothing changed.
+    await waitFor(() => expect(screen.getByText('OTHER的作品')).toBeInTheDocument())
+    expect(screen.queryByText('还没有已确认署名的作品。')).not.toBeInTheDocument()
   })
 })

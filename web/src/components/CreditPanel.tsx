@@ -28,6 +28,8 @@ export default function CreditPanel({ bounty, onChanged }: { bounty: Bounty; onC
 
   useEffect(load, [load])
 
+  // C1: mirrors domain.CanNominate in internal/domain/bounty.go. The two
+  // must be changed together.
   const canNominate = Boolean(me && (bounty.claimed_by === me.id || me.roles.includes('STEWARD')))
 
   async function nominate() {
@@ -68,7 +70,10 @@ export default function CreditPanel({ bounty, onChanged }: { bounty: Bounty; onC
     }
   }
 
-  const nameOf = (id: string) => users.find((u) => u.id === id)?.name ?? id
+  // C3: fall back to the generic '成员' label rather than the raw UUID — a
+  // human-facing name must never be a bare id. Kept consistent with
+  // Portfolio.tsx and Mine.tsx, which use the same fallback.
+  const nameOf = (id: string) => users.find((u) => u.id === id)?.name ?? '成员'
 
   return (
     <section>
