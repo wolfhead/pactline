@@ -34,10 +34,28 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   })
 
   const text = await res.text()
-  const parsed = text ? JSON.parse(text) : null
+
+  // The body is not guaranteed to be JSON: the Vite dev proxy returns an
+  // HTML error page when the Go backend is unreachable, and some upstream
+  // failures (502s from a reverse proxy, etc.) do the same. A raw
+  // JSON.parse() would throw a SyntaxError that escapes as-is, bypassing
+  // ApiError entirely and confusing callers that check `instanceof ApiError`
+  // or read `.status`. Guard the parse so both a failed response and a
+  // successful-but-unparseable one always surface as an ApiError.
+  let parsed: unknown = null
+  if (text) {
+    try {
+      parsed = JSON.parse(text)
+    } catch (err) {
+      console.error('response body is not valid JSON', err)
+      const snippet = text.length > 200 ? `${text.slice(0, 200)}…` : text
+      throw new ApiError(`${res.status} ${res.statusText}: ${snippet}`, res.status)
+    }
+  }
 
   if (!res.ok) {
-    const message = parsed && typeof parsed.error === 'string' ? parsed.error : res.statusText
+    const errorField = parsed && typeof parsed === 'object' ? (parsed as { error?: unknown }).error : undefined
+    const message = typeof errorField === 'string' ? errorField : res.statusText
     throw new ApiError(message, res.status)
   }
   return parsed as T
