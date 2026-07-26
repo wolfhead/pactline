@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
+	"sync/atomic"
 	"testing"
 
 	"bountyboard"
@@ -25,10 +28,20 @@ const (
 
 type httptestRecorder = httptest.ResponseRecorder
 
+// skippedForNoDatabase counts tests in this package that skipped for lack of
+// DATABASE_URL, so TestMain can print a warning no one can mistake for a
+// clean, full run. See postgres_test.go's testDSN for the same concern in the
+// store package.
+var skippedForNoDatabase atomic.Int64
+
 func newTestServer(t *testing.T) http.Handler {
 	t.Helper()
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatal("DATABASE_URL not set while CI is set: refusing to silently skip API integration tests. Run via `make test`.")
+		}
+		skippedForNoDatabase.Add(1)
 		t.Skip("DATABASE_URL not set; run via `make test`")
 	}
 	db, err := store.Connect(context.Background(), dsn)
@@ -37,6 +50,22 @@ func newTestServer(t *testing.T) http.Handler {
 	t.Cleanup(db.Close)
 
 	return api.NewRouter(store.NewUserStore(db), store.NewBountyStore(db), store.NewCreditStore(db))
+}
+
+// TestMain makes a partial run of this package impossible to mistake for a
+// full one: if any test skipped for lack of DATABASE_URL, print an unmissable
+// warning naming the count and how to run the suite properly.
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if n := skippedForNoDatabase.Load(); n > 0 {
+		bar := strings.Repeat("!", 78)
+		fmt.Fprintf(os.Stderr, "\n%s\n%d test(s) in internal/api SKIPPED: DATABASE_URL was not set.\n"+
+			"This is NOT a full run of this package's regression guards (the whole HTTP\n"+
+			"API surface, including the two mandated credit-confirmation and abandoned-\n"+
+			"work-feed regressions). Run `make test` from the repo root instead.\n%s\n\n",
+			bar, n, bar)
+	}
+	os.Exit(code)
 }
 
 func do(t *testing.T, h http.Handler, method, path, userID string, body any) *httptest.ResponseRecorder {
@@ -82,6 +111,35 @@ func cleanupBounty(t *testing.T, id uuid.UUID) {
 	})
 }
 
+// deactivateUser flips a seeded user's active flag off directly through the
+// store (there is no HTTP endpoint for this in Phase 1; see
+// store.UserStore.SetActive), and registers cleanup that flips it back to
+// active.
+//
+// This must reactivate on cleanup: every other test in this shared-database
+// suite assumes all six seeded users are active, and `make test` runs with
+// -p 1 so tests across files and packages interleave against the same rows.
+func deactivateUser(t *testing.T, id string) {
+	t.Helper()
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		return
+	}
+	uid := uuid.MustParse(id)
+
+	db, err := store.Connect(context.Background(), dsn)
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, store.NewUserStore(db).SetActive(context.Background(), uid, false))
+
+	t.Cleanup(func() {
+		db, err := store.Connect(context.Background(), dsn)
+		require.NoError(t, err)
+		defer db.Close()
+		require.NoError(t, store.NewUserStore(db).SetActive(context.Background(), uid, true))
+	})
+}
+
 func TestListUsersReturnsSeeded(t *testing.T) {
 	h := newTestServer(t)
 	rec := do(t, h, http.MethodGet, "/api/users", pmID, nil)
@@ -119,7 +177,11 @@ func TestCreateBountyDefaultsToDraft(t *testing.T) {
 	require.Equal(t, domain.VisibilityPublic, b.Visibility)
 	require.Equal(t, pmID, b.SponsorID.String())
 
-	got := do(t, h, http.MethodGet, "/api/bounties/"+b.ID.String(), engCID, nil)
+	// Fetched by the sponsor, not an arbitrary engineer: the bounty just
+	// created is a DRAFT, and per spec §5 a DRAFT is visible only to its
+	// sponsor or a steward (see draft_visibility_test.go for the dedicated
+	// coverage of that rule from a non-sponsor's perspective).
+	got := do(t, h, http.MethodGet, "/api/bounties/"+b.ID.String(), pmID, nil)
 	require.Equal(t, http.StatusOK, got.Code)
 }
 

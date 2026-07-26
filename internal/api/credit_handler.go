@@ -126,6 +126,52 @@ func (h *creditHandler) respond(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+// reset is the steward-only correction channel required by spec §6.1 for a
+// mistakenly declined credit (A4b): it moves a credit from DECLINED back to
+// PENDING so the nominee can decide again.
+//
+// This must NEVER be able to set a credit to CONFIRMED — that would let a
+// steward confirm on someone else's behalf, breaking the specification's one
+// hard constraint (§6.2: only the nominee may confirm their own credit). The
+// request body carries no status field at all, so there is no path — steward
+// intent, malformed request, or otherwise — through which this handler can
+// produce CONFIRMED; the target status is a hardcoded literal below, not
+// something a caller can influence.
+func (h *creditHandler) reset(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorBody{Error: "id is not a UUID"})
+		return
+	}
+	me := CurrentUser(r)
+	if !me.HasRole(domain.UserRoleSteward) {
+		slog.Warn("credit reset denied", "credit_id", id, "actor_id", me.ID, "actor_roles", me.Roles)
+		writeError(w, r, domain.ErrForbidden)
+		return
+	}
+
+	c, err := h.credits.GetByID(r.Context(), id)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if c.Status != domain.CreditDeclined {
+		slog.Warn("credit reset refused: source status is not DECLINED",
+			"credit_id", id, "actor_id", me.ID, "credit_status", c.Status)
+		writeError(w, r, domain.ErrCreditNotDeclined)
+		return
+	}
+
+	out, err := h.credits.Respond(r.Context(), id, domain.CreditPending)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	slog.Info("credit reset to pending by steward",
+		"credit_id", out.ID, "bounty_id", out.BountyID, "user_id", out.UserID, "actor_id", me.ID)
+	writeJSON(w, http.StatusOK, out)
+}
+
 func (h *creditHandler) listPending(w http.ResponseWriter, r *http.Request) {
 	out, err := h.credits.ListPendingForUser(r.Context(), CurrentUser(r).ID)
 	if err != nil {

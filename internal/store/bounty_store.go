@@ -26,7 +26,10 @@ const bountyColumns = `
 	commitment, status, sponsor_id, claimed_by, claimed_at,
 	person_days, retrospective, completed_at, created_at, updated_at`
 
-// BountyFilter narrows a List query. Zero value means "everything".
+// BountyFilter narrows a List query. Zero value means "everything" — in
+// particular, a nil Viewer applies no draft-visibility restriction, which
+// keeps every store-level test and internal call site that has no notion of
+// a requesting user working unchanged.
 type BountyFilter struct {
 	Statuses           []domain.Status
 	Type               *domain.BountyType
@@ -34,6 +37,21 @@ type BountyFilter struct {
 	ClaimedBy          *uuid.UUID
 	SponsorID          *uuid.UUID
 	OrderByCompletedAt bool
+
+	// Viewer scopes DRAFT visibility per spec §5 ("DRAFT 仅出题人可见"): unless
+	// Viewer.IsSteward, a DRAFT bounty is included only when Viewer.ID equals
+	// its sponsor_id. Every other status is unaffected. Callers reachable
+	// from the untrusted HTTP API (bounty_handler.list) MUST set this to the
+	// authenticated caller; leaving it nil is only safe for trusted,
+	// non-user-facing call sites.
+	Viewer *DraftViewer
+}
+
+// DraftViewer is the identity a List call is scoped against for DRAFT
+// visibility. See BountyFilter.Viewer.
+type DraftViewer struct {
+	ID        uuid.UUID
+	IsSteward bool
 }
 
 // Create inserts a bounty, assigning an ID when absent.
@@ -147,6 +165,13 @@ func (s *BountyStore) List(ctx context.Context, f BountyFilter) ([]domain.Bounty
 	}
 	if f.SponsorID != nil {
 		add("sponsor_id = $%d", *f.SponsorID)
+	}
+	if f.Viewer != nil && !f.Viewer.IsSteward {
+		// A DRAFT row is included only when the viewer is its sponsor; every
+		// other status passes through untouched. Doing this in SQL (rather
+		// than filtering the Go slice after Query) means a large draft
+		// population never leaks through a paginated read later.
+		add("(status <> 'DRAFT' OR sponsor_id = $%d)", f.Viewer.ID)
 	}
 
 	q := `SELECT ` + bountyColumns + ` FROM bounties`

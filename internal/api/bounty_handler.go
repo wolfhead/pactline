@@ -108,12 +108,41 @@ func (h *bountyHandler) get(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
+	me := CurrentUser(r)
+	if b.Status == domain.StatusDraft && !canViewDraft(me, b) {
+		// 404, not 403: spec §5 says DRAFT is visible only to its sponsor —
+		// "invisible", not merely "access denied". A 403 would still confirm
+		// to every other engineer that a bounty with this id exists and is
+		// someone's draft; 404 makes a foreign draft indistinguishable from
+		// no bounty at all, which is the stronger reading of "invisible".
+		slog.Warn("draft bounty hidden from non-sponsor",
+			"bounty_id", b.ID, "actor_id", me.ID, "sponsor_id", b.SponsorID)
+		writeError(w, r, domain.ErrNotFound)
+		return
+	}
 	writeJSON(w, http.StatusOK, b)
 }
 
+// canViewDraft reports whether the user may see a DRAFT bounty: its sponsor,
+// or a steward. This is the same predicate as domain.CanEdit — spec §5 ties
+// DRAFT visibility to the same "sponsor or steward" line as editing — kept as
+// a separate, locally-named check here because the call site is about
+// visibility, not mutation, and a future change to one must not silently
+// change the other's behaviour.
+func canViewDraft(u domain.User, b domain.Bounty) bool {
+	return u.ID == b.SponsorID || u.HasRole(domain.UserRoleSteward)
+}
+
 func (h *bountyHandler) list(w http.ResponseWriter, r *http.Request) {
+	me := CurrentUser(r)
 	q := r.URL.Query()
-	f := store.BountyFilter{BusinessTag: q.Get("tag")}
+	// Viewer MUST be set here: this is the untrusted HTTP entry point
+	// store.BountyFilter's own doc comment warns about — leaving it nil would
+	// silently let any authenticated caller list every sponsor's drafts.
+	f := store.BountyFilter{
+		BusinessTag: q.Get("tag"),
+		Viewer:      &store.DraftViewer{ID: me.ID, IsSteward: me.HasRole(domain.UserRoleSteward)},
+	}
 	for _, s := range q["status"] {
 		st := domain.Status(s)
 		if !domain.IsValidStatus(st) {
@@ -176,6 +205,14 @@ func (h *bountyHandler) transition(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &req) {
 		return
 	}
+	// A6: reject an unknown target status before authorising. authorizeTransition's
+	// fall-through (CanEdit-or-claimer) is the most permissive branch, so an
+	// unknown status would otherwise inherit the loosest gate instead of being
+	// rejected outright.
+	if !domain.IsValidStatus(req.To) {
+		writeJSON(w, http.StatusBadRequest, errorBody{Error: "to is not a known status: " + string(req.To)})
+		return
+	}
 
 	b, err := h.bounties.GetByID(r.Context(), id)
 	if err != nil {
@@ -184,12 +221,7 @@ func (h *bountyHandler) transition(w http.ResponseWriter, r *http.Request) {
 	}
 	me := CurrentUser(r)
 
-	if req.Retrospective != "" {
-		b.Retrospective = req.Retrospective
-	}
-	if req.PersonDays != nil {
-		b.PersonDays = req.PersonDays
-	}
+	applyTransitionFormFields(&b, me, req)
 
 	if err := authorizeTransition(me, b, req.To); err != nil {
 		slog.Warn("transition denied",
@@ -217,6 +249,32 @@ func (h *bountyHandler) transition(w http.ResponseWriter, r *http.Request) {
 		"bounty_id", updated.ID, "from", from, "to", updated.Status,
 		"actor_id", me.ID, "person_days", updated.PersonDays)
 	writeJSON(w, http.StatusOK, updated)
+}
+
+// applyTransitionFormFields applies request fields that belong to the
+// requested edge only: retrospective belongs to the ABANDONED edge,
+// person_days belongs to the DELIVERED edge (A3). A field sent for the wrong
+// edge is silently ignored as far as the transition's outcome goes — the
+// transition itself must still succeed, this is not a validation error — but
+// it is logged at warn so a stale field reused by a second client or a curl
+// script is diagnosable purely from logs.
+func applyTransitionFormFields(b *domain.Bounty, me domain.User, req transitionRequest) {
+	if req.Retrospective != "" {
+		if req.To == domain.StatusAbandoned {
+			b.Retrospective = req.Retrospective
+		} else {
+			slog.Warn("ignored retrospective field on transition that does not target ABANDONED",
+				"bounty_id", b.ID, "actor_id", me.ID, "from", b.Status, "to", req.To, "field", "retrospective")
+		}
+	}
+	if req.PersonDays != nil {
+		if req.To == domain.StatusDelivered {
+			b.PersonDays = req.PersonDays
+		} else {
+			slog.Warn("ignored person_days field on transition that does not target DELIVERED",
+				"bounty_id", b.ID, "actor_id", me.ID, "from", b.Status, "to", req.To, "field", "person_days")
+		}
+	}
 }
 
 func authorizeTransition(me domain.User, b domain.Bounty, to domain.Status) error {
@@ -266,4 +324,73 @@ func applyTransitionEffects(b *domain.Bounty, me domain.User, to domain.Status) 
 	case domain.StatusCompleted, domain.StatusAbandoned:
 		b.CompletedAt = &now
 	}
+}
+
+// amendRequest carries only the two fields the correction channel may touch.
+// There is deliberately no field for status, sponsor_id, claimed_by or
+// business_lines: any such field in the request body is simply dropped by
+// json.Decode because amendRequest has nowhere to put it, so the endpoint
+// cannot become a general editor by accident.
+type amendRequest struct {
+	Retrospective *string  `json:"retrospective"`
+	PersonDays    *float64 `json:"person_days"`
+}
+
+// amend is the steward-only correction channel required by spec §6.1 (强制修正).
+// The status graph is a hard gate and there is no edit endpoint, so a typo in
+// a terminal bounty's retrospective or a wrong person_days figure would
+// otherwise be permanent. amend fixes exactly that, and nothing else: it
+// works on bounties in any status, including terminal ones, but only ever
+// touches retrospective and person_days.
+func (h *bountyHandler) amend(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorBody{Error: "id is not a UUID"})
+		return
+	}
+	me := CurrentUser(r)
+	if !me.HasRole(domain.UserRoleSteward) {
+		slog.Warn("amend denied", "bounty_id", id, "actor_id", me.ID, "actor_roles", me.Roles)
+		writeError(w, r, domain.ErrForbidden)
+		return
+	}
+	var req amendRequest
+	if !decodeBody(w, r, &req) {
+		return
+	}
+
+	b, err := h.bounties.GetByID(r.Context(), id)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	beforeRetrospective := b.Retrospective
+	beforePersonDays := personDaysLogValue(b.PersonDays)
+	if req.Retrospective != nil {
+		b.Retrospective = *req.Retrospective
+	}
+	if req.PersonDays != nil {
+		b.PersonDays = req.PersonDays
+	}
+
+	updated, err := h.bounties.Update(r.Context(), b)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	slog.Info("bounty amended by steward",
+		"bounty_id", updated.ID, "actor_id", me.ID, "status", updated.Status,
+		"retrospective_before", beforeRetrospective, "retrospective_after", updated.Retrospective,
+		"person_days_before", beforePersonDays, "person_days_after", personDaysLogValue(updated.PersonDays))
+	writeJSON(w, http.StatusOK, updated)
+}
+
+// personDaysLogValue turns a possibly-nil *float64 into a slog-friendly value
+// (the dereferenced number, or nil) instead of a pointer address.
+func personDaysLogValue(p *float64) any {
+	if p == nil {
+		return nil
+	}
+	return *p
 }

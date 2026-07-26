@@ -25,4 +25,8 @@ var (
 	// ErrInvalidCreditRole means the nominated role is not one of the six
 	// defined parts.
 	ErrInvalidCreditRole = errors.New("invalid credit role")
+	// ErrCreditNotDeclined means a steward tried to reset a credit that is
+	// not currently DECLINED (the only source status the reset channel may
+	// act on).
+	ErrCreditNotDeclined = errors.New("credit is not declined")
 )

@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"bountyboard"
@@ -19,13 +20,46 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// skippedForNoDatabase counts tests in this package that skipped for lack of
+// DATABASE_URL, so TestMain can print a warning no one can mistake for a
+// clean, full run.
+var skippedForNoDatabase atomic.Int64
+
+// testDSN returns the shared test database DSN, or stops the calling test.
+//
+// A3/A5 concern: `go test ./...` run bare (no DATABASE_URL) still reports
+// PASS if every store test just skips — the two mandated regression guards
+// (migration integrity, active-user seeding) silently vanish. Under CI this
+// must be a hard failure rather than a quiet skip, since a green CI run is
+// exactly the signal a maintainer trusts without looking closer. Locally,
+// where a bare `go test ./...` during development is normal, skip but count
+// it so TestMain can shout about the shortfall on exit.
 func testDSN(t *testing.T) string {
 	t.Helper()
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatal("DATABASE_URL not set while CI is set: refusing to silently skip postgres integration tests. Run via `make test`.")
+		}
+		skippedForNoDatabase.Add(1)
 		t.Skip("DATABASE_URL not set; run via `make test`")
 	}
 	return dsn
+}
+
+// TestMain makes a partial run of this package impossible to mistake for a
+// full one: if any test skipped for lack of DATABASE_URL, print an unmissable
+// warning naming the count and how to run the suite properly.
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if n := skippedForNoDatabase.Load(); n > 0 {
+		bar := strings.Repeat("!", 78)
+		fmt.Fprintf(os.Stderr, "\n%s\n%d test(s) in internal/store SKIPPED: DATABASE_URL was not set.\n"+
+			"This is NOT a full run of this package's regression guards (migrations,\n"+
+			"active-user seeding). Run `make test` from the repo root instead.\n%s\n\n",
+			bar, n, bar)
+	}
+	os.Exit(code)
 }
 
 func TestConnectPings(t *testing.T) {

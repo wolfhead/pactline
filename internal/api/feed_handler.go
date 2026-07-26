@@ -13,8 +13,11 @@ import (
 )
 
 // unknownUserNamePlaceholder marks a credit whose nominee could not be found
-// in the active user map. It is deliberately unlike any seeded display name
-// so it reads as a data problem rather than an unnamed person.
+// in the user map. Since credits.user_id has a foreign key into users, this
+// should be unreachable in practice — the map is now built from ListAll, not
+// ListActive, so deactivation can no longer cause it. It is deliberately
+// unlike any seeded display name so it reads as a data problem rather than
+// an unnamed person.
 const unknownUserNamePlaceholder = "[unknown user]"
 
 // CreditView pairs a credit with the nominee's display name so the frontend
@@ -67,6 +70,16 @@ func (h *feedHandler) portfolio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A real user with no credits is "200 []" (they have no works). An
+	// unknown user id must be 404, not the same empty list — the two read
+	// very differently: "no works yet" versus "the system has never heard of
+	// this person". GetByID does not filter on active, so a deactivated
+	// user's own portfolio still resolves.
+	if _, err := h.users.GetByID(r.Context(), userID); err != nil {
+		writeError(w, r, err)
+		return
+	}
+
 	byBounty, err := h.credits.ListConfirmedBountyIDsForUser(r.Context(), userID)
 	if err != nil {
 		writeError(w, r, err)
@@ -98,8 +111,15 @@ func (h *feedHandler) portfolio(w http.ResponseWriter, r *http.Request) {
 }
 
 // decorate attaches confirmed credits and nominee names to each bounty.
+//
+// Names are resolved against ALL users, not just active ones (ListAll, not
+// ListActive): the archive's whole point is that doing the work leaves a
+// durable trace, and that trace must not go blank the moment someone leaves
+// the team. GET /api/users (the identity switcher and nomination picker)
+// deliberately keeps using ListActive instead — those two call sites want
+// different populations and must not be conflated.
 func (h *feedHandler) decorate(ctx context.Context, list []domain.Bounty) ([]WorkView, error) {
-	users, err := h.users.ListActive(ctx)
+	users, err := h.users.ListAll(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +143,7 @@ func (h *feedHandler) decorate(ctx context.Context, list []domain.Bounty) ([]Wor
 			}
 			name, ok := names[c.UserID]
 			if !ok {
-				slog.Warn("credit user missing from active user map",
+				slog.Warn("credit user missing from user map",
 					"credit_id", c.ID, "bounty_id", c.BountyID, "user_id", c.UserID)
 				name = unknownUserNamePlaceholder
 			}

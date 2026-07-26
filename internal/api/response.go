@@ -42,7 +42,8 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		errors.Is(err, domain.ErrRetrospectiveRequired),
 		errors.Is(err, domain.ErrNotClaimable),
 		errors.Is(err, domain.ErrEvidenceRequired),
-		errors.Is(err, domain.ErrCreditNotPending):
+		errors.Is(err, domain.ErrCreditNotPending),
+		errors.Is(err, domain.ErrCreditNotDeclined):
 		status = http.StatusConflict
 	}
 

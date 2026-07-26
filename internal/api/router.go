@@ -18,18 +18,18 @@ func NewRouter(users *store.UserStore, bounties *store.BountyStore, credits *sto
 	mux.HandleFunc("GET /api/bounties", bh.list)
 	mux.HandleFunc("GET /api/bounties/{id}", bh.get)
 	mux.HandleFunc("POST /api/bounties/{id}/transition", bh.transition)
+	mux.HandleFunc("POST /api/bounties/{id}/amend", bh.amend)
 
-	if credits != nil {
-		ch := &creditHandler{credits: credits, bounties: bounties}
-		mux.HandleFunc("POST /api/bounties/{id}/credits", ch.nominate)
-		mux.HandleFunc("GET /api/bounties/{id}/credits", ch.listByBounty)
-		mux.HandleFunc("POST /api/credits/{id}/respond", ch.respond)
-		mux.HandleFunc("GET /api/credits/pending", ch.listPending)
+	ch := &creditHandler{credits: credits, bounties: bounties}
+	mux.HandleFunc("POST /api/bounties/{id}/credits", ch.nominate)
+	mux.HandleFunc("GET /api/bounties/{id}/credits", ch.listByBounty)
+	mux.HandleFunc("POST /api/credits/{id}/respond", ch.respond)
+	mux.HandleFunc("POST /api/credits/{id}/reset", ch.reset)
+	mux.HandleFunc("GET /api/credits/pending", ch.listPending)
 
-		fh := &feedHandler{bounties: bounties, credits: credits, users: users}
-		mux.HandleFunc("GET /api/works", fh.works)
-		mux.HandleFunc("GET /api/users/{id}/portfolio", fh.portfolio)
-	}
+	fh := &feedHandler{bounties: bounties, credits: credits, users: users}
+	mux.HandleFunc("GET /api/works", fh.works)
+	mux.HandleFunc("GET /api/users/{id}/portfolio", fh.portfolio)
 
 	return withIdentity(users, mux)
 }

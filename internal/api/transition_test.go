@@ -206,3 +206,56 @@ func TestClaimerRetainsOtherEdges(t *testing.T) {
 	})
 	require.Equal(t, http.StatusOK, rec.Code)
 }
+
+// TestUnknownTransitionStatusIsBadRequest pins A6: an unknown target status
+// must be rejected with 400 before authorizeTransition ever runs, because its
+// fall-through (CanEdit-or-claimer) is the most permissive branch and would
+// otherwise grant an unknown edge the loosest possible gate.
+func TestUnknownTransitionStatusIsBadRequest(t *testing.T) {
+	h := newTestServer(t)
+	b := createDraft(t, h)
+	rec := transition(t, h, b.ID.String(), pmID, map[string]any{"to": "BOGUS"})
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// TestPersonDaysIgnoredOnClaim and TestRetrospectiveIgnoredOnAcceptance pin
+// A3: transition applies retrospective only on the edge that targets
+// ABANDONED and person_days only on the edge that targets DELIVERED. A field
+// sent for the wrong edge must not be written, but the transition itself must
+// still succeed (this is a warning-worthy client bug, not a rejection).
+
+func TestPersonDaysIgnoredOnClaim(t *testing.T) {
+	h := newTestServer(t)
+	b := createDraft(t, h)
+	require.Equal(t, http.StatusOK,
+		transition(t, h, b.ID.String(), pmID, map[string]any{"to": "OPEN"}).Code)
+
+	// person_days belongs to the DELIVERED edge; sending it while claiming
+	// must be ignored, not written.
+	rec := transition(t, h, b.ID.String(), engCID, map[string]any{"to": "CLAIMED", "person_days": 99})
+	require.Equal(t, http.StatusOK, rec.Code)
+	var claimed domain.Bounty
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &claimed))
+	require.Nil(t, claimed.PersonDays, "person_days sent on a claim must be ignored")
+}
+
+func TestRetrospectiveIgnoredOnAcceptance(t *testing.T) {
+	h := newTestServer(t)
+	b := createDraft(t, h)
+	require.Equal(t, http.StatusOK,
+		transition(t, h, b.ID.String(), pmID, map[string]any{"to": "OPEN"}).Code)
+	require.Equal(t, http.StatusOK,
+		transition(t, h, b.ID.String(), engCID, map[string]any{"to": "CLAIMED"}).Code)
+	require.Equal(t, http.StatusOK,
+		transition(t, h, b.ID.String(), engCID, map[string]any{"to": "DELIVERED"}).Code)
+
+	// retrospective belongs to the ABANDONED edge; sending it on acceptance
+	// into COMPLETED must be ignored, not written.
+	rec := transition(t, h, b.ID.String(), pmID, map[string]any{
+		"to": "COMPLETED", "retrospective": "误填的结论,不应写入",
+	})
+	require.Equal(t, http.StatusOK, rec.Code)
+	var done domain.Bounty
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &done))
+	require.Empty(t, done.Retrospective, "retrospective sent on an acceptance must be ignored")
+}

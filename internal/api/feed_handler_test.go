@@ -94,6 +94,16 @@ func TestPortfolioListsOnlyConfirmedCredits(t *testing.T) {
 	require.Equal(t, "研发 D", works[0].Credits[0].UserName)
 }
 
+// TestPortfolioOfUnknownUserIs404 distinguishes "no works yet" (a real user
+// with zero credits, covered by TestPortfolioOfUncreditedUserIsEmpty below)
+// from "the system has never heard of this person" — the two must not read
+// the same over the wire.
+func TestPortfolioOfUnknownUserIs404(t *testing.T) {
+	h := newTestServer(t)
+	rec := do(t, h, http.MethodGet, "/api/users/11111111-1111-1111-1111-111111111111/portfolio", pmID, nil)
+	require.Equal(t, http.StatusNotFound, rec.Code)
+}
+
 func TestPortfolioOfUncreditedUserIsEmpty(t *testing.T) {
 	h := newTestServer(t)
 	completeWithCredit(t, h, engDID, "CO_DELIVER", "")

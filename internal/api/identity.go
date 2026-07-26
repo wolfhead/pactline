@@ -46,6 +46,22 @@ func withIdentity(users *store.UserStore, next http.Handler) http.Handler {
 			writeJSON(w, http.StatusInternalServerError, errorBody{Error: "identity resolution failed"})
 			return
 		}
+		// Decision: "active" governs who may ACT — every endpoint reachable
+		// through this middleware, read or write — and who appears in
+		// pickers (UserStore.ListActive, backing GET /api/users). It never
+		// governs who is REMEMBERED: credit names are resolved from
+		// UserStore.ListAll regardless of active (see feed_handler.decorate),
+		// so a person who has left still keeps their name on the work they
+		// are credited on. Gating here, in the one place identity is
+		// resolved, closes every mutating endpoint to a deactivated user
+		// without each handler re-checking the flag — and closes reads too,
+		// since a deactivated user has left and has no standing to ask the
+		// system anything, not just to change it.
+		if !u.Active {
+			slog.Warn("deactivated identity denied", "path", r.URL.Path, "user_id", id)
+			writeJSON(w, http.StatusForbidden, errorBody{Error: "user is deactivated"})
+			return
+		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey, u)))
 	})
 }
