@@ -98,21 +98,50 @@ func TestOnlyNomineeMayRespond(t *testing.T) {
 		do(t, h, http.MethodPost, respond, engDID, map[string]any{"status": "DECLINED"}).Code)
 }
 
+// TestPendingListShowsOnlyMine pins both filters ListPendingForUser applies:
+// the target credit (engDID, PENDING) sits alongside a PENDING credit
+// belonging to someone else (which only the user_id filter excludes) and a
+// non-pending credit of engDID's own on a different bounty (which only the
+// status filter excludes). Dropping either filter would leak one of these
+// two decoys into the response.
 func TestPendingListShowsOnlyMine(t *testing.T) {
 	h := newTestServer(t)
-	b := claimedBounty(t, h)
-	do(t, h, http.MethodPost, "/api/bounties/"+b.ID.String()+"/credits", engCID,
+
+	const engEID = "00000000-0000-0000-0000-000000000005"
+
+	target := claimedBounty(t, h)
+	targetRec := do(t, h, http.MethodPost, "/api/bounties/"+target.ID.String()+"/credits", engCID,
 		map[string]any{"user_id": engDID, "role": "SUPPORT"})
+	require.Equal(t, http.StatusCreated, targetRec.Code)
+	var targetCredit domain.Credit
+	require.NoError(t, json.Unmarshal(targetRec.Body.Bytes(), &targetCredit))
+
+	// Someone else's PENDING credit: only the user_id filter excludes this.
+	otherBounty := claimedBounty(t, h)
+	require.Equal(t, http.StatusCreated,
+		do(t, h, http.MethodPost, "/api/bounties/"+otherBounty.ID.String()+"/credits", engCID,
+			map[string]any{"user_id": engEID, "role": "SUPPORT"}).Code)
+
+	// engDID's own credit, but already CONFIRMED: only the status filter
+	// excludes this.
+	confirmedBounty := claimedBounty(t, h)
+	confirmedRec := do(t, h, http.MethodPost, "/api/bounties/"+confirmedBounty.ID.String()+"/credits", engCID,
+		map[string]any{"user_id": engDID, "role": "CO_DELIVER"})
+	require.Equal(t, http.StatusCreated, confirmedRec.Code)
+	var confirmedCredit domain.Credit
+	require.NoError(t, json.Unmarshal(confirmedRec.Body.Bytes(), &confirmedCredit))
+	require.Equal(t, http.StatusOK,
+		do(t, h, http.MethodPost, "/api/credits/"+confirmedCredit.ID.String()+"/respond", engDID,
+			map[string]any{"status": "CONFIRMED"}).Code)
 
 	rec := do(t, h, http.MethodGet, "/api/credits/pending", engDID, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	var mine []domain.Credit
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &mine))
-	require.NotEmpty(t, mine)
-	for _, c := range mine {
-		require.Equal(t, engDID, c.UserID.String())
-		require.Equal(t, domain.CreditPending, c.Status)
-	}
+	require.Len(t, mine, 1, "only engDID's own PENDING credit must be returned")
+	require.Equal(t, targetCredit.ID, mine[0].ID)
+	require.Equal(t, engDID, mine[0].UserID.String())
+	require.Equal(t, domain.CreditPending, mine[0].Status)
 }
 
 func TestDeliveryBountyInheritsDefineCredit(t *testing.T) {
@@ -142,4 +171,48 @@ func TestDeliveryBountyInheritsDefineCredit(t *testing.T) {
 	require.Equal(t, engCID, credits[0].UserID.String())
 	require.Nil(t, credits[0].NominatedBy)
 	require.Equal(t, domain.CreditPending, credits[0].Status)
+}
+
+// TestRespondWithEmptyBodyIsBadRequest pins that an empty request body is
+// rejected by decodeBody (JSON decode of zero bytes fails with EOF) before
+// respond ever reaches the credit or the nominee check.
+func TestRespondWithEmptyBodyIsBadRequest(t *testing.T) {
+	h := newTestServer(t)
+	b := claimedBounty(t, h)
+	c := nominateCredit(t, h, b, engDID, "SUPPORT", "")
+
+	rec := do(t, h, http.MethodPost, "/api/credits/"+c.ID.String()+"/respond", engDID, nil)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// TestRespondWithMissingStatusIsBadRequest pins that a body with no "status"
+// field decodes to the zero value (""), which the handler's
+// CONFIRMED-or-DECLINED check must reject rather than silently no-op or crash.
+func TestRespondWithMissingStatusIsBadRequest(t *testing.T) {
+	h := newTestServer(t)
+	b := claimedBounty(t, h)
+	c := nominateCredit(t, h, b, engDID, "SUPPORT", "")
+
+	rec := do(t, h, http.MethodPost, "/api/credits/"+c.ID.String()+"/respond", engDID, map[string]any{})
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// TestRespondWithPendingStatusIsBadRequest pins a real bypass shape against
+// the mechanism's one hard constraint (spec §6.2): a caller cannot "confirm"
+// a credit by sending its already-current status back. status: PENDING must
+// be rejected exactly like any other value outside {CONFIRMED, DECLINED}.
+func TestRespondWithPendingStatusIsBadRequest(t *testing.T) {
+	h := newTestServer(t)
+	b := claimedBounty(t, h)
+	c := nominateCredit(t, h, b, engDID, "SUPPORT", "")
+
+	rec := do(t, h, http.MethodPost, "/api/credits/"+c.ID.String()+"/respond", engDID,
+		map[string]any{"status": "PENDING"})
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+
+	// The credit must still be normally confirmable afterward — the rejected
+	// request must not have corrupted its state.
+	require.Equal(t, http.StatusOK,
+		do(t, h, http.MethodPost, "/api/credits/"+c.ID.String()+"/respond", engDID,
+			map[string]any{"status": "CONFIRMED"}).Code)
 }

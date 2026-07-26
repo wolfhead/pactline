@@ -155,6 +155,9 @@ func TestListFiltersByStatusAndTag(t *testing.T) {
 	require.Len(t, platforms, 1)
 }
 
+// TestListByClaimedBy plants a decoy row claimed by a different user, like
+// every sibling filter test in this file: without it, a single-row fixture
+// would still pass even with the claimed_by filter deleted from the query.
 func TestListByClaimedBy(t *testing.T) {
 	db := newTestDB(t)
 	s := store.NewBountyStore(db)
@@ -167,9 +170,17 @@ func TestListByClaimedBy(t *testing.T) {
 	require.NoError(t, err)
 	cleanupBounties(t, db, created.ID)
 
+	decoy := newBounty(userPM)
+	decoy.Status = domain.StatusClaimed
+	decoy.ClaimedBy = &userEngC
+	createdDecoy, err := s.Create(ctx, decoy)
+	require.NoError(t, err)
+	cleanupBounties(t, db, createdDecoy.ID)
+
 	mine, err := s.List(ctx, store.BountyFilter{ClaimedBy: &userEngD})
 	require.NoError(t, err)
 	require.Len(t, mine, 1)
+	require.Equal(t, created.ID, mine[0].ID)
 }
 
 func TestListFiltersByType(t *testing.T) {

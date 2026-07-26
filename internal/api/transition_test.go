@@ -123,14 +123,21 @@ func TestStewardCanForceTransition(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 }
 
-// TestStewardCanClaimDirectedBountyForOthers exercises the one capability that
-// authorizeTransition's steward short-circuit uniquely grants: a steward can
-// move a DIRECTED bounty into CLAIMED even though it is directed at someone
-// else, bypassing domain.CanClaim's ErrNotDirectedToYou. TestStewardCanForceTransition
-// alone would still pass if the short-circuit were deleted, because
-// domain.CanEdit already grants stewards the DRAFT->OPEN edge; this test fails
-// if the short-circuit is removed.
-func TestStewardCanClaimDirectedBountyForOthers(t *testing.T) {
+// TestStewardClaimingDirectedBountyClaimsItForSelf exercises the one
+// capability that authorizeTransition's steward short-circuit uniquely
+// grants: a steward can move a DIRECTED bounty into CLAIMED even though it is
+// directed at someone else, bypassing domain.CanClaim's ErrNotDirectedToYou.
+// TestStewardCanForceTransition alone would still pass if the short-circuit
+// were deleted, because domain.CanEdit already grants stewards the
+// DRAFT->OPEN edge; this test fails if the short-circuit is removed.
+//
+// This test was previously misnamed "...ForOthers" and asserted only a 200,
+// which never checked who ends up as claimant. There is no claim-on-behalf
+// feature: applyTransitionEffects always assigns the caller's own id as
+// ClaimedBy, so the bounty ends up claimed by the STEWARD, not by
+// directed_to. That is the actual, and only, behaviour this edge grants —
+// pinned here explicitly instead of implied by a passing status code.
+func TestStewardClaimingDirectedBountyClaimsItForSelf(t *testing.T) {
 	h := newTestServer(t)
 	rec := do(t, h, http.MethodPost, "/api/bounties", pmID, map[string]any{
 		"type":        "DELIVERY",
@@ -148,6 +155,11 @@ func TestStewardCanClaimDirectedBountyForOthers(t *testing.T) {
 
 	rec = transition(t, h, b.ID.String(), stewardID, map[string]any{"to": "CLAIMED"})
 	require.Equal(t, http.StatusOK, rec.Code)
+	var claimed domain.Bounty
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &claimed))
+	require.NotNil(t, claimed.ClaimedBy)
+	require.Equal(t, stewardID, claimed.ClaimedBy.String(),
+		"the steward's short-circuit claims the bounty for the steward, not for directed_to")
 }
 
 // TestThirdPartyCannotTransitionOthersBounty covers the case where the actor is

@@ -140,14 +140,28 @@ func deactivateUser(t *testing.T, id string) {
 	})
 }
 
+// TestListUsersReturnsSeeded pins that GET /api/users backs onto ListActive
+// (WHERE active, ORDER BY name), not just "however many rows exist": every
+// seed starts active, so a bare Len(..., 6) would still pass even with the
+// WHERE clause deleted entirely, and ORDER BY dropped would still return the
+// right set in a different order. 研发 E is deactivated for the duration of
+// this test and reactivated in cleanup via the shared deactivateUser helper.
 func TestListUsersReturnsSeeded(t *testing.T) {
+	const engEID = "00000000-0000-0000-0000-000000000005"
 	h := newTestServer(t)
+	deactivateUser(t, engEID)
+
 	rec := do(t, h, http.MethodGet, "/api/users", pmID, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	var users []domain.User
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &users))
-	require.Len(t, users, 6)
+	gotNames := make([]string, len(users))
+	for i, u := range users {
+		gotNames[i] = u.Name
+	}
+	require.Equal(t, []string{"Steward F", "产品 A", "技术 Leader B", "研发 C", "研发 D"}, gotNames,
+		"the deactivated user must be excluded and order must be by name")
 }
 
 func TestMissingIdentityIsUnauthorized(t *testing.T) {

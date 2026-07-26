@@ -41,6 +41,55 @@ func TestValidateTransition(t *testing.T) {
 	}
 }
 
+// TestValidateTransitionMatrix exercises every from/to pair over all six
+// statuses (36 combinations), asserting the allowed set exactly against a
+// matrix transcribed independently from spec §5's lifecycle diagram — not
+// from domain.allowedTransitions itself, so this cannot degrade into a
+// tautology. The prior table only covered two invalid edges plus the happy
+// path; a typo in the production transition map (e.g. an edge added or
+// removed) would not necessarily be caught by that sparse coverage but must
+// be caught here.
+func TestValidateTransitionMatrix(t *testing.T) {
+	statuses := []domain.Status{
+		domain.StatusDraft, domain.StatusOpen, domain.StatusClaimed,
+		domain.StatusDelivered, domain.StatusCompleted, domain.StatusAbandoned,
+	}
+	allowed := map[domain.Status]map[domain.Status]bool{
+		domain.StatusDraft: {
+			domain.StatusOpen: true, domain.StatusAbandoned: true,
+		},
+		domain.StatusOpen: {
+			domain.StatusDraft: true, domain.StatusClaimed: true, domain.StatusAbandoned: true,
+		},
+		domain.StatusClaimed: {
+			domain.StatusOpen: true, domain.StatusDelivered: true, domain.StatusAbandoned: true,
+		},
+		domain.StatusDelivered: {
+			domain.StatusClaimed: true, domain.StatusCompleted: true, domain.StatusAbandoned: true,
+		},
+		domain.StatusCompleted: {},
+		domain.StatusAbandoned: {},
+	}
+
+	for _, from := range statuses {
+		for _, to := range statuses {
+			t.Run(string(from)+"->"+string(to), func(t *testing.T) {
+				// Retrospective is pre-filled so this matrix tests only the
+				// status-graph edge, not the separate retrospective-required
+				// rule (covered by the "abandon without retrospective" case
+				// in TestValidateTransition above).
+				b := domain.Bounty{Status: from, Retrospective: "非空结论,规避 ErrRetrospectiveRequired"}
+				err := domain.ValidateTransition(b, to)
+				if allowed[from][to] {
+					require.NoError(t, err, "%s -> %s must be permitted", from, to)
+					return
+				}
+				require.ErrorIs(t, err, domain.ErrInvalidTransition, "%s -> %s must be rejected", from, to)
+			})
+		}
+	}
+}
+
 func TestCanClaim(t *testing.T) {
 	eng := domain.User{ID: uuid.New(), Roles: []domain.UserRole{domain.UserRoleEngineer}}
 	other := domain.User{ID: uuid.New(), Roles: []domain.UserRole{domain.UserRoleEngineer}}
