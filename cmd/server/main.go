@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 
+	"bountyboard"
 	"bountyboard/internal/logging"
 	"bountyboard/internal/store"
 )
@@ -25,6 +26,11 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
+
+	if err := db.Migrate(context.Background(), bountyboard.MigrationFS); err != nil {
+		slog.Error("migrate", "error", err)
+		os.Exit(1)
+	}
 
 	slog.Info("server starting")
 }
