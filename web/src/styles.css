@@ -1,0 +1,23 @@
+:root { color-scheme: light dark; --line: #d0d0d0; --muted: #6b6b6b; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.6 system-ui, -apple-system, "PingFang SC", sans-serif; }
+.app { max-width: 960px; margin: 0 auto; padding: 0 16px 64px; }
+header { display: flex; justify-content: space-between; align-items: center;
+  gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+nav { display: flex; gap: 16px; }
+nav a { text-decoration: none; color: inherit; }
+nav a.active { font-weight: 600; border-bottom: 2px solid currentColor; }
+.switcher { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
+.card { border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin: 16px 0; }
+.card h3 { margin: 0 0 8px; font-size: 16px; }
+.meta { color: var(--muted); font-size: 13px; display: flex; gap: 12px; flex-wrap: wrap; }
+.credits { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 4px; }
+.credits li { display: flex; gap: 8px; font-size: 14px; }
+.credits .role { color: var(--muted); min-width: 84px; }
+.tag { border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; font-size: 12px; }
+.retro { margin-top: 12px; padding: 12px; border-left: 3px solid var(--line); color: var(--muted); }
+.error { color: #b3261e; }
+.hint { color: var(--muted); }
+form { display: grid; gap: 8px; max-width: 560px; }
+input, textarea, select, button { font: inherit; padding: 6px 8px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }

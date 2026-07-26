@@ -12,4 +12,13 @@ test: up
 run: up
 	DATABASE_URL="$(DSN)" go run ./cmd/server
 
-.PHONY: up down test run
+web-install:
+	cd web && npm install
+
+web-dev:
+	cd web && npm run dev
+
+web-test:
+	cd web && npm test
+
+.PHONY: up down test run web-install web-dev web-test
