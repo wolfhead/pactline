@@ -17,6 +17,8 @@ export default function CreditPanel({ bounty, onChanged }: { bounty: Bounty; onC
   const [role, setRole] = useState<CreditRole>('SUPPORT')
   const [evidence, setEvidence] = useState('')
   const [error, setError] = useState('')
+  const [nominating, setNominating] = useState(false)
+  const [respondingId, setRespondingId] = useState<string | null>(null)
 
   const load = useCallback(() => {
     apiGet<Credit[]>(`/api/bounties/${bounty.id}/credits`)
@@ -30,28 +32,39 @@ export default function CreditPanel({ bounty, onChanged }: { bounty: Bounty; onC
 
   async function nominate() {
     setError('')
+    setNominating(true)
     try {
       await apiPost(`/api/bounties/${bounty.id}/credits`, {
         user_id: userId,
         role,
         evidence,
       })
+      // Reset the whole selection on success — otherwise a second accidental
+      // click re-submits the same user/role pair (A4). On failure the
+      // selection is left intact so the user can retry without re-entering it.
+      setUserId('')
+      setRole('SUPPORT')
       setEvidence('')
       load()
       onChanged()
     } catch (err) {
       setError(String((err as Error).message))
+    } finally {
+      setNominating(false)
     }
   }
 
   async function respond(id: string, status: 'CONFIRMED' | 'DECLINED') {
     setError('')
+    setRespondingId(id)
     try {
       await apiPost(`/api/credits/${id}/respond`, { status })
       load()
       onChanged()
     } catch (err) {
       setError(String((err as Error).message))
+    } finally {
+      setRespondingId(null)
     }
   }
 
@@ -73,8 +86,8 @@ export default function CreditPanel({ bounty, onChanged }: { bounty: Bounty; onC
             {c.evidence && <a href={c.evidence} target="_blank" rel="noreferrer">评审记录</a>}
             {me?.id === c.user_id && c.status === 'PENDING' && (
               <>
-                <button onClick={() => respond(c.id, 'CONFIRMED')}>确认</button>
-                <button onClick={() => respond(c.id, 'DECLINED')}>拒绝</button>
+                <button onClick={() => respond(c.id, 'CONFIRMED')} disabled={respondingId === c.id}>确认</button>
+                <button onClick={() => respond(c.id, 'DECLINED')} disabled={respondingId === c.id}>拒绝</button>
               </>
             )}
           </li>
@@ -98,7 +111,7 @@ export default function CreditPanel({ bounty, onChanged }: { bounty: Bounty; onC
             <input value={evidence} onChange={(e) => setEvidence(e.target.value)}
               placeholder="评审意见链接(REVIEW 必填)" />
           )}
-          <button onClick={nominate} disabled={!userId}>提名</button>
+          <button onClick={nominate} disabled={!userId || nominating}>{nominating ? '提交中…' : '提名'}</button>
         </div>
       )}
 

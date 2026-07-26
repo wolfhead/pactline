@@ -193,4 +193,116 @@ describe('CreditPanel', () => {
 
     await waitFor(() => expect(mockedApiPost).toHaveBeenCalledWith('/api/credits/credit-x/respond', { status: 'CONFIRMED' }))
   })
+
+  it('posts a nomination with exactly user_id, role and evidence (B1)', async () => {
+    mockIdentity(CLAIMER)
+    mockedApiGet.mockResolvedValue([])
+    mockedApiPost.mockResolvedValue(undefined)
+
+    const { container } = renderPanel()
+
+    await waitFor(() => expect(screen.getByText('提名')).toBeInTheDocument())
+
+    const [userSelect, roleSelect] = container.querySelectorAll('select')
+    fireEvent.change(userSelect, { target: { value: NOMINEE } })
+    fireEvent.change(roleSelect, { target: { value: 'REVIEW' } })
+    fireEvent.change(screen.getByPlaceholderText('评审意见链接(REVIEW 必填)'), {
+      target: { value: 'https://review.example.com/123' },
+    })
+
+    fireEvent.click(screen.getByText('提名'))
+
+    await waitFor(() =>
+      expect(mockedApiPost).toHaveBeenCalledWith(`/api/bounties/${BOUNTY_ID}/credits`, {
+        user_id: NOMINEE,
+        role: 'REVIEW',
+        evidence: 'https://review.example.com/123',
+      }),
+    )
+    const payload = mockedApiPost.mock.calls[0][1] as Record<string, unknown>
+    expect(Object.keys(payload).sort()).toEqual(['evidence', 'role', 'user_id'])
+  })
+
+  it('surfaces the server error on a rejected nomination and keeps the selection intact (B2)', async () => {
+    mockIdentity(CLAIMER)
+    mockedApiGet.mockResolvedValue([])
+    mockedApiPost.mockRejectedValue(new Error('role already claimed by another nominee'))
+
+    const { container } = renderPanel()
+
+    await waitFor(() => expect(screen.getByText('提名')).toBeInTheDocument())
+
+    const [userSelect] = container.querySelectorAll('select')
+    fireEvent.change(userSelect, { target: { value: NOMINEE } })
+
+    fireEvent.click(screen.getByText('提名'))
+
+    await waitFor(() => expect(screen.getByText('role already claimed by another nominee')).toBeInTheDocument())
+    expect((userSelect as HTMLSelectElement).value).toBe(NOMINEE)
+  })
+
+  it('shows no confirm or decline control on a DECLINED credit, even for its owner (B3)', async () => {
+    mockIdentity(NOMINEE)
+    mockedApiGet.mockResolvedValue([makeCredit({ user_id: NOMINEE, status: 'DECLINED' })])
+
+    renderPanel()
+
+    await waitFor(() => expect(screen.getByText('已拒绝')).toBeInTheDocument())
+    expect(screen.queryByText('确认')).not.toBeInTheDocument()
+    expect(screen.queryByText('拒绝')).not.toBeInTheDocument()
+  })
+
+  it('disables the nominate button while its request is in flight, and re-enables on success (B4)', async () => {
+    mockIdentity(CLAIMER)
+    mockedApiGet.mockResolvedValue([])
+    let resolvePost!: () => void
+    mockedApiPost.mockReturnValue(
+      new Promise((resolve) => {
+        resolvePost = () => resolve(undefined)
+      }),
+    )
+
+    const { container } = renderPanel()
+    const userSelect = container.querySelectorAll('select')[0]
+
+    await waitFor(() => expect(screen.getByText('提名')).toBeInTheDocument())
+    fireEvent.change(userSelect, { target: { value: NOMINEE } })
+
+    const button = screen.getByText('提名') as HTMLButtonElement
+    fireEvent.click(button)
+
+    await waitFor(() => expect(button.disabled).toBe(true))
+
+    resolvePost()
+    // A successful nomination also resets the selection (A4), which leaves
+    // the button disabled via its separate `!userId` guard — re-select a
+    // nominee to isolate whether the in-flight guard itself cleared.
+    await waitFor(() => expect(userSelect).toHaveValue(''))
+    fireEvent.change(userSelect, { target: { value: NOMINEE } })
+    expect(button.disabled).toBe(false)
+  })
+
+  it('disables the nominate button while its request is in flight, and re-enables on failure (B4)', async () => {
+    mockIdentity(CLAIMER)
+    mockedApiGet.mockResolvedValue([])
+    let rejectPost!: (err: Error) => void
+    mockedApiPost.mockReturnValue(
+      new Promise((_resolve, reject) => {
+        rejectPost = reject
+      }),
+    )
+
+    const { container } = renderPanel()
+
+    await waitFor(() => expect(screen.getByText('提名')).toBeInTheDocument())
+    fireEvent.change(container.querySelectorAll('select')[0], { target: { value: NOMINEE } })
+
+    const button = screen.getByText('提名') as HTMLButtonElement
+    fireEvent.click(button)
+
+    await waitFor(() => expect(button.disabled).toBe(true))
+
+    rejectPost(new Error('boom'))
+    await waitFor(() => expect(button.disabled).toBe(false))
+  })
 })

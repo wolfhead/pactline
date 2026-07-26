@@ -19,6 +19,7 @@ export default function BountyDetail() {
   const [retro, setRetro] = useState('')
   const [personDays, setPersonDays] = useState('')
   const [error, setError] = useState('')
+  const [pending, setPending] = useState<Status | null>(null)
 
   const load = useCallback(() => {
     if (!id) return
@@ -35,15 +36,34 @@ export default function BountyDetail() {
 
   async function move(to: Status) {
     setError('')
+
+    // Each field is meaningful only for the transition it belongs to:
+    // retrospective records why work was abandoned, person_days records
+    // effort spent on hand-in. Sending either on an unrelated transition
+    // would silently persist a stale value the user never meant to submit
+    // for that edge (A1).
+    let personDaysValue: number | undefined
+    if (to === 'DELIVERED' && personDays !== '') {
+      const parsed = Number(personDays)
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        setError(`实际人天「${personDays}」不是合法的非负数字,请检查`)
+        return
+      }
+      personDaysValue = parsed
+    }
+
+    setPending(to)
     try {
       await apiPost(`/api/bounties/${id}/transition`, {
         to,
-        retrospective: retro || undefined,
-        person_days: personDays ? Number(personDays) : undefined,
+        retrospective: to === 'ABANDONED' ? (retro || undefined) : undefined,
+        person_days: personDaysValue,
       })
       load()
     } catch (err) {
       setError(String((err as Error).message))
+    } finally {
+      setPending(null)
     }
   }
 
@@ -77,7 +97,9 @@ export default function BountyDetail() {
 
       <div className="row">
         {NEXT_STATES[bounty.status].map((s) => (
-          <button key={s} onClick={() => move(s)}>转为「{STATUS_LABELS[s]}」</button>
+          <button key={s} onClick={() => move(s)} disabled={pending !== null}>
+            {pending === s ? '提交中…' : `转为「${STATUS_LABELS[s]}」`}
+          </button>
         ))}
         {NEXT_STATES[bounty.status].length === 0 && <span className="hint">已归档为作品,不可再流转。</span>}
       </div>
