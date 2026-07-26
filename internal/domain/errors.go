@@ -22,4 +22,7 @@ var (
 	ErrCreditNotPending = errors.New("credit is not pending")
 	// ErrEvidenceRequired means a REVIEW credit carries no review record.
 	ErrEvidenceRequired = errors.New("evidence is required for REVIEW credit")
+	// ErrInvalidCreditRole means the nominated role is not one of the six
+	// defined parts.
+	ErrInvalidCreditRole = errors.New("invalid credit role")
 )
