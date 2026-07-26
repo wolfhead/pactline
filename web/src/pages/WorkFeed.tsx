@@ -1,8 +1,31 @@
+import { useEffect, useState } from 'react'
+import { apiGet } from '../api/client'
+import WorkCard from '../components/WorkCard'
+import type { WorkView } from '../types'
+
+/**
+ * The work feed is the home page. It is deliberately a changelog, not a
+ * leaderboard: no ranking, no totals, no aggregate numbers.
+ */
 export default function WorkFeed() {
+  const [works, setWorks] = useState<WorkView[]>([])
+  const [error, setError] = useState<string>('')
+
+  useEffect(() => {
+    apiGet<WorkView[]>('/api/works')
+      .then(setWorks)
+      .catch((err) => setError(String(err.message ?? err)))
+  }, [])
+
+  if (error) return <p className="error">加载失败:{error}</p>
+  if (works.length === 0) return <p className="hint">还没有已完成的作品。</p>
+
   return (
-    <div className="card">
-      <h3>作品流</h3>
-      <p className="hint">尚未实现 — 由 Task 12 补齐。</p>
-    </div>
+    <section>
+      <h2>作品流</h2>
+      {works.map((w) => (
+        <WorkCard key={w.bounty.id} work={w} />
+      ))}
+    </section>
   )
 }
