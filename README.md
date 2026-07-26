@@ -24,8 +24,17 @@ make web-dev     # 启动前端(:5173)
 
 ```bash
 make test        # Go,需 Docker(内部执行 `go test ./... -p 1`,共用一个数据库,不能并发跑多个 make test)
-make web-test     # 前端单元测试
+make web-test     # 前端组件测试(vitest)
+make e2e          # 端到端测试(Playwright,真实浏览器驱动整个应用)
 ```
+
+`make e2e` 不需要手动起服务:`web/playwright.config.ts` 的 `webServer` 会自动拉起
+PostgreSQL(`docker compose up -d --wait`)、Go 后端与 Vite 前端;若开发者本机已经
+在跑这三者,则复用现有进程(`reuseExistingServer`),不会被占用端口卡住。
+
+每个 e2e 用例自建自己的数据(标题带唯一后缀)并在测试结束时清理
+(`credits` 随其 `bounty` 级联删除),不依赖、也不修改数据库里已有的行 ——
+整套 e2e 跑完后 `bounties`、`credits` 的行数应与跑之前完全一致。
 
 ## Phase 1 边界
 

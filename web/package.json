@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -13,12 +14,15 @@
     "react-router-dom": "^6.26.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.0",
     "@testing-library/jest-dom": "^6.5.0",
     "@testing-library/react": "^16.0.1",
+    "@types/pg": "^8.20.0",
     "@types/react": "^18.3.10",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.2",
     "jsdom": "^25.0.1",
+    "pg": "^8.22.0",
     "typescript": "^5.6.2",
     "vite": "^5.4.8",
     "vitest": "^2.1.2"

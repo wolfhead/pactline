@@ -21,4 +21,11 @@ web-dev:
 web-test:
 	cd web && npm test
 
-.PHONY: up down test run web-install web-dev web-test
+# e2e drives a real browser against the whole stack. Playwright's own
+# webServer config brings up Postgres (via docker compose), the Go backend
+# and the Vite dev server as needed, and reuses them if a developer already
+# has them running — see web/playwright.config.ts.
+e2e:
+	cd web && npx playwright test
+
+.PHONY: up down test run web-install web-dev web-test e2e
