@@ -25,6 +25,10 @@ func NewRouter(users *store.UserStore, bounties *store.BountyStore, credits *sto
 		mux.HandleFunc("GET /api/bounties/{id}/credits", ch.listByBounty)
 		mux.HandleFunc("POST /api/credits/{id}/respond", ch.respond)
 		mux.HandleFunc("GET /api/credits/pending", ch.listPending)
+
+		fh := &feedHandler{bounties: bounties, credits: credits, users: users}
+		mux.HandleFunc("GET /api/works", fh.works)
+		mux.HandleFunc("GET /api/users/{id}/portfolio", fh.portfolio)
 	}
 
 	return withIdentity(users, mux)
