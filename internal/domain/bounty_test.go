@@ -24,6 +24,7 @@ func TestValidateTransition(t *testing.T) {
 		{"claimed back to open", domain.StatusClaimed, domain.StatusOpen, "", nil},
 		{"draft straight to completed", domain.StatusDraft, domain.StatusCompleted, "", domain.ErrInvalidTransition},
 		{"completed is terminal", domain.StatusCompleted, domain.StatusOpen, "", domain.ErrInvalidTransition},
+		{"abandoned is terminal", domain.StatusAbandoned, domain.StatusOpen, "", domain.ErrInvalidTransition},
 		{"abandon without retrospective", domain.StatusClaimed, domain.StatusAbandoned, "", domain.ErrRetrospectiveRequired},
 		{"abandon with retrospective", domain.StatusClaimed, domain.StatusAbandoned, "上游依赖未就绪", nil},
 	}
@@ -65,6 +66,11 @@ func TestCanClaim(t *testing.T) {
 		require.NoError(t, domain.CanClaim(eng, b))
 		require.ErrorIs(t, domain.CanClaim(other, b), domain.ErrNotDirectedToYou)
 	})
+
+	t.Run("directed bounty allows target without engineer role", func(t *testing.T) {
+		b := domain.Bounty{Status: domain.StatusOpen, Visibility: domain.VisibilityDirected, DirectedTo: &pm.ID}
+		require.NoError(t, domain.CanClaim(pm, b))
+	})
 }
 
 func TestCanEditAndNominate(t *testing.T) {
@@ -82,6 +88,15 @@ func TestCanEditAndNominate(t *testing.T) {
 	require.True(t, domain.CanNominate(claimer, b))
 	require.True(t, domain.CanNominate(steward, b))
 	require.False(t, domain.CanNominate(sponsor, b))
+
+	t.Run("CanNominate with nil ClaimedBy", func(t *testing.T) {
+		eng := domain.User{ID: uuid.New(), Roles: []domain.UserRole{domain.UserRoleEngineer}}
+		stwd := domain.User{ID: uuid.New(), Roles: []domain.UserRole{domain.UserRoleSteward}}
+		bUnclaimed := domain.Bounty{SponsorID: sponsor.ID, ClaimedBy: nil}
+
+		require.False(t, domain.CanNominate(eng, bUnclaimed))
+		require.True(t, domain.CanNominate(stwd, bUnclaimed))
+	})
 }
 
 func TestBusinessLineWeightSum(t *testing.T) {

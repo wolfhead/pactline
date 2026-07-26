@@ -59,6 +59,12 @@ type BusinessLine struct {
 
 // Bounty is a unit of work. Before completion it is a claimable bounty; after
 // completion it is a work displayed in the feed. There is no second entity.
+//
+// Note: some columns in migrations/0001_init.sql are deliberately not yet included here
+// because the features that depend on them ship in later phases:
+// - value_level, difficulty, completion, settled_score, settled_at: scoring system (future phase)
+// - due_date: commitment tracking (future phase)
+// - baseline_system_id: baseline contracts (future phase)
 type Bounty struct {
 	ID                 uuid.UUID      `json:"id"`
 	Type               BountyType     `json:"type"`
@@ -129,12 +135,20 @@ func CanClaim(u User, b Bounty) error {
 	if b.Status != StatusOpen {
 		return ErrNotClaimable
 	}
+	// Directed bounties are claimed only by their named target. Notably, this check
+	// returns before the engineer/steward role check below. This is intentional:
+	// a directed bounty names one specific person, and the act of naming them is
+	// itself the authorization to claim—no role is required.
 	if b.Visibility == VisibilityDirected {
 		if b.DirectedTo == nil || *b.DirectedTo != u.ID {
 			return ErrNotDirectedToYou
 		}
 		return nil
 	}
+	// Public and restricted bounties both require engineer or steward role. Restricted
+	// visibility has no machine enforcement; the Restriction field holds a human-readable
+	// context requirement (e.g., "needs Bidding Engine context") that software cannot
+	// evaluate. It is advisory guidance for the claimer, not a programmatic gate.
 	if !u.HasRole(UserRoleEngineer) && !u.HasRole(UserRoleSteward) {
 		return ErrForbidden
 	}
