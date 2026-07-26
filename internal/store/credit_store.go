@@ -31,14 +31,16 @@ func (s *CreditStore) Nominate(ctx context.Context, c domain.Credit) (domain.Cre
 		c.Status = domain.CreditPending
 	}
 
-	if _, err := s.db.Pool.Exec(ctx, `
+	tag, err := s.db.Pool.Exec(ctx, `
 		INSERT INTO credits (id, bounty_id, user_id, role, nominated_by, evidence, status)
 		VALUES ($1,$2,$3,$4,$5,$6,$7)
 		ON CONFLICT (bounty_id, user_id, role) DO NOTHING`,
 		c.ID, c.BountyID, c.UserID, c.Role, c.NominatedBy, nullableString(c.Evidence), c.Status,
-	); err != nil {
+	)
+	if err != nil {
 		return domain.Credit{}, fmt.Errorf("insert credit: %w", err)
 	}
+	inserted := tag.RowsAffected() > 0
 
 	row := s.db.Pool.QueryRow(ctx,
 		`SELECT `+creditColumns+` FROM credits WHERE bounty_id=$1 AND user_id=$2 AND role=$3`,
@@ -47,10 +49,36 @@ func (s *CreditStore) Nominate(ctx context.Context, c domain.Credit) (domain.Cre
 	if err != nil {
 		return domain.Credit{}, err
 	}
+
+	// A conflict means the row already existed. If what was just submitted
+	// differs from what's stored, that data was silently discarded by
+	// DO NOTHING — make that visible instead of logging an identical-looking
+	// info line.
+	if !inserted {
+		evidenceDiffers := c.Evidence != out.Evidence
+		nominatedByDiffers := !uuidPtrEqual(c.NominatedBy, out.NominatedBy)
+		if evidenceDiffers || nominatedByDiffers {
+			slog.Warn("credit nomination conflict discarded submitted data",
+				"credit_id", out.ID, "bounty_id", out.BountyID, "user_id", out.UserID, "role", out.Role,
+				"submitted_evidence", c.Evidence, "stored_evidence", out.Evidence,
+				"submitted_nominated_by", c.NominatedBy, "stored_nominated_by", out.NominatedBy)
+			return out, nil
+		}
+	}
+
 	slog.Info("credit nominated",
 		"credit_id", out.ID, "bounty_id", out.BountyID, "user_id", out.UserID,
 		"role", out.Role, "nominated_by", out.NominatedBy, "status", out.Status)
 	return out, nil
+}
+
+// uuidPtrEqual reports whether two possibly-nil uuid pointers refer to the
+// same value.
+func uuidPtrEqual(a, b *uuid.UUID) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }
 
 // GetByID returns one credit, or domain.ErrNotFound.
@@ -219,7 +247,7 @@ func scanCredit(s scanner) (domain.Credit, error) {
 	err := s.Scan(&c.ID, &c.BountyID, &c.UserID, &c.Role, &c.NominatedBy,
 		&evidence, &c.Status, &c.ConfirmedAt, &c.CreatedAt)
 	if err != nil {
-		return domain.Credit{}, err
+		return domain.Credit{}, fmt.Errorf("scan credit: %w", err)
 	}
 	if evidence != nil {
 		c.Evidence = *evidence

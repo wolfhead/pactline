@@ -184,3 +184,129 @@ func mustCredits(t *testing.T, cs *store.CreditStore, id uuid.UUID) []domain.Cre
 	require.NoError(t, err)
 	return out
 }
+
+// TestInheritDefineCreditsIgnoresUnconfirmedLead pins the CONFIRMED filter in
+// confirmedLeadHolders: a PENDING lead must not be treated as an author, and
+// inheritance must fall back to the parent's claimed_by instead. A
+// regression that dropped `status='CONFIRMED'` from that query's WHERE
+// clause would pass every other existing test, since they only ever exercise
+// the case where the lead is already confirmed.
+func TestInheritDefineCreditsIgnoresUnconfirmedLead(t *testing.T) {
+	db := newTestDB(t)
+	bs, cs := store.NewBountyStore(db), store.NewCreditStore(db)
+	ctx := context.Background()
+
+	plan := newBounty(userPM)
+	plan.Type = domain.BountyTypePlan
+	plan.ClaimedBy = &userEngD
+	planned, err := bs.Create(ctx, plan)
+	require.NoError(t, err)
+	cleanupBounties(t, db, planned.ID)
+
+	// Nominate a LEAD credit for a different user, but never confirm it.
+	_, err = cs.Nominate(ctx, domain.Credit{
+		BountyID: planned.ID, UserID: userEngC, Role: domain.CreditRoleLead, NominatedBy: &userPM,
+	})
+	require.NoError(t, err)
+
+	child := newBounty(userPM)
+	child.ParentID = &planned.ID
+	delivery, err := bs.Create(ctx, child)
+	require.NoError(t, err)
+	cleanupBounties(t, db, delivery.ID)
+
+	n, err := cs.InheritDefineCredits(ctx, delivery)
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+
+	credits, err := cs.ListByBounty(ctx, delivery.ID)
+	require.NoError(t, err)
+	require.Len(t, credits, 1)
+	require.Equal(t, domain.CreditRoleDefine, credits[0].Role)
+	require.Equal(t, userEngD, credits[0].UserID, "unconfirmed LEAD holder must be ignored; fallback to claimed_by")
+}
+
+// TestInheritDefineCreditsNeitherLeadNorClaimerIsNoop covers the branch where
+// the parent plan has no confirmed LEAD credit and no claimer at all: there
+// is nobody to credit, so inheritance must return (0, nil) and leave the
+// child with no credits, rather than nominating a zero-value user.
+func TestInheritDefineCreditsNeitherLeadNorClaimerIsNoop(t *testing.T) {
+	db := newTestDB(t)
+	bs, cs := store.NewBountyStore(db), store.NewCreditStore(db)
+	ctx := context.Background()
+
+	plan := newBounty(userPM)
+	plan.Type = domain.BountyTypePlan
+	plan.ClaimedBy = nil
+	planned, err := bs.Create(ctx, plan)
+	require.NoError(t, err)
+	cleanupBounties(t, db, planned.ID)
+
+	child := newBounty(userPM)
+	child.ParentID = &planned.ID
+	delivery, err := bs.Create(ctx, child)
+	require.NoError(t, err)
+	cleanupBounties(t, db, delivery.ID)
+
+	n, err := cs.InheritDefineCredits(ctx, delivery)
+	require.NoError(t, err)
+	require.Equal(t, 0, n)
+	require.Empty(t, mustCredits(t, cs, delivery.ID))
+}
+
+// TestRespondDeclineLeavesConfirmedAtNil is the DECLINE counterpart to
+// TestRespondConfirmsAndStamps: only the confirm path stamps confirmed_at.
+func TestRespondDeclineLeavesConfirmedAtNil(t *testing.T) {
+	db := newTestDB(t)
+	bs, cs := store.NewBountyStore(db), store.NewCreditStore(db)
+	ctx := context.Background()
+
+	b, err := bs.Create(ctx, newBounty(userPM))
+	require.NoError(t, err)
+	cleanupBounties(t, db, b.ID)
+
+	c, err := cs.Nominate(ctx, domain.Credit{
+		BountyID: b.ID, UserID: userEngC, Role: domain.CreditRoleSupport, NominatedBy: &userPM,
+	})
+	require.NoError(t, err)
+
+	declined, err := cs.Respond(ctx, c.ID, domain.CreditDeclined)
+	require.NoError(t, err)
+	require.Equal(t, domain.CreditDeclined, declined.Status)
+	require.Nil(t, declined.ConfirmedAt)
+}
+
+// TestNominateConflictKeepsOriginalEvidence pins the idempotent-wins behavior
+// from A1: re-nominating the same (bounty, user, role) with different data
+// must not overwrite what was already stored, and the discard must be
+// something a future change to upsert semantics has to break this test to
+// introduce.
+func TestNominateConflictKeepsOriginalEvidence(t *testing.T) {
+	db := newTestDB(t)
+	bs, cs := store.NewBountyStore(db), store.NewCreditStore(db)
+	ctx := context.Background()
+
+	b, err := bs.Create(ctx, newBounty(userPM))
+	require.NoError(t, err)
+	cleanupBounties(t, db, b.ID)
+
+	first, err := cs.Nominate(ctx, domain.Credit{
+		BountyID: b.ID, UserID: userEngC, Role: domain.CreditRoleReview,
+		Evidence: "https://git/mr/1", NominatedBy: &userPM,
+	})
+	require.NoError(t, err)
+
+	second, err := cs.Nominate(ctx, domain.Credit{
+		BountyID: b.ID, UserID: userEngC, Role: domain.CreditRoleReview,
+		Evidence: "https://git/mr/2", NominatedBy: &userPM,
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, first.ID, second.ID)
+	require.Equal(t, "https://git/mr/1", second.Evidence, "conflict must not overwrite the originally stored evidence")
+
+	all, err := cs.ListByBounty(ctx, b.ID)
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	require.Equal(t, "https://git/mr/1", all[0].Evidence)
+}
