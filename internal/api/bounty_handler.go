@@ -142,7 +142,8 @@ type transitionRequest struct {
 
 // transition moves a bounty along the status graph and applies the side effects
 // tied to each edge. Authorisation depends on the target state: claiming is
-// governed by CanClaim, everything else by CanEdit or by being the claimer.
+// governed by CanClaim; accepting into COMPLETED requires CanEdit (sponsor or
+// steward) only; every other edge accepts CanEdit or being the claimer.
 func (h *bountyHandler) transition(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -169,10 +170,14 @@ func (h *bountyHandler) transition(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := authorizeTransition(me, b, req.To); err != nil {
+		slog.Warn("transition denied",
+			"bounty_id", b.ID, "actor_id", me.ID, "from", b.Status, "to", req.To, "error", err)
 		writeError(w, r, err)
 		return
 	}
 	if err := domain.ValidateTransition(b, req.To); err != nil {
+		slog.Warn("transition rejected",
+			"bounty_id", b.ID, "actor_id", me.ID, "from", b.Status, "to", req.To, "error", err)
 		writeError(w, r, err)
 		return
 	}
@@ -196,8 +201,21 @@ func authorizeTransition(me domain.User, b domain.Bounty, to domain.Status) erro
 	if me.HasRole(domain.UserRoleSteward) {
 		return nil
 	}
-	if to == domain.StatusClaimed {
+	if to == domain.StatusClaimed && b.Status == domain.StatusOpen {
+		// This is the actual claim edge (OPEN -> CLAIMED); CanClaim enforces
+		// role and DIRECTED-visibility rules. The other edge that targets
+		// CLAIMED is DELIVERED -> CLAIMED (the claimer handing the bounty
+		// back), which falls through to the CanEdit/isClaimer check below —
+		// CanClaim does not apply there since the bounty is no longer OPEN.
 		return domain.CanClaim(me, b)
+	}
+	if to == domain.StatusCompleted {
+		// Acceptance is the sponsor's (or a steward's, handled above) call.
+		// The claimer must not be able to accept their own delivery.
+		if domain.CanEdit(me, b) {
+			return nil
+		}
+		return domain.ErrForbidden
 	}
 	isClaimer := b.ClaimedBy != nil && *b.ClaimedBy == me.ID
 	if domain.CanEdit(me, b) || isClaimer {
@@ -210,6 +228,11 @@ func applyTransitionEffects(b *domain.Bounty, me domain.User, to domain.Status) 
 	now := time.Now().UTC()
 	switch to {
 	case domain.StatusClaimed:
+		// transitionRequest carries no field for naming another claimer, so
+		// ClaimedBy is always set to the caller's own ID here. The nil check
+		// guards the one edge where ClaimedBy is already set: walking a
+		// DELIVERED bounty back to CLAIMED, where it preserves the original
+		// claimer and claim timestamp instead of overwriting them.
 		if b.ClaimedBy == nil {
 			claimer := me.ID
 			b.ClaimedBy = &claimer

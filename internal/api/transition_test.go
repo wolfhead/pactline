@@ -10,7 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const stewardID = "00000000-0000-0000-0000-000000000006"
+const (
+	stewardID = "00000000-0000-0000-0000-000000000006"
+	engDID    = "00000000-0000-0000-0000-000000000004"
+)
 
 func createDraft(t *testing.T, h http.Handler) domain.Bounty {
 	t.Helper()
@@ -117,5 +120,89 @@ func TestStewardCanForceTransition(t *testing.T) {
 	h := newTestServer(t)
 	b := createDraft(t, h)
 	rec := transition(t, h, b.ID.String(), stewardID, map[string]any{"to": "OPEN"})
+	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+// TestStewardCanClaimDirectedBountyForOthers exercises the one capability that
+// authorizeTransition's steward short-circuit uniquely grants: a steward can
+// move a DIRECTED bounty into CLAIMED even though it is directed at someone
+// else, bypassing domain.CanClaim's ErrNotDirectedToYou. TestStewardCanForceTransition
+// alone would still pass if the short-circuit were deleted, because
+// domain.CanEdit already grants stewards the DRAFT->OPEN edge; this test fails
+// if the short-circuit is removed.
+func TestStewardCanClaimDirectedBountyForOthers(t *testing.T) {
+	h := newTestServer(t)
+	rec := do(t, h, http.MethodPost, "/api/bounties", pmID, map[string]any{
+		"type":        "DELIVERY",
+		"title":       "定向单:仅研发C可认领",
+		"visibility":  "DIRECTED",
+		"directed_to": engCID,
+	})
+	require.Equal(t, http.StatusCreated, rec.Code)
+	var b domain.Bounty
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &b))
+	cleanupBounty(t, b.ID)
+
+	require.Equal(t, http.StatusOK,
+		transition(t, h, b.ID.String(), pmID, map[string]any{"to": "OPEN"}).Code)
+
+	rec = transition(t, h, b.ID.String(), stewardID, map[string]any{"to": "CLAIMED"})
+	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+// TestThirdPartyCannotTransitionOthersBounty covers the case where the actor is
+// neither the sponsor, a steward, nor the claimer.
+func TestThirdPartyCannotTransitionOthersBounty(t *testing.T) {
+	h := newTestServer(t)
+	b := createDraft(t, h)
+	require.Equal(t, http.StatusOK,
+		transition(t, h, b.ID.String(), pmID, map[string]any{"to": "OPEN"}).Code)
+	require.Equal(t, http.StatusOK,
+		transition(t, h, b.ID.String(), engCID, map[string]any{"to": "CLAIMED"}).Code)
+
+	rec := transition(t, h, b.ID.String(), engDID, map[string]any{"to": "DELIVERED"})
+	require.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+// TestClaimerCannotAcceptOwnDelivery pins the A1 fix: the deliverer must not be
+// able to accept their own work into COMPLETED. Only the sponsor (or a
+// steward) may.
+func TestClaimerCannotAcceptOwnDelivery(t *testing.T) {
+	h := newTestServer(t)
+	b := createDraft(t, h)
+	require.Equal(t, http.StatusOK,
+		transition(t, h, b.ID.String(), pmID, map[string]any{"to": "OPEN"}).Code)
+	require.Equal(t, http.StatusOK,
+		transition(t, h, b.ID.String(), engCID, map[string]any{"to": "CLAIMED"}).Code)
+	require.Equal(t, http.StatusOK,
+		transition(t, h, b.ID.String(), engCID, map[string]any{"to": "DELIVERED"}).Code)
+
+	rec := transition(t, h, b.ID.String(), engCID, map[string]any{"to": "COMPLETED"})
+	require.Equal(t, http.StatusForbidden, rec.Code)
+
+	rec = transition(t, h, b.ID.String(), pmID, map[string]any{"to": "COMPLETED"})
+	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+// TestClaimerRetainsOtherEdges pins that the A1 fix is scoped to COMPLETED
+// only: the claimer can still hand a DELIVERED bounty back to CLAIMED, and can
+// still abandon their own bounty with a retrospective.
+func TestClaimerRetainsOtherEdges(t *testing.T) {
+	h := newTestServer(t)
+	b := createDraft(t, h)
+	require.Equal(t, http.StatusOK,
+		transition(t, h, b.ID.String(), pmID, map[string]any{"to": "OPEN"}).Code)
+	require.Equal(t, http.StatusOK,
+		transition(t, h, b.ID.String(), engCID, map[string]any{"to": "CLAIMED"}).Code)
+	require.Equal(t, http.StatusOK,
+		transition(t, h, b.ID.String(), engCID, map[string]any{"to": "DELIVERED"}).Code)
+
+	rec := transition(t, h, b.ID.String(), engCID, map[string]any{"to": "CLAIMED"})
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	rec = transition(t, h, b.ID.String(), engCID, map[string]any{
+		"to":            "ABANDONED",
+		"retrospective": "接口联调受阻,claimer 主动放弃",
+	})
 	require.Equal(t, http.StatusOK, rec.Code)
 }
