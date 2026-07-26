@@ -12,7 +12,10 @@ import (
 	"github.com/google/uuid"
 )
 
-type bountyHandler struct{ bounties *store.BountyStore }
+type bountyHandler struct {
+	bounties *store.BountyStore
+	credits  *store.CreditStore
+}
 
 type createBountyRequest struct {
 	Type               domain.BountyType     `json:"type"`
@@ -71,6 +74,17 @@ func (h *bountyHandler) create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, r, err)
 		return
+	}
+	if created.ParentID != nil && h.credits != nil {
+		if n, err := h.credits.InheritDefineCredits(r.Context(), created); err != nil {
+			// The bounty exists; failing to inherit must not lose it. Surface
+			// the problem loudly and let the deliverer nominate manually.
+			slog.Error("inherit define credits",
+				"bounty_id", created.ID, "parent_id", *created.ParentID, "error", err)
+		} else {
+			slog.Info("define credits inherited on create",
+				"bounty_id", created.ID, "count", n)
+		}
 	}
 	writeJSON(w, http.StatusCreated, created)
 }

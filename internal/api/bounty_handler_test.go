@@ -36,7 +36,7 @@ func newTestServer(t *testing.T) http.Handler {
 	require.NoError(t, db.Migrate(context.Background(), bountyboard.MigrationFS))
 	t.Cleanup(db.Close)
 
-	return api.NewRouter(store.NewUserStore(db), store.NewBountyStore(db), nil)
+	return api.NewRouter(store.NewUserStore(db), store.NewBountyStore(db), store.NewCreditStore(db))
 }
 
 func do(t *testing.T, h http.Handler, method, path, userID string, body any) *httptest.ResponseRecorder {

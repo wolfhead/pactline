@@ -37,7 +37,7 @@ func main() {
 	handler := api.NewRouter(
 		store.NewUserStore(db),
 		store.NewBountyStore(db),
-		nil,
+		store.NewCreditStore(db),
 	)
 
 	addr := os.Getenv("ADDR")

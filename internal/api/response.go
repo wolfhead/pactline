@@ -30,6 +30,8 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	status := http.StatusInternalServerError
 	switch {
+	case errors.Is(err, domain.ErrInvalidCreditRole):
+		status = http.StatusBadRequest
 	case errors.Is(err, domain.ErrNotFound):
 		status = http.StatusNotFound
 	case errors.Is(err, domain.ErrForbidden),
