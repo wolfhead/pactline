@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: bounty
+      POSTGRES_PASSWORD: bounty
+      POSTGRES_DB: bountyboard
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bounty -d bountyboard"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
