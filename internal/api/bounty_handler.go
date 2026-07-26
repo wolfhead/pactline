@@ -35,6 +35,15 @@ func (h *bountyHandler) create(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &req) {
 		return
 	}
+
+	me := CurrentUser(r)
+	if !me.HasRole(domain.UserRoleSponsor) && !me.HasRole(domain.UserRoleSteward) {
+		slog.Warn("create bounty denied",
+			"actor_id", me.ID, "actor_roles", me.Roles, "title", req.Title)
+		writeError(w, r, domain.ErrForbidden)
+		return
+	}
+
 	if req.Title == "" {
 		writeJSON(w, http.StatusBadRequest, errorBody{Error: "title is required"})
 		return
@@ -56,7 +65,6 @@ func (h *bountyHandler) create(w http.ResponseWriter, r *http.Request) {
 		slog.Warn("business line weights do not sum to 1", "sum", sum, "title", req.Title)
 	}
 
-	me := CurrentUser(r)
 	created, err := h.bounties.Create(r.Context(), domain.Bounty{
 		Type:               req.Type,
 		ParentID:           req.ParentID,

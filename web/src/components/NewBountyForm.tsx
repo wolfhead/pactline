@@ -21,6 +21,13 @@ export default function NewBountyForm({ onCreated }: { onCreated: () => void }) 
   async function submit(e: FormEvent) {
     e.preventDefault()
     setError('')
+
+    const parsed = parseTags(tags)
+    if (!parsed.ok) {
+      setError(parsed.error)
+      return
+    }
+
     setBusy(true)
     try {
       await apiPost<Bounty>('/api/bounties', {
@@ -31,7 +38,7 @@ export default function NewBountyForm({ onCreated }: { onCreated: () => void }) 
         commitment,
         visibility,
         restriction: visibility === 'RESTRICTED' ? restriction : '',
-        business_lines: parseTags(tags),
+        business_lines: parsed.lines,
       })
       setTitle('')
       setGoal('')
@@ -79,14 +86,58 @@ export default function NewBountyForm({ onCreated }: { onCreated: () => void }) 
   )
 }
 
-/** parseTags turns "DSP:0.7,ADX:0.3" into weighted business lines. */
-function parseTags(raw: string) {
-  return raw
-    .split(',')
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .map((part) => {
-      const [tag, weight] = part.split(':')
-      return { tag: tag.trim(), weight: Number(weight ?? 1) || 0 }
-    })
+type ParsedTags =
+  | { ok: true; lines: { tag: string; weight: number }[] }
+  | { ok: false; error: string }
+
+/**
+ * parseTags turns "DSP:0.7,ADX:0.3" into weighted business lines.
+ *
+ * A segment with no colon (e.g. "DSP") defaults to weight 1 — that is the
+ * intended shorthand for an unweighted single business line. A segment that
+ * *does* carry a colon but whose weight is missing, unparseable, or negative
+ * (e.g. "DSP:", "DSP:abc", a typo like "DSP:o.7") is a mistake, not a zero
+ * weight, so parsing fails loudly instead of silently coercing it to 0 and
+ * letting a mis-attributed bounty through.
+ */
+function parseTags(raw: string): ParsedTags {
+  const lines: { tag: string; weight: number }[] = []
+  const seenTags = new Set<string>()
+
+  for (const rawPart of raw.split(',')) {
+    const part = rawPart.trim()
+    if (!part) continue
+
+    const colonIndex = part.indexOf(':')
+    const hasWeight = colonIndex !== -1
+    const tag = (hasWeight ? part.slice(0, colonIndex) : part).trim()
+    const weightStr = hasWeight ? part.slice(colonIndex + 1).trim() : undefined
+
+    if (!tag) {
+      return { ok: false, error: `业务线「${part}」缺少标签名,请检查格式` }
+    }
+
+    let weight = 1
+    if (weightStr !== undefined) {
+      if (weightStr === '') {
+        return { ok: false, error: `业务线「${part}」缺少权重,请填写数字或去掉冒号` }
+      }
+      const parsedWeight = Number(weightStr)
+      if (!Number.isFinite(parsedWeight) || parsedWeight < 0) {
+        return { ok: false, error: `业务线「${part}」的权重不是合法数字,请检查` }
+      }
+      weight = parsedWeight
+    }
+
+    // Two segments with the same tag must not both be submitted — reject
+    // rather than silently merge, so a duplicate never changes weights
+    // without the sponsor noticing.
+    if (seenTags.has(tag)) {
+      return { ok: false, error: `业务线「${tag}」重复出现,请合并或删除后再提交` }
+    }
+    seenTags.add(tag)
+    lines.push({ tag, weight })
+  }
+
+  return { ok: true, lines }
 }

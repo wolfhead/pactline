@@ -170,6 +170,48 @@ func TestCreateBountyWeightMismatchStillSucceeds(t *testing.T) {
 	cleanupBounty(t, b.ID)
 }
 
+// TestCreateBountyRequiresSponsorOrSteward pins the fix for the authorisation
+// gap where any authenticated identity, regardless of role, could create a
+// bounty (and thus be attributed as sponsor_id) through the HTTP API even
+// though the Board page only shows the form to sponsors and stewards.
+func TestCreateBountyRequiresSponsorOrSteward(t *testing.T) {
+	h := newTestServer(t)
+	rec := do(t, h, http.MethodPost, "/api/bounties", engCID, map[string]any{
+		"type":  "DELIVERY",
+		"title": "工程师尝试直接建单",
+		"goal":  "绕过前端隐藏的开单入口",
+	})
+	require.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+func TestCreateBountyAllowsSponsor(t *testing.T) {
+	h := newTestServer(t)
+	rec := do(t, h, http.MethodPost, "/api/bounties", pmID, map[string]any{
+		"type":  "DELIVERY",
+		"title": "产品 A 建单",
+		"goal":  "验证 SPONSOR 仍可开单",
+	})
+	require.Equal(t, http.StatusCreated, rec.Code)
+
+	var b domain.Bounty
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &b))
+	cleanupBounty(t, b.ID)
+}
+
+func TestCreateBountyAllowsSteward(t *testing.T) {
+	h := newTestServer(t)
+	rec := do(t, h, http.MethodPost, "/api/bounties", stewardID, map[string]any{
+		"type":  "DELIVERY",
+		"title": "Steward F 建单",
+		"goal":  "验证 STEWARD 仍可开单",
+	})
+	require.Equal(t, http.StatusCreated, rec.Code)
+
+	var b domain.Bounty
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &b))
+	cleanupBounty(t, b.ID)
+}
+
 func TestMalformedIdentityIsUnauthorized(t *testing.T) {
 	h := newTestServer(t)
 	rec := do(t, h, http.MethodGet, "/api/bounties", "not-a-uuid", nil)
