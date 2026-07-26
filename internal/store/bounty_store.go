@@ -81,6 +81,12 @@ func (s *BountyStore) GetByID(ctx context.Context, id uuid.UUID) (domain.Bounty,
 }
 
 // Update overwrites every mutable column and refreshes updated_at.
+//
+// SponsorID is immutable: it is who opened the bounty, a fact about its
+// origin rather than a mutable attribute. The SET clause below deliberately
+// never touches sponsor_id, so any change to b.SponsorID made by the caller
+// before calling Update is silently ignored — do not "fix" this by adding
+// sponsor_id to the UPDATE.
 func (s *BountyStore) Update(ctx context.Context, b domain.Bounty) (domain.Bounty, error) {
 	lines, err := json.Marshal(nonNilLines(b.BusinessLines))
 	if err != nil {
@@ -183,7 +189,7 @@ func scanBounty(s scanner) (domain.Bounty, error) {
 		&b.Commitment, &b.Status, &b.SponsorID, &b.ClaimedBy, &b.ClaimedAt,
 		&b.PersonDays, &retro, &b.CompletedAt, &b.CreatedAt, &b.UpdatedAt)
 	if err != nil {
-		return domain.Bounty{}, err
+		return domain.Bounty{}, fmt.Errorf("scan bounty: %w", err)
 	}
 	if restriction != nil {
 		b.Restriction = *restriction
