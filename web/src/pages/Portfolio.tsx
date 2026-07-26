@@ -1,11 +1,64 @@
+import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
+import { apiGet } from '../api/client'
+import WorkCard from '../components/WorkCard'
+import { useIdentity } from '../identity'
+import { CREDIT_ROLE_LABELS, type CreditRole, type WorkView } from '../types'
 
+const ROLE_ORDER: CreditRole[] = ['DEFINE', 'LEAD', 'CO_DELIVER', 'REVIEW', 'SUPPORT', 'BASELINE']
+
+/**
+ * A personal page is the set of works someone is credited on — not a score
+ * card. Grouping by role shows what parts they play, without ranking anyone.
+ * A work where the person holds two roles on the same bounty appears under
+ * both groups, since each group answers "what did they do here", not "which
+ * single bucket does this work belong to".
+ */
 export default function Portfolio() {
-  const { id } = useParams()
+  const { id } = useParams<{ id: string }>()
+  const { users } = useIdentity()
+  const [works, setWorks] = useState<WorkView[]>([])
+  const [error, setError] = useState('')
+  // Distinct from the empty-state check below: WorkFeed/Board/BountyDetail
+  // all fixed a defect where the empty-state text rendered before the
+  // initial request resolved. Mirror that fix here rather than
+  // reintroducing it.
+  const [loading, setLoading] = useState<boolean>(true)
+
+  useEffect(() => {
+    if (!id) return
+    setLoading(true)
+    setError('')
+    apiGet<WorkView[]>(`/api/users/${id}/portfolio`)
+      .then(setWorks)
+      .catch((err) => setError(String(err.message ?? err)))
+      .finally(() => setLoading(false))
+  }, [id])
+
+  const person = users.find((u) => u.id === id)
+
+  if (loading) return <p className="hint">加载中…</p>
+  if (error) return <p className="error">{error}</p>
+
+  const byRole = ROLE_ORDER.map((role) => ({
+    role,
+    works: works.filter((w) => w.credits.some((c) => c.credit.user_id === id && c.credit.role === role)),
+  })).filter((g) => g.works.length > 0)
+
   return (
-    <div className="card">
-      <h3>作品集</h3>
-      <p className="hint">尚未实现（用户 {id}）— 由 Task 15 补齐。</p>
-    </div>
+    <section>
+      <h2>{person?.name ?? '成员'} 的作品集</h2>
+      {works.length === 0 && <p className="hint">还没有已确认署名的作品。</p>}
+      {byRole.map((g) => (
+        <div key={g.role}>
+          <h3>
+            {CREDIT_ROLE_LABELS[g.role]}（{g.works.length}）
+          </h3>
+          {g.works.map((w) => (
+            <WorkCard key={w.bounty.id} work={w} />
+          ))}
+        </div>
+      ))}
+    </section>
   )
 }
