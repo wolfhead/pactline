@@ -24,6 +24,8 @@ import (
 //   - DELIVERED -> COMPLETED requires the sponsor or a steward, never the
 //     claimer, so every COMPLETED transition below is driven by pmID.
 func TestPhase1FullLoop(t *testing.T) {
+	const engEID = "00000000-0000-0000-0000-000000000005" // 研发 E
+
 	h := newTestServer(t)
 
 	// 1. 产品 A opens a plan bounty; 研发 C claims, delivers and it is accepted.
@@ -36,6 +38,12 @@ func TestPhase1FullLoop(t *testing.T) {
 	require.Equal(t, http.StatusCreated, planRec.Code)
 	var plan domain.Bounty
 	require.NoError(t, json.Unmarshal(planRec.Body.Bytes(), &plan))
+	// Registered before the delivery's cleanup below. t.Cleanup runs LIFO, so
+	// this parent-plan deletion executes SECOND, after the child delivery row
+	// is already gone. bounties.parent_id has a foreign key with no cascade,
+	// so deleting the parent first would fail teardown. Do not reorder these
+	// two cleanupBounty calls, and do not factor this creation into a shared
+	// helper without preserving the registration order.
 	cleanupBounty(t, plan.ID)
 
 	require.Equal(t, http.StatusOK, transition(t, h, plan.ID.String(), pmID, map[string]any{"to": "OPEN"}).Code)
@@ -54,6 +62,8 @@ func TestPhase1FullLoop(t *testing.T) {
 	require.Equal(t, http.StatusCreated, delRec.Code)
 	var delivery domain.Bounty
 	require.NoError(t, json.Unmarshal(delRec.Body.Bytes(), &delivery))
+	// Registered after the plan's cleanup above, so it runs FIRST (LIFO):
+	// the child delivery row is deleted before its parent plan row.
 	cleanupBounty(t, delivery.ID)
 
 	inherited := listCredits(t, h, delivery.ID.String())
@@ -81,6 +91,21 @@ func TestPhase1FullLoop(t *testing.T) {
 		"/api/credits/"+support.ID.String()+"/respond", engCID,
 		map[string]any{"status": "CONFIRMED"}).Code)
 
+	// 研发 D also brings in 研发 E as a co-deliverer, nominated after the
+	// SUPPORT credit above. This makes the feed's ordering assertion below
+	// discriminating: creation order is DEFINE, SUPPORT, CO_DELIVER and
+	// alphabetical order is CO_DELIVER, DEFINE, SUPPORT, but the mechanism's
+	// display order (by part) is DEFINE, CO_DELIVER, SUPPORT — a sequence
+	// that agrees with neither.
+	coDelivRec := do(t, h, http.MethodPost, "/api/bounties/"+delivery.ID.String()+"/credits", engDID,
+		map[string]any{"user_id": engEID, "role": "CO_DELIVER"})
+	require.Equal(t, http.StatusCreated, coDelivRec.Code)
+	var coDeliver domain.Credit
+	require.NoError(t, json.Unmarshal(coDelivRec.Body.Bytes(), &coDeliver))
+	require.Equal(t, http.StatusOK, do(t, h, http.MethodPost,
+		"/api/credits/"+coDeliver.ID.String()+"/respond", engEID,
+		map[string]any{"status": "CONFIRMED"}).Code)
+
 	// A credit that is nominated but never confirmed must not appear anywhere
 	// in the feed.
 	require.Equal(t, http.StatusCreated, do(t, h, http.MethodPost,
@@ -104,8 +129,9 @@ func TestPhase1FullLoop(t *testing.T) {
 	}).Code)
 
 	// 5. The feed shows all three works: the plan, the delivery (with
-	// exactly its confirmed credits, ordered by part), and the abandoned
-	// bounty carrying its retrospective.
+	// exactly its three confirmed credits, ordered by part rather than by
+	// creation order or alphabetically), and the abandoned bounty carrying
+	// its retrospective.
 	feedRec := do(t, h, http.MethodGet, "/api/works", pmID, nil)
 	require.Equal(t, http.StatusOK, feedRec.Code)
 	var feed []api.WorkView
@@ -122,11 +148,22 @@ func TestPhase1FullLoop(t *testing.T) {
 		}
 	}
 	require.NotNil(t, deliveryView)
-	require.Len(t, deliveryView.Credits, 2, "only the two confirmed credits surface")
-	require.Equal(t, domain.CreditRoleDefine, deliveryView.Credits[0].Credit.Role, "credits are ordered by part")
+	require.Len(t, deliveryView.Credits, 3, "only the three confirmed credits surface; the pending SUPPORT for pmID does not")
+	// Ordered by part (DEFINE, LEAD, CO_DELIVER, REVIEW, SUPPORT, BASELINE),
+	// not by creation order (DEFINE, SUPPORT, CO_DELIVER) and not
+	// alphabetically (CO_DELIVER, DEFINE, SUPPORT) — this sequence agrees
+	// with neither, so it actually exercises the sort in decorate rather
+	// than passing by coincidence.
+	gotRoles := make([]domain.CreditRole, len(deliveryView.Credits))
+	for i, cv := range deliveryView.Credits {
+		gotRoles[i] = cv.Credit.Role
+	}
+	require.Equal(t,
+		[]domain.CreditRole{domain.CreditRoleDefine, domain.CreditRoleCoDeliver, domain.CreditRoleSupport},
+		gotRoles, "credits are ordered by part")
 	require.Equal(t, "研发 C", deliveryView.Credits[0].UserName)
-	require.Equal(t, domain.CreditRoleSupport, deliveryView.Credits[1].Credit.Role)
-	require.Equal(t, "研发 C", deliveryView.Credits[1].UserName)
+	require.Equal(t, "研发 E", deliveryView.Credits[1].UserName)
+	require.Equal(t, "研发 C", deliveryView.Credits[2].UserName)
 
 	require.NotNil(t, abandonedView, "an abandoned bounty must appear in the feed")
 	require.Equal(t, domain.StatusAbandoned, abandonedView.Bounty.Status)
