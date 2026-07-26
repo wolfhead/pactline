@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"sort"
 
@@ -10,6 +11,11 @@ import (
 
 	"github.com/google/uuid"
 )
+
+// unknownUserNamePlaceholder marks a credit whose nominee could not be found
+// in the active user map. It is deliberately unlike any seeded display name
+// so it reads as a data problem rather than an unnamed person.
+const unknownUserNamePlaceholder = "[unknown user]"
 
 // CreditView pairs a credit with the nominee's display name so the frontend
 // need not join users itself.
@@ -115,9 +121,15 @@ func (h *feedHandler) decorate(ctx context.Context, list []domain.Bounty) ([]Wor
 			if c.Status != domain.CreditConfirmed {
 				continue
 			}
-			views = append(views, CreditView{Credit: c, UserName: names[c.UserID]})
+			name, ok := names[c.UserID]
+			if !ok {
+				slog.Warn("credit user missing from active user map",
+					"credit_id", c.ID, "bounty_id", c.BountyID, "user_id", c.UserID)
+				name = unknownUserNamePlaceholder
+			}
+			views = append(views, CreditView{Credit: c, UserName: name})
 		}
-		sort.Slice(views, func(i, j int) bool {
+		sort.SliceStable(views, func(i, j int) bool {
 			return creditRoleOrder(views[i].Credit.Role) < creditRoleOrder(views[j].Credit.Role)
 		})
 		out = append(out, WorkView{Bounty: b, Credits: views})
