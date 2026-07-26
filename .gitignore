@@ -1,0 +1,26 @@
+# Binaries
+/bin/
+/server
+*.exe
+
+# Go
+*.test
+*.out
+vendor/
+
+# Node
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# Env & local config
+.env
+.env.local
+*.local
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
