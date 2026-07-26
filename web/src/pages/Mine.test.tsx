@@ -58,6 +58,19 @@ function mockGets(pending: Credit[]) {
   })
 }
 
+// Makes exactly the claimed-bounties request (the second of the three
+// concurrent Promise.all calls) reject, while the other two resolve empty.
+// Used to prove the failure branch surfaces regardless of which of the
+// three concurrent requests is the one that rejects.
+function mockGetsWithFailure(errorMessage: string) {
+  mockedApiGet.mockImplementation((path: unknown) => {
+    if (typeof path === 'string' && path.startsWith('/api/bounties?claimed_by=')) {
+      return Promise.reject(new Error(errorMessage))
+    }
+    return Promise.resolve([])
+  })
+}
+
 function renderMine() {
   return render(
     <MemoryRouter>
@@ -101,5 +114,88 @@ describe('Mine', () => {
     await waitFor(() => expect(screen.queryByText('确认')).not.toBeInTheDocument())
     expect(screen.getByText('没有待确认的署名。')).toBeInTheDocument()
     expect(mockedApiPost).toHaveBeenCalledWith('/api/credits/credit-x/respond', { status: 'CONFIRMED' })
+  })
+
+  it('shows the loading hint while the three initial requests are pending, and not the empty-state text (B1)', async () => {
+    mockIdentity()
+    let resolveAll!: (v: unknown[]) => void
+    mockedApiGet.mockReturnValue(
+      new Promise((resolve) => {
+        resolveAll = resolve as (v: unknown[]) => void
+      }),
+    )
+
+    renderMine()
+
+    expect(screen.getByText('加载中…')).toBeInTheDocument()
+    expect(screen.queryByText('没有待确认的署名。')).not.toBeInTheDocument()
+
+    // Resolve so the pending promise doesn't leak into later tests.
+    resolveAll([])
+    await waitFor(() => expect(screen.queryByText('加载中…')).not.toBeInTheDocument())
+  })
+
+  it('shows the empty-state text once the requests resolve with nothing pending, and hides the loading hint (B2)', async () => {
+    mockIdentity()
+    mockGets([])
+
+    renderMine()
+
+    await waitFor(() => expect(screen.getByText('没有待确认的署名。')).toBeInTheDocument())
+    expect(screen.queryByText('加载中…')).not.toBeInTheDocument()
+  })
+
+  it('renders the failure message including the underlying error message when one of the three concurrent requests rejects (B3)', async () => {
+    mockIdentity()
+    mockGetsWithFailure('network down')
+
+    renderMine()
+
+    await waitFor(() => expect(document.querySelector('.error')).not.toBeNull())
+    const text = document.querySelector('.error')?.textContent ?? ''
+    expect(text).toContain('network down')
+    expect(text).not.toContain('[object Object]')
+    expect(text).not.toBe('')
+  })
+
+  it('re-enables the buttons and keeps the credit in the list when respond() fails (B4)', async () => {
+    mockIdentity()
+    mockGets([makeCredit({ id: 'credit-y' })])
+
+    renderMine()
+
+    await waitFor(() => expect(screen.getByText('确认')).toBeInTheDocument())
+
+    let rejectPost!: (err: Error) => void
+    mockedApiPost.mockReturnValue(
+      new Promise((_resolve, reject) => {
+        rejectPost = reject
+      }),
+    )
+
+    const confirmButton = screen.getByText('确认') as HTMLButtonElement
+    const declineButton = screen.getByText('拒绝') as HTMLButtonElement
+
+    fireEvent.click(confirmButton)
+
+    await waitFor(() => expect(confirmButton.disabled).toBe(true))
+    expect(declineButton.disabled).toBe(true)
+
+    rejectPost(new Error('respond failed'))
+
+    // The failed respond() must re-enable the buttons rather than leaving
+    // them stuck disabled forever, and the credit must still be there to
+    // retry against — not silently dropped from the list. This is the
+    // counterpart to the success-path test above: a respond() that only
+    // resets its in-flight marker on success would leave these buttons
+    // disabled here.
+    await waitFor(() => expect(confirmButton.disabled).toBe(false))
+    expect(declineButton.disabled).toBe(false)
+    expect(screen.getByText('确认')).toBeInTheDocument()
+    expect(screen.getByText('拒绝')).toBeInTheDocument()
+
+    // The failure surfaces inline, near the action, without blanking out
+    // the rest of the page's data (cf. the separate load-failure path in B3).
+    expect(screen.getByText('响应失败:respond failed')).toBeInTheDocument()
   })
 })

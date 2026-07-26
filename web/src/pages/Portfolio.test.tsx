@@ -27,8 +27,12 @@ afterEach(() => {
 
 const NOMINEE = '00000000-0000-0000-0000-000000000003'
 const SPONSOR = '00000000-0000-0000-0000-000000000001'
+const OTHER = '00000000-0000-0000-0000-000000000004'
 
-const USERS: User[] = [{ id: NOMINEE, name: '研发 D', email: 'd@example.com', roles: ['ENGINEER'], active: true }]
+const USERS: User[] = [
+  { id: NOMINEE, name: '研发 D', email: 'd@example.com', roles: ['ENGINEER'], active: true },
+  { id: OTHER, name: '研发 E', email: 'e@example.com', roles: ['ENGINEER'], active: true },
+]
 
 function makeBounty(overrides: Partial<Bounty> = {}): Bounty {
   return {
@@ -126,5 +130,65 @@ describe('Portfolio', () => {
 
     await waitFor(() => expect(screen.getByText('还没有已确认署名的作品。')).toBeInTheDocument())
     expect(screen.queryByText('加载中…')).not.toBeInTheDocument()
+  })
+
+  it("does not show another person's role credit under the viewed user's portfolio (product rule: this person's work, not any collaborator's) (A1)", async () => {
+    mockIdentity()
+    // OTHER holds REVIEW on this work; NOMINEE (the viewed user) holds no
+    // credit on it at all. If the filter dropped its `user_id === id`
+    // clause, matching would fall back to role-only, and this work would
+    // wrongly surface under NOMINEE's 深度评审 group.
+    const workOther: WorkView = {
+      bounty: makeBounty({ id: 'b-other', title: '别人的评审工作' }),
+      credits: [
+        {
+          credit: { id: 'c-other', bounty_id: 'b-other', user_id: OTHER, role: 'REVIEW', status: 'CONFIRMED', created_at: '2026-01-01T00:00:00Z' },
+          user_name: '研发 E',
+        },
+      ],
+    }
+    mockedApiGet.mockResolvedValue([workOther])
+
+    renderPortfolio()
+
+    await waitFor(() => expect(screen.queryByText('加载中…')).not.toBeInTheDocument())
+
+    // No role group can legitimately match for NOMINEE, so no role header
+    // renders, and the other person's work title never appears.
+    expect(screen.queryByText(/深度评审/)).not.toBeInTheDocument()
+    expect(screen.queryByText('别人的评审工作')).not.toBeInTheDocument()
+  })
+
+  it("shows a work under exactly the viewed user's own role group when other people hold different roles on the same work (A2)", async () => {
+    mockIdentity()
+    // NOMINEE holds DEFINE; OTHER holds LEAD on the very same work. Only
+    // the DEFINE group should pick it up for NOMINEE's portfolio.
+    const workMix: WorkView = {
+      bounty: makeBounty({ id: 'b-mix', title: '混合署名的工作' }),
+      credits: [
+        {
+          credit: { id: 'c-mine', bounty_id: 'b-mix', user_id: NOMINEE, role: 'DEFINE', status: 'CONFIRMED', created_at: '2026-01-01T00:00:00Z' },
+          user_name: '研发 D',
+        },
+        {
+          credit: { id: 'c-theirs', bounty_id: 'b-mix', user_id: OTHER, role: 'LEAD', status: 'CONFIRMED', created_at: '2026-01-01T00:00:00Z' },
+          user_name: '研发 E',
+        },
+      ],
+    }
+    mockedApiGet.mockResolvedValue([workMix])
+
+    renderPortfolio()
+
+    await waitFor(() => expect(screen.getByText('定义方案（1）')).toBeInTheDocument())
+    const defineGroup = screen.getByText('定义方案（1）').closest('div')!
+    expect(within(defineGroup).getByText('混合署名的工作')).toBeInTheDocument()
+
+    // OTHER's LEAD role must not surface as a group heading for NOMINEE.
+    // WorkCard legitimately lists every collaborator's role (including
+    // OTHER's LEAD) on the card itself, so assert on the group heading
+    // text (which carries a count) rather than the bare role label.
+    expect(screen.queryByText('主交付（1）')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 3, name: /^主交付/ })).not.toBeInTheDocument()
   })
 })

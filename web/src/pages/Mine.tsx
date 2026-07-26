@@ -26,6 +26,12 @@ export default function Mine() {
   // flight, so only that row's buttons are disabled and — per CreditPanel's
   // established pattern — a slow request can't be double-submitted.
   const [respondingId, setRespondingId] = useState<string | null>(null)
+  // Deliberately separate from `error` above: `error` means the page's own
+  // data failed to load and there is nothing to show, so it replaces the
+  // content. A failed respond() on one credit is different — the rest of
+  // the page's data is still valid, so it must not blank out the list the
+  // user is looking at. Scoped to the credit id so only that row shows it.
+  const [respondError, setRespondError] = useState<{ id: string; message: string } | null>(null)
 
   const load = useCallback(() => {
     if (!me) return
@@ -48,13 +54,13 @@ export default function Mine() {
   useEffect(load, [load])
 
   async function respond(id: string, status: 'CONFIRMED' | 'DECLINED') {
-    setError('')
+    setRespondError(null)
     setRespondingId(id)
     try {
       await apiPost(`/api/credits/${id}/respond`, { status })
       load()
     } catch (err) {
-      setError(String((err as Error).message))
+      setRespondError({ id, message: String((err as Error).message) })
     } finally {
       setRespondingId(null)
     }
@@ -87,6 +93,7 @@ export default function Mine() {
                 <button onClick={() => respond(c.id, 'DECLINED')} disabled={respondingId === c.id}>
                   拒绝
                 </button>
+                {respondError?.id === c.id && <span className="error">响应失败:{respondError.message}</span>}
               </li>
             ))}
           </ul>
