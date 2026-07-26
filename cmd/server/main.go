@@ -4,9 +4,11 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"os"
 
 	"bountyboard"
+	"bountyboard/internal/api"
 	"bountyboard/internal/logging"
 	"bountyboard/internal/store"
 )
@@ -32,5 +34,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	slog.Info("server starting")
+	handler := api.NewRouter(
+		store.NewUserStore(db),
+		store.NewBountyStore(db),
+		nil,
+	)
+
+	addr := os.Getenv("ADDR")
+	if addr == "" {
+		addr = ":8080"
+	}
+	slog.Info("server listening", "addr", addr)
+	if err := http.ListenAndServe(addr, handler); err != nil {
+		slog.Error("server stopped", "error", err)
+		os.Exit(1)
+	}
 }

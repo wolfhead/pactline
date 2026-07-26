@@ -1,0 +1,51 @@
+package api
+
+import (
+	"context"
+	"log/slog"
+	"net/http"
+
+	"bountyboard/internal/domain"
+	"bountyboard/internal/store"
+
+	"github.com/google/uuid"
+)
+
+type ctxKey int
+
+const userKey ctxKey = iota
+
+// withIdentity resolves the X-User-Id header into a domain.User.
+//
+// Phase 1 has no authentication on purpose: the frontend ships a user switcher
+// so the whole loop can be exercised locally. This middleware and the switcher
+// are both removed when Feishu OAuth lands in Phase 6.
+func withIdentity(users *store.UserStore, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw := r.Header.Get("X-User-Id")
+		if raw == "" {
+			slog.Warn("request without identity", "path", r.URL.Path)
+			writeJSON(w, http.StatusUnauthorized, errorBody{Error: "X-User-Id header is required"})
+			return
+		}
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			slog.Warn("malformed identity header", "path", r.URL.Path, "value", raw)
+			writeJSON(w, http.StatusUnauthorized, errorBody{Error: "X-User-Id is not a UUID"})
+			return
+		}
+		u, err := users.GetByID(r.Context(), id)
+		if err != nil {
+			slog.Warn("unknown identity", "path", r.URL.Path, "user_id", id, "error", err)
+			writeJSON(w, http.StatusUnauthorized, errorBody{Error: "unknown user"})
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey, u)))
+	})
+}
+
+// CurrentUser returns the caller resolved by withIdentity.
+func CurrentUser(r *http.Request) domain.User {
+	u, _ := r.Context().Value(userKey).(domain.User)
+	return u
+}

@@ -16,4 +16,10 @@ var (
 	ErrNotDirectedToYou = errors.New("bounty is directed to another user")
 	// ErrForbidden means the actor lacks the required role.
 	ErrForbidden = errors.New("forbidden")
+	// ErrNotYourCredit means the actor is not the nominee of this credit.
+	ErrNotYourCredit = errors.New("credit belongs to another user")
+	// ErrCreditNotPending means the credit was already confirmed or declined.
+	ErrCreditNotPending = errors.New("credit is not pending")
+	// ErrEvidenceRequired means a REVIEW credit carries no review record.
+	ErrEvidenceRequired = errors.New("evidence is required for REVIEW credit")
 )
