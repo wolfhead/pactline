@@ -16,10 +16,13 @@ func TestValidateNomination(t *testing.T) {
 		evidence string
 		wantErr  error
 	}{
+		{"define needs no evidence", domain.CreditRoleDefine, "", nil},
 		{"lead needs no evidence", domain.CreditRoleLead, "", nil},
-		{"support needs no evidence", domain.CreditRoleSupport, "", nil},
+		{"co_deliver needs no evidence", domain.CreditRoleCoDeliver, "", nil},
 		{"review without evidence is rejected", domain.CreditRoleReview, "", domain.ErrEvidenceRequired},
 		{"review with evidence is accepted", domain.CreditRoleReview, "https://git/mr/42#note-7", nil},
+		{"support needs no evidence", domain.CreditRoleSupport, "", nil},
+		{"baseline needs no evidence", domain.CreditRoleBaseline, "", nil},
 		{"unknown role is rejected", domain.CreditRole("PRAISE"), "", domain.ErrInvalidCreditRole},
 	}
 	for _, tc := range cases {
@@ -50,4 +53,7 @@ func TestCanRespond(t *testing.T) {
 
 	confirmed := domain.Credit{UserID: nominee.ID, Status: domain.CreditConfirmed}
 	require.ErrorIs(t, domain.CanRespond(nominee, confirmed), domain.ErrCreditNotPending)
+
+	declined := domain.Credit{UserID: nominee.ID, Status: domain.CreditDeclined}
+	require.ErrorIs(t, domain.CanRespond(nominee, declined), domain.ErrCreditNotPending)
 }
