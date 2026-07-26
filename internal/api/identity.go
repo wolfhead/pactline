@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 
@@ -36,8 +37,13 @@ func withIdentity(users *store.UserStore, next http.Handler) http.Handler {
 		}
 		u, err := users.GetByID(r.Context(), id)
 		if err != nil {
-			slog.Warn("unknown identity", "path", r.URL.Path, "user_id", id, "error", err)
-			writeJSON(w, http.StatusUnauthorized, errorBody{Error: "unknown user"})
+			if errors.Is(err, domain.ErrNotFound) {
+				slog.Warn("unknown identity", "path", r.URL.Path, "user_id", id, "error", err)
+				writeJSON(w, http.StatusUnauthorized, errorBody{Error: "unknown user"})
+				return
+			}
+			slog.Error("identity resolution failed", "path", r.URL.Path, "user_id", id, "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorBody{Error: "identity resolution failed"})
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey, u)))

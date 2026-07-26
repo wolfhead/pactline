@@ -126,3 +126,80 @@ func TestGetUnknownBountyIs404(t *testing.T) {
 	rec := do(t, h, http.MethodGet, "/api/bounties/11111111-1111-1111-1111-111111111111", pmID, nil)
 	require.Equal(t, http.StatusNotFound, rec.Code)
 }
+
+// TestCreateBountyDefaultsAllFields exercises the Type, Commitment and
+// Visibility defaulting branches in create by omitting all three from the
+// request body, so deleting any of those `if` blocks fails this test.
+func TestCreateBountyDefaultsAllFields(t *testing.T) {
+	h := newTestServer(t)
+	rec := do(t, h, http.MethodPost, "/api/bounties", pmID, map[string]any{
+		"title": "缺省字段开单",
+		"goal":  "验证默认值",
+	})
+	require.Equal(t, http.StatusCreated, rec.Code)
+
+	var b domain.Bounty
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &b))
+	cleanupBounty(t, b.ID)
+
+	require.Equal(t, domain.BountyTypeDelivery, b.Type)
+	require.Equal(t, domain.CommitmentCommitted, b.Commitment)
+	require.Equal(t, domain.VisibilityPublic, b.Visibility)
+}
+
+// TestCreateBountyWeightMismatchStillSucceeds locks in the warn-not-reject
+// behaviour for business line weights that do not sum to 1: a future change
+// to reject such requests must break this test explicitly.
+func TestCreateBountyWeightMismatchStillSucceeds(t *testing.T) {
+	h := newTestServer(t)
+	rec := do(t, h, http.MethodPost, "/api/bounties", pmID, map[string]any{
+		"type":       "DELIVERY",
+		"title":      "权重不为一也能建单",
+		"commitment": "COMMITTED",
+		"business_lines": []map[string]any{
+			{"tag": "DSP", "weight": 0.5},
+			{"tag": "ADX", "weight": 0.2},
+		},
+	})
+	require.Equal(t, http.StatusCreated, rec.Code)
+
+	var b domain.Bounty
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &b))
+	cleanupBounty(t, b.ID)
+}
+
+func TestMalformedIdentityIsUnauthorized(t *testing.T) {
+	h := newTestServer(t)
+	rec := do(t, h, http.MethodGet, "/api/bounties", "not-a-uuid", nil)
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestUnknownIdentityIsUnauthorized(t *testing.T) {
+	h := newTestServer(t)
+	rec := do(t, h, http.MethodGet, "/api/bounties", "99999999-9999-9999-9999-999999999999", nil)
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestGetBountyWithNonUUIDIdIsBadRequest(t *testing.T) {
+	h := newTestServer(t)
+	rec := do(t, h, http.MethodGet, "/api/bounties/not-a-uuid", pmID, nil)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestListWithMalformedClaimedByIsBadRequest(t *testing.T) {
+	h := newTestServer(t)
+	rec := do(t, h, http.MethodGet, "/api/bounties?claimed_by=not-a-uuid", pmID, nil)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestListWithUnknownStatusIsBadRequest(t *testing.T) {
+	h := newTestServer(t)
+	rec := do(t, h, http.MethodGet, "/api/bounties?status=OPEM", pmID, nil)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestListWithUnknownTypeIsBadRequest(t *testing.T) {
+	h := newTestServer(t)
+	rec := do(t, h, http.MethodGet, "/api/bounties?type=BOGUS", pmID, nil)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+}

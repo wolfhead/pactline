@@ -92,10 +92,19 @@ func (h *bountyHandler) list(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	f := store.BountyFilter{BusinessTag: q.Get("tag")}
 	for _, s := range q["status"] {
-		f.Statuses = append(f.Statuses, domain.Status(s))
+		st := domain.Status(s)
+		if !domain.IsValidStatus(st) {
+			writeJSON(w, http.StatusBadRequest, errorBody{Error: "status is not a known value: " + s})
+			return
+		}
+		f.Statuses = append(f.Statuses, st)
 	}
 	if t := q.Get("type"); t != "" {
 		bt := domain.BountyType(t)
+		if !domain.IsValidBountyType(bt) {
+			writeJSON(w, http.StatusBadRequest, errorBody{Error: "type is not a known value: " + t})
+			return
+		}
 		f.Type = &bt
 	}
 	if v := q.Get("claimed_by"); v != "" {

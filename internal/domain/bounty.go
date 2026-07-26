@@ -164,6 +164,34 @@ func CanNominate(u User, b Bounty) bool {
 	return b.ClaimedBy != nil && *b.ClaimedBy == u.ID
 }
 
+// ValidStatuses lists every known Status constant, in enum declaration order.
+var ValidStatuses = []Status{
+	StatusDraft, StatusOpen, StatusClaimed, StatusDelivered, StatusCompleted, StatusAbandoned,
+}
+
+// IsValidStatus reports whether s is one of the known Status constants.
+func IsValidStatus(s Status) bool {
+	for _, v := range ValidStatuses {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+// ValidBountyTypes lists every known BountyType constant.
+var ValidBountyTypes = []BountyType{BountyTypePlan, BountyTypeDelivery}
+
+// IsValidBountyType reports whether t is one of the known BountyType constants.
+func IsValidBountyType(t BountyType) bool {
+	for _, v := range ValidBountyTypes {
+		if v == t {
+			return true
+		}
+	}
+	return false
+}
+
 // BusinessLineWeightSum totals attribution weights so callers can warn on drift.
 func BusinessLineWeightSum(lines []BusinessLine) float64 {
 	var sum float64

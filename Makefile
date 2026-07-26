@@ -7,7 +7,7 @@ down:
 	docker compose down -v
 
 test: up
-	DATABASE_URL="$(DSN)" go test ./... -count=1
+	DATABASE_URL="$(DSN)" go test ./... -count=1 -p 1
 
 run: up
 	DATABASE_URL="$(DSN)" go run ./cmd/server
