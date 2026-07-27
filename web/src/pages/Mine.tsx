@@ -33,32 +33,57 @@ export default function Mine() {
   // user is looking at. Scoped to the credit id so only that row shows it.
   const [respondError, setRespondError] = useState<{ id: string; message: string } | null>(null)
 
-  const load = useCallback(() => {
+  // Bumped by `reload()` to force the effect below to re-run for the same
+  // identity (e.g. after respond() changes a credit's status), without
+  // giving it its own separate, unguarded fetch path.
+  const [reloadToken, setReloadToken] = useState(0)
+  const reload = useCallback(() => setReloadToken((t) => t + 1), [])
+
+  // Every list here is scoped to the current user by construction — this
+  // whole page is "my" credits and "my" bounties — so switching identity in
+  // the header must refetch an already-mounted page rather than leave the
+  // previous identity's data on screen. setLoading(true) below re-enters
+  // the loading gate on every run for exactly that reason. Also guards
+  // against request cancellation (C2): if identity changes again — or a
+  // reload fires — before these three requests resolve, `cancelled` is set
+  // in the cleanup below, so a slow stale response can never overwrite a
+  // newer one's result. Mirrors the cancelled-flag idiom in identity.tsx /
+  // Board.tsx / Portfolio.tsx / BountyDetail.tsx.
+  useEffect(() => {
     if (!me) return
     setLoading(true)
     setError('')
+    let cancelled = false
     Promise.all([
       apiGet<Credit[]>('/api/credits/pending'),
       apiGet<Bounty[]>(`/api/bounties?claimed_by=${me.id}`),
       apiGet<Bounty[]>(`/api/bounties?sponsor_id=${me.id}`),
     ])
       .then(([p, c, s]) => {
+        if (cancelled) return
         setPending(p)
         setClaimed(c)
         setSponsored(s)
       })
-      .catch((err) => setError(String(err.message ?? err)))
-      .finally(() => setLoading(false))
-  }, [me])
-
-  useEffect(load, [load])
+      .catch((err) => {
+        if (cancelled) return
+        setError(String(err.message ?? err))
+      })
+      .finally(() => {
+        if (cancelled) return
+        setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [me?.id, reloadToken])
 
   async function respond(id: string, status: 'CONFIRMED' | 'DECLINED') {
     setRespondError(null)
     setRespondingId(id)
     try {
       await apiPost(`/api/credits/${id}/respond`, { status })
-      load()
+      reload()
     } catch (err) {
       setRespondError({ id, message: String((err as Error).message) })
     } finally {

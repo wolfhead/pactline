@@ -19,7 +19,7 @@ const ROLE_ORDER: CreditRole[] = ['DEFINE', 'LEAD', 'CO_DELIVER', 'REVIEW', 'SUP
  */
 export default function Portfolio() {
   const { id } = useParams<{ id: string }>()
-  const { users } = useIdentity()
+  const { me, users } = useIdentity()
   const [works, setWorks] = useState<WorkView[]>([])
   const [error, setError] = useState('')
   // Distinct from the empty-state check below: WorkFeed/Board/BountyDetail
@@ -28,14 +28,22 @@ export default function Portfolio() {
   // reintroducing it.
   const [loading, setLoading] = useState<boolean>(true)
 
-  // Guards against request cancellation (C2): if the route id changes again
-  // before this request resolves — e.g. the user navigates from one
-  // person's portfolio to another's — `cancelled` is set in the cleanup
-  // below, so a slow stale response can never overwrite a newer one's
-  // result. Without this, a slow response for a previous id could resolve
-  // after a faster one for the current id and render one person's works
-  // under another person's heading — the worst version of this bug for an
-  // attribution system. Mirrors the cancelled-flag idiom in identity.tsx.
+  // Guards against request cancellation (C2): if the route id changes
+  // again — e.g. the user navigates from one person's portfolio to
+  // another's — or the current identity changes before this request
+  // resolves, `cancelled` is set in the cleanup below, so a slow stale
+  // response can never overwrite a newer one's result. Without this, a
+  // slow response for a previous id could resolve after a faster one for
+  // the current id and render one person's works under another person's
+  // heading — the worst version of this bug for an attribution system.
+  // Mirrors the cancelled-flag idiom in identity.tsx.
+  //
+  // Also refetches when the current identity changes: which works are
+  // returned for a given portfolio depends on what the viewer is allowed
+  // to see (e.g. RESTRICTED bounties), so switching identity in the header
+  // must refetch an already-mounted portfolio rather than leave the
+  // previous identity's view on screen. setLoading(true) below re-enters
+  // the loading gate on every run for exactly that reason.
   useEffect(() => {
     if (!id) return
     setLoading(true)
@@ -57,7 +65,7 @@ export default function Portfolio() {
     return () => {
       cancelled = true
     }
-  }, [id])
+  }, [id, me?.id])
 
   const person = users.find((u) => u.id === id)
 

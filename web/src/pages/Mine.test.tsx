@@ -1,10 +1,11 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
+import { useState } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import Mine from './Mine'
 import { apiGet, apiPost } from '../api/client'
 import { useIdentity } from '../identity'
-import type { Credit, User } from '../types'
+import type { Bounty, Credit, User } from '../types'
 
 // Mocks both modules so apiGet/apiPost resolution and the current identity
 // are fully controllable per test, without touching global fetch, a real
@@ -32,6 +33,57 @@ const USERS: User[] = [{ id: ME, name: '研发 D', email: 'd@example.com', roles
 
 function mockIdentity() {
   mockedUseIdentity.mockReturnValue({ me: USERS[0], users: USERS, switchTo: vi.fn() })
+}
+
+const OTHER = '00000000-0000-0000-0000-000000000004'
+const SWITCH_USERS: User[] = [
+  ...USERS,
+  { id: OTHER, name: '研发 E', email: 'e@example.com', roles: ['ENGINEER'], active: true },
+]
+
+function makeBounty(overrides: Partial<Bounty> = {}): Bounty {
+  return {
+    id: 'b-1',
+    type: 'DELIVERY',
+    title: 'a bounty',
+    goal: '',
+    acceptance_criteria: '',
+    visibility: 'PUBLIC',
+    business_lines: [],
+    commitment: 'COMMITTED',
+    status: 'CLAIMED',
+    sponsor_id: ME,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+    ...overrides,
+  }
+}
+
+// A thin harness that reassigns the mocked useIdentity() return value on
+// every render, so a click can flip the "current identity" the mounted
+// <Mine/> observes — the same thing the real header's UserSwitcher does by
+// calling switchTo(), without unmounting the page. Mine itself calls
+// useIdentity() on every render, so reassigning the mock here (which runs
+// before Mine's own render, since this component is Mine's parent) is
+// observed by Mine on the very next render. Mirrors src/pages/Board.test.tsx.
+function IdentitySwitchHarness() {
+  const [meId, setMeId] = useState(ME)
+  const me = SWITCH_USERS.find((u) => u.id === meId) ?? null
+  mockedUseIdentity.mockReturnValue({ me, users: SWITCH_USERS, switchTo: setMeId })
+  return (
+    <>
+      <button onClick={() => setMeId(OTHER)}>switch-to-other</button>
+      <Mine />
+    </>
+  )
+}
+
+function renderSwitchHarness() {
+  return render(
+    <MemoryRouter>
+      <IdentitySwitchHarness />
+    </MemoryRouter>,
+  )
 }
 
 function makeCredit(overrides: Partial<Credit> = {}): Credit {
@@ -197,5 +249,71 @@ describe('Mine', () => {
     // The failure surfaces inline, near the action, without blanking out
     // the rest of the page's data (cf. the separate load-failure path in B3).
     expect(screen.getByText('响应失败:respond failed')).toBeInTheDocument()
+  })
+})
+
+describe('Mine — identity switch refetch', () => {
+  it("refetches on identity switch and the new identity's data replaces the old — every list on this page is scoped to the current user by construction, so this is the page most directly exposed by a missing identity dependency", async () => {
+    mockedApiGet.mockImplementation((path: unknown) => {
+      if (typeof path === 'string' && path === `/api/bounties?claimed_by=${ME}`) {
+        return Promise.resolve([makeBounty({ id: 'b-me', title: 'D 认领的单' })])
+      }
+      if (typeof path === 'string' && path === `/api/bounties?claimed_by=${OTHER}`) {
+        return Promise.resolve([makeBounty({ id: 'b-other', title: 'E 认领的单' })])
+      }
+      return Promise.resolve([])
+    })
+
+    renderSwitchHarness()
+
+    await waitFor(() => expect(screen.getByText('D 认领的单')).toBeInTheDocument())
+    // Requests carry the caller's own id, not a stale one, per identity.tsx's
+    // synchronous switchTo assignment — the request-count check below proves
+    // a second round of fetches actually fired.
+    const callsBeforeSwitch = mockedApiGet.mock.calls.length
+
+    fireEvent.click(screen.getByText('switch-to-other'))
+
+    await waitFor(() => expect(screen.getByText('E 认领的单')).toBeInTheDocument())
+    expect(screen.queryByText('D 认领的单')).not.toBeInTheDocument()
+    expect(mockedApiGet.mock.calls.length).toBeGreaterThan(callsBeforeSwitch)
+    expect(mockedApiGet).toHaveBeenCalledWith(`/api/bounties?claimed_by=${OTHER}`)
+  })
+
+  it("does not show the previous identity's rows while the new identity's request is still in flight", async () => {
+    mockedApiGet.mockImplementation((path: unknown) => {
+      if (typeof path === 'string' && path === `/api/bounties?claimed_by=${ME}`) {
+        return Promise.resolve([makeBounty({ id: 'b-me', title: 'D 认领的单' })])
+      }
+      return Promise.resolve([])
+    })
+
+    renderSwitchHarness()
+
+    await waitFor(() => expect(screen.getByText('D 认领的单')).toBeInTheDocument())
+
+    let resolveOther!: (bounties: Bounty[]) => void
+    mockedApiGet.mockImplementation((path: unknown) => {
+      if (typeof path === 'string' && path === `/api/bounties?claimed_by=${OTHER}`) {
+        return new Promise<Bounty[]>((resolve) => {
+          resolveOther = resolve
+        })
+      }
+      // The other two concurrent requests (pending credits, sponsored
+      // bounties) resolve immediately; only claimed_by is held open, so
+      // Promise.all stays pending on that one alone.
+      return Promise.resolve([])
+    })
+
+    fireEvent.click(screen.getByText('switch-to-other'))
+
+    // Before the new identity's requests resolve, the previous identity's
+    // row must already be gone — replaced by the loading state, not left on
+    // screen for a user with no right to see it.
+    await waitFor(() => expect(screen.getAllByText('加载中…').length).toBeGreaterThan(0))
+    expect(screen.queryByText('D 认领的单')).not.toBeInTheDocument()
+
+    resolveOther([makeBounty({ id: 'b-other', title: 'E 认领的单' })])
+    await waitFor(() => expect(screen.getByText('E 认领的单')).toBeInTheDocument())
   })
 })

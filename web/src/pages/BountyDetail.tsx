@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { apiGet, apiPost } from '../api/client'
 import CreditPanel from '../components/CreditPanel'
+import { useIdentity } from '../identity'
 import { STATUS_LABELS, type Bounty, type Status } from '../types'
 
 // C1: mirrors `allowedTransitions` in internal/domain/bounty.go. The two must
@@ -19,6 +20,7 @@ const NEXT_STATES: Record<Status, Status[]> = {
 
 export default function BountyDetail() {
   const { id } = useParams<{ id: string }>()
+  const { me } = useIdentity()
   const [bounty, setBounty] = useState<Bounty | null>(null)
   const [retro, setRetro] = useState('')
   const [personDays, setPersonDays] = useState('')
@@ -30,14 +32,24 @@ export default function BountyDetail() {
   const [reloadToken, setReloadToken] = useState(0)
   const reload = useCallback(() => setReloadToken((t) => t + 1), [])
 
-  // Fetches whenever the route id changes or a reload is requested. Guards
-  // against request cancellation (C2): if the id changes again — e.g. the
-  // user navigates to a different bounty — before this request resolves,
-  // `cancelled` is set in the cleanup below, so a slow stale response can
-  // never overwrite a newer one's result. Mirrors the cancelled-flag idiom
-  // in identity.tsx.
+  // Fetches whenever the route id changes, a reload is requested, or the
+  // current identity changes. A RESTRICTED bounty's visibility depends on
+  // who's asking (canViewDraft/canView on the server), so switching
+  // identity in the header must refetch an already-mounted detail page
+  // rather than leave the previous identity's bounty on screen.
+  // setBounty(null)/setError('') below re-enter the loading gate
+  // (`if (!bounty) return <hint>`) on every run, mirroring the
+  // setLoading(true) convention in Board.tsx/Portfolio.tsx, so a stale
+  // bounty (or a stale error from a previous fetch) is never shown as
+  // current while a new request is in flight. Also guards against request
+  // cancellation (C2): if the id/identity changes again before this
+  // request resolves, `cancelled` is set in the cleanup below, so a slow
+  // stale response can never overwrite a newer one's result. Mirrors the
+  // cancelled-flag idiom in identity.tsx.
   useEffect(() => {
     if (!id) return
+    setBounty(null)
+    setError('')
     let cancelled = false
     apiGet<Bounty>(`/api/bounties/${id}`)
       .then((b) => {
@@ -53,7 +65,7 @@ export default function BountyDetail() {
     return () => {
       cancelled = true
     }
-  }, [id, reloadToken])
+  }, [id, reloadToken, me?.id])
 
   async function move(to: Status) {
     setError('')

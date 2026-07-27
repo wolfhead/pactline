@@ -26,12 +26,13 @@ test('a sponsor\'s draft is invisible to another engineer, on the Board and by d
   // The identity switcher only mounts after the app has loaded (it waits on
   // GET /api/users), so a page must be navigated to before it can be used.
   await page.goto('/board')
+  await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible()
+
+  // Switch identity without navigating anywhere — the Board stays mounted.
+  // Board's fetch effect depends on identity (alongside tag/reloadToken),
+  // so this alone must refetch and drop the sponsor's draft, with no
+  // re-navigation needed to correct the view.
   await switchIdentity(page, USERS.engineerD.id)
-  // Board's own fetch effect depends only on [tag, reloadToken], not on
-  // identity — switching identity updates the header used by future
-  // requests but does not by itself refetch an already-mounted page. Force
-  // a fresh navigation so the list is actually fetched as engineerD.
-  await page.goto('/board')
   await expect(page.getByRole('heading', { name: title, exact: true })).toHaveCount(0)
 
   await page.goto(`/bounties/${bounty.id}`)

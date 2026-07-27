@@ -22,8 +22,13 @@ export default function Board() {
   const [reloadToken, setReloadToken] = useState(0)
   const reload = useCallback(() => setReloadToken((t) => t + 1), [])
 
-  // Fetches whenever the tag filter changes or a reload is requested. Guards
-  // against request cancellation (C2): if the tag changes again — or a
+  // Fetches whenever the tag filter changes, a reload is requested, or the
+  // current identity changes. Draft visibility, RESTRICTED business lines,
+  // etc. depend on who's asking, so switching identity in the header must
+  // refetch an already-mounted board rather than leave the previous
+  // identity's rows on screen — setLoading(true) below re-enters the
+  // loading state on every run for exactly that reason. Also guards against
+  // request cancellation (C2): if the tag/identity changes again — or a
   // reload fires — before this request resolves, `cancelled` is set in the
   // cleanup below, so a slow stale response can never overwrite a newer
   // one's result. Mirrors the cancelled-flag idiom in identity.tsx.
@@ -50,7 +55,7 @@ export default function Board() {
     return () => {
       cancelled = true
     }
-  }, [tag, reloadToken])
+  }, [tag, reloadToken, me?.id])
 
   // C1: mirrors the create handler's role check in
   // internal/api/bounty_handler.go (bountyHandler.create) — SPONSOR or
