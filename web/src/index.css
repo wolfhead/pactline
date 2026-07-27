@@ -1,0 +1,22 @@
+/* Tailwind is imported layer by layer, deliberately WITHOUT preflight, for as
+ * long as the hand-written styles.css still dresses the pages being migrated.
+ * Preflight's resets would fight it and leave every not-yet-rewritten page
+ * looking broken mid-migration. The final cleanup task swaps this block for a
+ * plain `@import "tailwindcss";` once styles.css is gone. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "tw-animate-css";
+
+/* The repo picks the theme with a data-theme attribute on <html>, and under
+ * "system" it REMOVES the attribute so prefers-color-scheme keeps handling it
+ * with no listener of ours (see web/src/theme.tsx). shadcn's own convention is
+ * a .dark class, which would require theme.tsx to grow a matchMedia listener.
+ * Teaching the variant about the existing scheme is cheaper and keeps
+ * theme.tsx untouched. */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) { @slot; }
+  @media (prefers-color-scheme: dark) {
+    &:where(:not([data-theme="light"], [data-theme="light"] *)) { @slot; }
+  }
+}
