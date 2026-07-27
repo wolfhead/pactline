@@ -54,11 +54,14 @@
   --color-border: light-dark(#e6e6e2, #2a2a2e);
   --color-border-strong: light-dark(#888888, #75757a);
   --color-fg: light-dark(#17171a, #e4e4e7);
-  /* fg-muted/fg-subtle: both sit in the "text" contrast group (4.5:1), which
-   * compresses how much lighter "subtle" can be than "muted" while staying
-   * legal — see task-3-report.md for the before/after ratios. */
-  --color-fg-muted: light-dark(#68686f, #a1a1aa);
-  --color-fg-subtle: light-dark(#6d6d72, #919198);
+  --color-fg-muted: light-dark(#56565c, #a1a1aa);
+  /* fg-subtle is the weakest text tier (numbers, dates) and is NEVER drawn on
+   * --color-accent-subtle (the selected-row background) — selected rows use
+   * fg-muted for weakened text instead. That's what frees fg-subtle to sit
+   * visibly lighter than fg-muted while still clearing 4.5:1 on surface,
+   * surface-subtle and surface-raised; see task-3-report.md for the ratios
+   * and hex values on both sides of this tier split. */
+  --color-fg-subtle: light-dark(#6e6e72, #888890);
   --color-accent: light-dark(#4f46e5, #818cf8);
   --color-accent-fg: light-dark(#ffffff, #17171a);
   --color-accent-subtle: light-dark(#eef2ff, #26264a);
@@ -81,8 +84,8 @@
   --color-status-done: light-dark(#1f8a3c, #4ea866);
   --color-status-cancelled: light-dark(#c62828, #f87171);
 
-  --color-priority-low: light-dark(#68686f, #a1a1aa);
-  --color-priority-medium: light-dark(#68686f, #a1a1aa);
+  --color-priority-low: light-dark(#56565c, #a1a1aa);
+  --color-priority-medium: light-dark(#56565c, #a1a1aa);
   --color-priority-high: light-dark(#d02424, #f87171);
   --color-priority-urgent: light-dark(#b91c1c, #fca5a5);
 }
