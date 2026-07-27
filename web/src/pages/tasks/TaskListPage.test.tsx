@@ -90,6 +90,77 @@ describe('TaskListPage', () => {
     await waitFor(() => expect(input.value).toBe(''))
   })
 
+  it('returns focus to the create input after a task is created, so a second task can be captured without re-pressing "c"', async () => {
+    renderList([])
+    await waitFor(() => expect(screen.getByText('没有任务 — 按 C 创建一个吧')).toBeInTheDocument())
+
+    const input = screen.getByPlaceholderText('输入标题，回车创建任务…') as HTMLInputElement
+
+    let resolveCreateOne!: (task: Task) => void
+    mockedApiPost.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveCreateOne = resolve
+      }),
+    )
+
+    input.focus()
+    fireEvent.change(input, { target: { value: '任务一' } })
+    fireEvent.submit(input.closest('form')!)
+
+    // While the request is in flight the input is disabled — jsdom (like a
+    // real browser) refuses to focus a disabled element, which is exactly
+    // what makes a synchronous .focus() call right here a silent no-op.
+    expect(input).toBeDisabled()
+
+    // A real browser moves focus away the instant a focused control becomes
+    // disabled (jsdom does not model that automatically, so this line
+    // stands in for it) — reproducing what the bug report actually observed:
+    // focus ends up elsewhere, not still sitting on the input.
+    screen.getByRole('button', { name: '进行中' }).focus()
+
+    resolveCreateOne(makeTask({ id: 't-1', number: 1, title: '任务一' }))
+    await screen.findByText('任务一')
+
+    // Only once React has actually committed `disabled={false}` does focus
+    // genuinely return — not merely "the input exists", but the real
+    // document.activeElement.
+    await waitFor(() => expect(input).not.toBeDisabled())
+    await waitFor(() => expect(input).toHaveFocus())
+    expect(input.value).toBe('')
+
+    // A second task, typed immediately, with no re-trigger of the "c"
+    // shortcut and no click — proving a burst of captures never requires
+    // touching the mouse or the shortcut again.
+    mockedApiPost.mockResolvedValueOnce(makeTask({ id: 't-2', number: 2, title: '任务二' }))
+    fireEvent.change(input, { target: { value: '任务二' } })
+    fireEvent.submit(input.closest('form')!)
+
+    await waitFor(() => expect(mockedApiPost).toHaveBeenCalledWith('/api/tasks', { title: '任务二' }))
+    expect(await screen.findByText('任务二')).toBeInTheDocument()
+  })
+
+  it('shows a distinct, actionable message when filters narrow the list to zero, offering to clear them', async () => {
+    const task = makeTask({ number: 3, title: '唯一匹配的任务' })
+    renderList([task])
+    await screen.findByText('唯一匹配的任务')
+
+    // A status filter that this task doesn't have narrows the (non-empty)
+    // list down to zero results.
+    stubListing([])
+    fireEvent.click(screen.getByRole('button', { name: '已完成' }))
+
+    await waitFor(() => expect(screen.getByText(/没有符合筛选条件的任务/)).toBeInTheDocument())
+    // Distinct from the genuinely-empty message — "press C" would be
+    // misleading here since a newly created task wouldn't match the filter.
+    expect(screen.queryByText('没有任务 — 按 C 创建一个吧')).not.toBeInTheDocument()
+
+    // Clearing resets the filters and the matching task reappears.
+    stubListing([task])
+    fireEvent.click(screen.getByRole('button', { name: '清除筛选条件' }))
+    expect(await screen.findByText('唯一匹配的任务')).toBeInTheDocument()
+    expect(screen.queryByText(/没有符合筛选条件的任务/)).not.toBeInTheDocument()
+  })
+
   it('reverts an optimistic status change and explains why when the server refuses it', async () => {
     const task = makeTask({ number: 7, status: 'todo', title: '待处理的任务' })
     renderList([task])

@@ -56,6 +56,18 @@ export default function TaskListPage() {
 
   const queryKey = useMemo(() => JSON.stringify(filters), [filters])
 
+  // Whether any filter/search narrows the list — sort/order never do, so
+  // they're excluded. Distinguishes "genuinely no tasks yet" from "filters
+  // narrowed a non-empty list down to zero": the latter needs to say a
+  // filter is the reason and offer to clear it, since a task created via
+  // "c" while filtered out would otherwise seem to vanish.
+  const hasActiveFilters =
+    filters.statuses.length > 0 ||
+    filters.priorities.length > 0 ||
+    filters.assignee !== '' ||
+    filters.labelId !== '' ||
+    filters.search !== ''
+
   // Fetches whenever a filter changes, a reload is requested, or identity
   // changes — mirrors the cancelled-flag idiom in identity.tsx / WorkFeed.tsx
   // / Board.tsx: switching identity (or any filter) must replace an
@@ -219,7 +231,15 @@ export default function TaskListPage() {
           <button type="button" onClick={() => setReloadToken((t) => t + 1)}>重试</button>
         </p>
       )}
-      {!loading && !error && tasks.length === 0 && <p className="hint">没有任务 — 按 C 创建一个吧</p>}
+      {!loading && !error && tasks.length === 0 && hasActiveFilters && (
+        <p className="hint">
+          没有符合筛选条件的任务 —{' '}
+          <button type="button" onClick={() => setFilters(DEFAULT_FILTERS)}>清除筛选条件</button>
+        </p>
+      )}
+      {!loading && !error && tasks.length === 0 && !hasActiveFilters && (
+        <p className="hint">没有任务 — 按 C 创建一个吧</p>
+      )}
       {!loading && !error && tasks.length > 0 && (
         <div className="task-list" role="list">
           {tasks.map((t, i) => (

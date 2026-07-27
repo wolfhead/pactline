@@ -6,15 +6,10 @@ import { USERS } from './support/config'
  * Scenario: keyboard navigation on the list — move with j/k, open with
  * Enter, clear the selection with Escape, and focus never gets trapped.
  *
- * One real product gap surfaced while writing this test (see the e2e
- * report): the task detail view is a full page (/tasks/:number), not an
- * overlay, and unlike the shortcuts overlay or InlineEditable, Escape does
- * nothing there — there is no keyboard path back to the list. The shortcut
- * legend itself claims "Esc 关闭弹层 / 取消编辑" (close overlay / cancel
- * edit), which a user opening a task via Enter would reasonably read as
- * "Escape backs out of what Enter just opened". It doesn't. This test
- * documents the actual behaviour (Escape is a no-op on the detail page) and
- * uses the explicit "← 返回列表" link to go back instead.
+ * FIXED (was a documented gap in the e2e report): the task detail view
+ * (/tasks/:number) now has its own Escape handler matching the shortcut
+ * legend's "Esc 关闭弹层 / 取消编辑" — with nothing being edited, Escape
+ * navigates back to the list, the same as the explicit "← 返回列表" link.
  */
 test('keyboard-only list navigation: move, open with Enter, clear selection with Escape, focus never traps', async ({
   page,
@@ -50,10 +45,18 @@ test('keyboard-only list navigation: move, open with Enter, clear selection with
   await page.keyboard.press('Enter')
   await expect(page).toHaveURL(new RegExp(`/tasks/${taskB.number}$`))
 
-  // Documented gap: Escape does nothing on the detail page.
+  // Escape now backs out of the detail view the same way "← 返回列表" does
+  // — matches the shortcut legend's "Esc 关闭弹层 / 取消编辑" and gives a
+  // keyboard-only user, who arrived here via Enter, a keyboard-only way out.
   await page.keyboard.press('Escape')
-  await expect(page).toHaveURL(new RegExp(`/tasks/${taskB.number}$`))
+  await expect(page).toHaveURL(/\/tasks$/)
 
+  // Re-open the same task and confirm the explicit link still works too.
+  await page.keyboard.press('/')
+  await page.keyboard.type(runTag)
+  await expect(page.getByRole('link', { name: titleB, exact: true })).toBeVisible()
+  await page.getByRole('link', { name: titleB, exact: true }).click()
+  await expect(page).toHaveURL(new RegExp(`/tasks/${taskB.number}$`))
   await page.getByRole('link', { name: '← 返回列表' }).click()
   await expect(page).toHaveURL(/\/tasks$/)
 

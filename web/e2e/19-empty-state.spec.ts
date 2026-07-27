@@ -3,23 +3,44 @@ import { switchIdentity } from './support/identity'
 import { USERS } from './support/config'
 
 /**
- * Scenario: empty state. A filter combination matching nothing must say
- * what to do next, not show a bare "no data".
+ * Scenario: empty state. A filter combination matching nothing must say so
+ * — distinctly from a genuinely empty table — and offer to clear it.
  *
- * Rough edge documented in the e2e report: the same message
- * ("没有任务 — 按 C 创建一个吧") is shown both when the table is genuinely
- * empty and when filters/search have narrowed a non-empty list down to
- * zero. In the filtered case, "press C to create one" doesn't explain that
- * a filter is the reason nothing is showing, and a task created via C won't
- * itself satisfy the still-active filter — a real user could easily create
- * a task, watch it not appear, and think capture is broken.
+ * FIXED (was a rough edge in the e2e report): TaskListPage.tsx used to show
+ * the same "没有任务 — 按 C 创建一个吧" message whether the table was
+ * genuinely empty or a filter/search had narrowed a non-empty list to zero.
+ * It now branches on whether any filter is active, showing
+ * "没有符合筛选条件的任务" plus a "清除筛选条件" button in the filtered case.
  */
-test('a search that matches nothing shows guidance, not a bare empty list', async ({ page, runTag }) => {
+test('a search that matches nothing shows guidance distinct from "no tasks at all", and offers to clear it', async ({
+  page,
+  uniqueTitle,
+  runTag,
+  trackTask,
+  tasksApi,
+}) => {
+  const title = uniqueTitle('Empty state guard')
+  const task = await tasksApi.createTask(USERS.engineerC.id, { title })
+  trackTask(task.id)
+
   await page.goto('/tasks')
   await switchIdentity(page, USERS.engineerC.id)
 
-  // A search term unique to this run can never match any real task.
+  await expect(page.getByRole('link', { name: title, exact: true })).toBeVisible()
+
+  // A search term unique to this run can never match any real task,
+  // including the one just created above.
   await page.getByLabel('搜索任务').fill(`nonexistent-${runTag}`)
 
-  await expect(page.getByText('没有任务 — 按 C 创建一个吧')).toBeVisible()
+  await expect(page.getByText(/没有符合筛选条件的任务/)).toBeVisible()
+  // Distinct from the genuinely-empty-table message: "press C" would be
+  // misleading here, since a task created via C wouldn't itself satisfy the
+  // still-active search — a user could create one, watch it not appear, and
+  // think capture is broken.
+  await expect(page.getByText('没有任务 — 按 C 创建一个吧')).not.toBeVisible()
+
+  // Clearing resets the search and the matching task reappears.
+  await page.getByRole('button', { name: '清除筛选条件' }).click()
+  await expect(page.getByLabel('搜索任务')).toHaveValue('')
+  await expect(page.getByRole('link', { name: title, exact: true })).toBeVisible()
 })

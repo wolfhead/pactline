@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import ActivityLog from '../../components/tasks/ActivityLog'
 import CommentSection from '../../components/tasks/CommentSection'
 import InlineEditable from '../../components/tasks/InlineEditable'
 import PillSelect from '../../components/tasks/PillSelect'
 import { archiveTask, getTask, listLabels, restoreTask, updateTask } from '../../api/tasks'
 import { useIdentity } from '../../identity'
+import { isTypingTarget } from '../../keyboard'
 import {
   PRIORITY_LABELS,
   STATUS_LABELS,
@@ -29,6 +30,7 @@ export default function TaskDetailPage() {
   const { number: numberParam } = useParams<{ number: string }>()
   const number = Number(numberParam)
   const { me, users } = useIdentity()
+  const navigate = useNavigate()
 
   const [task, setTask] = useState<Task | null>(null)
   const [error, setError] = useState('')
@@ -82,6 +84,26 @@ export default function TaskDetailPage() {
       if (undoTimerRef.current) window.clearTimeout(undoTimerRef.current)
     }
   }, [])
+
+  // Matches the shortcut legend's "Esc 关闭弹层 / 取消编辑": if an in-place
+  // edit field (title/description here, or a comment body in
+  // CommentSection — every one of them an InlineEditable) currently owns
+  // focus, its own keydown handler reverts the draft and blurs it first;
+  // `e.target` stays that same field for the rest of this event's bubble
+  // (event.target never changes mid-dispatch, even once the element loses
+  // focus), so isTypingTarget(e.target) is still true here and this handler
+  // steps aside for that keystroke. Only once nothing is being edited does
+  // Escape take the second, obvious meaning: leave the page, the same way
+  // "← 返回列表" does. Never traps focus — this never calls preventDefault.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      if (isTypingTarget(e.target)) return
+      navigate('/tasks')
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [navigate])
 
   function patchOptimistic(patch: TaskPatchBody, optimistic: Partial<Task>) {
     if (!task) return

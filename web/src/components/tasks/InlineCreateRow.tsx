@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useRef, useState, type FormEvent } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type FormEvent } from 'react'
 import { createTask } from '../../api/tasks'
 import type { Task } from '../../task-types'
 
@@ -25,10 +25,27 @@ const InlineCreateRow = forwardRef<InlineCreateRowHandle, InlineCreateRowProps>(
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  // Set right before setPending(false) and consumed by the effect below —
+  // see that effect's comment for why a synchronous .focus() here doesn't
+  // work.
+  const refocusPendingRef = useRef(false)
 
   useImperativeHandle(ref, () => ({
     focus: () => inputRef.current?.focus(),
   }))
+
+  // Re-focuses the input once React has actually committed `disabled` back
+  // to false. Calling .focus() synchronously in submit()'s `finally` block
+  // targets an element that is, at that instant, still disabled (setPending
+  // only *schedules* the re-render) — a silent no-op in every real browser.
+  // Waiting for this effect to run after the `pending` commit is what makes
+  // the input genuinely focusable again.
+  useEffect(() => {
+    if (!pending && refocusPendingRef.current) {
+      refocusPendingRef.current = false
+      inputRef.current?.focus()
+    }
+  }, [pending])
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -43,8 +60,8 @@ const InlineCreateRow = forwardRef<InlineCreateRowHandle, InlineCreateRowProps>(
     } catch (err) {
       setError(String((err as Error).message))
     } finally {
+      refocusPendingRef.current = true
       setPending(false)
-      inputRef.current?.focus()
     }
   }
 

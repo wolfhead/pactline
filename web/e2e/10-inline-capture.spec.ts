@@ -5,27 +5,18 @@ import { USERS } from './support/config'
 /**
  * Scenario: inline capture. The create row is always ready — press the
  * global "c" shortcut, type a title, press Enter, and the task appears in
- * the list.
+ * the list, with focus genuinely back in the input for the next one.
  *
- * BUG (documented here, not fixed — see the e2e report): InlineCreateRow's
- * own file comment promises "the input is immediately ready for the next
- * one" after a successful create, with no further key needed. It isn't.
- * InlineCreateRow.tsx's submit() does, in its `finally` block:
- *   setPending(false)
- *   inputRef.current?.focus()
- * back to back, synchronously. `setPending(false)` only *schedules* the
- * re-render that clears the input's `disabled` attribute; React hasn't
- * committed that DOM change yet when `.focus()` runs immediately after, so
- * `.focus()` is called on an element that is, at that instant, still
- * disabled — which is a silent no-op in every real browser. Nothing focuses
- * the input once it actually becomes enabled a tick later, so keyboard
- * focus is left on <body>. Reproduced directly: type a title into the
- * create input, press Enter, wait for the request to resolve, then check
- * document.activeElement — it is <body>, not the input, even though the
- * input's `disabled` is by then `false`. A user who just captured one task
- * cannot keep typing the next one; they must press "c" (or click) again.
+ * FIXED (was documented as a bug in the e2e report): InlineCreateRow.tsx's
+ * submit() used to call `inputRef.current?.focus()` synchronously right
+ * after `setPending(false)` in its `finally` block — but `setPending(false)`
+ * only *schedules* the re-render that clears the input's `disabled`
+ * attribute, so `.focus()` ran on an element that was, at that instant,
+ * still disabled — a silent no-op in every real browser. The fix defers the
+ * refocus to an effect keyed on `pending`, which only runs once React has
+ * actually committed `disabled={false}`.
  */
-test('inline capture creates a task on Enter (documents: focus does not return to the input afterward)', async ({
+test('inline capture creates a task on Enter, and keeps focus so a second task needs no re-trigger of "c"', async ({
   page,
   uniqueTitle,
   trackTask,
@@ -50,21 +41,18 @@ test('inline capture creates a task on Enter (documents: focus does not return t
 
   await expect(page.getByRole('link', { name: titleOne, exact: true })).toBeVisible()
   await expect(input).toHaveValue('')
-  // Per the bug documented above, focus is NOT retained here — it lands
-  // back on <body>. This assertion pins down the actual (broken) behavior;
-  // if InlineCreateRow is ever fixed to keep focus, this line should be
-  // changed to `await expect(input).toBeFocused()`.
-  await expect(input).not.toBeFocused()
-
-  // A real user must press "c" again (still mouse-free, but contradicts the
-  // "immediately ready" promise) to capture a second task straight after.
-  await page.keyboard.press('c')
+  // Focus genuinely returns once the input is re-enabled — no click, no
+  // re-press of "c" needed to keep capturing.
   await expect(input).toBeFocused()
+
+  // A second task, typed immediately with no shortcut re-trigger and no
+  // mouse — this is the whole point of an inline capture row.
   await page.keyboard.type(titleTwo)
   await page.keyboard.press('Enter')
 
   await expect(page.getByRole('link', { name: titleTwo, exact: true })).toBeVisible()
   await expect(input).toHaveValue('')
+  await expect(input).toBeFocused()
 
   // Resolve both created tasks' ids (through the number visible in their
   // row link) so cleanup can delete them.
