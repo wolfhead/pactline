@@ -17,14 +17,23 @@ function isPreference(v: string | null): v is ThemePreference {
   return v === 'system' || v === 'light' || v === 'dark'
 }
 
+/**
+ * Light, not "system", is the default.
+ *
+ * Following the OS is the conventional choice, but it is a choice about who
+ * decides — and here it silently handed the decision to a machine setting that
+ * disagreed with the person using the tool. Light is a decision; "system" is a
+ * deferral. Anyone who wants dark or OS-following picks it once and it sticks.
+ */
+const DEFAULT_PREFERENCE: ThemePreference = 'light'
+
 function readStored(): ThemePreference {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    return isPreference(raw) ? raw : 'system'
+    return isPreference(raw) ? raw : DEFAULT_PREFERENCE
   } catch {
-    // Private mode or a blocked store: fall back to following the OS rather
-    // than failing to render.
-    return 'system'
+    // Private mode or a blocked store must not break rendering.
+    return DEFAULT_PREFERENCE
   }
 }
 
