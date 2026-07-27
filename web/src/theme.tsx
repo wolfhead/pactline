@@ -11,7 +11,13 @@ import { useEffect, useState } from 'react'
  */
 export type ThemePreference = 'system' | 'light' | 'dark'
 
-const STORAGE_KEY = 'bountyboard.theme'
+/**
+ * Versioned key. The previous key holds values that were auto-written on mount
+ * rather than chosen, so honouring them would pin existing users to a
+ * preference they never expressed. A new key discards them once; anything
+ * stored under this one is a real choice.
+ */
+const STORAGE_KEY = 'bountyboard.theme.v2'
 
 function isPreference(v: string | null): v is ThemePreference {
   return v === 'system' || v === 'light' || v === 'dark'
@@ -49,16 +55,25 @@ function apply(preference: ThemePreference): void {
 export function useTheme(): [ThemePreference, (next: ThemePreference) => void] {
   const [preference, setPreference] = useState<ThemePreference>(readStored)
 
+  // Apply on every change, but never write on mount. Writing the default here
+  // was a real bug: it persisted the default as though the user had chosen it,
+  // so changing the default afterwards had no effect on anyone who had ever
+  // loaded the page — they were pinned to a preference they never expressed.
   useEffect(() => {
     apply(preference)
+  }, [preference])
+
+  // Only an explicit choice is written. That is what makes it a choice.
+  function choose(next: ThemePreference): void {
+    setPreference(next)
     try {
-      localStorage.setItem(STORAGE_KEY, preference)
+      localStorage.setItem(STORAGE_KEY, next)
     } catch {
       // Persisting is a convenience; a blocked store must not break the toggle.
     }
-  }, [preference])
+  }
 
-  return [preference, setPreference]
+  return [preference, choose]
 }
 
 const LABELS: Record<ThemePreference, string> = {
