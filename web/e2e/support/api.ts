@@ -69,7 +69,7 @@ export interface CreateBountyInput {
 }
 
 export function createBounty(sponsorId: string, input: CreateBountyInput): Promise<Bounty> {
-  return call<Bounty>(sponsorId, 'POST', '/api/bounties', input)
+  return call<Bounty>(sponsorId, 'POST', '/api/legacy/bounties', input)
 }
 
 export interface TransitionExtra {
@@ -78,7 +78,7 @@ export interface TransitionExtra {
 }
 
 export function transition(userId: string, bountyId: string, to: Bounty['status'], extra?: TransitionExtra): Promise<Bounty> {
-  return call<Bounty>(userId, 'POST', `/api/bounties/${bountyId}/transition`, { to, ...extra })
+  return call<Bounty>(userId, 'POST', `/api/legacy/bounties/${bountyId}/transition`, { to, ...extra })
 }
 
 export interface NominateInput {
@@ -88,17 +88,17 @@ export interface NominateInput {
 }
 
 export function nominate(userId: string, bountyId: string, input: NominateInput): Promise<Credit> {
-  return call<Credit>(userId, 'POST', `/api/bounties/${bountyId}/credits`, input)
+  return call<Credit>(userId, 'POST', `/api/legacy/bounties/${bountyId}/credits`, input)
 }
 
 export function respond(userId: string, creditId: string, status: 'CONFIRMED' | 'DECLINED'): Promise<Credit> {
-  return call<Credit>(userId, 'POST', `/api/credits/${creditId}/respond`, { status })
+  return call<Credit>(userId, 'POST', `/api/legacy/credits/${creditId}/respond`, { status })
 }
 
 export function listCredits(userId: string, bountyId: string): Promise<Credit[]> {
-  return call<Credit[]>(userId, 'GET', `/api/bounties/${bountyId}/credits`)
+  return call<Credit[]>(userId, 'GET', `/api/legacy/bounties/${bountyId}/credits`)
 }
 
 export function getBounty(userId: string, bountyId: string): Promise<Bounty> {
-  return call<Bounty>(userId, 'GET', `/api/bounties/${bountyId}`)
+  return call<Bounty>(userId, 'GET', `/api/legacy/bounties/${bountyId}`)
 }

@@ -6,13 +6,13 @@ export type CreditRole = 'DEFINE' | 'LEAD' | 'CO_DELIVER' | 'REVIEW' | 'SUPPORT'
 export type CreditStatus = 'PENDING' | 'CONFIRMED' | 'DECLINED'
 export type UserRole = 'SPONSOR' | 'ENGINEER' | 'TECH_LEAD' | 'STEWARD'
 
-// The three graded levels from internal/domain/bounty.go. Deliberately coarse
+// The three graded levels from internal/legacy/domain/bounty.go. Deliberately coarse
 // (spec §7.1): a continuous score would invite arguing over decimals.
 export type ValueLevel = 'S' | 'A' | 'B' | 'C'
 export type Difficulty = 'XS' | 'S' | 'M' | 'L' | 'XL'
 export type Completion = 'EXCEEDED' | 'MET' | 'PARTIAL' | 'MISSED'
 
-// From internal/domain/anchor.go's AnchorDimension.
+// From internal/legacy/domain/anchor.go's AnchorDimension.
 export type AnchorDimension = 'VALUE' | 'DIFFICULTY'
 
 export interface User {
@@ -55,8 +55,8 @@ export interface Bounty {
   claimed_at?: string
   person_days?: number
   retrospective?: string
-  // settled_score / settled_at: present only on GET /api/bounties/{id}.
-  // decorate() in internal/api/feed_handler.go deliberately strips both from
+  // settled_score / settled_at: present only on GET /api/legacy/bounties/{id}.
+  // decorate() in internal/legacy/api/feed_handler.go deliberately strips both from
   // every WorkView (the feed and every portfolio) — a score is a fact about a
   // work, never about a person, and this is the one place it may be shown.
   // Do not add these to WorkCard/Portfolio/WorkFeed rendering.
@@ -89,7 +89,7 @@ export interface WorkView {
   credits: CreditView[]
 }
 
-// Calibration — from internal/domain/calibration.go's Calibration struct
+// Calibration — from internal/legacy/domain/calibration.go's Calibration struct
 // (spec §4.6). Both the original and calibrated value/score are stored on
 // the row itself, so a calibration is a self-contained before/after and
 // never needs to be reconciled against the bounty's own (mutable) fields.
@@ -106,7 +106,7 @@ export interface Calibration {
   created_at: string
 }
 
-// AnchorExample — from internal/domain/anchor.go's AnchorExample struct
+// AnchorExample — from internal/legacy/domain/anchor.go's AnchorExample struct
 // (spec §4.7). Level is a plain string because it holds either a ValueLevel
 // or a Difficulty code depending on Dimension.
 export interface AnchorExample {
@@ -120,7 +120,7 @@ export interface AnchorExample {
 
 // The four outcome buckets of a settlement run — from the settledItem /
 // unscorableItem / failedItem / settlementResponse types in
-// internal/api/scoring_handler.go.
+// internal/legacy/api/scoring_handler.go.
 export interface SettledItem {
   bounty_id: string
   title: string
@@ -174,7 +174,7 @@ export const STATUS_LABELS: Record<Status, string> = {
 // §4.7) — hiding them behind prose-only labels, the way CREDIT_ROLE_LABELS
 // fully replaces DEFINE with "定义方案", would defeat that. The ordering
 // implied by each phrase ("最高" down to "最低") mirrors the fixed weight
-// ordering in internal/scoring/constants.go (S=8 > A=5 > B=3 > C=1, and
+// ordering in internal/legacy/scoring/constants.go (S=8 > A=5 > B=3 > C=1, and
 // XS=0.5 < S=1 < M=2 < L=3.5 < XL=6); it names no business meaning beyond
 // that ordering, since the spec deliberately does not anchor these levels to
 // anything more concrete than order (§13: "价值分锚定金额" was rejected).

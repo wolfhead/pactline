@@ -9,6 +9,8 @@ import (
 
 	"bountyboard"
 	"bountyboard/internal/api"
+	legacyapi "bountyboard/internal/legacy/api"
+	legacystore "bountyboard/internal/legacy/store"
 	"bountyboard/internal/logging"
 	"bountyboard/internal/store"
 )
@@ -34,13 +36,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	handler := api.NewRouter(
-		store.NewUserStore(db),
-		store.NewBountyStore(db),
-		store.NewCreditStore(db),
-		store.NewCalibrationStore(db),
-		store.NewAnchorStore(db),
+	users := store.NewUserStore(db)
+
+	// The bounty/credit/scoring mechanism moved to internal/legacy — see
+	// internal/legacy/README.md. Its router is mounted under /api/legacy/ by
+	// api.NewRouter, behind the same identity middleware as the rest of the
+	// API.
+	legacyHandler := legacyapi.NewRouter(
+		users,
+		legacystore.NewBountyStore(db),
+		legacystore.NewCreditStore(db),
+		legacystore.NewCalibrationStore(db),
+		legacystore.NewAnchorStore(db),
 	)
+
+	handler := api.NewRouter(users, legacyHandler)
 
 	addr := os.Getenv("ADDR")
 	if addr == "" {

@@ -1,29 +1,23 @@
-import { NavLink, Route, Routes } from 'react-router-dom'
-import { UserSwitcher, useIdentity } from './identity'
-import WorkFeed from './pages/WorkFeed'
-import Board from './pages/Board'
-import BountyDetail from './pages/BountyDetail'
-import Portfolio from './pages/Portfolio'
-import Mine from './pages/Mine'
-import Steward from './pages/Steward'
+import { Route, Routes } from 'react-router-dom'
+import { UserSwitcher } from './identity'
+import WorkFeed from './legacy/pages/WorkFeed'
+import Board from './legacy/pages/Board'
+import BountyDetail from './legacy/pages/BountyDetail'
+import Portfolio from './legacy/pages/Portfolio'
+import Mine from './legacy/pages/Mine'
+import Steward from './legacy/pages/Steward'
 
 export default function App() {
-  const { me } = useIdentity()
-  const isSteward = Boolean(me?.roles.includes('STEWARD'))
-
+  // The bounty/credit/scoring mechanism (work feed, board, portfolio, mine,
+  // steward tools) moved to internal/legacy on both backend and frontend —
+  // see web/src/legacy/README.md. Its routes stay mounted below so the pages
+  // remain reachable by direct URL (and drivable by the Playwright suite),
+  // but they are deliberately no longer linked from the nav: the plain
+  // routes are reserved for the task system that replaces this mechanism.
   return (
     <div className="app">
       <header>
-        <nav>
-          <NavLink to="/">作品流</NavLink>
-          <NavLink to="/board">Board</NavLink>
-          <NavLink to="/mine">我的</NavLink>
-          {/* Settlement and the anchor list are steward-only tools with no
-              per-bounty scope, so they get their own nav entry rather than
-              living on a bounty page — visible only to a steward, since
-              nobody else can act on it anyway (spec §7.2, §4.7). */}
-          {isSteward && <NavLink to="/steward">Steward</NavLink>}
-        </nav>
+        <nav></nav>
         <UserSwitcher />
       </header>
       <main>

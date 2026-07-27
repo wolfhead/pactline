@@ -26,24 +26,24 @@ func withIdentity(users *store.UserStore, next http.Handler) http.Handler {
 		raw := r.Header.Get("X-User-Id")
 		if raw == "" {
 			slog.Warn("request without identity", "path", r.URL.Path)
-			writeJSON(w, http.StatusUnauthorized, errorBody{Error: "X-User-Id header is required"})
+			WriteJSON(w, http.StatusUnauthorized, ErrorBody{Error: "X-User-Id header is required"})
 			return
 		}
 		id, err := uuid.Parse(raw)
 		if err != nil {
 			slog.Warn("malformed identity header", "path", r.URL.Path, "value", raw)
-			writeJSON(w, http.StatusUnauthorized, errorBody{Error: "X-User-Id is not a UUID"})
+			WriteJSON(w, http.StatusUnauthorized, ErrorBody{Error: "X-User-Id is not a UUID"})
 			return
 		}
 		u, err := users.GetByID(r.Context(), id)
 		if err != nil {
 			if errors.Is(err, domain.ErrNotFound) {
 				slog.Warn("unknown identity", "path", r.URL.Path, "user_id", id, "error", err)
-				writeJSON(w, http.StatusUnauthorized, errorBody{Error: "unknown user"})
+				WriteJSON(w, http.StatusUnauthorized, ErrorBody{Error: "unknown user"})
 				return
 			}
 			slog.Error("identity resolution failed", "path", r.URL.Path, "user_id", id, "error", err)
-			writeJSON(w, http.StatusInternalServerError, errorBody{Error: "identity resolution failed"})
+			WriteJSON(w, http.StatusInternalServerError, ErrorBody{Error: "identity resolution failed"})
 			return
 		}
 		// Decision: "active" governs who may ACT — every endpoint reachable
@@ -59,7 +59,7 @@ func withIdentity(users *store.UserStore, next http.Handler) http.Handler {
 		// system anything, not just to change it.
 		if !u.Active {
 			slog.Warn("deactivated identity denied", "path", r.URL.Path, "user_id", id)
-			writeJSON(w, http.StatusForbidden, errorBody{Error: "user is deactivated"})
+			WriteJSON(w, http.StatusForbidden, ErrorBody{Error: "user is deactivated"})
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey, u)))

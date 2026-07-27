@@ -10,11 +10,17 @@ import (
 	"bountyboard/internal/domain"
 )
 
-type errorBody struct {
+// ErrorBody is the JSON envelope every error response uses. Exported (along
+// with WriteJSON, WriteError and DecodeBody below) so internal/legacy/api's
+// handlers — a separate package after the legacy split, see
+// internal/legacy/README.md — can keep sharing this response-writing
+// infrastructure instead of duplicating it.
+type ErrorBody struct {
 	Error string `json:"error"`
 }
 
-func writeJSON(w http.ResponseWriter, status int, v any) {
+// WriteJSON writes v as the JSON body with the given status.
+func WriteJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	if v == nil {
@@ -25,38 +31,18 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	}
 }
 
-// writeError maps a domain error onto an HTTP status. Unknown errors become 500
-// and are logged with their full text; they are never silently swallowed.
-func writeError(w http.ResponseWriter, r *http.Request, err error) {
+// WriteError maps a domain error onto an HTTP status. Unknown errors become
+// 500 and are logged with their full text; they are never silently
+// swallowed.
+//
+// This package only ever raises domain.ErrNotFound itself (the one domain
+// error shared with the legacy mechanism's stores, e.g. an unknown user).
+// internal/legacy/api has its own writeError for the mechanism-specific
+// domain errors that moved with it.
+func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	status := http.StatusInternalServerError
-	switch {
-	case errors.Is(err, domain.ErrInvalidCreditRole),
-		errors.Is(err, domain.ErrInvalidValueLevel),
-		errors.Is(err, domain.ErrInvalidDifficulty),
-		errors.Is(err, domain.ErrInvalidCompletion),
-		errors.Is(err, domain.ErrInvalidAnchorDimension),
-		errors.Is(err, domain.ErrInvalidAnchorLevel),
-		errors.Is(err, domain.ErrQuarterRequired),
-		errors.Is(err, domain.ErrInvalidQuarterFormat):
-		status = http.StatusBadRequest
-	case errors.Is(err, domain.ErrNotFound):
+	if errors.Is(err, domain.ErrNotFound) {
 		status = http.StatusNotFound
-	case errors.Is(err, domain.ErrForbidden),
-		errors.Is(err, domain.ErrNotDirectedToYou),
-		errors.Is(err, domain.ErrNotYourCredit):
-		status = http.StatusForbidden
-	case errors.Is(err, domain.ErrInvalidTransition),
-		errors.Is(err, domain.ErrRetrospectiveRequired),
-		errors.Is(err, domain.ErrNotClaimable),
-		errors.Is(err, domain.ErrEvidenceRequired),
-		errors.Is(err, domain.ErrCreditNotPending),
-		errors.Is(err, domain.ErrCreditNotDeclined),
-		errors.Is(err, domain.ErrValueLevelLocked),
-		errors.Is(err, domain.ErrAlreadySettled),
-		errors.Is(err, domain.ErrNotSettled),
-		errors.Is(err, domain.ErrUnscorable),
-		errors.Is(err, domain.ErrDifficultySettled):
-		status = http.StatusConflict
 	}
 
 	logger := slog.With("method", r.Method, "path", r.URL.Path, "status", status, "error", err.Error())
@@ -65,13 +51,15 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	} else {
 		logger.Warn("request rejected")
 	}
-	writeJSON(w, status, errorBody{Error: err.Error()})
+	WriteJSON(w, status, ErrorBody{Error: err.Error()})
 }
 
-func decodeBody(w http.ResponseWriter, r *http.Request, dst any) bool {
+// DecodeBody decodes the request body into dst, writing a 400 and returning
+// false on failure.
+func DecodeBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
 		slog.Warn("decode request body", "path", r.URL.Path, "error", err)
-		writeJSON(w, http.StatusBadRequest, errorBody{Error: "invalid JSON body"})
+		WriteJSON(w, http.StatusBadRequest, ErrorBody{Error: "invalid JSON body"})
 		return false
 	}
 	return true

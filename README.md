@@ -3,6 +3,19 @@
 作品制研发任务管理系统。机制设计见 [`docs/mechanism-design.md`](docs/mechanism-design.md),
 系统规格见 [`docs/superpowers/specs/2026-07-26-bounty-board-design.md`](docs/superpowers/specs/2026-07-26-bounty-board-design.md)。
 
+## 当前状态:机制已移入 legacy
+
+项目方向已调整:新的任务管理平台优先,原先的 bounty/credits 机制作为可选层
+后续再接回。**本仓库当前的机制实现(bounty 状态机、credits、作品流、个人页、
+计分、结算、定档、锚点清单、steward 修正通道)已整体移入 `internal/legacy`
+(后端)与 `web/src/legacy`(前端),挂在 `/api/legacy/...` 路由前缀下,并已从
+导航中移除,但仍可通过直接 URL 访问,测试也全部保留、持续跑绿。**
+详见 [`internal/legacy/README.md`](internal/legacy/README.md)。以下文档
+其余部分描述的仍是这套机制本身的行为——搬家不改变行为,只是换了位置。
+
+下方核心概念、认证、规则等描述的都是 `internal/legacy` / `web/src/legacy`
+里的这套机制,不要把它误认成新任务平台的产品行为。
+
 ## 核心概念
 
 记录单位是**作品**,不是人。一条记录在生命周期前半段是可认领的「单」,
@@ -61,12 +74,12 @@ Phase 1 **没有认证**。身份由 `X-User-Id` 请求头携带,前端提供用
 1. **未确认的 credit 不进入任何统计与展示** —— 防的是虚假署名
 2. **`ABANDONED` 的单出现在作品流中,并带着结论** —— 失败带结论归档,是让人敢碰难题的机制
 
-两条均有回归测试守护,见 `internal/store/credit_store_test.go`、
-`internal/api/feed_handler_test.go` 与端到端闭环测试 `internal/api/loop_test.go`。
+两条均有回归测试守护,见 `internal/legacy/store/credit_store_test.go`、
+`internal/legacy/api/feed_handler_test.go` 与端到端闭环测试 `internal/legacy/api/loop_test.go`。
 
 ## 状态流转与权限要点
 
-开单(`POST /api/bounties`)要求调用者持有 `SPONSOR` 或 `STEWARD` 角色;
+开单(`POST /api/legacy/bounties`)要求调用者持有 `SPONSOR` 或 `STEWARD` 角色;
 仅有 `ENGINEER` 角色的身份会被拒绝(403)。
 
 `DELIVERED -> COMPLETED`(验收)只能由该单的 sponsor 或 steward 触发,
