@@ -20,3 +20,69 @@
     &:where(:not([data-theme="light"], [data-theme="light"] *)) { @slot; }
   }
 }
+
+/* color-scheme is what makes light-dark() resolve, and it lines up exactly
+ * with the three preference states theme.tsx already produces: no attribute
+ * means "follow the OS", so the root keeps both schemes and the browser
+ * picks; an explicit choice pins one. Writing each token once this way is
+ * the whole reason there is no duplicated dark block below.
+ *
+ * The override rules deliberately do NOT use :where([data-theme=...]) (zero
+ * specificity). web/src/styles.css — imported after this file in main.tsx,
+ * only removed by a later cleanup task — declares its own unconditional
+ * `:root { color-scheme: light dark; }`. At equal specificity the later
+ * source wins, which silently made explicit light/dark choices fall back to
+ * following the OS instead of pinning a scheme (verified with Playwright:
+ * toggling the in-app theme select to "dark" left every light-dark() token
+ * resolved to its light value). Plain `:root[data-theme="dark"]` has higher
+ * specificity than styles.css's bare `:root`, so it wins regardless of
+ * import order — robust now and after styles.css is deleted. */
+:root { color-scheme: light dark; }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+
+@theme {
+  --color-surface: light-dark(#ffffff, #161618);
+  --color-surface-subtle: light-dark(#fafafa, #1c1c1f);
+  --color-surface-raised: light-dark(#f4f4f2, #212124);
+  /* --color-border is a hairline row/section divider, not a UI-component
+   * boundary, so WCAG 1.4.11's 3:1 non-text bar does not apply to it (see
+   * the exemption note on scratch-contrast.mjs / task-3-report.md). It is
+   * carried over unchanged from styles.css's --border. --color-border-strong
+   * IS used for real control boundaries (inputs, buttons) and is measured
+   * and adjusted below to clear 3:1 for real. */
+  --color-border: light-dark(#e6e6e2, #2a2a2e);
+  --color-border-strong: light-dark(#888888, #75757a);
+  --color-fg: light-dark(#17171a, #e4e4e7);
+  /* fg-muted/fg-subtle: both sit in the "text" contrast group (4.5:1), which
+   * compresses how much lighter "subtle" can be than "muted" while staying
+   * legal — see task-3-report.md for the before/after ratios. */
+  --color-fg-muted: light-dark(#68686f, #a1a1aa);
+  --color-fg-subtle: light-dark(#6d6d72, #919198);
+  --color-accent: light-dark(#4f46e5, #818cf8);
+  --color-accent-fg: light-dark(#ffffff, #17171a);
+  --color-accent-subtle: light-dark(#eef2ff, #26264a);
+  --color-danger: light-dark(#c62828, #f87171);
+  --color-danger-subtle: light-dark(#fdecec, #3a1f1f);
+
+  /* Light status colours are carried over from styles.css, where they were
+   * already measured against every surface a dot can sit on. The dot is a
+   * redundant cue — the label text is always present — so the 3:1 non-text
+   * bar applies, not 4.5:1. The dark half is a separate palette, lightened
+   * to clear the same bar on a dark surface; Step 3 measures both.
+   * in-progress's light value is darkened slightly from styles.css's
+   * #d97706 — the new --color-surface-raised/--color-accent-subtle surfaces
+   * didn't exist when that value was measured and it fell just under 3:1
+   * against them (2.85-2.89:1); see task-3-report.md. */
+  --color-status-backlog: light-dark(#76767e, #8a8a92);
+  --color-status-todo: light-dark(#3b6fd6, #6a9ee8);
+  --color-status-in-progress: light-dark(#cd7106, #e0a33e);
+  --color-status-in-review: light-dark(#a15c00, #d9a441);
+  --color-status-done: light-dark(#1f8a3c, #4ea866);
+  --color-status-cancelled: light-dark(#c62828, #f87171);
+
+  --color-priority-low: light-dark(#68686f, #a1a1aa);
+  --color-priority-medium: light-dark(#68686f, #a1a1aa);
+  --color-priority-high: light-dark(#d02424, #f87171);
+  --color-priority-urgent: light-dark(#b91c1c, #fca5a5);
+}
