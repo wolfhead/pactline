@@ -25,6 +25,9 @@ playwright/.cache/
 .env.local
 *.local
 
+# Brainstorming mockups (the sdd/ reports alongside them are tracked)
+.superpowers/brainstorm/
+
 # Editor / OS
 .DS_Store
 .idea/
