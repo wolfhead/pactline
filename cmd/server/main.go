@@ -37,6 +37,9 @@ func main() {
 	}
 
 	users := store.NewUserStore(db)
+	tasks := store.NewTaskStore(db)
+	comments := store.NewCommentStore(db)
+	labels := store.NewLabelStore(db)
 
 	// The bounty/credit/scoring mechanism moved to internal/legacy — see
 	// internal/legacy/README.md. Its router is mounted under /api/legacy/ by
@@ -50,7 +53,7 @@ func main() {
 		legacystore.NewAnchorStore(db),
 	)
 
-	handler := api.NewRouter(users, legacyHandler)
+	handler := api.NewRouter(users, legacyHandler, api.TaskSurface{Tasks: tasks, Comments: comments, Labels: labels})
 
 	addr := os.Getenv("ADDR")
 	if addr == "" {

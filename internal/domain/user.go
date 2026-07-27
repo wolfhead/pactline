@@ -31,3 +31,13 @@ func (u User) HasRole(r UserRole) bool {
 	}
 	return false
 }
+
+// UserRef is a light reference to a user embedded in another entity's API
+// response — a task's assignee or creator. Embedding this (rather than just
+// an ID) is what lets a task list response satisfy a frontend in a single
+// round trip: it never has to look up who a task belongs to separately.
+type UserRef struct {
+	ID    uuid.UUID `json:"id"`
+	Name  string    `json:"name"`
+	Email string    `json:"email"`
+}

@@ -35,14 +35,23 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 // 500 and are logged with their full text; they are never silently
 // swallowed.
 //
-// This package only ever raises domain.ErrNotFound itself (the one domain
-// error shared with the legacy mechanism's stores, e.g. an unknown user).
+// Beyond domain.ErrNotFound (shared with the legacy mechanism's stores, e.g.
+// an unknown user), this package also raises domain.ErrInvalidInput,
+// domain.ErrForbidden and domain.ErrConflict for the task/comment/label
+// surface — see internal/domain/errors.go for what each means.
 // internal/legacy/api has its own writeError for the mechanism-specific
 // domain errors that moved with it.
 func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	status := http.StatusInternalServerError
-	if errors.Is(err, domain.ErrNotFound) {
+	switch {
+	case errors.Is(err, domain.ErrNotFound):
 		status = http.StatusNotFound
+	case errors.Is(err, domain.ErrInvalidInput):
+		status = http.StatusBadRequest
+	case errors.Is(err, domain.ErrForbidden):
+		status = http.StatusForbidden
+	case errors.Is(err, domain.ErrConflict):
+		status = http.StatusConflict
 	}
 
 	logger := slog.With("method", r.Method, "path", r.URL.Path, "status", status, "error", err.Error())
