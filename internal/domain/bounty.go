@@ -50,6 +50,84 @@ const (
 // line. Without it, platform contributors vanish from every line's view.
 const BusinessTagPlatform = "PLATFORM"
 
+// ValueLevel is the sponsor-set claim of how much a work is worth. Spec §7.1
+// deliberately uses four coarse levels rather than a continuous score: a
+// precise number invites arguing over decimals, and multiplying several
+// subjective estimates together only amplifies their error.
+type ValueLevel string
+
+const (
+	ValueS ValueLevel = "S"
+	ValueA ValueLevel = "A"
+	ValueB ValueLevel = "B"
+	ValueC ValueLevel = "C"
+)
+
+// ValidValueLevels lists every known ValueLevel constant.
+var ValidValueLevels = []ValueLevel{ValueS, ValueA, ValueB, ValueC}
+
+// IsValidValueLevel reports whether v is one of the four defined levels.
+func IsValidValueLevel(v ValueLevel) bool {
+	for _, l := range ValidValueLevels {
+		if l == v {
+			return true
+		}
+	}
+	return false
+}
+
+// Difficulty is the tech-lead-set estimate of how hard a work is. Never the
+// sponsor's call, even for their own bounty — separating "how valuable" from
+// "how hard" is the mechanism's point (spec §6.1), not an accident.
+type Difficulty string
+
+const (
+	DifficultyXS Difficulty = "XS"
+	DifficultyS  Difficulty = "S"
+	DifficultyM  Difficulty = "M"
+	DifficultyL  Difficulty = "L"
+	DifficultyXL Difficulty = "XL"
+)
+
+// ValidDifficulties lists every known Difficulty constant.
+var ValidDifficulties = []Difficulty{DifficultyXS, DifficultyS, DifficultyM, DifficultyL, DifficultyXL}
+
+// IsValidDifficulty reports whether d is one of the five defined levels.
+func IsValidDifficulty(d Difficulty) bool {
+	for _, l := range ValidDifficulties {
+		if l == d {
+			return true
+		}
+	}
+	return false
+}
+
+// Completion is the sponsor-set grade of how well a delivered work met its
+// acceptance criteria. Set at acceptance (the DELIVERED -> COMPLETED edge);
+// ABANDONED bounties never carry one — spec §7.1.1 scores those by status and
+// commitment alone.
+type Completion string
+
+const (
+	CompletionExceeded Completion = "EXCEEDED"
+	CompletionMet      Completion = "MET"
+	CompletionPartial  Completion = "PARTIAL"
+	CompletionMissed   Completion = "MISSED"
+)
+
+// ValidCompletions lists every known Completion constant.
+var ValidCompletions = []Completion{CompletionExceeded, CompletionMet, CompletionPartial, CompletionMissed}
+
+// IsValidCompletion reports whether c is one of the four defined levels.
+func IsValidCompletion(c Completion) bool {
+	for _, l := range ValidCompletions {
+		if l == c {
+			return true
+		}
+	}
+	return false
+}
+
 // BusinessLine is a weighted attribution tag. Weights are expected to sum to 1,
 // but a mismatch is surfaced as a warning rather than rejected.
 type BusinessLine struct {
@@ -62,9 +140,8 @@ type BusinessLine struct {
 //
 // Note: some columns in migrations/0001_init.sql are deliberately not yet included here
 // because the features that depend on them ship in later phases:
-// - value_level, difficulty, completion, settled_score, settled_at: scoring system (future phase)
-// - due_date: commitment tracking (future phase)
-// - baseline_system_id: baseline contracts (future phase)
+// - due_date: commitment tracking (Phase 3)
+// - baseline_system_id: baseline contracts (Phase 5)
 type Bounty struct {
 	ID                 uuid.UUID      `json:"id"`
 	Type               BountyType     `json:"type"`
@@ -76,13 +153,18 @@ type Bounty struct {
 	Restriction        string         `json:"restriction,omitempty"`
 	DirectedTo         *uuid.UUID     `json:"directed_to,omitempty"`
 	BusinessLines      []BusinessLine `json:"business_lines"`
+	ValueLevel         ValueLevel     `json:"value_level,omitempty"`
+	Difficulty         Difficulty     `json:"difficulty,omitempty"`
 	Commitment         Commitment     `json:"commitment"`
+	Completion         Completion     `json:"completion,omitempty"`
 	Status             Status         `json:"status"`
 	SponsorID          uuid.UUID      `json:"sponsor_id"`
 	ClaimedBy          *uuid.UUID     `json:"claimed_by,omitempty"`
 	ClaimedAt          *time.Time     `json:"claimed_at,omitempty"`
 	PersonDays         *float64       `json:"person_days,omitempty"`
 	Retrospective      string         `json:"retrospective,omitempty"`
+	SettledScore       *float64       `json:"settled_score,omitempty"`
+	SettledAt          *time.Time     `json:"settled_at,omitempty"`
 	CompletedAt        *time.Time     `json:"completed_at,omitempty"`
 	CreatedAt          time.Time      `json:"created_at"`
 	UpdatedAt          time.Time      `json:"updated_at"`
@@ -153,6 +235,31 @@ func CanClaim(u User, b Bounty) error {
 		return ErrForbidden
 	}
 	return nil
+}
+
+// CanSetValueLevel reports whether the user may set or amend the bounty's
+// value level. Per spec §6.1 this is the sponsor's call (or a steward's),
+// given "when opening, and amendable while the bounty is still open" —
+// enforced here as the DRAFT/OPEN window. Once claimed, the value is locked
+// in: it is what the deliverer committed against.
+func CanSetValueLevel(u User, b Bounty) error {
+	if !CanEdit(u, b) {
+		return ErrForbidden
+	}
+	if b.Status != StatusDraft && b.Status != StatusOpen {
+		return ErrValueLevelLocked
+	}
+	return nil
+}
+
+// CanSetDifficulty reports whether the user may set the bounty's difficulty
+// level. Deliberately NOT the sponsor's call, even for their own bounty — see
+// Difficulty's doc comment. Only a TECH_LEAD or STEWARD may set it.
+func CanSetDifficulty(u User) error {
+	if u.HasRole(UserRoleTechLead) || u.HasRole(UserRoleSteward) {
+		return nil
+	}
+	return ErrForbidden
 }
 
 // CanNominate reports whether the user may name credits on this bounty. Only

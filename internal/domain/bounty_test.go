@@ -148,6 +148,74 @@ func TestCanEditAndNominate(t *testing.T) {
 	})
 }
 
+// TestCanSetValueLevel pins spec §6.1: the sponsor (or a steward) sets the
+// value level, and only while the bounty is still DRAFT or OPEN. Once
+// claimed, it is locked in — the deliverer commits against a fixed value.
+func TestCanSetValueLevel(t *testing.T) {
+	sponsor := domain.User{ID: uuid.New(), Roles: []domain.UserRole{domain.UserRoleSponsor}}
+	steward := domain.User{ID: uuid.New(), Roles: []domain.UserRole{domain.UserRoleSteward}}
+	stranger := domain.User{ID: uuid.New(), Roles: []domain.UserRole{domain.UserRoleEngineer}}
+
+	t.Run("sponsor may set while draft", func(t *testing.T) {
+		b := domain.Bounty{SponsorID: sponsor.ID, Status: domain.StatusDraft}
+		require.NoError(t, domain.CanSetValueLevel(sponsor, b))
+	})
+	t.Run("sponsor may amend while open", func(t *testing.T) {
+		b := domain.Bounty{SponsorID: sponsor.ID, Status: domain.StatusOpen}
+		require.NoError(t, domain.CanSetValueLevel(sponsor, b))
+	})
+	t.Run("steward may set regardless of ownership", func(t *testing.T) {
+		b := domain.Bounty{SponsorID: sponsor.ID, Status: domain.StatusOpen}
+		require.NoError(t, domain.CanSetValueLevel(steward, b))
+	})
+	t.Run("stranger may not set", func(t *testing.T) {
+		b := domain.Bounty{SponsorID: sponsor.ID, Status: domain.StatusOpen}
+		require.ErrorIs(t, domain.CanSetValueLevel(stranger, b), domain.ErrForbidden)
+	})
+	t.Run("locked once claimed", func(t *testing.T) {
+		b := domain.Bounty{SponsorID: sponsor.ID, Status: domain.StatusClaimed}
+		require.ErrorIs(t, domain.CanSetValueLevel(sponsor, b), domain.ErrValueLevelLocked)
+	})
+	t.Run("locked once completed", func(t *testing.T) {
+		b := domain.Bounty{SponsorID: sponsor.ID, Status: domain.StatusCompleted}
+		require.ErrorIs(t, domain.CanSetValueLevel(sponsor, b), domain.ErrValueLevelLocked)
+	})
+}
+
+// TestCanSetDifficulty pins spec §6.1's separation of powers: the sponsor
+// cannot set difficulty even for their own bounty, only a TECH_LEAD or
+// STEWARD can. This is the mechanism's point, not an accident.
+func TestCanSetDifficulty(t *testing.T) {
+	sponsor := domain.User{ID: uuid.New(), Roles: []domain.UserRole{domain.UserRoleSponsor}}
+	techLead := domain.User{ID: uuid.New(), Roles: []domain.UserRole{domain.UserRoleTechLead}}
+	sponsorTechLead := domain.User{ID: uuid.New(), Roles: []domain.UserRole{domain.UserRoleSponsor, domain.UserRoleTechLead}}
+	steward := domain.User{ID: uuid.New(), Roles: []domain.UserRole{domain.UserRoleSteward}}
+
+	require.ErrorIs(t, domain.CanSetDifficulty(sponsor), domain.ErrForbidden,
+		"a sponsor, even the bounty's own sponsor, may never set difficulty")
+	require.NoError(t, domain.CanSetDifficulty(techLead))
+	require.NoError(t, domain.CanSetDifficulty(sponsorTechLead),
+		"holding TECH_LEAD alongside SPONSOR still grants the capability, via the TECH_LEAD role")
+	require.NoError(t, domain.CanSetDifficulty(steward))
+}
+
+func TestIsValidValueLevelDifficultyCompletion(t *testing.T) {
+	for _, v := range domain.ValidValueLevels {
+		require.True(t, domain.IsValidValueLevel(v))
+	}
+	require.False(t, domain.IsValidValueLevel("Z"))
+
+	for _, d := range domain.ValidDifficulties {
+		require.True(t, domain.IsValidDifficulty(d))
+	}
+	require.False(t, domain.IsValidDifficulty("HUGE"))
+
+	for _, c := range domain.ValidCompletions {
+		require.True(t, domain.IsValidCompletion(c))
+	}
+	require.False(t, domain.IsValidCompletion("WOW"))
+}
+
 func TestBusinessLineWeightSum(t *testing.T) {
 	sum := domain.BusinessLineWeightSum([]domain.BusinessLine{
 		{Tag: "DSP", Weight: 0.7},

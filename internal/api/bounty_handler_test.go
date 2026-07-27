@@ -49,7 +49,10 @@ func newTestServer(t *testing.T) http.Handler {
 	require.NoError(t, db.Migrate(context.Background(), bountyboard.MigrationFS))
 	t.Cleanup(db.Close)
 
-	return api.NewRouter(store.NewUserStore(db), store.NewBountyStore(db), store.NewCreditStore(db))
+	return api.NewRouter(
+		store.NewUserStore(db), store.NewBountyStore(db), store.NewCreditStore(db),
+		store.NewCalibrationStore(db), store.NewAnchorStore(db),
+	)
 }
 
 // TestMain makes a partial run of this package impossible to mistake for a

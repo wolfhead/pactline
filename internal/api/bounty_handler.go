@@ -28,6 +28,12 @@ type createBountyRequest struct {
 	DirectedTo         *uuid.UUID            `json:"directed_to"`
 	BusinessLines      []domain.BusinessLine `json:"business_lines"`
 	Commitment         domain.Commitment     `json:"commitment"`
+	// ValueLevel lets the sponsor set the value level "when opening", per
+	// spec §6.1. There is deliberately no Difficulty field here: difficulty is
+	// never the sponsor's call, even for their own bounty — see
+	// domain.CanSetDifficulty. It is set only through the dedicated
+	// POST /api/bounties/{id}/difficulty endpoint.
+	ValueLevel domain.ValueLevel `json:"value_level"`
 }
 
 func (h *bountyHandler) create(w http.ResponseWriter, r *http.Request) {
@@ -57,6 +63,10 @@ func (h *bountyHandler) create(w http.ResponseWriter, r *http.Request) {
 	if req.Type == "" {
 		req.Type = domain.BountyTypeDelivery
 	}
+	if req.ValueLevel != "" && !domain.IsValidValueLevel(req.ValueLevel) {
+		writeJSON(w, http.StatusBadRequest, errorBody{Error: "value_level is not a known value: " + string(req.ValueLevel)})
+		return
+	}
 
 	// Attribution weights are expected to sum to 1, but a mismatch is a warning
 	// rather than a rejection — the mechanism deliberately leaves this to team
@@ -76,6 +86,7 @@ func (h *bountyHandler) create(w http.ResponseWriter, r *http.Request) {
 		DirectedTo:         req.DirectedTo,
 		BusinessLines:      req.BusinessLines,
 		Commitment:         req.Commitment,
+		ValueLevel:         req.ValueLevel,
 		Status:             domain.StatusDraft,
 		SponsorID:          me.ID,
 	})
@@ -189,6 +200,12 @@ type transitionRequest struct {
 	To            domain.Status `json:"to"`
 	Retrospective string        `json:"retrospective"`
 	PersonDays    *float64      `json:"person_days"`
+	// Completion belongs to the DELIVERED -> COMPLETED edge only: per spec
+	// §6.1 the sponsor grades completion "at acceptance", i.e. exactly when
+	// they accept the delivery into COMPLETED. It is optional — leaving it
+	// unset is how a Phase 1-shaped acceptance keeps working unchanged, and
+	// an unscorable bounty is reported (not blocked) at settlement time.
+	Completion domain.Completion `json:"completion"`
 }
 
 // transition moves a bounty along the status graph and applies the side effects
@@ -211,6 +228,10 @@ func (h *bountyHandler) transition(w http.ResponseWriter, r *http.Request) {
 	// rejected outright.
 	if !domain.IsValidStatus(req.To) {
 		writeJSON(w, http.StatusBadRequest, errorBody{Error: "to is not a known status: " + string(req.To)})
+		return
+	}
+	if req.Completion != "" && !domain.IsValidCompletion(req.Completion) {
+		writeJSON(w, http.StatusBadRequest, errorBody{Error: "completion is not a known value: " + string(req.Completion)})
 		return
 	}
 
@@ -273,6 +294,14 @@ func applyTransitionFormFields(b *domain.Bounty, me domain.User, req transitionR
 		} else {
 			slog.Warn("ignored person_days field on transition that does not target DELIVERED",
 				"bounty_id", b.ID, "actor_id", me.ID, "from", b.Status, "to", req.To, "field", "person_days")
+		}
+	}
+	if req.Completion != "" {
+		if req.To == domain.StatusCompleted {
+			b.Completion = req.Completion
+		} else {
+			slog.Warn("ignored completion field on transition that does not target COMPLETED",
+				"bounty_id", b.ID, "actor_id", me.ID, "from", b.Status, "to", req.To, "field", "completion")
 		}
 	}
 }

@@ -30,7 +30,13 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	status := http.StatusInternalServerError
 	switch {
-	case errors.Is(err, domain.ErrInvalidCreditRole):
+	case errors.Is(err, domain.ErrInvalidCreditRole),
+		errors.Is(err, domain.ErrInvalidValueLevel),
+		errors.Is(err, domain.ErrInvalidDifficulty),
+		errors.Is(err, domain.ErrInvalidCompletion),
+		errors.Is(err, domain.ErrInvalidAnchorDimension),
+		errors.Is(err, domain.ErrInvalidAnchorLevel),
+		errors.Is(err, domain.ErrQuarterRequired):
 		status = http.StatusBadRequest
 	case errors.Is(err, domain.ErrNotFound):
 		status = http.StatusNotFound
@@ -43,7 +49,11 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		errors.Is(err, domain.ErrNotClaimable),
 		errors.Is(err, domain.ErrEvidenceRequired),
 		errors.Is(err, domain.ErrCreditNotPending),
-		errors.Is(err, domain.ErrCreditNotDeclined):
+		errors.Is(err, domain.ErrCreditNotDeclined),
+		errors.Is(err, domain.ErrValueLevelLocked),
+		errors.Is(err, domain.ErrAlreadySettled),
+		errors.Is(err, domain.ErrNotSettled),
+		errors.Is(err, domain.ErrUnscorable):
 		status = http.StatusConflict
 	}
 

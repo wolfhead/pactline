@@ -38,6 +38,8 @@ func main() {
 		store.NewUserStore(db),
 		store.NewBountyStore(db),
 		store.NewCreditStore(db),
+		store.NewCalibrationStore(db),
+		store.NewAnchorStore(db),
 	)
 
 	addr := os.Getenv("ADDR")
