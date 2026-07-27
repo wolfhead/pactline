@@ -3,10 +3,11 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import FilterBar, { DEFAULT_FILTERS, type FilterBarHandle, type TaskFilters } from '../../components/tasks/FilterBar'
 import InlineCreateRow, { type InlineCreateRowHandle } from '../../components/tasks/InlineCreateRow'
 import TaskRow from '../../components/tasks/TaskRow'
-import { listLabels, listTasks, updateTask } from '../../api/tasks'
+import { useBreakpoint } from '../../hooks/useBreakpoint'
+import { archiveTask, listLabels, listTasks, restoreTask, updateTask } from '../../api/tasks'
 import { useIdentity } from '../../identity'
 import { isTypingTarget } from '../../keyboard'
-import type { Label, Task, TaskPatchBody, TaskPriority, TaskStatus } from '../../task-types'
+import type { Label, Task, TaskPatchBody } from '../../task-types'
 
 const PAGE_SIZE = 50
 
@@ -20,6 +21,7 @@ export default function TaskListPage() {
   const { me, users } = useIdentity()
   const navigate = useNavigate()
   const location = useLocation()
+  const tier = useBreakpoint()
 
   const [filters, setFilters] = useState<TaskFilters>(DEFAULT_FILTERS)
   const [labels, setLabels] = useState<Label[]>([])
@@ -160,17 +162,19 @@ export default function TaskListPage() {
       })
   }
 
-  function handleChangeStatus(task: Task, status: TaskStatus) {
-    patchOptimistic(task, { status }, { status })
+  // Not optimistic like patchOptimistic above: archiving/restoring changes
+  // the task's lifecycle, not one of its properties, so the row just waits
+  // for the server's answer and reports a row error if it refuses.
+  function handleArchive(task: Task) {
+    archiveTask(task.number)
+      .then((updated) => setTasks((ts) => ts.map((t) => (t.number === task.number ? updated : t))))
+      .catch((err) => setRowErrors((e) => ({ ...e, [task.number]: `归档失败：${(err as Error).message}` })))
   }
 
-  function handleChangePriority(task: Task, priority: TaskPriority) {
-    patchOptimistic(task, { priority }, { priority })
-  }
-
-  function handleChangeAssignee(task: Task, assigneeId: string | null) {
-    const assignee = assigneeId ? users.find((u) => u.id === assigneeId) ?? null : null
-    patchOptimistic(task, { assignee_id: assigneeId }, { assignee })
+  function handleRestore(task: Task) {
+    restoreTask(task.number)
+      .then((updated) => setTasks((ts) => ts.map((t) => (t.number === task.number ? updated : t))))
+      .catch((err) => setRowErrors((e) => ({ ...e, [task.number]: `恢复失败：${(err as Error).message}` })))
   }
 
   // Jumped here from the board's "c" shortcut (board has no capture row of
@@ -246,11 +250,13 @@ export default function TaskListPage() {
             <TaskRow
               key={t.id}
               task={t}
-              focused={i === focusedIndex}
+              selected={i === focusedIndex}
+              tier={tier}
+              users={users}
               error={rowErrors[t.number]}
-              onChangeStatus={handleChangeStatus}
-              onChangePriority={handleChangePriority}
-              onChangeAssignee={handleChangeAssignee}
+              onPatch={patchOptimistic}
+              onArchive={handleArchive}
+              onRestore={handleRestore}
             />
           ))}
           {hasMore && (

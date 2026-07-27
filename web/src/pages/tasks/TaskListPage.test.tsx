@@ -164,13 +164,11 @@ describe('TaskListPage', () => {
     const task = makeTask({ number: 7, status: 'todo', title: '待处理的任务' })
     renderList([task])
 
-    // Status is now a quiet display (a colour mark + label) until
-    // interacted with — click it to reveal the real <select>.
-    const trigger = await screen.findByRole('button', { name: '任务 #7 状态' })
+    // Status is a permanently visible combobox — no reveal-on-interaction
+    // step first (that was the old QuietSelect pattern; TaskRow no longer
+    // uses it, see task-7-report.md).
+    const trigger = await screen.findByRole('combobox', { name: '任务 #7 状态' })
     expect(trigger).toHaveTextContent('待办')
-    fireEvent.click(trigger)
-    const select = screen.getByRole('combobox', { name: '任务 #7 状态' })
-    expect(select).toHaveValue('todo')
 
     let rejectPatch!: (err: Error) => void
     mockedApiPatch.mockReturnValue(
@@ -179,14 +177,12 @@ describe('TaskListPage', () => {
       }),
     )
 
-    fireEvent.change(select, { target: { value: 'done' } })
+    fireEvent.click(trigger)
+    fireEvent.click(await screen.findByRole('option', { name: '已完成' }))
 
-    // Choosing an option collapses the <select> straight back to the quiet
-    // display, same as a native <select> closing its own dropdown — so the
-    // optimistic update is observed there: the quiet display already
-    // reflects the new value, before the server has answered at all.
-    const triggerAfterChange = screen.getByRole('button', { name: '任务 #7 状态' })
-    expect(triggerAfterChange).toHaveTextContent('已完成')
+    // The optimistic update is observed on the trigger immediately, before
+    // the server has answered at all.
+    expect(trigger).toHaveTextContent('已完成')
     expect(mockedApiPatch).toHaveBeenCalledWith('/api/tasks/7', { status: 'done' })
     expect(screen.queryByText(/已恢复原状态/)).not.toBeInTheDocument()
 
@@ -194,7 +190,7 @@ describe('TaskListPage', () => {
 
     // Revert: back to the value it held before the change, plus a message
     // naming what went wrong.
-    await waitFor(() => expect(screen.getByRole('button', { name: '任务 #7 状态' })).toHaveTextContent('待办'))
+    await waitFor(() => expect(trigger).toHaveTextContent('待办'))
     expect(await screen.findByText(/cannot skip directly to done/)).toBeInTheDocument()
     expect(screen.getByText(/已恢复原状态/)).toBeInTheDocument()
   })

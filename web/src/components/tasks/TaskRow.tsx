@@ -1,62 +1,171 @@
 import { Link } from 'react-router-dom'
-import { useIdentity } from '../../identity'
-import { PRIORITY_LABELS, STATUS_LABELS, TASK_PRIORITIES, TASK_STATUSES, type Task, type TaskPriority, type TaskStatus } from '../../task-types'
-import { PriorityMark, StatusMark } from './marks'
-import QuietSelect from './QuietSelect'
-
-const UNASSIGNED = ''
+import type { Tier } from '@/hooks/useBreakpoint'
+import { cn } from '@/lib/utils'
+import type { Task, TaskPatchBody, UserRef } from '@/task-types'
+import AssigneeControl from './controls/AssigneeControl'
+import DueDateControl from './controls/DueDateControl'
+import PriorityControl from './controls/PriorityControl'
+import StatusControl from './controls/StatusControl'
+import RowActionsMenu from './RowActionsMenu'
 
 interface TaskRowProps {
   task: Task
-  focused: boolean
+  selected: boolean
+  tier: Tier
+  users: UserRef[]
   error?: string
-  onChangeStatus: (task: Task, status: TaskStatus) => void
-  onChangePriority: (task: Task, priority: TaskPriority) => void
-  onChangeAssignee: (task: Task, assigneeId: string | null) => void
+  onPatch: (task: Task, patch: TaskPatchBody, optimistic: Partial<Task>) => void
+  onArchive: (task: Task) => void
+  onRestore: (task: Task) => void
 }
 
-/** One row: everything needed at a glance (number, title, status, priority,
- * assignee, due date). Status/priority/assignee are quiet displays that
- * become editable on interaction (see QuietSelect) — a colour mark, compact
- * coloured text, and a name respectively — not three permanently-open
- * dropdowns; unassigned and no-priority both read as genuinely empty. */
-export default function TaskRow({ task, focused, error, onChangeStatus, onChangePriority, onChangeAssignee }: TaskRowProps) {
-  const { users } = useIdentity()
+/** One row: every property control is permanently visible — no hover or
+ * click needed first, the opposite of the old QuietSelect/InlineEditable
+ * reveal-on-interaction pattern this redesign replaces. Desktop renders a
+ * single 40px line with the number, title and labels on the left and the
+ * five right-aligned controls (status/priority/assignee/due
+ * date/actions) in a fixed column so they line up across every row; a
+ * phone renders a two-line card instead — see the per-tier branches below.
+ *
+ * `onPatch` always carries both the wire patch and the optimistic
+ * fragment. The assignee path is the one case where those two differ in
+ * shape: the wire patch sends `assignee_id` (a bare id, per
+ * TaskPatchBody), but the optimistic fragment needs the resolved
+ * `UserRef` — the row renders `assignee.name`, so an id there would blank
+ * the cell until the server answered. */
+export default function TaskRow({ task, selected, tier, users, error, onPatch, onArchive, onRestore }: TaskRowProps) {
+  const isPhone = tier === 'phone'
+  const dimmed = task.status === 'done' || task.status === 'cancelled'
+  // fg-subtle must never sit on the selected row's accent-subtle background
+  // (insufficient contrast — see index.css's tier comments); fg-muted is the
+  // weakened-text tier that stays legible there, so a selected done/cancelled
+  // row's title falls back to it instead.
+  const dimmedTextClass = dimmed ? (selected ? 'text-fg-muted' : 'text-fg-subtle') : undefined
 
-  const assigneeOptions = [UNASSIGNED, ...users.map((u) => u.id)]
-  const assigneeLabels: Record<string, string> = { [UNASSIGNED]: '未分配' }
-  for (const u of users) assigneeLabels[u.id] = u.name
+  function handleChangeStatus(status: Task['status']) {
+    onPatch(task, { status }, { status })
+  }
+
+  function handleChangePriority(priority: Task['priority']) {
+    onPatch(task, { priority }, { priority })
+  }
+
+  function handleChangeAssignee(assigneeId: string | null) {
+    const assignee = assigneeId ? (users.find((u) => u.id === assigneeId) ?? null) : null
+    onPatch(task, { assignee_id: assigneeId }, { assignee })
+  }
+
+  function handleChangeDueDate(dueDate: string | null) {
+    onPatch(task, { due_date: dueDate }, { due_date: dueDate })
+  }
+
+  function handleCopyLink() {
+    const url = `${window.location.origin}/tasks/${task.number}`
+    navigator.clipboard?.writeText(url).catch(() => {
+      // Best-effort: clipboard access can be unavailable (insecure context,
+      // permission denied). 打开详情 in the same menu still reaches the task.
+    })
+  }
+
+  const statusControl = (
+    <StatusControl value={task.status} onChange={handleChangeStatus} ariaLabel={`任务 #${task.number} 状态`} />
+  )
+  const priorityControl = (
+    <PriorityControl value={task.priority} onChange={handleChangePriority} ariaLabel={`任务 #${task.number} 优先级`} />
+  )
+  const assigneeControl = (
+    <AssigneeControl
+      value={task.assignee?.id ?? null}
+      users={users}
+      onChange={handleChangeAssignee}
+      ariaLabel={`任务 #${task.number} 负责人`}
+    />
+  )
+  const dueDateControl = (
+    <DueDateControl value={task.due_date} onChange={handleChangeDueDate} ariaLabel={`任务 #${task.number} 截止日期`} />
+  )
+  const actionsMenu = (
+    <RowActionsMenu
+      taskNumber={task.number}
+      archived={Boolean(task.archived_at)}
+      onArchive={() => onArchive(task)}
+      onRestore={() => onRestore(task)}
+      onCopyLink={handleCopyLink}
+    />
+  )
+
+  const labelChips = task.labels.length > 0 && (
+    <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-1">
+      {task.labels.map((l) => (
+        <span key={l.ID} className="rounded-full bg-surface-subtle px-2 py-0.5 text-[11px] text-fg-muted">
+          {l.Name}
+        </span>
+      ))}
+    </div>
+  )
+
+  if (isPhone) {
+    return (
+      <div
+        role="listitem"
+        aria-current={selected ? 'true' : undefined}
+        data-task-number={task.number}
+        className={cn('flex flex-col gap-1.5 border-b border-border px-3 py-2.5', selected && 'bg-accent-subtle')}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <Link
+            to={`/tasks/${task.number}`}
+            className={cn('min-w-0 flex-1 text-sm font-medium', dimmedTextClass)}
+          >
+            {task.title}
+          </Link>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {statusControl}
+            {actionsMenu}
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {labelChips}
+          {priorityControl}
+          {dueDateControl}
+          <div className="ml-auto shrink-0">{assigneeControl}</div>
+        </div>
+        {error && (
+          <p role="alert" className="text-xs text-danger">
+            {error}
+          </p>
+        )}
+      </div>
+    )
+  }
 
   return (
-    <div className={`task-row ${focused ? 'focused' : ''}`} data-task-number={task.number}>
-      <span className="task-number hint">#{task.number}</span>
-      <Link className="task-title" to={`/tasks/${task.number}`}>{task.title}</Link>
-      <QuietSelect
-        value={task.status}
-        options={TASK_STATUSES}
-        labels={STATUS_LABELS}
-        onChange={(s) => onChangeStatus(task, s)}
-        ariaLabel={`任务 #${task.number} 状态`}
-        renderQuiet={(status) => <StatusMark status={status} />}
-      />
-      <QuietSelect
-        value={task.priority}
-        options={TASK_PRIORITIES}
-        labels={PRIORITY_LABELS}
-        onChange={(p) => onChangePriority(task, p)}
-        ariaLabel={`任务 #${task.number} 优先级`}
-        renderQuiet={(priority, label) => <PriorityMark priority={priority} label={label} />}
-      />
-      <QuietSelect
-        value={task.assignee?.id ?? UNASSIGNED}
-        options={assigneeOptions}
-        labels={assigneeLabels}
-        onChange={(id) => onChangeAssignee(task, id || null)}
-        ariaLabel={`任务 #${task.number} 负责人`}
-        renderQuiet={(id) => (id ? assigneeLabels[id] : '')}
-      />
-      <span className="task-due hint">{task.due_date ?? ''}</span>
-      {error && <span className="error task-row-error">{error}</span>}
+    <div
+      role="listitem"
+      aria-current={selected ? 'true' : undefined}
+      data-task-number={task.number}
+      className={cn('flex h-10 items-center gap-2 border-b border-border px-3', selected && 'bg-accent-subtle')}
+    >
+      <span className="w-12 shrink-0 font-mono text-xs text-fg-muted">#{task.number}</span>
+      <Link
+        to={`/tasks/${task.number}`}
+        className={cn('min-w-0 flex-1 truncate text-sm', dimmedTextClass)}
+      >
+        {task.title}
+      </Link>
+      {labelChips}
+      <div className="flex shrink-0 items-center justify-end gap-1.5">
+        <div className="w-28">{statusControl}</div>
+        <div className="w-24">{priorityControl}</div>
+        <div className="w-28">{assigneeControl}</div>
+        <div className="w-24">{dueDateControl}</div>
+        {actionsMenu}
+      </div>
+      {error && (
+        <p role="alert" className="ml-2 shrink-0 text-xs text-danger">
+          {error}
+        </p>
+      )}
     </div>
   )
 }
