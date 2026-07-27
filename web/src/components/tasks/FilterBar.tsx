@@ -52,7 +52,14 @@ interface FilterBarProps {
 
 /** Every filter is independent and additive — toggling one never clears
  * another, since "filters combine" is the whole point of a list view over
- * a fixed dataset. */
+ * a fixed dataset.
+ *
+ * The bar itself reads as one quiet line: search, a "筛选" disclosure
+ * (with a count badge — the only sign anything is active), sort, and the
+ * label manager. Status/priority chips plus the assignee/label selects
+ * used to render unconditionally, spilling across two rows even with
+ * nothing active; they now live inside the disclosure and only cost
+ * screen space once opened. */
 const FilterBar = forwardRef<FilterBarHandle, FilterBarProps>(function FilterBar(
   { filters, onChange, labels, onLabelsChanged },
   ref,
@@ -74,6 +81,9 @@ const FilterBar = forwardRef<FilterBarHandle, FilterBarProps>(function FilterBar
     onChange({ ...filters, priorities: has ? filters.priorities.filter((x) => x !== p) : [...filters.priorities, p] })
   }
 
+  const activeCount =
+    filters.statuses.length + filters.priorities.length + (filters.assignee !== '' ? 1 : 0) + (filters.labelId !== '' ? 1 : 0)
+
   return (
     <div className="filter-bar">
       <input
@@ -85,62 +95,70 @@ const FilterBar = forwardRef<FilterBarHandle, FilterBarProps>(function FilterBar
         aria-label="搜索任务"
       />
 
-      <div className="filter-group" role="group" aria-label="按状态筛选">
-        {TASK_STATUSES.map((s) => (
-          <button
-            key={s}
-            type="button"
-            className={`tag filter-chip ${filters.statuses.includes(s) ? 'active' : ''}`}
-            onClick={() => toggleStatus(s)}
-            aria-pressed={filters.statuses.includes(s)}
-          >
-            {STATUS_LABELS[s]}
-          </button>
-        ))}
-      </div>
+      <details className="filter-disclosure">
+        <summary>
+          筛选
+          {activeCount > 0 && <span className="filter-count">{activeCount}</span>}
+        </summary>
+        <div className="filter-disclosure-body">
+          <div className="filter-group" role="group" aria-label="按状态筛选">
+            {TASK_STATUSES.map((s) => (
+              <button
+                key={s}
+                type="button"
+                className={`tag filter-chip ${filters.statuses.includes(s) ? 'active' : ''}`}
+                onClick={() => toggleStatus(s)}
+                aria-pressed={filters.statuses.includes(s)}
+              >
+                {STATUS_LABELS[s]}
+              </button>
+            ))}
+          </div>
 
-      <div className="filter-group" role="group" aria-label="按优先级筛选">
-        {TASK_PRIORITIES.map((p) => (
-          <button
-            key={p}
-            type="button"
-            className={`tag filter-chip ${filters.priorities.includes(p) ? 'active' : ''}`}
-            onClick={() => togglePriority(p)}
-            aria-pressed={filters.priorities.includes(p)}
-          >
-            {PRIORITY_LABELS[p]}
-          </button>
-        ))}
-      </div>
+          <div className="filter-group" role="group" aria-label="按优先级筛选">
+            {TASK_PRIORITIES.map((p) => (
+              <button
+                key={p}
+                type="button"
+                className={`tag filter-chip ${filters.priorities.includes(p) ? 'active' : ''}`}
+                onClick={() => togglePriority(p)}
+                aria-pressed={filters.priorities.includes(p)}
+              >
+                {PRIORITY_LABELS[p]}
+              </button>
+            ))}
+          </div>
 
-      <label>
-        负责人
-        <select
-          value={filters.assignee}
-          onChange={(e) => onChange({ ...filters, assignee: e.target.value })}
-          aria-label="按负责人筛选"
-        >
-          <option value="">所有人</option>
-          <option value="none">未分配</option>
-          {users.map((u) => (
-            <option key={u.id} value={u.id}>{u.name}</option>
-          ))}
-        </select>
-      </label>
+          <label>
+            负责人
+            <select
+              value={filters.assignee}
+              onChange={(e) => onChange({ ...filters, assignee: e.target.value })}
+              aria-label="按负责人筛选"
+            >
+              <option value="">所有人</option>
+              <option value="none">未分配</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
+          </label>
 
-      <label>
-        标签
-        <select
-          value={filters.labelId}
-          onChange={(e) => onChange({ ...filters, labelId: e.target.value })}
-          aria-label="按标签筛选"
-        >
-          <option value="">所有标签</option>
-          {labels.map((l) => (
-            <option key={l.ID} value={l.ID}>{l.Name}</option>
-          ))}
-        </select>
-      </label>
+          <label>
+            标签
+            <select
+              value={filters.labelId}
+              onChange={(e) => onChange({ ...filters, labelId: e.target.value })}
+              aria-label="按标签筛选"
+            >
+              <option value="">所有标签</option>
+              {labels.map((l) => (
+                <option key={l.ID} value={l.ID}>{l.Name}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </details>
 
       <label>
         排序

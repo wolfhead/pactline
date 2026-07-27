@@ -37,6 +37,19 @@
   --danger-subtle: #fdecec;
   --focus: #4f46e5;
 
+  /* Status marks — a colour dot beside the label, never the sole signal
+   * (the label text is always present too). Verified >=3.8:1 against every
+   * surface a dot can sit on (bg, bg-subtle, surface-hover, accent-subtle)
+   * in both themes — see /tmp/contrast.js used while designing this; the
+   * 3:1 bar (WCAG 1.4.11, non-text) applies here, not the 4.5:1 text bar,
+   * since colour is a redundant cue alongside the text label, not the only
+   * way the state is conveyed. todo/in-review/done are new; backlog reuses
+   * text-subtle, in-progress reuses accent, cancelled reuses danger, so the
+   * palette doesn't grow by more than it has to. */
+  --status-todo: #3b6fd6;
+  --status-in-review: #a15c00;
+  --status-done: #1f8a3c;
+
   --sp-1: 4px;
   --sp-2: 8px;
   --sp-3: 12px;
@@ -108,6 +121,9 @@
     --danger: #ef7a7a;
     --danger-subtle: #2e1a1a;
     --focus: #8b83f5;
+    --status-todo: #6ea8ff;
+    --status-in-review: #e0a53d;
+    --status-done: #4fd671;
   }
 }
 
@@ -129,6 +145,9 @@
   --danger: #ef7a7a;
   --danger-subtle: #2e1a1a;
   --focus: #8b83f5;
+  --status-todo: #6ea8ff;
+  --status-in-review: #e0a53d;
+  --status-done: #4fd671;
 }
 
 /* An explicit light choice must beat the OS preference, so these restate the
@@ -151,6 +170,9 @@
   --danger: #c62828;
   --danger-subtle: #fdecec;
   --focus: #4f46e5;
+  --status-todo: #3b6fd6;
+  --status-in-review: #a15c00;
+  --status-done: #1f8a3c;
 }
 
 * { box-sizing: border-box; }
@@ -470,30 +492,78 @@ form label { display: grid; gap: var(--sp-1); font-size: var(--fs-sm); color: va
 .inline-editable:hover { border-color: var(--border); }
 .inline-editable:focus { border-color: var(--accent); background: var(--surface); }
 .task-title-input { font-size: var(--fs-xl); font-weight: 600; letter-spacing: -0.01em; }
-.task-description-input { min-height: 4.5em; line-height: 1.6; }
+/* No fixed min-height and no resize handle: the field's height tracks the
+ * text (see InlineEditable's dynamic `rows`), so a short description reads
+ * as a short paragraph, not a form field with an empty block under it. */
+.task-description-input { line-height: 1.6; resize: none; overflow: hidden; }
 
 .task-detail-header { display: flex; align-items: baseline; gap: var(--sp-3); margin-bottom: var(--sp-2); }
 .task-detail-header .task-title-input { flex: 1; }
 
-/* ---------- pill selects ----------
- * Status/priority/assignee: a plain <select> dressed as a quiet pill so it
- * reads as a property, not a form field, but keeps full native keyboard
- * and screen-reader behaviour.
+/* ---------- quiet editable values ----------
+ * The core interaction of the whole redesign: status/priority/assignee/due
+ * date read as plain text or a small mark, not as a permanently-open
+ * control. Click, Enter or Space swaps the quiet display for the real
+ * native control (<select> or <input type="date">), which commits on
+ * change and collapses back to the quiet display; Escape (or blur without
+ * a change) collapses it back without committing anything, since nothing
+ * has changed yet. Both states share one aria-label, so a screen reader or
+ * a test driving it by accessible name never has to know which is mounted.
  */
-.pill-select {
+.quiet-value {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-width: 1.5em;
+  min-height: 1.5em;
   padding: var(--sp-1) var(--sp-2);
-  border: 1px solid var(--border);
+  margin: 0 calc(var(--sp-2) * -1);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.quiet-value:hover:not(:disabled) { border-color: var(--border); background: var(--surface-hover); }
+.quiet-value:disabled { cursor: default; }
+
+.quiet-select-control {
+  /* Looks like the old pill once it's actually open, so it visibly reads
+   * as a live control for as long as it's on screen. */
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border-control);
   border-radius: var(--radius-pill);
-  background: var(--bg-subtle);
+  background: var(--surface);
   font-size: var(--fs-sm);
 }
-.pill-select:hover { border-color: var(--border-strong); }
+
+/* ---------- status / priority marks ----------
+ * Status: a small colour dot plus its label — colour is a redundant cue,
+ * the label is what actually carries the meaning. Priority: compact
+ * coloured text with no border/background of its own, so it never competes
+ * with a control for width; "no priority" renders nothing at all rather
+ * than a placeholder pill, the same rule applied to a blank due date.
+ */
+.status-mark { display: inline-flex; align-items: center; gap: var(--sp-1); color: var(--text-muted); }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--text-subtle); }
+.status-mark[data-status="todo"] .status-dot { background: var(--status-todo); }
+.status-mark[data-status="in_progress"] .status-dot { background: var(--accent); }
+.status-mark[data-status="in_review"] .status-dot { background: var(--status-in-review); }
+.status-mark[data-status="done"] .status-dot { background: var(--status-done); }
+.status-mark[data-status="cancelled"] .status-dot { background: var(--danger); }
+
+.priority-mark { font-size: var(--fs-sm); font-weight: 600; }
+.priority-mark[data-priority="low"] { color: var(--text-muted); font-weight: 500; }
+.priority-mark[data-priority="medium"] { color: var(--accent); }
+.priority-mark[data-priority="high"] { color: var(--status-in-review); }
+.priority-mark[data-priority="urgent"] { color: var(--danger); }
 
 /* ---------- task list ---------- */
 .task-list { display: flex; flex-direction: column; }
 .task-row {
   display: grid;
-  grid-template-columns: 48px 1fr 130px 96px 140px 92px;
+  grid-template-columns: 48px 1fr 96px 68px 110px 84px;
   align-items: center;
   gap: var(--sp-3);
   padding: var(--sp-2) var(--sp-2);
@@ -505,7 +575,7 @@ form label { display: grid; gap: var(--sp-1); font-size: var(--fs-sm); color: va
 .task-number { font-variant-numeric: tabular-nums; }
 .task-title { font-weight: 500; }
 .task-title:hover { color: var(--accent); }
-.task-due { font-variant-numeric: tabular-nums; text-align: right; }
+.task-due { font-variant-numeric: tabular-nums; text-align: right; color: var(--text-subtle); font-size: var(--fs-sm); }
 .task-row-error { grid-column: 1 / -1; }
 .load-more { align-self: flex-start; margin-top: var(--sp-3); }
 
@@ -514,14 +584,20 @@ form label { display: grid; gap: var(--sp-1); font-size: var(--fs-sm); color: va
   .task-due { text-align: left; }
 }
 
-/* ---------- filter bar ---------- */
+/* ---------- filter bar ----------
+ * One quiet line by default: search, a "筛选" disclosure (its count badge
+ * is the only sign anything is active), sort, and the label manager. The
+ * full spread of status/priority chips plus the assignee/label selects
+ * used to sit here unconditionally, in two rows, whether or not any of
+ * them were in use — now they only render once the disclosure is open.
+ */
 .filter-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--sp-3);
   margin-bottom: var(--sp-4);
-  padding-bottom: var(--sp-4);
+  padding-bottom: var(--sp-3);
   border-bottom: 1px solid var(--border);
 }
 .filter-bar label { display: flex; align-items: center; gap: var(--sp-1); font-size: var(--fs-sm); color: var(--text-muted); }
@@ -529,6 +605,41 @@ form label { display: grid; gap: var(--sp-1); font-size: var(--fs-sm); color: va
 .filter-group { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
 .filter-chip { background: var(--surface); cursor: pointer; }
 .filter-chip.active { background: var(--accent-subtle); border-color: var(--accent); color: var(--accent); }
+
+.filter-disclosure { font-size: var(--fs-sm); }
+.filter-disclosure summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius-sm);
+  list-style: none;
+}
+.filter-disclosure summary::-webkit-details-marker { display: none; }
+.filter-disclosure summary:hover { color: var(--text); background: var(--surface-hover); }
+.filter-disclosure[open] summary { color: var(--text); }
+.filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: var(--sp-1);
+  border-radius: var(--radius-pill);
+  background: var(--accent-subtle);
+  color: var(--accent);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+.filter-disclosure-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border);
+}
 
 .label-manager { font-size: var(--fs-sm); }
 .label-manager summary { cursor: pointer; color: var(--text-muted); }
@@ -549,17 +660,40 @@ form label { display: grid; gap: var(--sp-1); font-size: var(--fs-sm); color: va
 .board-column {
   display: flex;
   flex-direction: column;
-  min-height: 120px;
+  min-height: 64px;
   padding: var(--sp-2);
   border-radius: var(--radius);
-  background: var(--bg-subtle);
-  transition: background 120ms ease;
+  background: transparent;
+  border: 1px solid var(--border);
+  transition: background 120ms ease, border-color 120ms ease;
 }
-.board-column.drag-over { background: var(--accent-subtle); }
+.board-column.drag-over { background: var(--accent-subtle); border-color: var(--accent); }
 .board-column h3 { display: flex; justify-content: space-between; font-size: var(--fs-sm); color: var(--text-muted); font-weight: 600; }
+.board-column-empty { margin: var(--sp-2) 0 0; font-size: var(--fs-sm); }
 .task-card { cursor: grab; }
 .task-card.focused { border-color: var(--accent); background: var(--accent-subtle); }
-.task-card .pill-select { margin-top: var(--sp-2); }
+
+/* The card never carries a permanent status control — the column it sits
+ * in already says the status. This is the only per-card affordance for
+ * changing it without dragging: quiet text, revealed as a real <select>
+ * (see QuietSelect) the moment it's activated. */
+.card-move-trigger {
+  align-self: flex-start;
+  margin-top: var(--sp-2);
+  padding: 1px var(--sp-1);
+  border: none;
+  background: transparent;
+  /* text-muted, not text-subtle: this text sits on --surface (the card's
+   * own background, not the page background text-subtle is normally read
+   * against), where text-subtle measures only ~4.15:1 in dark mode —
+   * short of the 4.5:1 body-text bar. text-muted clears >=4.99:1 on
+   * --surface in both themes and is what the rest of the card's own
+   * secondary text (.meta) already uses. */
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+.card-move-trigger:hover:not(:disabled) { color: var(--accent); background: transparent; text-decoration: underline; }
+.card-move-trigger.quiet-select-control { margin-top: var(--sp-2); }
 
 /* Shown only on a column actually over the render cap (see
  * COLUMN_RENDER_CAP in TaskBoardPage.tsx) — a plain button standing in for
@@ -625,15 +759,65 @@ kbd {
   font-size: var(--fs-sm);
 }
 
-/* ---------- task detail ---------- */
-.property-panel { display: flex; flex-wrap: wrap; gap: var(--sp-4); margin: var(--sp-4) 0; }
-.property-panel label { display: grid; gap: var(--sp-1); font-size: var(--fs-sm); color: var(--text-muted); }
+/* ---------- task detail ----------
+ * The properties read as a quiet list — a label and a value, not a form
+ * field — one row per property, each value editable on interaction via
+ * the same QuietSelect/QuietDateField pattern used in the list and board.
+ */
+.property-list {
+  display: grid;
+  gap: var(--sp-1);
+  margin: var(--sp-4) 0;
+  max-width: 360px;
+}
+.property-row {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-1) 0;
+}
+.property-label { font-size: var(--fs-sm); color: var(--text-subtle); }
+.property-row .quiet-value { justify-self: start; }
+
 .label-picker { display: flex; flex-wrap: wrap; gap: var(--sp-1); margin-bottom: var(--sp-4); }
 .label-picker .filter-chip { cursor: pointer; }
 
 .comment-list { list-style: none; margin: var(--sp-3) 0; padding: 0; display: grid; gap: var(--sp-3); }
 .comment-item { padding: var(--sp-3); border: 1px solid var(--border); border-radius: var(--radius); }
 .comment-body { margin: 0 0 var(--sp-2); width: 100%; }
+
+/* The composer must read lighter than the comments it adds to, not
+ * heavier: no boxed field, no filled button until there's something to
+ * send. */
+/* Overrides the generic `form` box (border/background/padding/max-width) —
+ * this is the element the redesign report calls out by name: a bordered
+ * panel with a filled button, heavier than the plain-bordered comments it
+ * adds to. */
+.comment-composer {
+  display: flex;
+  align-items: flex-end;
+  max-width: none;
+  margin: var(--sp-3) 0 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+.comment-composer textarea {
+  flex: 1;
+  min-height: 2.4em;
+  border-color: transparent;
+  background: transparent;
+}
+.comment-composer textarea:hover { border-color: var(--border); }
+.comment-composer textarea:focus { border-color: var(--accent); background: var(--surface); }
+.comment-composer button[type="submit"] {
+  background: transparent;
+  border-color: transparent;
+  color: var(--accent);
+}
+.comment-composer button[type="submit"]:hover:not(:disabled) { background: var(--surface-hover); border-color: transparent; }
+.comment-composer button[type="submit"]:disabled { color: var(--text-subtle); }
 
 /* ---------- reduced motion ----------
  * Every transition in this sheet is a state affordance, never information, so

@@ -110,7 +110,7 @@ export default function CommentSection({ taskNumber }: CommentSectionProps) {
         })}
       </ul>
 
-      <form className="row" onSubmit={submit}>
+      <form className="row comment-composer" onSubmit={submit}>
         <textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}

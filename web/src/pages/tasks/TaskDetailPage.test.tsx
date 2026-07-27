@@ -175,7 +175,10 @@ describe('TaskDetailPage — activity log live update', () => {
     currentTask = { ...task, status: 'in_progress', updated_at: '2026-01-01T01:00:00Z' }
     mockedApiPatch.mockResolvedValue(currentTask)
 
-    const status = await screen.findByRole('combobox', { name: '状态' })
+    // Status is a quiet display until interacted with — click it to reveal
+    // the real <select> before driving it.
+    fireEvent.click(await screen.findByRole('button', { name: '状态' }))
+    const status = screen.getByRole('combobox', { name: '状态' })
     fireEvent.change(status, { target: { value: 'in_progress' } })
 
     await waitFor(() => expect(mockedApiPatch).toHaveBeenCalledWith(`/api/tasks/${task.number}`, { status: 'in_progress' }))

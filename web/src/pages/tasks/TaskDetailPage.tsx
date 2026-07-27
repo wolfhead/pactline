@@ -3,7 +3,9 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import ActivityLog from '../../components/tasks/ActivityLog'
 import CommentSection from '../../components/tasks/CommentSection'
 import InlineEditable from '../../components/tasks/InlineEditable'
-import PillSelect from '../../components/tasks/PillSelect'
+import { PriorityMark, StatusMark } from '../../components/tasks/marks'
+import QuietDateField from '../../components/tasks/QuietDateField'
+import QuietSelect from '../../components/tasks/QuietSelect'
 import { archiveTask, getTask, listLabels, restoreTask, updateTask } from '../../api/tasks'
 import { useIdentity } from '../../identity'
 import { isTypingTarget } from '../../keyboard'
@@ -197,56 +199,51 @@ export default function TaskDetailPage() {
 
       {task.archived_at && <p className="hint">此任务已归档。</p>}
 
-      <div className="property-panel">
-        <label>
-          状态
-          <PillSelect
+      <div className="property-list">
+        <div className="property-row">
+          <span className="property-label">状态</span>
+          <QuietSelect
             value={task.status}
             options={TASK_STATUSES}
             labels={STATUS_LABELS}
             ariaLabel="状态"
             onChange={(status) => patchOptimistic({ status }, { status })}
+            renderQuiet={(status) => <StatusMark status={status} />}
           />
-        </label>
-        <label>
-          优先级
-          <PillSelect
+        </div>
+        <div className="property-row">
+          <span className="property-label">优先级</span>
+          <QuietSelect
             value={task.priority}
             options={TASK_PRIORITIES}
             labels={PRIORITY_LABELS}
             ariaLabel="优先级"
             onChange={(priority) => patchOptimistic({ priority }, { priority })}
+            renderQuiet={(priority, label) => <PriorityMark priority={priority} label={label} />}
           />
-        </label>
-        <label>
-          负责人
-          <select
+        </div>
+        <div className="property-row">
+          <span className="property-label">负责人</span>
+          <QuietSelect
             value={task.assignee?.id ?? ''}
-            aria-label="负责人"
-            onChange={(e) => {
-              const id = e.target.value || null
+            options={['', ...users.map((u) => u.id)]}
+            labels={Object.fromEntries([['', '未分配'], ...users.map((u) => [u.id, u.name])])}
+            ariaLabel="负责人"
+            onChange={(id) => {
               const assignee = id ? users.find((u) => u.id === id) ?? null : null
-              patchOptimistic({ assignee_id: id }, { assignee })
+              patchOptimistic({ assignee_id: id || null }, { assignee })
             }}
-          >
-            <option value="">未分配</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>{u.name}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          截止日期
-          <input
-            type="date"
-            aria-label="截止日期"
-            value={task.due_date ?? ''}
-            onChange={(e) => {
-              const due = e.target.value || null
-              patchOptimistic({ due_date: due }, { due_date: due })
-            }}
+            renderQuiet={(id) => (id ? users.find((u) => u.id === id)?.name ?? '' : '')}
           />
-        </label>
+        </div>
+        <div className="property-row">
+          <span className="property-label">截止日期</span>
+          <QuietDateField
+            value={task.due_date}
+            ariaLabel="截止日期"
+            onChange={(due) => patchOptimistic({ due_date: due }, { due_date: due })}
+          />
+        </div>
       </div>
 
       <div className="label-picker" role="group" aria-label="标签">

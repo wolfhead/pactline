@@ -36,6 +36,10 @@ test('two filters at once return only their intersection', async ({
   await expect(page.getByRole('link', { name: decoyStatus, exact: true })).toBeVisible()
   await expect(page.getByRole('link', { name: decoyPriority, exact: true })).toBeVisible()
 
+  // The status/priority chips live behind the "筛选" disclosure now — the
+  // filter bar reads as one quiet line until it's opened.
+  await page.getByText('筛选', { exact: true }).click()
+
   const statusGroup = page.getByRole('group', { name: '按状态筛选' })
   const priorityGroup = page.getByRole('group', { name: '按优先级筛选' })
   await statusGroup.getByRole('button', { name: '进行中' }).click()

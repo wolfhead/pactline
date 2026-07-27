@@ -9,6 +9,13 @@ import { USERS } from './support/config'
  * backend refuse a status PATCH through genuine user interaction — route
  * interception is the documented fallback for that half of this test (see
  * the task brief).
+ *
+ * Status is a quiet display (a colour mark + label) until interacted with
+ * (see QuietSelect) — click it to reveal the real <select>. Choosing an
+ * option commits it and collapses the <select> straight back to the quiet
+ * display, the same way a native <select> closing its own dropdown would,
+ * so the optimistic update and its later revert are both observed on the
+ * quiet display's text, not on a <select> that's only briefly on screen.
  */
 test('status change is optimistic: the UI updates before the server responds, and reverts with a reason if the server refuses', async ({
   page,
@@ -23,10 +30,10 @@ test('status change is optimistic: the UI updates before the server responds, an
   await page.goto(`/tasks/${task.number}`)
   await switchIdentity(page, USERS.engineerC.id)
 
-  const statusSelect = page.getByLabel('状态', { exact: true })
-  await expect(statusSelect).toHaveValue('todo')
+  const statusField = page.getByLabel('状态', { exact: true })
+  await expect(statusField).toHaveText('待办')
 
-  // Hold the PATCH response open so the test can prove the control updates
+  // Hold the PATCH response open so the test can prove the display updates
   // BEFORE the server ever answers — not merely "eventually, after a round
   // trip fast enough that we didn't actually watch for the gap".
   let releaseHold: () => void = () => {}
@@ -45,10 +52,12 @@ test('status change is optimistic: the UI updates before the server responds, an
   const patchResponse = page.waitForResponse(
     (res) => res.url().endsWith(`/api/tasks/${task.number}`) && res.request().method() === 'PATCH',
   )
-  await statusSelect.selectOption('in_progress')
-  // The PATCH is still pending (held) right now, yet the control already
-  // reflects the new status.
-  await expect(statusSelect).toHaveValue('in_progress')
+  await statusField.click()
+  await page.getByLabel('状态', { exact: true }).selectOption('in_progress')
+  // The PATCH is still pending (held) right now, yet the quiet display —
+  // the <select> already collapsed back to it the instant a choice was
+  // made — already reflects the new status.
+  await expect(page.getByLabel('状态', { exact: true })).toHaveText('进行中')
   await expect(page.getByText(/已恢复原状态/)).toHaveCount(0)
 
   releaseHold()
@@ -63,7 +72,7 @@ test('status change is optimistic: the UI updates before the server responds, an
   // Reload to confirm the optimistic value is what the server actually
   // persisted, not just a client-side illusion.
   await page.reload()
-  await expect(page.getByLabel('状态', { exact: true })).toHaveValue('in_progress')
+  await expect(page.getByLabel('状态', { exact: true })).toHaveText('进行中')
 
   // Now make the server refuse the next change outright, held the same way
   // so the optimistic bump is observed before the revert.
@@ -84,14 +93,14 @@ test('status change is optimistic: the UI updates before the server responds, an
     })
   })
 
-  const select2 = page.getByLabel('状态', { exact: true })
-  await select2.selectOption('done')
-  await expect(select2).toHaveValue('done')
+  await page.getByLabel('状态', { exact: true }).click()
+  await page.getByLabel('状态', { exact: true }).selectOption('done')
+  await expect(page.getByLabel('状态', { exact: true })).toHaveText('已完成')
 
   releaseFail()
 
   // Reverts once the server's refusal comes back, with the reason shown.
-  await expect(select2).toHaveValue('in_progress')
+  await expect(page.getByLabel('状态', { exact: true })).toHaveText('进行中')
   await expect(page.getByText(/forced e2e failure/)).toBeVisible()
   await expect(page.getByText(/已恢复原状态/)).toBeVisible()
 })

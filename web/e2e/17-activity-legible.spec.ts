@@ -36,9 +36,15 @@ test('activity log reads as legible prose and updates live after a status change
   const isPatch = (res: import('@playwright/test').Response) =>
     res.url().endsWith(`/api/tasks/${task.number}`) && res.request().method() === 'PATCH'
 
+  // Status and assignee are quiet displays until interacted with (see
+  // QuietSelect) — click to reveal the real <select> before driving it;
+  // choosing an option collapses it straight back to the quiet display, so
+  // the assertion afterwards is on that display's text, not on a <select>
+  // that's only briefly on screen.
   const statusPatch = page.waitForResponse(isPatch)
+  await page.getByLabel('状态', { exact: true }).click()
   await page.getByLabel('状态', { exact: true }).selectOption('in_progress')
-  await expect(page.getByLabel('状态', { exact: true })).toHaveValue('in_progress')
+  await expect(page.getByLabel('状态', { exact: true })).toHaveText('进行中')
   await statusPatch
 
   // No reload: the new entry must appear purely from the activity fetch
@@ -48,8 +54,9 @@ test('activity log reads as legible prose and updates live after a status change
   ).toBeVisible()
 
   const assigneePatch = page.waitForResponse(isPatch)
+  await page.getByLabel('负责人', { exact: true }).click()
   await page.getByLabel('负责人', { exact: true }).selectOption(USERS.engineerD.id)
-  await expect(page.getByLabel('负责人', { exact: true })).toHaveValue(USERS.engineerD.id)
+  await expect(page.getByLabel('负责人', { exact: true })).toHaveText(USERS.engineerD.name)
   await assigneePatch
 
   await expect(

@@ -165,7 +165,12 @@ describe('TaskListPage', () => {
     const task = makeTask({ number: 7, status: 'todo', title: '待处理的任务' })
     renderList([task])
 
-    const select = await screen.findByRole('combobox', { name: '任务 #7 状态' })
+    // Status is now a quiet display (a colour mark + label) until
+    // interacted with — click it to reveal the real <select>.
+    const trigger = await screen.findByRole('button', { name: '任务 #7 状态' })
+    expect(trigger).toHaveTextContent('待办')
+    fireEvent.click(trigger)
+    const select = screen.getByRole('combobox', { name: '任务 #7 状态' })
     expect(select).toHaveValue('todo')
 
     let rejectPatch!: (err: Error) => void
@@ -177,16 +182,20 @@ describe('TaskListPage', () => {
 
     fireEvent.change(select, { target: { value: 'done' } })
 
-    // Optimistic: the control reflects the new value immediately, before
-    // the server has answered at all.
-    expect(select).toHaveValue('done')
+    // Choosing an option collapses the <select> straight back to the quiet
+    // display, same as a native <select> closing its own dropdown — so the
+    // optimistic update is observed there: the quiet display already
+    // reflects the new value, before the server has answered at all.
+    const triggerAfterChange = screen.getByRole('button', { name: '任务 #7 状态' })
+    expect(triggerAfterChange).toHaveTextContent('已完成')
     expect(mockedApiPatch).toHaveBeenCalledWith('/api/tasks/7', { status: 'done' })
+    expect(screen.queryByText(/已恢复原状态/)).not.toBeInTheDocument()
 
     rejectPatch(new Error('cannot skip directly to done'))
 
-    // Revert: back to the value it held before the click, plus a message
+    // Revert: back to the value it held before the change, plus a message
     // naming what went wrong.
-    await waitFor(() => expect(select).toHaveValue('todo'))
+    await waitFor(() => expect(screen.getByRole('button', { name: '任务 #7 状态' })).toHaveTextContent('待办'))
     expect(await screen.findByText(/cannot skip directly to done/)).toBeInTheDocument()
     expect(screen.getByText(/已恢复原状态/)).toBeInTheDocument()
   })

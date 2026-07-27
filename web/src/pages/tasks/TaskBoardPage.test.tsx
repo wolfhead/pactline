@@ -130,3 +130,40 @@ describe('TaskBoardPage — column render cap', () => {
     expect(within(backlogColumn).getAllByRole('article')).toHaveLength(51)
   })
 })
+
+describe('TaskBoardPage — no per-card status control', () => {
+  it('carries no permanent <select> on any card, and a card can still be moved by keyboard via its quiet trigger', async () => {
+    const task = makeTask({ id: 't-5', number: 5, status: 'todo', title: '待移动任务' })
+    renderBoard([task])
+    mockedApiPatch.mockResolvedValue({ ...task, status: 'in_progress' })
+
+    await screen.findByText('#5 待移动任务')
+
+    // The whole point of the redesign: the column already says the status,
+    // so the card itself carries no <select> at all — not even a hidden
+    // one — until something reveals it.
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+
+    // The keyboard path: a quiet "移动" trigger (a plain button, not a
+    // dropdown sitting open on the card) reveals the real <select> the
+    // moment it's activated.
+    const trigger = screen.getByRole('button', { name: /移动任务 #5/ })
+    expect(trigger).toHaveAttribute('aria-label', expect.stringContaining('当前状态：待办'))
+    fireEvent.click(trigger)
+
+    const select = screen.getByRole('combobox', { name: /移动任务 #5/ })
+    expect(select).toHaveValue('todo')
+
+    fireEvent.change(select, { target: { value: 'in_progress' } })
+
+    await waitFor(() => expect(mockedApiPatch).toHaveBeenCalledWith('/api/tasks/5', { status: 'in_progress' }))
+    // Choosing a status collapses the <select> straight back to the quiet
+    // trigger, whose accessible name now reports the new status — and
+    // still no permanent <select> is left on screen.
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /移动任务 #5/ })).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('当前状态：进行中'),
+    )
+  })
+})

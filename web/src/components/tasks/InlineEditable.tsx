@@ -73,13 +73,20 @@ export default function InlineEditable({
   }
 
   if (multiline) {
+    // Rows track the actual line count instead of a fixed 4, so a short
+    // (or empty) description reads as a short paragraph — no large empty
+    // block underneath it, and (paired with `resize: none` on
+    // .task-description-input in styles.css) no resize handle either. A
+    // floor of 2 keeps an empty field from collapsing to a single sliver
+    // that's awkward to click into.
+    const rows = Math.max(2, draft.split('\n').length)
     return (
       <textarea
         className={`inline-editable ${className ?? ''}`}
         value={draft}
         placeholder={placeholder}
         aria-label={ariaLabel}
-        rows={4}
+        rows={rows}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commitIfChanged}
         onKeyDown={handleKeyDown}

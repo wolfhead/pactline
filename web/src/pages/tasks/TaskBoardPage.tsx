@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type DragEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import PillSelect from '../../components/tasks/PillSelect'
+import { PriorityMark } from '../../components/tasks/marks'
+import QuietSelect from '../../components/tasks/QuietSelect'
 import { listTasks, updateTask } from '../../api/tasks'
 import { useIdentity } from '../../identity'
 import { isTypingTarget } from '../../keyboard'
@@ -19,10 +20,12 @@ const COLUMN_RENDER_CAP = 50
 /**
  * A column per status; dragging a card between columns changes its status.
  * Drag-and-drop uses only the native HTML5 drag events (dragstart on the
- * card, dragover/drop on the column) — no library. Every card also carries
- * a status <select>, so the exact same move is reachable by keyboard: focus
- * the card (j/k or the arrow keys) then Tab into its status control, or use
- * the same control with a mouse instead of dragging.
+ * card, dragover/drop on the column) — no library. The column a card sits
+ * in already says its status, so the card itself carries no status
+ * control — the same move is still reachable by keyboard via a quiet
+ * per-card "移动" trigger (QuietSelect): focus the card (j/k or the arrow
+ * keys), Tab into the trigger, Enter/Space reveals the real <select>, and
+ * choosing a status moves it exactly like a drop would.
  */
 export default function TaskBoardPage() {
   const { me } = useIdentity()
@@ -187,6 +190,7 @@ export default function TaskBoardPage() {
               <h3>
                 {STATUS_LABELS[status]} <span className="hint">{(columns.get(status) ?? []).length}</span>
               </h3>
+              {visible.length === 0 && hiddenCount === 0 && <p className="hint board-column-empty">暂无任务</p>}
               {visible.map((task) => (
                 <article
                   key={task.id}
@@ -201,16 +205,18 @@ export default function TaskBoardPage() {
                     <Link to={`/tasks/${task.number}`}>#{task.number} {task.title}</Link>
                   </h3>
                   <div className="meta">
-                    <span className="tag">{PRIORITY_LABELS[task.priority]}</span>
+                    <PriorityMark priority={task.priority} label={PRIORITY_LABELS[task.priority]} />
                     {task.assignee && <span>{task.assignee.name}</span>}
                     {task.due_date && <span>{task.due_date}</span>}
                   </div>
-                  <PillSelect
+                  <QuietSelect
                     value={task.status}
                     options={TASK_STATUSES}
                     labels={STATUS_LABELS}
                     onChange={(s) => moveStatus(task, s)}
-                    ariaLabel={`任务 #${task.number} 状态（无需拖拽即可移动）`}
+                    ariaLabel={`移动任务 #${task.number}（当前状态：${STATUS_LABELS[task.status]}），无需拖拽即可移动`}
+                    className="card-move-trigger"
+                    renderQuiet={() => '移动'}
                   />
                   {rowErrors[task.number] && <span className="error">{rowErrors[task.number]}</span>}
                 </article>
