@@ -53,15 +53,15 @@ export default function ActivityLog({ task }: ActivityLogProps) {
   }, [users, task.creator, task.assignee])
 
   return (
-    <section className="activity-log">
-      <h3>历史记录</h3>
-      {error && <p className="error">{error}</p>}
-      {activity.length === 0 && !error && <p className="hint">还没有记录。</p>}
-      <ul>
+    <section className="flex flex-col gap-3">
+      <h3 className="text-sm font-medium text-fg">历史记录</h3>
+      {error && <p className="text-sm text-danger">{error}</p>}
+      {activity.length === 0 && !error && <p className="text-sm text-fg-muted">还没有记录。</p>}
+      <ul className="flex flex-col gap-1.5">
         {[...activity].reverse().map((a) => (
-          <li key={a.id}>
+          <li key={a.id} className="text-sm text-fg">
             <span>{describeActivity(a, userNameById[a.actor_id] ?? '某用户', userNameById)}</span>
-            <span className="hint"> · {new Date(a.created_at).toLocaleString()}</span>
+            <span className="text-fg-muted"> · {new Date(a.created_at).toLocaleString()}</span>
           </li>
         ))}
       </ul>

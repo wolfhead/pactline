@@ -77,52 +77,61 @@ export default function CommentSection({ taskNumber }: CommentSectionProps) {
   }
 
   return (
-    <section className="comments">
-      <h3>评论</h3>
-      {comments.length === 0 && <p className="hint">还没有评论。</p>}
-      <ul className="comment-list">
+    <section className="flex flex-col gap-3">
+      <h3 className="text-sm font-medium text-fg">评论</h3>
+      {comments.length === 0 && <p className="text-sm text-fg-muted">还没有评论。</p>}
+      <ul className="flex flex-col gap-3">
         {comments.map((c) => {
           const mine = me?.id === c.author_id
           return (
-            <li key={c.id} className="comment-item">
+            <li key={c.id} className="rounded-md border border-border p-3">
               {mine ? (
                 <InlineEditable
                   value={c.body}
                   onCommit={(next) => editComment(c.id, next)}
                   multiline
                   ariaLabel="编辑评论"
-                  className="comment-body"
+                  className="mb-2 w-full text-sm text-fg"
                 />
               ) : (
-                <p className="comment-body">{c.body}</p>
+                <p className="mb-2 text-sm text-fg">{c.body}</p>
               )}
-              <div className="row">
-                <span className="hint">{new Date(c.created_at).toLocaleString()}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-fg-muted">{new Date(c.created_at).toLocaleString()}</span>
                 {mine && (
-                  <button type="button" onClick={() => removeComment(c.id)}>
+                  <button
+                    type="button"
+                    className="text-xs text-fg-muted hover:text-danger"
+                    onClick={() => removeComment(c.id)}
+                  >
                     删除
                   </button>
                 )}
               </div>
-              {rowErrors[c.id] && <span className="error">{rowErrors[c.id]}</span>}
+              {rowErrors[c.id] && <span className="text-xs text-danger">{rowErrors[c.id]}</span>}
             </li>
           )
         })}
       </ul>
 
-      <form className="row comment-composer" onSubmit={submit}>
+      <form className="flex flex-col gap-2 rounded-md border border-border bg-surface-subtle p-3" onSubmit={submit}>
         <textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
           placeholder="添加评论…"
           aria-label="新评论内容"
           rows={2}
+          className="rounded-md border border-border-strong bg-surface px-2 py-1.5 text-sm text-fg placeholder:text-fg-muted"
         />
-        <button type="submit" disabled={!body.trim() || posting}>
+        <button
+          type="submit"
+          disabled={!body.trim() || posting}
+          className="self-end rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-fg disabled:cursor-not-allowed disabled:opacity-50"
+        >
           {posting ? '提交中…' : '评论'}
         </button>
       </form>
-      {error && <p className="error">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
     </section>
   )
 }
