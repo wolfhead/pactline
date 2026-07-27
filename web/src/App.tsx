@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { NavLink, Route, Routes } from 'react-router-dom'
+import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
 import ShortcutsOverlay from './components/tasks/ShortcutsOverlay'
 import { UserSwitcher } from './identity'
 import { isTypingTarget } from './keyboard'
@@ -19,14 +19,11 @@ function navLinkClass({ isActive }: { isActive: boolean }): string {
 }
 
 export default function App() {
-  // The bounty/credit/scoring mechanism (work feed, board, portfolio, mine,
-  // steward tools) moved to internal/legacy on both backend and frontend —
-  // see web/src/legacy/README.md. Its routes stay mounted below, unlinked
-  // from the nav but still reachable by direct URL (and drivable by the
-  // Playwright suite) at their original paths ("/", "/board", ...). The
-  // task product below therefore lives at its own paths ("/tasks",
-  // "/tasks/board", "/tasks/:number") rather than reclaiming "/" — doing so
-  // would silently break every legacy e2e spec that navigates to "/".
+  // The task product owns "/". The retired bounty/credit/scoring mechanism
+  // (work feed, board, portfolio, mine, steward tools) lives under /legacy —
+  // see web/src/legacy/README.md. It used to sit at "/" so its e2e specs would
+  // not need updating, which had the product's front door opening onto the
+  // retired product; the specs were updated instead.
   const [showShortcuts, setShowShortcuts] = useState(false)
 
   // Global, reachable from every view: "?" opens the shortcuts overlay,
@@ -68,12 +65,15 @@ export default function App() {
           <Route path="/tasks/board" element={<TaskBoardPage />} />
           <Route path="/tasks/:number" element={<TaskDetailPage />} />
 
-          <Route path="/" element={<WorkFeed />} />
-          <Route path="/board" element={<Board />} />
-          <Route path="/bounties/:id" element={<BountyDetail />} />
-          <Route path="/users/:id/portfolio" element={<Portfolio />} />
-          <Route path="/mine" element={<Mine />} />
-          <Route path="/steward" element={<Steward />} />
+          <Route path="/" element={<Navigate to="/tasks" replace />} />
+
+          {/* Retired mechanism product. Reachable, out of the way, clearly marked. */}
+          <Route path="/legacy" element={<WorkFeed />} />
+          <Route path="/legacy/board" element={<Board />} />
+          <Route path="/legacy/bounties/:id" element={<BountyDetail />} />
+          <Route path="/legacy/users/:id/portfolio" element={<Portfolio />} />
+          <Route path="/legacy/mine" element={<Mine />} />
+          <Route path="/legacy/steward" element={<Steward />} />
         </Routes>
       </main>
       {showShortcuts && <ShortcutsOverlay onClose={() => setShowShortcuts(false)} />}

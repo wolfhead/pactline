@@ -20,7 +20,7 @@ export default function WorkCard({ work }: { work: WorkView }) {
   return (
     <article className="card">
       <h3>
-        <Link to={`/bounties/${bounty.id}`}>{bounty.title}</Link>
+        <Link to={`/legacy/bounties/${bounty.id}`}>{bounty.title}</Link>
       </h3>
       <div className="meta">
         <span>{STATUS_LABELS[bounty.status]}</span>
@@ -41,7 +41,7 @@ export default function WorkCard({ work }: { work: WorkView }) {
           {credits.map((c) => (
             <li key={c.credit.id}>
               <span className="role">{CREDIT_ROLE_LABELS[c.credit.role]}</span>
-              <Link to={`/users/${c.credit.user_id}/portfolio`}>{c.user_name}</Link>
+              <Link to={`/legacy/users/${c.credit.user_id}/portfolio`}>{c.user_name}</Link>
             </li>
           ))}
         </ul>

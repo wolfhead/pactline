@@ -17,7 +17,7 @@ test('sponsor opens a bounty, publishes it, an engineer claims and delivers it, 
 
   // The identity switcher only mounts after the app has loaded (it waits on
   // GET /api/users), so a page must be navigated to before it can be used.
-  await page.goto('/board')
+  await page.goto('/legacy/board')
   await switchIdentity(page, USERS.sponsorA.id)
 
   await page.getByPlaceholder('标题').fill(title)
@@ -52,6 +52,6 @@ test('sponsor opens a bounty, publishes it, an engineer claims and delivers it, 
   await expect(page.getByText('已归档为作品,不可再流转。')).toBeVisible()
 
   // The finished work shows up in the feed.
-  await page.goto('/')
+  await page.goto('/legacy')
   await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible()
 })

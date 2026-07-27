@@ -88,9 +88,9 @@ function mockGetsFor(bounty: Bounty) {
 
 function renderDetail() {
   return render(
-    <MemoryRouter initialEntries={[`/bounties/${BOUNTY_ID}`]}>
+    <MemoryRouter initialEntries={[`/legacy/bounties/${BOUNTY_ID}`]}>
       <Routes>
-        <Route path="/bounties/:id" element={<BountyDetail />} />
+        <Route path="/legacy/bounties/:id" element={<BountyDetail />} />
       </Routes>
     </MemoryRouter>,
   )

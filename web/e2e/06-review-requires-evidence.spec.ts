@@ -26,7 +26,7 @@ test('nominating a REVIEW credit with empty evidence is refused with the evidenc
 
   // The identity switcher only mounts after the app has loaded (it waits on
   // GET /api/users), so a page must be navigated to before it can be used.
-  await page.goto(`/bounties/${bounty.id}`)
+  await page.goto(`/legacy/bounties/${bounty.id}`)
   await switchIdentity(page, USERS.engineerC.id)
 
   const memberSelect = page.getByRole('combobox').filter({ has: page.getByRole('option', { name: '选择成员…' }) })

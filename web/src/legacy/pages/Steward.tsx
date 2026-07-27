@@ -87,7 +87,7 @@ function SettlementPanel() {
           <ul className="credits">
             {result.settled.map((s) => (
               <li key={s.bounty_id}>
-                <Link to={`/bounties/${s.bounty_id}`}>{s.title}</Link>
+                <Link to={`/legacy/bounties/${s.bounty_id}`}>{s.title}</Link>
                 <span className="tag">{s.score}</span>
               </li>
             ))}
@@ -100,7 +100,7 @@ function SettlementPanel() {
           <ul className="credits">
             {result.unscorable.map((u) => (
               <li key={u.bounty_id}>
-                <Link to={`/bounties/${u.bounty_id}`}>{u.title}</Link>
+                <Link to={`/legacy/bounties/${u.bounty_id}`}>{u.title}</Link>
                 <span className="tag">{u.reason}</span>
               </li>
             ))}
@@ -111,7 +111,7 @@ function SettlementPanel() {
           <ul className="credits">
             {result.failed.map((f) => (
               <li key={f.bounty_id}>
-                <Link to={`/bounties/${f.bounty_id}`}>{f.title}</Link>
+                <Link to={`/legacy/bounties/${f.bounty_id}`}>{f.title}</Link>
                 <span className="tag">{f.reason}</span>
               </li>
             ))}
@@ -181,7 +181,7 @@ function AnchorListPanel() {
           <li key={a.id}>
             <span className="role">{ANCHOR_DIMENSION_LABELS[a.dimension]}</span>
             <span className="tag">{a.level}</span>
-            <Link to={`/bounties/${a.bounty_id}`}>查看作品</Link>
+            <Link to={`/legacy/bounties/${a.bounty_id}`}>查看作品</Link>
             {a.note && <span>{a.note}</span>}
             <button onClick={() => remove(a.id)}>删除</button>
           </li>

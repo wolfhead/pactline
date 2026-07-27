@@ -40,7 +40,7 @@ test('the feed shows completed work without any ranking or aggregate-score vocab
     await api.transition(USERS.sponsorA.id, bounty.id, 'COMPLETED')
   }
 
-  await page.goto('/')
+  await page.goto('/legacy')
   await expect(page.getByRole('heading', { name: '作品流', exact: true })).toBeVisible()
   const cardA = page.getByRole('article').filter({ has: page.getByRole('heading', { name: titleA, exact: true }) })
   const cardB = page.getByRole('article').filter({ has: page.getByRole('heading', { name: titleB, exact: true }) })

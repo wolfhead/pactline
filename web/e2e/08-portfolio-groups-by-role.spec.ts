@@ -36,7 +36,7 @@ test('a work where a person holds two confirmed roles appears under both role gr
   await api.respond(USERS.engineerE.id, review.id, 'CONFIRMED')
   await api.transition(USERS.sponsorA.id, bounty.id, 'COMPLETED')
 
-  await page.goto(`/users/${USERS.engineerE.id}/portfolio`)
+  await page.goto(`/legacy/users/${USERS.engineerE.id}/portfolio`)
 
   await expect(page.getByRole('heading', { name: /共同交付/ })).toBeVisible()
   await expect(page.getByRole('heading', { name: /深度评审/ })).toBeVisible()

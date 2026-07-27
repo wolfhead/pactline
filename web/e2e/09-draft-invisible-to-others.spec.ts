@@ -25,7 +25,7 @@ test('a sponsor\'s draft is invisible to another engineer, on the Board and by d
 
   // The identity switcher only mounts after the app has loaded (it waits on
   // GET /api/users), so a page must be navigated to before it can be used.
-  await page.goto('/board')
+  await page.goto('/legacy/board')
   await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible()
 
   // Switch identity without navigating anywhere — the Board stays mounted.
@@ -35,12 +35,12 @@ test('a sponsor\'s draft is invisible to another engineer, on the Board and by d
   await switchIdentity(page, USERS.engineerD.id)
   await expect(page.getByRole('heading', { name: title, exact: true })).toHaveCount(0)
 
-  await page.goto(`/bounties/${bounty.id}`)
+  await page.goto(`/legacy/bounties/${bounty.id}`)
   await expect(page.getByRole('heading', { name: title, exact: true })).toHaveCount(0)
   await expect(page.getByText('not found', { exact: true })).toBeVisible()
 
   // Positive control: the sponsor who owns it still sees it.
   await switchIdentity(page, USERS.sponsorA.id)
-  await page.goto(`/bounties/${bounty.id}`)
+  await page.goto(`/legacy/bounties/${bounty.id}`)
   await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible()
 })

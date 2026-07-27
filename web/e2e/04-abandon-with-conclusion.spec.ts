@@ -26,7 +26,7 @@ test('abandoning without a conclusion is refused; with one it succeeds and the f
 
   // The identity switcher only mounts after the app has loaded (it waits on
   // GET /api/users), so a page must be navigated to before it can be used.
-  await page.goto(`/bounties/${bounty.id}`)
+  await page.goto(`/legacy/bounties/${bounty.id}`)
   await switchIdentity(page, USERS.engineerC.id)
 
   // Empty conclusion: refused.
@@ -40,7 +40,7 @@ test('abandoning without a conclusion is refused; with one it succeeds and the f
   await expect(page.getByText('已归档为作品,不可再流转。')).toBeVisible()
 
   // The feed shows the abandoned work with its conclusion.
-  await page.goto('/')
+  await page.goto('/legacy')
   const card = page.getByRole('article').filter({ has: page.getByRole('heading', { name: title, exact: true }) })
   await expect(card).toBeVisible()
   await expect(card.getByText('已放弃', { exact: true })).toBeVisible()

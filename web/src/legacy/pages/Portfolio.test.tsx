@@ -58,9 +58,9 @@ function mockIdentity() {
 
 function renderPortfolio() {
   return render(
-    <MemoryRouter initialEntries={[`/users/${NOMINEE}/portfolio`]}>
+    <MemoryRouter initialEntries={[`/legacy/users/${NOMINEE}/portfolio`]}>
       <Routes>
-        <Route path="/users/:id/portfolio" element={<Portfolio />} />
+        <Route path="/legacy/users/:id/portfolio" element={<Portfolio />} />
       </Routes>
     </MemoryRouter>,
   )
@@ -78,10 +78,10 @@ function NavigateButton({ to }: { to: string }) {
 
 function renderPortfolioWithNav() {
   return render(
-    <MemoryRouter initialEntries={[`/users/${NOMINEE}/portfolio`]}>
-      <NavigateButton to={`/users/${OTHER}/portfolio`} />
+    <MemoryRouter initialEntries={[`/legacy/users/${NOMINEE}/portfolio`]}>
+      <NavigateButton to={`/legacy/users/${OTHER}/portfolio`} />
       <Routes>
-        <Route path="/users/:id/portfolio" element={<Portfolio />} />
+        <Route path="/legacy/users/:id/portfolio" element={<Portfolio />} />
       </Routes>
     </MemoryRouter>,
   )

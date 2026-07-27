@@ -26,7 +26,7 @@ test('a steward viewing another person\'s pending credit sees no confirm or decl
 
   // The identity switcher only mounts after the app has loaded (it waits on
   // GET /api/users), so a page must be navigated to before it can be used.
-  await page.goto(`/bounties/${bounty.id}`)
+  await page.goto(`/legacy/bounties/${bounty.id}`)
   await switchIdentity(page, USERS.stewardF.id)
 
   const creditRow = page.getByRole('listitem').filter({ hasText: USERS.engineerD.name })

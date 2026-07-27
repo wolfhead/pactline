@@ -21,7 +21,7 @@ test('the deliverer cannot accept their own delivery; the sponsor can', async ({
 
   // The claimer tries to accept their own delivery: refused. (The identity
   // switcher only mounts after the app has loaded, so navigate first.)
-  await page.goto(`/bounties/${bounty.id}`)
+  await page.goto(`/legacy/bounties/${bounty.id}`)
   await switchIdentity(page, USERS.engineerC.id)
   await page.getByRole('button', { name: '转为「已完成」' }).click()
   await expect(page.getByText('forbidden', { exact: true })).toBeVisible()

@@ -29,21 +29,21 @@ test('a nominated credit is absent from the feed until the nominee confirms it, 
 
   // Before confirmation: the work is already in the feed (it is COMPLETED),
   // but the nominee's name is nowhere on its card.
-  await page.goto('/')
+  await page.goto('/legacy')
   const card = page.getByRole('article').filter({ has: page.getByRole('heading', { name: title, exact: true }) })
   await expect(card).toBeVisible()
   await expect(card.getByText(USERS.engineerD.name)).toHaveCount(0)
 
   // The nominee confirms through "我的".
   await switchIdentity(page, USERS.engineerD.id)
-  await page.goto('/mine')
+  await page.goto('/legacy/mine')
   const pendingRow = page.getByRole('listitem').filter({ hasText: '共同交付' })
   await expect(pendingRow).toBeVisible()
   await pendingRow.getByRole('button', { name: '确认' }).click()
   await expect(page.getByText('没有待确认的署名。')).toBeVisible()
 
   // After confirmation: the name appears on the work in the feed.
-  await page.goto('/')
+  await page.goto('/legacy')
   const cardAfter = page.getByRole('article').filter({ has: page.getByRole('heading', { name: title, exact: true }) })
   await expect(cardAfter.getByRole('link', { name: USERS.engineerD.name, exact: true })).toBeVisible()
 })

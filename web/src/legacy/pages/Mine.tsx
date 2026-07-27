@@ -115,7 +115,7 @@ export default function Mine() {
             {pending.map((c) => (
               <li key={c.id}>
                 <span className="role">{CREDIT_ROLE_LABELS[c.role]}</span>
-                <Link to={`/bounties/${c.bounty_id}`}>查看单</Link>
+                <Link to={`/legacy/bounties/${c.bounty_id}`}>查看单</Link>
                 <span className="tag">提名人:{nameOf(c.nominated_by)}</span>
                 <button onClick={() => respond(c.id, 'CONFIRMED')} disabled={respondingId === c.id}>
                   确认
@@ -131,19 +131,19 @@ export default function Mine() {
           <h3>我认领的单（{claimed.length}）</h3>
           {claimed.map((b) => (
             <p key={b.id}>
-              <Link to={`/bounties/${b.id}`}>{b.title}</Link> —— {STATUS_LABELS[b.status]}
+              <Link to={`/legacy/bounties/${b.id}`}>{b.title}</Link> —— {STATUS_LABELS[b.status]}
             </p>
           ))}
 
           <h3>我开的单（{sponsored.length}）</h3>
           {sponsored.map((b) => (
             <p key={b.id}>
-              <Link to={`/bounties/${b.id}`}>{b.title}</Link> —— {STATUS_LABELS[b.status]}
+              <Link to={`/legacy/bounties/${b.id}`}>{b.title}</Link> —— {STATUS_LABELS[b.status]}
             </p>
           ))}
 
           <p>
-            <Link to={`/users/${me.id}/portfolio`}>查看我的作品集 →</Link>
+            <Link to={`/legacy/users/${me.id}/portfolio`}>查看我的作品集 →</Link>
           </p>
         </>
       )}

@@ -83,7 +83,7 @@ export default function Board() {
           {bounties.map((b) => (
             <article key={b.id} className="card">
               <h3>
-                <Link to={`/bounties/${b.id}`}>{b.title}</Link>
+                <Link to={`/legacy/bounties/${b.id}`}>{b.title}</Link>
               </h3>
               <div className="meta">
                 <span>{STATUS_LABELS[b.status]}</span>
