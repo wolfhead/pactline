@@ -207,7 +207,14 @@ export default function TaskDetail({ number, users, onPatched, onClose }: TaskDe
             type="button"
             aria-label="关闭"
             onClick={onClose}
-            className="flex size-7 items-center justify-center rounded-md text-fg-muted hover:bg-surface-subtle hover:text-fg"
+            // border-0/p-0 are not decoration: styles.css's legacy `button`
+            // rule still supplies `padding: var(--sp-2) var(--sp-4)` to any
+            // button that doesn't override it, and on a 28px icon-only
+            // button that padding leaves zero content width — the ✕ svg
+            // rendered at width 0, i.e. an empty box with no visible way to
+            // close the Sheet or the phone detail (caught in Task 9's
+            // screenshots). Drop both together with styles.css in Task 13.
+            className="flex size-7 items-center justify-center rounded-md border-0 bg-transparent p-0 text-fg-muted hover:bg-surface-subtle hover:text-fg"
           >
             <XIcon className="size-4" aria-hidden="true" />
           </button>

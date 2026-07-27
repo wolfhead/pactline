@@ -71,7 +71,13 @@ export default function TaskList({
         const headingId = `task-group-heading-${status}`
         return (
           <div key={status} role="group" aria-labelledby={headingId}>
-            <h2 id={headingId} className="px-3 py-1.5 text-xs font-medium text-fg-muted">
+            {/* m-0 is load-bearing while styles.css survives: its legacy
+                `h2 { margin: 0 0 var(--sp-5) }` still applies to any heading
+                that doesn't override it, and 24px of air between a group
+                heading and its own first row made the heading read as
+                belonging to the group above it. Drop with styles.css in
+                Task 13. */}
+            <h2 id={headingId} className="m-0 px-3 py-1.5 text-xs font-medium text-fg-muted">
               {STATUS_LABELS[status]} <span className="text-fg-subtle">{groupTasks.length}</span>
             </h2>
             {groupTasks.map(renderRow)}

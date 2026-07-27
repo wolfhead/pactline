@@ -1,27 +1,39 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
-import FilterBar, { DEFAULT_FILTERS, type FilterBarHandle, type TaskFilters } from '../../components/tasks/FilterBar'
-import InlineCreateRow, { type InlineCreateRowHandle } from '../../components/tasks/InlineCreateRow'
-import TaskRow from '../../components/tasks/TaskRow'
-import { useBreakpoint } from '../../hooks/useBreakpoint'
-import { archiveTask, listLabels, listTasks, restoreTask, updateTask } from '../../api/tasks'
-import { useIdentity } from '../../identity'
-import { isTypingTarget } from '../../keyboard'
-import type { Label, Task, TaskPatchBody } from '../../task-types'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import FilterBar, { DEFAULT_FILTERS, type TaskFilters } from '@/components/tasks/FilterBar'
+import InlineCreateRow, { type InlineCreateRowHandle } from '@/components/tasks/InlineCreateRow'
+import TaskDetail from '@/components/tasks/TaskDetail'
+import TaskList from '@/components/tasks/TaskList'
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
+import { useBreakpoint } from '@/hooks/useBreakpoint'
+import { archiveTask, listLabels, listTasks, restoreTask, updateTask } from '@/api/tasks'
+import { useIdentity } from '@/identity'
+import type { Label, Task, TaskPatchBody } from '@/task-types'
 
 const PAGE_SIZE = 50
 
 /**
- * The default view: an always-ready capture row, filters that combine
- * freely, and rows whose status/priority/assignee commit the instant they
- * change (optimistically — see patchOptimistic below) rather than opening
- * anything.
+ * `/tasks` and `/tasks/:number` are the same page in two states, not two
+ * pages. The number in the URL selects a row; it never unmounts the list.
+ * That is what keeps scroll position and filters across opening a task, and
+ * it is why the detail lives here rather than behind its own route element.
+ *
+ * One consequence the three no-regression tests pin down: `tasks` lives
+ * here, above both columns, so a change committed from the detail lands in
+ * the list by way of `handlePatched` — never by re-fetching the list.
  */
 export default function TaskListPage() {
   const { me, users } = useIdentity()
   const navigate = useNavigate()
   const location = useLocation()
   const tier = useBreakpoint()
+  const { number } = useParams()
+
+  // An unparseable :number (e.g. /tasks/abc) is treated as "nothing
+  // selected" rather than handed to TaskDetail, which would otherwise fetch
+  // /api/tasks/NaN.
+  const parsed = number === undefined ? NaN : Number(number)
+  const selected = Number.isInteger(parsed) ? parsed : null
 
   const [filters, setFilters] = useState<TaskFilters>(DEFAULT_FILTERS)
   const [labels, setLabels] = useState<Label[]>([])
@@ -32,11 +44,12 @@ export default function TaskListPage() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState('')
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({})
-  const [focusedIndex, setFocusedIndex] = useState(-1)
   const [reloadToken, setReloadToken] = useState(0)
 
+  // FilterBar still exposes a focusSearch() handle, but nothing calls it any
+  // more: the "/" shortcut that did is gone with the rest of the
+  // application-level keyboard layer, so no ref is held here.
   const createRef = useRef<InlineCreateRowHandle>(null)
-  const filterBarRef = useRef<FilterBarHandle>(null)
 
   // Labels load once per identity — shared by the filter dropdown and the
   // inline label manager folded into the filter bar.
@@ -61,8 +74,8 @@ export default function TaskListPage() {
   // Whether any filter/search narrows the list — sort/order never do, so
   // they're excluded. Distinguishes "genuinely no tasks yet" from "filters
   // narrowed a non-empty list down to zero": the latter needs to say a
-  // filter is the reason and offer to clear it, since a task created via
-  // "c" while filtered out would otherwise seem to vanish.
+  // filter is the reason and offer to clear it, since a task created in the
+  // capture row while filtered out would otherwise seem to vanish.
   const hasActiveFilters =
     filters.statuses.length > 0 ||
     filters.priorities.length > 0 ||
@@ -75,6 +88,10 @@ export default function TaskListPage() {
   // / Board.tsx: switching identity (or any filter) must replace an
   // already-mounted list's rows, and a slow stale response must never
   // overwrite a newer one's result.
+  //
+  // `selected` is deliberately NOT a dependency. Opening or closing a task
+  // must not re-fetch the list — that is the difference between three
+  // columns and two pages wearing a trench coat.
   useEffect(() => {
     setLoading(true)
     setError('')
@@ -94,7 +111,6 @@ export default function TaskListPage() {
         setTasks(res.items)
         setNextCursor(res.next_cursor)
         setHasMore(res.has_more)
-        setFocusedIndex(-1)
       })
       .catch((err) => {
         if (cancelled) return
@@ -141,6 +157,15 @@ export default function TaskListPage() {
     setTasks((ts) => [task, ...ts])
   }
 
+  // The single seam between the two columns. TaskDetail hands back whatever
+  // the server actually persisted; folding it in here is what makes the row
+  // update without the list issuing a request of its own. A task that isn't
+  // in the current page/filter is left alone rather than spliced in — it
+  // would be a row the active filters say should not be there.
+  function handlePatched(updated: Task) {
+    setTasks((ts) => ts.map((t) => (t.number === updated.number ? updated : t)))
+  }
+
   // Mutations feel instant: apply the change to the row immediately, send
   // the patch, and reconcile with whatever the server actually persisted.
   // If the server refuses, the row snaps back to its previous value and
@@ -177,8 +202,9 @@ export default function TaskListPage() {
       .catch((err) => setRowErrors((e) => ({ ...e, [task.number]: `恢复失败：${(err as Error).message}` })))
   }
 
-  // Jumped here from the board's "c" shortcut (board has no capture row of
-  // its own) with a request to focus the create input once mounted.
+  // Arrived here with a request to focus the capture row once mounted — the
+  // phone bottom bar's 新建 tab and the board both navigate that way, since
+  // neither has a capture row of its own.
   useEffect(() => {
     const state = location.state as { focusCreate?: boolean } | null
     if (state?.focusCreate) {
@@ -188,84 +214,149 @@ export default function TaskListPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Keyboard-first navigation: c creates, / searches, j/k or the arrow keys
-  // move the selection, Enter opens it, Escape clears the selection. None
-  // of these fire while the user is typing into a field.
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'c' && !isTypingTarget(e.target)) {
-        e.preventDefault()
-        createRef.current?.focus()
-        return
-      }
-      if (e.key === '/' && !isTypingTarget(e.target)) {
-        e.preventDefault()
-        filterBarRef.current?.focusSearch()
-        return
-      }
-      if (isTypingTarget(e.target)) return
+  function closeDetail() {
+    navigate('/tasks')
+  }
 
-      if (e.key === 'j' || e.key === 'ArrowDown') {
-        e.preventDefault()
-        setFocusedIndex((i) => Math.min(i + 1, tasks.length - 1))
-      } else if (e.key === 'k' || e.key === 'ArrowUp') {
-        e.preventDefault()
-        setFocusedIndex((i) => Math.max(i - 1, 0))
-      } else if (e.key === 'Enter' && focusedIndex >= 0 && tasks[focusedIndex]) {
-        navigate(`/tasks/${tasks[focusedIndex].number}`)
-      } else if (e.key === 'Escape') {
-        setFocusedIndex(-1)
-        ;(document.activeElement as HTMLElement | null)?.blur()
-      }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [tasks, navigate, focusedIndex])
+  // Status grouping only holds under the default creation-order sort; any
+  // other sort interleaves statuses, so a status heading would lie about
+  // what sits under it.
+  const grouped = filters.sort === DEFAULT_FILTERS.sort
+
+  // A phone has room for one thing at a time: an open task replaces the
+  // list outright rather than sliding over it. Every other tier keeps the
+  // list mounted — as a sibling column at xl, underneath a Sheet at lg/md.
+  const detailReplacesList = tier === 'phone' && selected !== null
+  const detailIsSheet = (tier === 'md' || tier === 'lg') && selected !== null
+
+  const detailPane = selected !== null && (
+    <TaskDetail
+      number={selected}
+      users={users}
+      onPatched={handlePatched}
+      // At xl the detail is a column, not something layered over the list;
+      // there is nothing to close, so no close affordance is offered.
+      onClose={tier === 'xl' ? undefined : closeDetail}
+    />
+  )
+
+  if (detailReplacesList) {
+    return <div className="h-full overflow-y-auto">{detailPane}</div>
+  }
 
   return (
-    <section>
-      <h2>任务列表</h2>
-      <InlineCreateRow ref={createRef} onCreated={handleCreated} />
-      <FilterBar ref={filterBarRef} filters={filters} onChange={setFilters} labels={labels} onLabelsChanged={setLabels} />
+    <div className="flex h-full min-h-0">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="shrink-0 border-b border-border px-3 py-2">
+          <h2 className="text-sm font-semibold text-fg">任务列表</h2>
+          <InlineCreateRow ref={createRef} onCreated={handleCreated} />
+          <FilterBar
+            filters={filters}
+            onChange={setFilters}
+            labels={labels}
+            onLabelsChanged={setLabels}
+          />
+        </div>
 
-      {loading && <p className="hint">正在加载任务…</p>}
-      {!loading && error && (
-        <p className="error">
-          加载失败：{error}{' '}
-          <button type="button" onClick={() => setReloadToken((t) => t + 1)}>重试</button>
-        </p>
-      )}
-      {!loading && !error && tasks.length === 0 && hasActiveFilters && (
-        <p className="hint">
-          没有符合筛选条件的任务 —{' '}
-          <button type="button" onClick={() => setFilters(DEFAULT_FILTERS)}>清除筛选条件</button>
-        </p>
-      )}
-      {!loading && !error && tasks.length === 0 && !hasActiveFilters && (
-        <p className="hint">没有任务 — 按 C 创建一个吧</p>
-      )}
-      {!loading && !error && tasks.length > 0 && (
-        <div className="task-list" role="list">
-          {tasks.map((t, i) => (
-            <TaskRow
-              key={t.id}
-              task={t}
-              selected={i === focusedIndex}
-              tier={tier}
-              users={users}
-              error={rowErrors[t.number]}
-              onPatch={patchOptimistic}
-              onArchive={handleArchive}
-              onRestore={handleRestore}
-            />
-          ))}
-          {hasMore && (
-            <button type="button" className="load-more" onClick={loadMore} disabled={loadingMore}>
-              {loadingMore ? '加载中…' : '加载更多'}
-            </button>
+        {/* border-0/bg-transparent/p-0 on the two recovery buttons below:
+            they sit mid-sentence and must read as links, but styles.css's
+            legacy `button` rule would otherwise dress them as full boxed
+            buttons inside the paragraph. Drop with styles.css in Task 13. */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {loading && <p className="p-3 text-sm text-fg-muted">正在加载任务…</p>}
+          {!loading && error && (
+            <p className="p-3 text-sm text-danger">
+              加载失败：{error}{' '}
+              <button type="button" className="border-0 bg-transparent p-0 text-accent underline" onClick={() => setReloadToken((t) => t + 1)}>
+                重试
+              </button>
+            </p>
+          )}
+          {!loading && !error && tasks.length === 0 && hasActiveFilters && (
+            <p className="p-3 text-sm text-fg-muted">
+              没有符合筛选条件的任务 —{' '}
+              <button type="button" className="border-0 bg-transparent p-0 text-accent underline" onClick={() => setFilters(DEFAULT_FILTERS)}>
+                清除筛选条件
+              </button>
+            </p>
+          )}
+          {!loading && !error && tasks.length === 0 && !hasActiveFilters && (
+            <p className="p-3 text-sm text-fg-muted">没有任务 — 在上面输入标题就能创建一个</p>
+          )}
+          {!loading && !error && tasks.length > 0 && (
+            <>
+              <TaskList
+                tasks={tasks}
+                selectedNumber={selected}
+                tier={tier}
+                users={users}
+                rowErrors={rowErrors}
+                grouped={grouped}
+                onPatch={patchOptimistic}
+                onArchive={handleArchive}
+                onRestore={handleRestore}
+              />
+              {hasMore && (
+                <div className="p-3">
+                  <button
+                    type="button"
+                    className="rounded-md border border-border px-3 py-1.5 text-sm text-fg hover:bg-surface-subtle"
+                    onClick={loadMore}
+                    disabled={loadingMore}
+                  >
+                    {loadingMore ? '加载中…' : '加载更多'}
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
+      </div>
+
+      {/* The third column is permanent at xl, selection or not: an empty
+          state holds its width so the list never widens on deselect and
+          jumps back the moment a row is clicked. */}
+      {tier === 'xl' && (
+        <aside
+          aria-label="任务详情"
+          className="w-96 shrink-0 overflow-y-auto border-l border-border"
+        >
+          {selected === null ? (
+            <p className="p-4 text-sm text-fg-muted">从左边选一条任务</p>
+          ) : (
+            detailPane
+          )}
+        </aside>
       )}
-    </section>
+
+      {/* lg/md: the list keeps its full width underneath and stays mounted;
+          the detail slides over part of it. Radix's own close button is
+          suppressed because TaskDetail already renders one from `onClose`,
+          and two stacked ✕ in the same corner is just a bug you can see. */}
+      <Sheet
+        open={detailIsSheet}
+        onOpenChange={(open) => {
+          if (!open) closeDetail()
+        }}
+      >
+        <SheetContent
+          // outline-none: Radix moves focus to this panel when it opens
+          // (tabindex="-1", never reached by Tab), and styles.css's legacy
+          // :focus-visible rule painted a 2px accent outline right around
+          // the whole sheet — a purple frame no user asked for, which read
+          // as decoration rather than a focus cue. Suppressing it here
+          // matches shadcn's own dialog content.
+          className="w-full overflow-y-auto p-0 outline-none sm:max-w-md"
+          showCloseButton={false}
+          aria-describedby={undefined}
+        >
+          {/* Radix requires an accessible name on dialog content; TaskDetail
+              renders no shell of its own, so the name belongs to the shell —
+              here. */}
+          <SheetTitle className="sr-only">任务详情</SheetTitle>
+          {detailPane}
+        </SheetContent>
+      </Sheet>
+    </div>
   )
 }
