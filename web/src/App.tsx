@@ -1,16 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes } from 'react-router-dom'
+import AppShell from './components/tasks/AppShell'
 import ShortcutsOverlay from './components/tasks/ShortcutsOverlay'
-import { UserSwitcher } from './identity'
 import { isTypingTarget } from './keyboard'
-import { ThemeToggle } from './theme'
 import TaskBoardPage from './pages/tasks/TaskBoardPage'
-import TaskDetailPage from './pages/tasks/TaskDetailPage'
 import TaskListPage from './pages/tasks/TaskListPage'
-
-function navLinkClass({ isActive }: { isActive: boolean }): string {
-  return isActive ? 'active' : ''
-}
 
 export default function App() {
   const [showShortcuts, setShowShortcuts] = useState(false)
@@ -34,30 +28,17 @@ export default function App() {
   }, [showShortcuts])
 
   return (
-    <div className="app">
-      <header>
-        <nav>
-          <NavLink to="/tasks" className={navLinkClass} end>列表</NavLink>
-          <NavLink to="/tasks/board" className={navLinkClass}>看板</NavLink>
-        </nav>
-        <div className="row">
-          <button type="button" onClick={() => setShowShortcuts(true)} title="键盘快捷键">
-            ? 快捷键
-          </button>
-          <ThemeToggle />
-          <UserSwitcher />
-        </div>
-      </header>
-      <main>
-        <Routes>
-          <Route path="/tasks" element={<TaskListPage />} />
-          <Route path="/tasks/board" element={<TaskBoardPage />} />
-          <Route path="/tasks/:number" element={<TaskDetailPage />} />
+    <AppShell>
+      <Routes>
+        <Route path="/tasks" element={<TaskListPage />} />
+        <Route path="/tasks/board" element={<TaskBoardPage />} />
+        {/* Task 9 makes this the three-column list+detail view; until then
+         * TaskListPage mounts here too and simply ignores :number. */}
+        <Route path="/tasks/:number" element={<TaskListPage />} />
 
-          <Route path="/" element={<Navigate to="/tasks" replace />} />
-        </Routes>
-      </main>
+        <Route path="/" element={<Navigate to="/tasks" replace />} />
+      </Routes>
       {showShortcuts && <ShortcutsOverlay onClose={() => setShowShortcuts(false)} />}
-    </div>
+    </AppShell>
   )
 }
