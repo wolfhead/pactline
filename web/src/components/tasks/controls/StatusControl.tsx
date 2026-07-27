@@ -1,6 +1,7 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { STATUS_LABELS, TASK_STATUSES, type TaskStatus } from '@/task-types'
 import { cn } from '@/lib/utils'
+import { CONTROL_TRIGGER_CLASS } from './trigger'
 
 const DOT: Record<TaskStatus, string> = {
   backlog: 'border-status-backlog',
@@ -29,8 +30,7 @@ export default function StatusControl({
     <Select value={value} onValueChange={(v) => onChange(v as TaskStatus)} disabled={disabled}>
       <SelectTrigger
         aria-label={ariaLabel}
-        className="h-8 min-h-11 gap-1.5 border-border bg-surface px-2 text-xs
-                   pointer-coarse:min-h-11 sm:min-h-8"
+        className={CONTROL_TRIGGER_CLASS}
       >
         <span className={cn('size-2.5 shrink-0 rounded-full border-[1.6px]', DOT[value])} aria-hidden="true" />
         <SelectValue />

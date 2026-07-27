@@ -1,5 +1,6 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { UserRef } from '@/task-types'
+import { CONTROL_TRIGGER_CLASS } from './trigger'
 
 // Radix Select treats "" as "no value" and would render the placeholder
 // instead of 未分配, so unassigned needs a sentinel that is not the empty
@@ -28,8 +29,7 @@ export default function AssigneeControl({
     >
       <SelectTrigger
         aria-label={ariaLabel}
-        className="h-8 min-h-11 gap-1.5 border-border bg-surface px-2 text-xs
-                   pointer-coarse:min-h-11 sm:min-h-8"
+        className={CONTROL_TRIGGER_CLASS}
       >
         <SelectValue />
       </SelectTrigger>

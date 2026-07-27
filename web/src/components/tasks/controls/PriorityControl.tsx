@@ -1,6 +1,7 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { PRIORITY_LABELS, TASK_PRIORITIES, type TaskPriority } from '@/task-types'
 import { cn } from '@/lib/utils'
+import { CONTROL_TRIGGER_CLASS } from './trigger'
 
 // Only low/medium/high/urgent have a dedicated --color-priority-* token
 // (see index.css); 'none' carries no priority colour of its own and reads
@@ -34,11 +35,7 @@ export default function PriorityControl({
     <Select value={value} onValueChange={(v) => onChange(v as TaskPriority)} disabled={disabled}>
       <SelectTrigger
         aria-label={ariaLabel}
-        className={cn(
-          'h-8 min-h-11 gap-1.5 border-border bg-surface px-2 text-xs font-medium',
-          'pointer-coarse:min-h-11 sm:min-h-8',
-          TEXT[value],
-        )}
+        className={cn(CONTROL_TRIGGER_CLASS, 'font-medium', TEXT[value])}
       >
         <SelectValue />
       </SelectTrigger>
