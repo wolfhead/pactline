@@ -601,10 +601,35 @@ form label { display: grid; gap: var(--sp-1); font-size: var(--fs-sm); color: va
   border-bottom: 1px solid var(--border);
 }
 .filter-bar label { display: flex; align-items: center; gap: var(--sp-1); font-size: var(--fs-sm); color: var(--text-muted); }
-.search-input { min-width: 220px; flex: 1 1 220px; }
+/* Bounded growth: an unbounded flex:1 search field eats every last pixel of
+ * slack in the row, leaving the trailing controls (排序/管理标签) flush
+ * against the container edge with zero margin for error — a scrollbar, a
+ * wider font metric, or an active-filter badge is then enough to push the
+ * last item past the edge instead of triggering the wrap below. Capping the
+ * growth guarantees headroom at 1440px; flex-wrap still handles anything
+ * narrower. */
+.search-input { min-width: 220px; max-width: 320px; flex: 1 1 220px; }
+/* The two trailing controls keep their natural width — under pressure the
+ * row wraps as whole units (already flex-wrap: wrap) rather than
+ * compressing a control's box past its own label text. .filter-disclosure
+ * is deliberately excluded: when open, its body is itself a flex-wrap
+ * row of chips and selects, and it needs to stay shrinkable so that
+ * content can wrap inside the available width instead of forcing the
+ * whole <details> out to its unshrunk content width (which, with several
+ * filters active, is wider than the row itself). */
+.filter-sort, .label-manager { flex-shrink: 0; }
 .filter-group { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
 .filter-chip { background: var(--surface); cursor: pointer; }
 .filter-chip.active { background: var(--accent-subtle); border-color: var(--accent); color: var(--accent); }
+
+/* Sort field + direction — brought into the same quiet-text register as
+ * the rest of the row (筛选/管理标签) instead of sitting there as raw form
+ * chrome: the field reuses QuietSelect (quiet text until interacted with,
+ * a real <select> once opened) and the direction toggle reuses the
+ * existing .quiet-value treatment already used for status/priority/etc, so
+ * this introduces no new visual vocabulary. */
+.filter-sort { display: flex; align-items: center; gap: var(--sp-1); }
+.filter-sort-label { font-size: var(--fs-sm); color: var(--text-muted); }
 
 .filter-disclosure { font-size: var(--fs-sm); }
 .filter-disclosure summary {
@@ -652,6 +677,12 @@ form label { display: grid; gap: var(--sp-1); font-size: var(--fs-sm); color: va
 .task-board {
   display: grid;
   grid-template-columns: repeat(6, minmax(180px, 1fr));
+  /* align-items: start keeps each column exactly as tall as its own
+   * content — Grid's default (stretch) forces every column to the height
+   * of the tallest one, which is what turned a one-card column into a
+   * bordered void. min-height on .board-column below keeps a short/empty
+   * column tall enough to still read as an obvious drop target. */
+  align-items: start;
   gap: var(--sp-3);
   overflow-x: auto;
   width: min(94vw, 1560px);
@@ -660,7 +691,7 @@ form label { display: grid; gap: var(--sp-1); font-size: var(--fs-sm); color: va
 .board-column {
   display: flex;
   flex-direction: column;
-  min-height: 64px;
+  min-height: 96px;
   padding: var(--sp-2);
   border-radius: var(--radius);
   background: transparent;
@@ -763,11 +794,34 @@ kbd {
  * The properties read as a quiet list — a label and a value, not a form
  * field — one row per property, each value editable on interaction via
  * the same QuietSelect/QuietDateField pattern used in the list and board.
+ *
+ * Rhythm: 归档/恢复 lives in the topbar next to "← 返回列表" — it is a
+ * page-level lifecycle action on the view itself, not a property of the
+ * task, so it reads as one of the page's own controls rather than a
+ * button floating alone in the content stream. Everything below follows
+ * one scale: sp-2 links a label tightly to what it labels (the title to
+ * the topbar, a property row's own internal gap), sp-5 separates one
+ * content cluster from the next (topbar/title, properties/labels), and
+ * sp-6 marks the bigger jump into a genuinely new section (comments,
+ * history).
  */
+.task-detail-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-5);
+}
+
 .property-list {
   display: grid;
   gap: var(--sp-1);
-  margin: var(--sp-4) 0;
+  /* Bottom margin stays modest, not sp-5: .label-picker right below is
+   * flex (its own formatting context), so adjoining margins never collapse
+   * through it even when it has no labels to render — two sp-5s back to
+   * back would double the gap into exactly the oversized jump this page
+   * had. .label-picker's own sp-5 bottom margin is what marks the real
+   * boundary before the creator line. */
+  margin: var(--sp-2) 0 var(--sp-3);
   max-width: 360px;
 }
 .property-row {
@@ -780,8 +834,29 @@ kbd {
 .property-label { font-size: var(--fs-sm); color: var(--text-subtle); }
 .property-row .quiet-value { justify-self: start; }
 
-.label-picker { display: flex; flex-wrap: wrap; gap: var(--sp-1); margin-bottom: var(--sp-4); }
+.archived-note { margin: var(--sp-2) 0; }
+
+.label-picker { display: flex; flex-wrap: wrap; gap: var(--sp-1); margin: 0 0 var(--sp-5); }
 .label-picker .filter-chip { cursor: pointer; }
+
+/* Explicit margins rather than the browser's default <p> margin (~1em,
+ * off the token scale) so the creator line's gaps above and below are
+ * even, and it no longer reads as crammed against whatever precedes it. */
+.task-detail-meta { margin: var(--sp-5) 0 var(--sp-6); }
+
+/* Comments and history are genuinely new sections, not more properties —
+ * sp-6 gives them a clearly bigger jump than the sp-5 clusters above, and
+ * the heading gets a touch more room (sp-3, not the global h3 default of
+ * sp-2) so it doesn't sit flush against its own first line of content. */
+.comments, .activity-log { margin-top: var(--sp-6); }
+.comments h3, .activity-log h3 { margin-bottom: var(--sp-3); }
+/* The empty-state/error paragraphs directly under these headings are
+ * plain <p>s with no class of their own controlling margin — without this
+ * they'd fall back to the browser's default ~1em paragraph margin (off
+ * the token scale) stacked on top of the h3's own margin-bottom, which is
+ * exactly the "heading sits close to nothing, then a odd gap" pattern
+ * being fixed here. */
+.comments > p, .activity-log > p { margin: 0 0 var(--sp-3); }
 
 .comment-list { list-style: none; margin: var(--sp-3) 0; padding: 0; display: grid; gap: var(--sp-3); }
 .comment-item { padding: var(--sp-3); border: 1px solid var(--border); border-radius: var(--radius); }
@@ -803,13 +878,18 @@ kbd {
   border: none;
   background: transparent;
 }
+/* The textarea keeps the same --border-control boundary every other input
+ * has (verified >=3:1 against --bg in both themes — see contrast notes on
+ * the generic input rule above) so the field itself is findable without
+ * hovering first; only the fill stays transparent so it doesn't read as a
+ * heavier, boxed panel than the plain-bordered comments above it. */
 .comment-composer textarea {
   flex: 1;
   min-height: 2.4em;
-  border-color: transparent;
+  border-color: var(--border-control);
   background: transparent;
 }
-.comment-composer textarea:hover { border-color: var(--border); }
+.comment-composer textarea:hover { border-color: var(--border-strong); }
 .comment-composer textarea:focus { border-color: var(--accent); background: var(--surface); }
 .comment-composer button[type="submit"] {
   background: transparent;

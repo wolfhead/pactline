@@ -176,7 +176,34 @@ export default function TaskDetailPage() {
 
   return (
     <section className="task-detail">
-      <p><Link to="/tasks">← 返回列表</Link></p>
+      {/* 归档/恢复 lives here, next to the back link, rather than isolated
+          further down the page: it acts on the view itself (the task's
+          lifecycle), not on one of its properties, so it belongs with the
+          page's own navigation/utility controls, not the property list. */}
+      <div className="task-detail-topbar">
+        <Link to="/tasks">← 返回列表</Link>
+        {task.archived_at ? (
+          <button type="button" onClick={handleRestore}>恢复</button>
+        ) : (
+          <button type="button" onClick={handleArchive}>归档</button>
+        )}
+      </div>
+
+      {undoMessage && (
+        <div className="undo-toast" role="status">
+          <span>{undoMessage}</span>
+          <button
+            type="button"
+            onClick={() => {
+              undoActionRef.current?.()
+              if (undoTimerRef.current) window.clearTimeout(undoTimerRef.current)
+              setUndoMessage(null)
+            }}
+          >
+            撤销
+          </button>
+        </div>
+      )}
 
       <div className="task-detail-header">
         <span className="hint">#{task.number}</span>
@@ -197,7 +224,7 @@ export default function TaskDetailPage() {
         className="task-description-input"
       />
 
-      {task.archived_at && <p className="hint">此任务已归档。</p>}
+      {task.archived_at && <p className="hint archived-note">此任务已归档。</p>}
 
       <div className="property-list">
         <div className="property-row">
@@ -265,31 +292,7 @@ export default function TaskDetailPage() {
 
       {fieldError && <p className="error">{fieldError}</p>}
 
-      <div className="row">
-        {task.archived_at ? (
-          <button type="button" onClick={handleRestore}>恢复</button>
-        ) : (
-          <button type="button" onClick={handleArchive}>归档</button>
-        )}
-      </div>
-
-      {undoMessage && (
-        <div className="undo-toast" role="status">
-          <span>{undoMessage}</span>
-          <button
-            type="button"
-            onClick={() => {
-              undoActionRef.current?.()
-              if (undoTimerRef.current) window.clearTimeout(undoTimerRef.current)
-              setUndoMessage(null)
-            }}
-          >
-            撤销
-          </button>
-        </div>
-      )}
-
-      <p className="hint">
+      <p className="hint task-detail-meta">
         创建者：{task.creator.name} · 创建于 {new Date(task.created_at).toLocaleString()}
       </p>
 

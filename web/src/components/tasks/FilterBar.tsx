@@ -10,6 +10,7 @@ import {
   type TaskStatus,
 } from '../../task-types'
 import LabelManager from './LabelManager'
+import QuietSelect from './QuietSelect'
 
 export interface TaskFilters {
   statuses: TaskStatus[]
@@ -38,6 +39,8 @@ const SORT_OPTIONS: [string, string][] = [
   ['priority', '优先级'],
   ['number', '编号'],
 ]
+const SORT_VALUES = SORT_OPTIONS.map(([v]) => v)
+const SORT_LABELS: Record<string, string> = Object.fromEntries(SORT_OPTIONS)
 
 export interface FilterBarHandle {
   focusSearch: () => void
@@ -160,25 +163,24 @@ const FilterBar = forwardRef<FilterBarHandle, FilterBarProps>(function FilterBar
         </div>
       </details>
 
-      <label>
-        排序
-        <select
+      <div className="filter-sort">
+        <span className="filter-sort-label">排序</span>
+        <QuietSelect
           value={filters.sort}
-          onChange={(e) => onChange({ ...filters, sort: e.target.value })}
-          aria-label="排序字段"
+          options={SORT_VALUES}
+          labels={SORT_LABELS}
+          onChange={(sort) => onChange({ ...filters, sort })}
+          ariaLabel="排序字段"
+        />
+        <button
+          type="button"
+          className="quiet-value"
+          onClick={() => onChange({ ...filters, order: filters.order === 'asc' ? 'desc' : 'asc' })}
+          aria-label={filters.order === 'asc' ? '升序，点击切换为降序' : '降序，点击切换为升序'}
         >
-          {SORT_OPTIONS.map(([v, l]) => (
-            <option key={v} value={v}>{l}</option>
-          ))}
-        </select>
-      </label>
-      <button
-        type="button"
-        onClick={() => onChange({ ...filters, order: filters.order === 'asc' ? 'desc' : 'asc' })}
-        aria-label={filters.order === 'asc' ? '升序，点击切换为降序' : '降序，点击切换为升序'}
-      >
-        {filters.order === 'asc' ? '↑ 升序' : '↓ 降序'}
-      </button>
+          {filters.order === 'asc' ? '↑ 升序' : '↓ 降序'}
+        </button>
+      </div>
 
       <LabelManager labels={labels} onChanged={onLabelsChanged} />
     </div>
