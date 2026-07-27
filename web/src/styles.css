@@ -49,6 +49,22 @@
   --radius-sm: 6px;
   --radius-pill: 999px;
 
+  /* Named z-index scale — steps, not raw numbers, so the next overlay picks
+   * a rung instead of inventing a bigger magic number. Gaps between steps
+   * are intentional headroom for stacking within a layer (e.g. two raised
+   * elements both above content but one above the other) without renaming
+   * anything.
+   *   10  raised   — content lifted slightly above the page flow (sticky-ish
+   *                   affordances, drag-over highlight if it ever needs one)
+   *   20  dropdown  — floating panels anchored to a control (menus, pickers)
+   *   30  sticky    — persistent chrome (header) that other content scrolls under
+   *   50  overlay   — modal dialogs and their backdrop; the top of the stack
+   */
+  --z-raised: 10;
+  --z-dropdown: 20;
+  --z-sticky: 30;
+  --z-overlay: 50;
+
   --fs-xs: 12px;
   --fs-sm: 13px;
   --fs-md: 14px;
@@ -343,6 +359,28 @@ button[type="submit"] {
 }
 button[type="submit"]:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
 
+/* ---------- touch target sizing ----------
+ * The 44x44 minimum (WCAG 2.5.5) is a touch rule, not a desktop one. This is
+ * a dense, keyboard-first tool used daily on desktop — bloating every button
+ * and field to 44px there would hurt exactly the density the product is
+ * built around, for a pointer precise enough not to need it. So the default
+ * sizing above (padding-driven, ~36-40px tall with the current tokens) is
+ * left alone as the fine-pointer baseline: mice and trackpads. It only grows
+ * to the full 44px floor under `(pointer: coarse)`, i.e. an actual touch
+ * screen, and only for things a finger — not a screen reader's virtual
+ * cursor — would need to hit: buttons, the form controls, and <summary>
+ * (the label manager's disclosure triangle is a real tap target, not text).
+ * Plain inline text links (nav tabs, task title links) are deliberately not
+ * included: they're inline by design, and forcing a box model onto them for
+ * this would risk reflow for a case the audit didn't flag.
+ */
+@media (pointer: coarse) {
+  button, input, select, textarea, summary {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
 form {
   display: grid;
   gap: var(--sp-3);
@@ -523,6 +561,17 @@ form label { display: grid; gap: var(--sp-1); font-size: var(--fs-sm); color: va
 .task-card.focused { border-color: var(--accent); background: var(--accent-subtle); }
 .task-card .pill-select { margin-top: var(--sp-2); }
 
+/* Shown only on a column actually over the render cap (see
+ * COLUMN_RENDER_CAP in TaskBoardPage.tsx) — a plain button standing in for
+ * virtualization, since no list-virtualization library is available here. */
+.board-column-more {
+  align-self: stretch;
+  margin-top: var(--sp-2);
+  background: transparent;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
 @media (max-width: 640px) {
   .task-board { grid-template-columns: minmax(220px, 1fr); grid-auto-flow: column; }
 }
@@ -537,7 +586,7 @@ form label { display: grid; gap: var(--sp-1); font-size: var(--fs-sm); color: va
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: var(--z-overlay);
 }
 .overlay-panel {
   width: min(420px, 90vw);

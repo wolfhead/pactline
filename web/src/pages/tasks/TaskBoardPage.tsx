@@ -8,6 +8,14 @@ import { PRIORITY_LABELS, STATUS_LABELS, TASK_STATUSES, type Task, type TaskStat
 
 const BOARD_LIMIT = 200
 
+// The rule this answers to says "virtualize past 50 items" — there's no
+// virtual-list library available (no new dependencies), so instead each
+// column renders at most this many cards and offers a plain "reveal the
+// rest" button for whichever column is actually over the cap. A backlog
+// column sitting at 150 items is the realistic case; the other five status
+// columns will rarely get near 50.
+const COLUMN_RENDER_CAP = 50
+
 /**
  * A column per status; dragging a card between columns changes its status.
  * Drag-and-drop uses only the native HTML5 drag events (dragstart on the
@@ -26,6 +34,14 @@ export default function TaskBoardPage() {
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({})
   const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null)
   const [focusedNumber, setFocusedNumber] = useState<number | null>(null)
+  // Which status columns have had their render cap lifted — either the user
+  // clicked "reveal", or a card just landed there (see moveStatus below) and
+  // must not be swallowed by the cap the instant it arrives.
+  const [revealedStatuses, setRevealedStatuses] = useState<Set<TaskStatus>>(() => new Set())
+
+  function revealColumn(status: TaskStatus) {
+    setRevealedStatuses((prev) => (prev.has(status) ? prev : new Set(prev).add(status)))
+  }
 
   // Fetches on mount, on reload, and whenever identity changes — mirrors
   // the cancelled-flag idiom in identity.tsx / WorkFeed.tsx / Board.tsx.
@@ -57,7 +73,25 @@ export default function TaskBoardPage() {
     return map
   }, [tasks])
 
-  const flatOrder = useMemo(() => TASK_STATUSES.flatMap((s) => columns.get(s) ?? []), [columns])
+  // The rendering cap, applied per column: unless a column has been
+  // revealed, only its first COLUMN_RENDER_CAP cards render at all. j/k
+  // navigation (flatOrder, below) is derived from this same capped view —
+  // not from `columns` — so focus never lands on a card that isn't actually
+  // on screen.
+  const visibleColumns = useMemo(() => {
+    const map = new Map<TaskStatus, { visible: Task[]; hiddenCount: number }>()
+    for (const status of TASK_STATUSES) {
+      const all = columns.get(status) ?? []
+      const visible = revealedStatuses.has(status) ? all : all.slice(0, COLUMN_RENDER_CAP)
+      map.set(status, { visible, hiddenCount: all.length - visible.length })
+    }
+    return map
+  }, [columns, revealedStatuses])
+
+  const flatOrder = useMemo(
+    () => TASK_STATUSES.flatMap((s) => visibleColumns.get(s)?.visible ?? []),
+    [visibleColumns],
+  )
 
   // Same optimistic-then-reconcile pattern as the list page: the card jumps
   // to its new column immediately; a server refusal snaps it back and says
@@ -66,6 +100,11 @@ export default function TaskBoardPage() {
     if (task.status === status) return
     const previousStatus = task.status
     setTasks((ts) => ts.map((t) => (t.number === task.number ? { ...t, status } : t)))
+    // A card the user just moved into `status` must be visible immediately,
+    // even if that column was already sitting at or over the render cap —
+    // so the destination column is revealed in full, the same as if the
+    // user had clicked "reveal" themselves.
+    revealColumn(status)
     setRowErrors((e) => ({ ...e, [task.number]: '' }))
     updateTask(task.number, { status })
       .then((updated) => setTasks((ts) => ts.map((t) => (t.number === task.number ? updated : t))))
@@ -132,50 +171,58 @@ export default function TaskBoardPage() {
     <section>
       <h2>看板</h2>
       <div className="board task-board">
-        {TASK_STATUSES.map((status) => (
-          <div
-            key={status}
-            className={`board-column ${dragOverStatus === status ? 'drag-over' : ''}`}
-            onDragOver={(e) => {
-              e.preventDefault()
-              if (dragOverStatus !== status) setDragOverStatus(status)
-            }}
-            onDragLeave={() => setDragOverStatus((s) => (s === status ? null : s))}
-            onDrop={(e) => handleDrop(e, status)}
-          >
-            <h3>
-              {STATUS_LABELS[status]} <span className="hint">{(columns.get(status) ?? []).length}</span>
-            </h3>
-            {(columns.get(status) ?? []).map((task) => (
-              <article
-                key={task.id}
-                className={`card task-card ${focusedNumber === task.number ? 'focused' : ''}`}
-                draggable
-                onDragStart={(e) => {
-                  e.dataTransfer.setData('text/plain', String(task.number))
-                  e.dataTransfer.effectAllowed = 'move'
-                }}
-              >
-                <h3>
-                  <Link to={`/tasks/${task.number}`}>#{task.number} {task.title}</Link>
-                </h3>
-                <div className="meta">
-                  <span className="tag">{PRIORITY_LABELS[task.priority]}</span>
-                  {task.assignee && <span>{task.assignee.name}</span>}
-                  {task.due_date && <span>{task.due_date}</span>}
-                </div>
-                <PillSelect
-                  value={task.status}
-                  options={TASK_STATUSES}
-                  labels={STATUS_LABELS}
-                  onChange={(s) => moveStatus(task, s)}
-                  ariaLabel={`任务 #${task.number} 状态（无需拖拽即可移动）`}
-                />
-                {rowErrors[task.number] && <span className="error">{rowErrors[task.number]}</span>}
-              </article>
-            ))}
-          </div>
-        ))}
+        {TASK_STATUSES.map((status) => {
+          const { visible, hiddenCount } = visibleColumns.get(status) ?? { visible: [], hiddenCount: 0 }
+          return (
+            <div
+              key={status}
+              className={`board-column ${dragOverStatus === status ? 'drag-over' : ''}`}
+              onDragOver={(e) => {
+                e.preventDefault()
+                if (dragOverStatus !== status) setDragOverStatus(status)
+              }}
+              onDragLeave={() => setDragOverStatus((s) => (s === status ? null : s))}
+              onDrop={(e) => handleDrop(e, status)}
+            >
+              <h3>
+                {STATUS_LABELS[status]} <span className="hint">{(columns.get(status) ?? []).length}</span>
+              </h3>
+              {visible.map((task) => (
+                <article
+                  key={task.id}
+                  className={`card task-card ${focusedNumber === task.number ? 'focused' : ''}`}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('text/plain', String(task.number))
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                >
+                  <h3>
+                    <Link to={`/tasks/${task.number}`}>#{task.number} {task.title}</Link>
+                  </h3>
+                  <div className="meta">
+                    <span className="tag">{PRIORITY_LABELS[task.priority]}</span>
+                    {task.assignee && <span>{task.assignee.name}</span>}
+                    {task.due_date && <span>{task.due_date}</span>}
+                  </div>
+                  <PillSelect
+                    value={task.status}
+                    options={TASK_STATUSES}
+                    labels={STATUS_LABELS}
+                    onChange={(s) => moveStatus(task, s)}
+                    ariaLabel={`任务 #${task.number} 状态（无需拖拽即可移动）`}
+                  />
+                  {rowErrors[task.number] && <span className="error">{rowErrors[task.number]}</span>}
+                </article>
+              ))}
+              {hiddenCount > 0 && (
+                <button type="button" className="board-column-more" onClick={() => revealColumn(status)}>
+                  还有 {hiddenCount} 条未显示，点击展开
+                </button>
+              )}
+            </div>
+          )
+        })}
       </div>
     </section>
   )
