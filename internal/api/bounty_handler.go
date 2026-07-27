@@ -355,22 +355,46 @@ func applyTransitionEffects(b *domain.Bounty, me domain.User, to domain.Status) 
 	}
 }
 
-// amendRequest carries only the two fields the correction channel may touch.
-// There is deliberately no field for status, sponsor_id, claimed_by or
-// business_lines: any such field in the request body is simply dropped by
-// json.Decode because amendRequest has nowhere to put it, so the endpoint
-// cannot become a general editor by accident.
+// amendRequest carries the fields the correction channel may touch. There is
+// deliberately no field for status, sponsor_id, claimed_by or business_lines:
+// any such field in the request body is simply dropped by json.Decode
+// because amendRequest has nowhere to put it, so the endpoint cannot become a
+// general editor by accident.
+//
+// ValueLevel, Difficulty and Completion were added to close C1/C2: the
+// dedicated channels for these (POST .../value-level, POST .../difficulty,
+// and the completion field on transition-into-COMPLETED) are each a one-way
+// door — value-level locks outside DRAFT/OPEN, completion is only ever
+// applied on the DELIVERED->COMPLETED edge and COMPLETED is terminal, and
+// difficulty now refuses once settled (I2). A sponsor who forgets to send
+// completion at acceptance, or a value level that turns out to have been
+// wrong, would otherwise be permanently unrecordable — every bounty already
+// past those gates is stuck with no key. Recording a grade the pricing group
+// actually decided here is not inventing one; it is the opposite of the
+// failure the "never default a level" rule guards against, so long as a
+// human (the steward, standing in for the pricing group) is the one
+// supplying it. Difficulty is the one field here that still refuses once the
+// bounty is settled (see domain.CanSetDifficulty) — value level and
+// completion are not similarly restricted, since correcting them after
+// settlement does not touch the immutable settled_score/settled_at snapshot
+// (BountyStore.Update is structurally unable to write those columns) and is
+// exactly the "record it after the fact" case C1/C2 exist to unblock.
 type amendRequest struct {
-	Retrospective *string  `json:"retrospective"`
-	PersonDays    *float64 `json:"person_days"`
+	Retrospective *string            `json:"retrospective"`
+	PersonDays    *float64           `json:"person_days"`
+	ValueLevel    *domain.ValueLevel `json:"value_level"`
+	Difficulty    *domain.Difficulty `json:"difficulty"`
+	Completion    *domain.Completion `json:"completion"`
 }
 
 // amend is the steward-only correction channel required by spec §6.1 (强制修正).
-// The status graph is a hard gate and there is no edit endpoint, so a typo in
-// a terminal bounty's retrospective or a wrong person_days figure would
+// The status graph is a hard gate and there is no general edit endpoint, so a
+// typo in a terminal bounty's retrospective, a wrong person_days figure, or a
+// grading decision made after the ordinary channel already locked would
 // otherwise be permanent. amend fixes exactly that, and nothing else: it
-// works on bounties in any status, including terminal ones, but only ever
-// touches retrospective and person_days.
+// works on bounties in any status, including terminal and settled ones
+// (except difficulty once settled — see amendRequest's doc comment), but only
+// ever touches the fields amendRequest names.
 func (h *bountyHandler) amend(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -387,6 +411,18 @@ func (h *bountyHandler) amend(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &req) {
 		return
 	}
+	if req.ValueLevel != nil && !domain.IsValidValueLevel(*req.ValueLevel) {
+		writeJSON(w, http.StatusBadRequest, errorBody{Error: "value_level is not a known value: " + string(*req.ValueLevel)})
+		return
+	}
+	if req.Difficulty != nil && !domain.IsValidDifficulty(*req.Difficulty) {
+		writeJSON(w, http.StatusBadRequest, errorBody{Error: "difficulty is not a known value: " + string(*req.Difficulty)})
+		return
+	}
+	if req.Completion != nil && !domain.IsValidCompletion(*req.Completion) {
+		writeJSON(w, http.StatusBadRequest, errorBody{Error: "completion is not a known value: " + string(*req.Completion)})
+		return
+	}
 
 	b, err := h.bounties.GetByID(r.Context(), id)
 	if err != nil {
@@ -394,13 +430,39 @@ func (h *bountyHandler) amend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.Difficulty != nil {
+		// me is already known to hold STEWARD (checked above), so this call
+		// can only fail on I2's settlement lock — the same rule that governs
+		// the dedicated /difficulty endpoint. There is no steward escape
+		// hatch for difficulty once settled: see domain.CanSetDifficulty's
+		// doc comment for why.
+		if err := domain.CanSetDifficulty(me, b); err != nil {
+			slog.Warn("amend difficulty denied",
+				"bounty_id", id, "actor_id", me.ID, "settled_at", b.SettledAt, "error", err)
+			writeError(w, r, err)
+			return
+		}
+	}
+
 	beforeRetrospective := b.Retrospective
 	beforePersonDays := personDaysLogValue(b.PersonDays)
+	beforeValueLevel := b.ValueLevel
+	beforeDifficulty := b.Difficulty
+	beforeCompletion := b.Completion
 	if req.Retrospective != nil {
 		b.Retrospective = *req.Retrospective
 	}
 	if req.PersonDays != nil {
 		b.PersonDays = req.PersonDays
+	}
+	if req.ValueLevel != nil {
+		b.ValueLevel = *req.ValueLevel
+	}
+	if req.Difficulty != nil {
+		b.Difficulty = *req.Difficulty
+	}
+	if req.Completion != nil {
+		b.Completion = *req.Completion
 	}
 
 	updated, err := h.bounties.Update(r.Context(), b)
@@ -412,6 +474,25 @@ func (h *bountyHandler) amend(w http.ResponseWriter, r *http.Request) {
 		"bounty_id", updated.ID, "actor_id", me.ID, "status", updated.Status,
 		"retrospective_before", beforeRetrospective, "retrospective_after", updated.Retrospective,
 		"person_days_before", beforePersonDays, "person_days_after", personDaysLogValue(updated.PersonDays))
+	// C1/C2: each graded field a steward actually corrected is logged on its
+	// own line with actor, bounty, field name and before/after, so a
+	// challenged correction can be attributed and reconstructed from logs
+	// alone — the same standard settlement's logging already holds itself to.
+	if req.ValueLevel != nil {
+		slog.Info("bounty amended by steward: field corrected",
+			"bounty_id", updated.ID, "actor_id", me.ID, "field", "value_level",
+			"before", beforeValueLevel, "after", updated.ValueLevel)
+	}
+	if req.Difficulty != nil {
+		slog.Info("bounty amended by steward: field corrected",
+			"bounty_id", updated.ID, "actor_id", me.ID, "field", "difficulty",
+			"before", beforeDifficulty, "after", updated.Difficulty)
+	}
+	if req.Completion != nil {
+		slog.Info("bounty amended by steward: field corrected",
+			"bounty_id", updated.ID, "actor_id", me.ID, "field", "completion",
+			"before", beforeCompletion, "after", updated.Completion)
+	}
 	writeJSON(w, http.StatusOK, updated)
 }
 

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"bountyboard/internal/api"
 	"bountyboard/internal/domain"
 
 	"github.com/stretchr/testify/require"
@@ -215,22 +216,59 @@ func TestSettlementScoresSkipsAlreadySettledAndReportsUnscorable(t *testing.T) {
 	require.Equal(t, 0, second.SettledCount)
 	require.Equal(t, 1, second.AlreadySettledCount)
 	require.Equal(t, 1, second.UnscorableCount)
+
+	// The unscorable record being REPORTED is not enough: an implementation
+	// that reported it correctly but also silently wrote a default score of
+	// 0 (Go's zero value, easy to produce by accident) would still pass every
+	// assertion above. Re-fetch it and confirm it was never settled at all —
+	// this is the "never invent a default" rule the whole unscorable path
+	// exists to guard, checked at the one place a violation would actually
+	// show up.
+	gotUnscorable := do(t, h, http.MethodGet, "/api/bounties/"+unscorable.ID.String(), pmID, nil)
+	require.Equal(t, http.StatusOK, gotUnscorable.Code)
+	var unscorableBounty domain.Bounty
+	require.NoError(t, json.Unmarshal(gotUnscorable.Body.Bytes(), &unscorableBounty))
+	require.Nil(t, unscorableBounty.SettledScore,
+		"an unscorable bounty must never be settled with an invented default score")
+	require.Nil(t, unscorableBounty.SettledAt)
+	// Its grading snapshot (the very fields that made it unscorable) must
+	// also be unchanged by the skip — the settlement run must not touch a
+	// record it declined to settle.
+	require.Empty(t, unscorableBounty.ValueLevel)
+	require.Empty(t, unscorableBounty.Difficulty)
+	require.Empty(t, unscorableBounty.Completion)
 }
 
 // TestSettlementDoesNotTouchAbandonedOrOtherPeriods pins that only terminal
 // bounties (COMPLETED/ABANDONED) inside the requested window are candidates,
 // and covers the ABANDONED scoring branch through the settlement endpoint
 // end to end.
+//
+// Uses EXPLORATORY commitment, not COMMITTED (createDraft's default): a
+// COMMITTED abandoned bounty scores exactly 0 per spec §7.1.1, which is also
+// Go's float64 zero value and the fallback almost every plausible scoring
+// breakage (a dropped multiplication, an unset weight, a wrong branch) lands
+// on. That made the assertion pass even under several broken implementations.
+// EXPLORATORY's non-zero expected value (A(5) x M(2) x 0.4 x 0.7 = 2.8) is
+// discriminating: only a correct computation produces it.
 func TestSettlementScoresAbandonedBounty(t *testing.T) {
 	h := newTestServer(t)
-	b := createDraft(t, h)
+	rec := do(t, h, http.MethodPost, "/api/bounties", pmID, map[string]any{
+		"type": "DELIVERY", "title": "探索型放弃单", "commitment": "EXPLORATORY",
+	})
+	require.Equal(t, http.StatusCreated, rec.Code)
+	var b domain.Bounty
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &b))
+	cleanupBounty(t, b.ID)
+	require.Equal(t, domain.CommitmentExploratory, b.Commitment)
+
 	// Value level must be set while still DRAFT/OPEN, before the bounty is
 	// claimed (see TestValueLevelLockedOnceClaimed) — order matters here.
 	require.Equal(t, http.StatusOK, setValueLevel(t, h, b.ID.String(), pmID, "A").Code)
 	require.Equal(t, http.StatusOK, setDifficulty(t, h, b.ID.String(), techLeadID, "M").Code)
 	require.Equal(t, http.StatusOK, transition(t, h, b.ID.String(), pmID, map[string]any{"to": "OPEN"}).Code)
 	require.Equal(t, http.StatusOK, transition(t, h, b.ID.String(), engCID, map[string]any{"to": "CLAIMED"}).Code)
-	rec := transition(t, h, b.ID.String(), engCID, map[string]any{
+	rec = transition(t, h, b.ID.String(), engCID, map[string]any{
 		"to": "ABANDONED", "retrospective": "接口未就绪,先归档",
 	})
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -246,9 +284,10 @@ func TestSettlementScoresAbandonedBounty(t *testing.T) {
 	for _, s := range resp.Settled {
 		if s.BountyID == b.ID.String() {
 			found = true
-			// COMMITTED (default commitment) abandoned bounty scores 0 per
-			// spec §7.1.1.
-			require.InDelta(t, 0, s.Score, 1e-9)
+			// EXPLORATORY abandoned bounty: A(5) x M(2) x 0.4 x 0.7 = 2.8,
+			// per spec §7.1.1. Not 0 — see the test's doc comment for why
+			// that matters.
+			require.InDelta(t, 2.8, s.Score, 1e-9)
 		}
 	}
 	require.True(t, found, "the abandoned bounty must be scored and reported settled")
@@ -369,4 +408,210 @@ func TestAnchorCRUDViaHTTP(t *testing.T) {
 
 	delRec = do(t, h, http.MethodDelete, "/api/anchors/"+anchor.ID.String(), stewardID, nil)
 	require.Equal(t, http.StatusNoContent, delRec.Code)
+}
+
+// TestStewardAmendsAllThreeLevelsOnTerminalWork is the required regression
+// for C1/C2's fix: a steward can record value level, difficulty and
+// completion through the correction channel on a bounty that is already
+// terminal (COMPLETED) — the exact situation where the dedicated channels
+// (value-level's DRAFT/OPEN window, difficulty, and completion-on-accept)
+// have each already locked or passed.
+func TestStewardAmendsAllThreeLevelsOnTerminalWork(t *testing.T) {
+	h := newTestServer(t)
+	b := gradedBounty(t, h, "A", "M", "MET")
+	require.Equal(t, domain.StatusCompleted, b.Status)
+
+	rec := amend(t, h, b.ID.String(), stewardID, map[string]any{
+		"value_level": "S", "difficulty": "L", "completion": "EXCEEDED",
+	})
+	require.Equal(t, http.StatusOK, rec.Code)
+	var updated domain.Bounty
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &updated))
+	require.Equal(t, domain.ValueS, updated.ValueLevel)
+	require.Equal(t, domain.DifficultyL, updated.Difficulty)
+	require.Equal(t, domain.CompletionExceeded, updated.Completion)
+	require.Equal(t, domain.StatusCompleted, updated.Status, "amend must not change status")
+}
+
+// TestNonStewardCannotAmendLevels is the required regression covering the
+// other side of C1/C2: nobody but a steward may use the correction channel to
+// grade a bounty, not even a TECH_LEAD who could set difficulty through the
+// dedicated endpoint, and not even the bounty's own sponsor.
+func TestNonStewardCannotAmendLevels(t *testing.T) {
+	h := newTestServer(t)
+	b := gradedBounty(t, h, "A", "M", "MET")
+
+	rec := amend(t, h, b.ID.String(), pmID, map[string]any{"value_level": "S"})
+	require.Equal(t, http.StatusForbidden, rec.Code, "the sponsor is not a steward and must be refused")
+
+	rec = amend(t, h, b.ID.String(), techLeadID, map[string]any{"difficulty": "L"})
+	require.Equal(t, http.StatusForbidden, rec.Code,
+		"a TECH_LEAD may set difficulty through the dedicated endpoint but is not a steward and must be refused here")
+}
+
+// TestDifficultyRefusedOnceSettled is the required regression for I2: once a
+// bounty is settled, difficulty may not be changed through either the
+// dedicated endpoint or the steward's correction channel — there is no
+// escape hatch, unlike value level (C2) and completion (C1), because
+// anchor_examples pins level precedent to bounty ids and the settled score's
+// inputs must stay legible against what actually produced it.
+func TestDifficultyRefusedOnceSettled(t *testing.T) {
+	h := newTestServer(t)
+	graded := gradedBounty(t, h, "A", "M", "MET")
+	from := time.Now().Add(-time.Hour)
+	to := time.Now().Add(time.Hour)
+	require.Equal(t, http.StatusOK, settle(t, h, stewardID, from, to).Code)
+
+	rec := setDifficulty(t, h, graded.ID.String(), techLeadID, "L")
+	require.Equal(t, http.StatusConflict, rec.Code, "difficulty must be refused once the bounty is settled")
+
+	rec = amend(t, h, graded.ID.String(), stewardID, map[string]any{"difficulty": "L"})
+	require.Equal(t, http.StatusConflict, rec.Code,
+		"even the steward's correction channel must not be able to rewrite difficulty once settled")
+
+	// Difficulty must still read back unchanged: neither refused attempt
+	// wrote anything.
+	got := do(t, h, http.MethodGet, "/api/bounties/"+graded.ID.String(), pmID, nil)
+	require.Equal(t, http.StatusOK, got.Code)
+	var current domain.Bounty
+	require.NoError(t, json.Unmarshal(got.Body.Bytes(), &current))
+	require.Equal(t, domain.DifficultyM, current.Difficulty)
+}
+
+// TestDifficultySettableBeforeSettlement pins the other half of I2's fix:
+// grading difficulty any time before settlement — including late, including
+// on an already-terminal (COMPLETED) work — remains unrestricted. Only
+// settlement closes the door.
+func TestDifficultySettableBeforeSettlement(t *testing.T) {
+	h := newTestServer(t)
+	b := gradedBounty(t, h, "A", "M", "MET")
+	require.Equal(t, domain.StatusCompleted, b.Status, "terminal but not yet settled")
+
+	rec := setDifficulty(t, h, b.ID.String(), techLeadID, "XL")
+	require.Equal(t, http.StatusOK, rec.Code, "late grading before settlement must still be allowed")
+	var updated domain.Bounty
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &updated))
+	require.Equal(t, domain.DifficultyXL, updated.Difficulty)
+}
+
+// TestCalibrationRecordsOriginalScore is the required regression for I3: a
+// calibration row must carry original_score, copied from the bounty's
+// settled_score at calibration time, so the row is a self-contained
+// settled-then vs calibrated-now comparison without a reader having to
+// separately re-fetch the bounty.
+func TestCalibrationRecordsOriginalScore(t *testing.T) {
+	h := newTestServer(t)
+	graded := gradedBounty(t, h, "A", "M", "MET") // settles at 10
+
+	from := time.Now().Add(-time.Hour)
+	to := time.Now().Add(time.Hour)
+	require.Equal(t, http.StatusOK, settle(t, h, stewardID, from, to).Code)
+
+	rec := createCalibration(t, h, graded.ID.String(), stewardID, map[string]any{
+		"quarter": "2026Q3", "calibrated_value": "B",
+	})
+	require.Equal(t, http.StatusCreated, rec.Code)
+	var cal domain.Calibration
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &cal))
+	require.InDelta(t, 10, cal.OriginalScore, 1e-9,
+		"original_score must be copied from the bounty's settled_score at calibration time")
+}
+
+// TestCalibrationInvalidValueIsBadRequest is the minor fix: an invalid
+// calibrated_value must be rejected with 400 before any score is computed
+// from it, not fall through to scoring's ErrUnscorable (409).
+func TestCalibrationInvalidValueIsBadRequest(t *testing.T) {
+	h := newTestServer(t)
+	graded := gradedBounty(t, h, "A", "M", "MET")
+	from := time.Now().Add(-time.Hour)
+	to := time.Now().Add(time.Hour)
+	require.Equal(t, http.StatusOK, settle(t, h, stewardID, from, to).Code)
+
+	rec := createCalibration(t, h, graded.ID.String(), stewardID, map[string]any{
+		"quarter": "2026Q3", "calibrated_value": "Z",
+	})
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// TestCalibrationInvalidQuarterFormatIsBadRequest is the minor fix: quarter
+// must match the YYYYQn shape.
+func TestCalibrationInvalidQuarterFormatIsBadRequest(t *testing.T) {
+	h := newTestServer(t)
+	graded := gradedBounty(t, h, "A", "M", "MET")
+	from := time.Now().Add(-time.Hour)
+	to := time.Now().Add(time.Hour)
+	require.Equal(t, http.StatusOK, settle(t, h, stewardID, from, to).Code)
+
+	rec := createCalibration(t, h, graded.ID.String(), stewardID, map[string]any{
+		"quarter": "not-a-quarter", "calibrated_value": "B",
+	})
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// TestFeedAndPortfolioOmitScoreButDetailKeepsIt is the required regression
+// for I4: WorkView (the shape backing both GET /api/works and
+// GET /api/users/{id}/portfolio) must carry no settled score or settled
+// timestamp at all — not even as a null field — while GET /api/bounties/{id}
+// keeps both, since a score is a fact about that specific work.
+func TestFeedAndPortfolioOmitScoreButDetailKeepsIt(t *testing.T) {
+	h := newTestServer(t)
+
+	rec := do(t, h, http.MethodPost, "/api/bounties", pmID, map[string]any{
+		"type": "DELIVERY", "title": "分值隐藏测试单", "value_level": "A",
+	})
+	require.Equal(t, http.StatusCreated, rec.Code)
+	var b domain.Bounty
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &b))
+	cleanupBounty(t, b.ID)
+
+	require.Equal(t, http.StatusOK, setDifficulty(t, h, b.ID.String(), techLeadID, "M").Code)
+	require.Equal(t, http.StatusOK, transition(t, h, b.ID.String(), pmID, map[string]any{"to": "OPEN"}).Code)
+	require.Equal(t, http.StatusOK, transition(t, h, b.ID.String(), engCID, map[string]any{"to": "CLAIMED"}).Code)
+
+	creditRec := do(t, h, http.MethodPost, "/api/bounties/"+b.ID.String()+"/credits", engCID,
+		map[string]any{"user_id": engDID, "role": "CO_DELIVER"})
+	require.Equal(t, http.StatusCreated, creditRec.Code)
+	var credit domain.Credit
+	require.NoError(t, json.Unmarshal(creditRec.Body.Bytes(), &credit))
+	confirmCredit(t, h, credit, engDID)
+
+	require.Equal(t, http.StatusOK, transition(t, h, b.ID.String(), engCID, map[string]any{"to": "DELIVERED"}).Code)
+	rec = transition(t, h, b.ID.String(), pmID, map[string]any{"to": "COMPLETED", "completion": "MET"})
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	from := time.Now().Add(-time.Hour)
+	to := time.Now().Add(time.Hour)
+	require.Equal(t, http.StatusOK, settle(t, h, stewardID, from, to).Code)
+
+	// The detail endpoint keeps the score: it is a fact about this work.
+	got := do(t, h, http.MethodGet, "/api/bounties/"+b.ID.String(), pmID, nil)
+	require.Equal(t, http.StatusOK, got.Code)
+	var detail domain.Bounty
+	require.NoError(t, json.Unmarshal(got.Body.Bytes(), &detail))
+	require.NotNil(t, detail.SettledScore, "the detail endpoint must keep the score")
+	require.NotNil(t, detail.SettledAt)
+
+	// The feed must not carry the score anywhere, not even as a null field.
+	feedRec := do(t, h, http.MethodGet, "/api/works", pmID, nil)
+	require.Equal(t, http.StatusOK, feedRec.Code)
+	require.NotContains(t, feedRec.Body.String(), "settled_score", "the feed response must carry no score at all")
+	require.NotContains(t, feedRec.Body.String(), "settled_at")
+	var feed []api.WorkView
+	require.NoError(t, json.Unmarshal(feedRec.Body.Bytes(), &feed))
+	feedWork := findWork(feed, b.ID)
+	require.NotNil(t, feedWork, "the completed work must still appear in the feed")
+	require.Nil(t, feedWork.Bounty.SettledScore)
+	require.Nil(t, feedWork.Bounty.SettledAt)
+
+	// Same for the portfolio: engDID holds a confirmed CO_DELIVER credit on
+	// this work.
+	portRec := do(t, h, http.MethodGet, "/api/users/"+engDID+"/portfolio", pmID, nil)
+	require.Equal(t, http.StatusOK, portRec.Code)
+	require.NotContains(t, portRec.Body.String(), "settled_score", "the portfolio response must carry no score at all")
+	var portfolio []api.WorkView
+	require.NoError(t, json.Unmarshal(portRec.Body.Bytes(), &portfolio))
+	portWork := findWork(portfolio, b.ID)
+	require.NotNil(t, portWork, "the work must still appear in the portfolio")
+	require.Nil(t, portWork.Bounty.SettledScore)
+	require.Nil(t, portWork.Bounty.SettledAt)
 }

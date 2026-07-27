@@ -41,9 +41,14 @@ type BountyFilter struct {
 	SponsorID          *uuid.UUID
 	OrderByCompletedAt bool
 
-	// CompletedFrom and CompletedTo bound completed_at inclusively. Both nil
-	// means unbounded. This backs settlement (spec §7.2's "settle a period"):
-	// scanning every terminal bounty whose completed_at falls in a range.
+	// CompletedFrom and CompletedTo bound completed_at as the half-open
+	// interval [CompletedFrom, CompletedTo): CompletedFrom is inclusive,
+	// CompletedTo is exclusive. Both nil means unbounded. This backs
+	// settlement (spec §7.2's "settle a period"): scanning every terminal
+	// bounty whose completed_at falls in a range. Half-open, not inclusive at
+	// both ends, so that two adjacent periods (e.g. back-to-back months) do
+	// not both claim the boundary instant — a bounty completed at exactly
+	// that instant would otherwise be a candidate in both runs.
 	CompletedFrom *time.Time
 	CompletedTo   *time.Time
 
@@ -193,7 +198,7 @@ func (s *BountyStore) List(ctx context.Context, f BountyFilter) ([]domain.Bounty
 		add("completed_at >= $%d", *f.CompletedFrom)
 	}
 	if f.CompletedTo != nil {
-		add("completed_at <= $%d", *f.CompletedTo)
+		add("completed_at < $%d", *f.CompletedTo)
 	}
 	if f.Viewer != nil && !f.Viewer.IsSteward {
 		// A DRAFT row is included only when the viewer is its sponsor; every

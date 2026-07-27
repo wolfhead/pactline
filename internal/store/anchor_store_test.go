@@ -58,9 +58,14 @@ func TestAnchorDeleteMissingReturnsNotFound(t *testing.T) {
 	require.ErrorIs(t, err, domain.ErrNotFound)
 }
 
-// TestAnchorListFiltersByDimensionAndLevel plants a decoy at a different
-// dimension/level so the filter's WHERE clause is actually exercised, not
-// merely a single-row fixture that would pass even with the filter deleted.
+// TestAnchorListFiltersByDimensionAndLevel plants two decoys: one differing
+// on both dimension and level, and one differing on level ALONE (same
+// dimension, VALUE/B vs the target's VALUE/A). The dimension+level-differing
+// decoy alone is not discriminating — deleting the Level clause from
+// AnchorStore.List's WHERE and keeping only the Dimension filter would still
+// return exactly the target row and pass, since the other decoy differs on
+// dimension too. The same-dimension decoy closes that gap: it is only
+// excluded if the Level filter is actually applied.
 func TestAnchorListFiltersByDimensionAndLevel(t *testing.T) {
 	db := newTestDB(t)
 	bs, as := store.NewBountyStore(db), store.NewAnchorStore(db)
@@ -72,6 +77,9 @@ func TestAnchorListFiltersByDimensionAndLevel(t *testing.T) {
 	b2, err := bs.Create(ctx, newBounty(userPM))
 	require.NoError(t, err)
 	cleanupBounties(t, db, b2.ID)
+	b3, err := bs.Create(ctx, newBounty(userPM))
+	require.NoError(t, err)
+	cleanupBounties(t, db, b3.ID)
 
 	target, err := as.Create(ctx, domain.AnchorExample{
 		Dimension: domain.AnchorDimensionValue, Level: "A", BountyID: b1.ID,
@@ -79,6 +87,11 @@ func TestAnchorListFiltersByDimensionAndLevel(t *testing.T) {
 	require.NoError(t, err)
 	_, err = as.Create(ctx, domain.AnchorExample{
 		Dimension: domain.AnchorDimensionDifficulty, Level: "L", BountyID: b2.ID,
+	})
+	require.NoError(t, err)
+	// Decoy differing on level alone: same VALUE dimension as target, level B.
+	_, err = as.Create(ctx, domain.AnchorExample{
+		Dimension: domain.AnchorDimensionValue, Level: "B", BountyID: b3.ID,
 	})
 	require.NoError(t, err)
 

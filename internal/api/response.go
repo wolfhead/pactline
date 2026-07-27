@@ -36,7 +36,8 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		errors.Is(err, domain.ErrInvalidCompletion),
 		errors.Is(err, domain.ErrInvalidAnchorDimension),
 		errors.Is(err, domain.ErrInvalidAnchorLevel),
-		errors.Is(err, domain.ErrQuarterRequired):
+		errors.Is(err, domain.ErrQuarterRequired),
+		errors.Is(err, domain.ErrInvalidQuarterFormat):
 		status = http.StatusBadRequest
 	case errors.Is(err, domain.ErrNotFound):
 		status = http.StatusNotFound
@@ -53,7 +54,8 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		errors.Is(err, domain.ErrValueLevelLocked),
 		errors.Is(err, domain.ErrAlreadySettled),
 		errors.Is(err, domain.ErrNotSettled),
-		errors.Is(err, domain.ErrUnscorable):
+		errors.Is(err, domain.ErrUnscorable),
+		errors.Is(err, domain.ErrDifficultySettled):
 		status = http.StatusConflict
 	}
 

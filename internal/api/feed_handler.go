@@ -152,6 +152,26 @@ func (h *feedHandler) decorate(ctx context.Context, list []domain.Bounty) ([]Wor
 		sort.SliceStable(views, func(i, j int) bool {
 			return creditRoleOrder(views[i].Credit.Role) < creditRoleOrder(views[j].Credit.Role)
 		})
+
+		// I4 / build ledger promise: a settled score appears on the work's
+		// own detail page (GET /api/bounties/{id}) and NOWHERE else — in
+		// particular not here, at the feed view, which is exactly the
+		// comment the ledger said belonged at this call site. decorate()
+		// backs both GET /api/works (the public feed) and
+		// GET /api/users/{id}/portfolio (one named person's works, each
+		// carrying a score) — the latter is a per-person total one `reduce`
+		// away, and the former is the one page every visitor sees, which is
+		// precisely the shape a leaderboard would take if this were left in.
+		// domain.Bounty.SettledScore/SettledAt are plain fields with `json:
+		// "...,omitempty"` tags, so nil-ing them on this local copy (not the
+		// caller's b, and not the stored row) is enough to omit them from the
+		// JSON this WorkView serialises to — GET /api/bounties/{id} is
+		// unaffected because it serialises domain.Bounty directly, never
+		// through WorkView. Do not "fix" this by adding them back: nothing in
+		// this codebase currently sums or orders by score, and that absence
+		// is deliberate, not an oversight to complete.
+		b.SettledScore = nil
+		b.SettledAt = nil
 		out = append(out, WorkView{Bounty: b, Credits: views})
 	}
 	return out, nil

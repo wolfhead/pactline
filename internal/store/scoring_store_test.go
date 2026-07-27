@@ -185,6 +185,44 @@ func TestUpdateNeverTouchesSettledSnapshot(t *testing.T) {
 	require.NotNil(t, updated.SettledAt, "Update must not be able to touch settled_at")
 }
 
+// TestSettleReturnsGenuineErrorDistinctFromAlreadySettled is the store-level
+// half of the I1 fix's proof: a real Settle failure is possible and is NOT
+// domain.ErrAlreadySettled. Settle's only other failure mode (the row exists
+// but settled_at is already non-null) is translated from pgx.ErrNoRows into
+// domain.ErrAlreadySettled specifically — everything else must come back as
+// itself. A cancelled context is used here as a deterministic, non-flaky way
+// to force a real query failure without needing fault-injection machinery the
+// store layer has no seam for; see
+// internal/api/settlement_classify_test.go's
+// TestIsAlreadySettledErrorClassifiesSettleFailures for the complementary
+// proof that the settlement handler's classification of this kind of error is
+// correct.
+func TestSettleReturnsGenuineErrorDistinctFromAlreadySettled(t *testing.T) {
+	db := newTestDB(t)
+	s := store.NewBountyStore(db)
+	ctx := context.Background()
+
+	b := newBounty(userPM)
+	b.Status = domain.StatusCompleted
+	created, err := s.Create(ctx, b)
+	require.NoError(t, err)
+	cleanupBounties(t, db, created.ID)
+
+	cancelledCtx, cancel := context.WithCancel(ctx)
+	cancel()
+
+	_, err = s.Settle(cancelledCtx, created.ID, 10, time.Now().UTC())
+	require.Error(t, err, "a cancelled context must fail the write")
+	require.NotErrorIs(t, err, domain.ErrAlreadySettled,
+		"a genuine failure (here: context cancellation) must not be misreported as already-settled")
+
+	// The row was never actually settled by the failed attempt above.
+	got, err := s.GetByID(ctx, created.ID)
+	require.NoError(t, err)
+	require.Nil(t, got.SettledScore)
+	require.Nil(t, got.SettledAt)
+}
+
 // TestListFiltersByCompletedAtRange pins the CompletedFrom/CompletedTo
 // filter that backs settlement's "settle a period" scan.
 func TestListFiltersByCompletedAtRange(t *testing.T) {
@@ -225,4 +263,46 @@ func TestListFiltersByCompletedAtRange(t *testing.T) {
 	}
 	require.Contains(t, ids, inID)
 	require.Len(t, got, 1, "only the bounty completed inside [from, to] must be returned")
+}
+
+// TestCompletedAtRangeIsHalfOpenAtTo pins the minor fix: the settlement
+// period is half-open [from, to), not inclusive at both ends. A bounty
+// completed at exactly the `to` instant must be excluded — otherwise two
+// back-to-back settlement runs (this month's [m1, m2) and next month's
+// [m2, m3)) would both treat the boundary instant as their own, making it a
+// candidate for both. A bounty completed exactly at `from` must still be
+// included: only the upper bound is exclusive.
+func TestCompletedAtRangeIsHalfOpenAtTo(t *testing.T) {
+	db := newTestDB(t)
+	s := store.NewBountyStore(db)
+	ctx := context.Background()
+
+	from := time.Now().UTC().Add(-time.Hour)
+	to := time.Now().UTC()
+
+	mkCompleted := func(completedAt time.Time) uuid.UUID {
+		b := newBounty(userPM)
+		b.Status = domain.StatusCompleted
+		b.CompletedAt = &completedAt
+		created, err := s.Create(ctx, b)
+		require.NoError(t, err)
+		cleanupBounties(t, db, created.ID)
+		return created.ID
+	}
+
+	atFrom := mkCompleted(from)
+	atTo := mkCompleted(to)
+
+	got, err := s.List(ctx, store.BountyFilter{
+		Statuses:      []domain.Status{domain.StatusCompleted},
+		CompletedFrom: &from,
+		CompletedTo:   &to,
+	})
+	require.NoError(t, err)
+	ids := make([]uuid.UUID, len(got))
+	for i, b := range got {
+		ids[i] = b.ID
+	}
+	require.Contains(t, ids, atFrom, "completed exactly at `from` must be included: the lower bound is inclusive")
+	require.NotContains(t, ids, atTo, "completed exactly at `to` must be excluded: the upper bound is exclusive")
 }

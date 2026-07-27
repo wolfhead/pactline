@@ -1,10 +1,20 @@
 package domain
 
 import (
+	"regexp"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// quarterFormat is the expected shape of a calibration's Quarter label:
+// four-digit year, literal "Q", one digit 1-4 — e.g. "2026Q3".
+var quarterFormat = regexp.MustCompile(`^\d{4}Q[1-4]$`)
+
+// IsValidQuarter reports whether q matches the expected YYYYQn shape.
+func IsValidQuarter(q string) bool {
+	return quarterFormat.MatchString(q)
+}
 
 // Calibration is spec §4.6's quarterly value-versus-reality correction. It is
 // stored as its own row rather than mutated onto the bounty: the settlement
@@ -24,11 +34,20 @@ import (
 // stored, not recomputed on read, for the same reason a settlement snapshot
 // is stored: a calibration is itself a historical record and must not drift
 // under a later constant change either.
+//
+// OriginalScore is copied from the bounty's SettledScore at calibration time
+// (I3). Without it, the row only had one side of the comparison a reader
+// actually needs — settled-then versus calibrated-now — and a caller would
+// have to go re-fetch the bounty and hope its (mutable-over-time, non-
+// snapshotted) SettledScore field still matched what was true when this
+// calibration was recorded. Storing it here makes each calibration row a
+// self-contained before/after, exactly like SettledScore/OriginalValue.
 type Calibration struct {
 	ID              uuid.UUID  `json:"id"`
 	BountyID        uuid.UUID  `json:"bounty_id"`
 	Quarter         string     `json:"quarter"`
 	OriginalValue   ValueLevel `json:"original_value"`
+	OriginalScore   float64    `json:"original_score"`
 	CalibratedValue ValueLevel `json:"calibrated_value"`
 	CalibratedScore float64    `json:"calibrated_score"`
 	Note            string     `json:"note,omitempty"`
@@ -48,6 +67,9 @@ func ValidateCalibration(c Calibration) error {
 	}
 	if c.Quarter == "" {
 		return ErrQuarterRequired
+	}
+	if !IsValidQuarter(c.Quarter) {
+		return ErrInvalidQuarterFormat
 	}
 	return nil
 }

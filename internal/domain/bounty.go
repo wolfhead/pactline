@@ -238,10 +238,26 @@ func CanClaim(u User, b Bounty) error {
 }
 
 // CanSetValueLevel reports whether the user may set or amend the bounty's
-// value level. Per spec §6.1 this is the sponsor's call (or a steward's),
-// given "when opening, and amendable while the bounty is still open" —
-// enforced here as the DRAFT/OPEN window. Once claimed, the value is locked
-// in: it is what the deliverer committed against.
+// value level through the dedicated POST /api/bounties/{id}/value-level
+// channel. Per spec §6.1, opening/editing a bounty (which includes setting
+// its value level) is the sponsor's call, or a steward's — but §6.1 names no
+// window for it. The DRAFT/OPEN restriction below is NOT from the spec: an
+// earlier version of this comment claimed it was ("when opening, and
+// amendable while the bounty is still open" — spec §6.1), and that sentence
+// does not appear anywhere in §6.1. It was a fabricated citation and has been
+// removed.
+//
+// The window is kept here anyway, as a deliberate implementation choice
+// independent of the spec: "the deliverer committed against this value" is a
+// reasonable argument for locking the sponsor's own channel once a bounty is
+// claimed. But per §2/§6.2, this system does not otherwise gate on strong
+// state-machine checks, and a lock with no escape hatch at all made every
+// terminal bounty in the archive permanently unscorable — the STEWARD side of
+// this gate does NOT apply: a steward corrects a value level through the
+// amend channel (bountyHandler.amend) regardless of status, including on
+// settled work. That is not inventing a grade; it is recording one a human
+// (the pricing group) actually decided, which is the opposite of the
+// "never default a level" failure this lock exists to prevent.
 func CanSetValueLevel(u User, b Bounty) error {
 	if !CanEdit(u, b) {
 		return ErrForbidden
@@ -254,12 +270,25 @@ func CanSetValueLevel(u User, b Bounty) error {
 
 // CanSetDifficulty reports whether the user may set the bounty's difficulty
 // level. Deliberately NOT the sponsor's call, even for their own bounty — see
-// Difficulty's doc comment. Only a TECH_LEAD or STEWARD may set it.
-func CanSetDifficulty(u User) error {
-	if u.HasRole(UserRoleTechLead) || u.HasRole(UserRoleSteward) {
-		return nil
+// Difficulty's doc comment. Only a TECH_LEAD or STEWARD may set it, and only
+// before the bounty has been settled (I2): the settlement snapshot itself is
+// protected structurally (BountyStore.Update never writes settled_score or
+// settled_at), but the displayed difficulty is one of the inputs that
+// produced that snapshot, and anchor_examples pins level precedent to
+// specific bounty ids. Rewriting the difficulty after settlement would let
+// the displayed grade silently diverge from what actually produced the score
+// and would silently corrupt the precedent an anchor entry exists to
+// preserve. Grading late — any time before settlement, often in a batch — is
+// legitimate and stays unrestricted; this only closes the door after
+// settlement, not before.
+func CanSetDifficulty(u User, b Bounty) error {
+	if !u.HasRole(UserRoleTechLead) && !u.HasRole(UserRoleSteward) {
+		return ErrForbidden
 	}
-	return ErrForbidden
+	if b.SettledAt != nil {
+		return ErrDifficultySettled
+	}
+	return nil
 }
 
 // CanNominate reports whether the user may name credits on this bounty. Only

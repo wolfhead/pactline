@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"testing"
+	"time"
 
 	"bountyboard/internal/domain"
 
@@ -191,12 +192,33 @@ func TestCanSetDifficulty(t *testing.T) {
 	sponsorTechLead := domain.User{ID: uuid.New(), Roles: []domain.UserRole{domain.UserRoleSponsor, domain.UserRoleTechLead}}
 	steward := domain.User{ID: uuid.New(), Roles: []domain.UserRole{domain.UserRoleSteward}}
 
-	require.ErrorIs(t, domain.CanSetDifficulty(sponsor), domain.ErrForbidden,
+	unsettled := domain.Bounty{}
+
+	require.ErrorIs(t, domain.CanSetDifficulty(sponsor, unsettled), domain.ErrForbidden,
 		"a sponsor, even the bounty's own sponsor, may never set difficulty")
-	require.NoError(t, domain.CanSetDifficulty(techLead))
-	require.NoError(t, domain.CanSetDifficulty(sponsorTechLead),
+	require.NoError(t, domain.CanSetDifficulty(techLead, unsettled))
+	require.NoError(t, domain.CanSetDifficulty(sponsorTechLead, unsettled),
 		"holding TECH_LEAD alongside SPONSOR still grants the capability, via the TECH_LEAD role")
-	require.NoError(t, domain.CanSetDifficulty(steward))
+	require.NoError(t, domain.CanSetDifficulty(steward, unsettled))
+}
+
+// TestCanSetDifficultyRefusedOnceSettled pins I2: a settled bounty's
+// difficulty may never be rewritten, for a TECH_LEAD or a STEWARD alike —
+// there is no role that escapes this lock, unlike CanSetValueLevel's
+// DRAFT/OPEN window (which the steward correction channel does bypass, on
+// purpose — see CanSetValueLevel's doc comment). anchor_examples pins level
+// precedent to specific bounty ids, so re-grading a settled work would
+// silently rewrite the precedent an anchor entry exists to stabilise.
+func TestCanSetDifficultyRefusedOnceSettled(t *testing.T) {
+	techLead := domain.User{ID: uuid.New(), Roles: []domain.UserRole{domain.UserRoleTechLead}}
+	steward := domain.User{ID: uuid.New(), Roles: []domain.UserRole{domain.UserRoleSteward}}
+
+	settledAt := time.Now().UTC()
+	settled := domain.Bounty{SettledAt: &settledAt}
+
+	require.ErrorIs(t, domain.CanSetDifficulty(techLead, settled), domain.ErrDifficultySettled)
+	require.ErrorIs(t, domain.CanSetDifficulty(steward, settled), domain.ErrDifficultySettled,
+		"even the steward's correction channel must not be able to rewrite difficulty once settled")
 }
 
 func TestIsValidValueLevelDifficultyCompletion(t *testing.T) {

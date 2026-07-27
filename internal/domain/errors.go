@@ -58,4 +58,13 @@ var (
 	// ErrQuarterRequired means a calibration was submitted without a quarter
 	// label.
 	ErrQuarterRequired = errors.New("quarter is required")
+	// ErrInvalidQuarterFormat means a calibration's quarter label does not
+	// match the expected YYYYQn shape (e.g. "2026Q3").
+	ErrInvalidQuarterFormat = errors.New("quarter must be in YYYYQn format, e.g. 2026Q3")
+	// ErrDifficultySettled means a difficulty change was attempted on a
+	// bounty that has already been settled (I2). The settlement snapshot
+	// survives regardless, but anchor_examples pins precedent to bounty ids,
+	// and letting the displayed difficulty drift from what actually produced
+	// the settled score would silently corrupt that precedent list.
+	ErrDifficultySettled = errors.New("difficulty cannot be changed once the bounty has been settled")
 )

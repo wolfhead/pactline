@@ -50,6 +50,16 @@ func (h *calibrationHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate the calibrated value before computing anything from it (minor
+	// fix): a bad level is a client input error (400), not a state conflict
+	// (409). Previously this fell through to scoring.ScoreWithValueLevel,
+	// whose failure wraps domain.ErrUnscorable and maps to 409 — a caller who
+	// mistyped a value level got the wrong signal about what went wrong.
+	if !domain.IsValidValueLevel(req.CalibratedValue) {
+		writeJSON(w, http.StatusBadRequest, errorBody{Error: "calibrated_value is not a known value: " + string(req.CalibratedValue)})
+		return
+	}
+
 	b, err := h.bounties.GetByID(r.Context(), bountyID)
 	if err != nil {
 		writeError(w, r, err)
@@ -69,10 +79,20 @@ func (h *calibrationHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// original_score is read from the bounty's own settlement snapshot, same
+	// as original_value — never accepted from the request body. b.SettledAt
+	// != nil (checked above) guarantees b.SettledScore is non-nil: Settle
+	// always writes both columns together.
+	var originalScore float64
+	if b.SettledScore != nil {
+		originalScore = *b.SettledScore
+	}
+
 	c := domain.Calibration{
 		BountyID:        bountyID,
 		Quarter:         req.Quarter,
 		OriginalValue:   b.ValueLevel,
+		OriginalScore:   originalScore,
 		CalibratedValue: req.CalibratedValue,
 		CalibratedScore: calibratedScore,
 		Note:            req.Note,
@@ -88,6 +108,18 @@ func (h *calibrationHandler) create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
+	// Minor fix: the calibration store's own log line carries the calibration
+	// row's fields, but not the difficulty/completion that also fed
+	// calibratedScore's computation (scoring.ScoreWithValueLevel uses the
+	// bounty's difficulty, completion and commitment alongside the calibrated
+	// value). Without those, a disputed calibrated score cannot be
+	// re-derived from logs alone — settlement's own logging already carries
+	// its full input state; this brings calibration up to the same standard.
+	slog.Info("calibration input state",
+		"calibration_id", out.ID, "bounty_id", b.ID,
+		"difficulty", b.Difficulty, "completion", b.Completion, "commitment", b.Commitment,
+		"original_value", out.OriginalValue, "original_score", out.OriginalScore,
+		"calibrated_value", out.CalibratedValue, "calibrated_score", out.CalibratedScore)
 	writeJSON(w, http.StatusCreated, out)
 }
 

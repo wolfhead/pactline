@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -83,15 +84,18 @@ func (h *bountyHandler) setDifficulty(w http.ResponseWriter, r *http.Request) {
 	}
 
 	me := CurrentUser(r)
-	if err := domain.CanSetDifficulty(me); err != nil {
-		slog.Warn("set difficulty denied",
-			"bounty_id", id, "actor_id", me.ID, "actor_roles", me.Roles, "error", err)
+	b, err := h.bounties.GetByID(r.Context(), id)
+	if err != nil {
 		writeError(w, r, err)
 		return
 	}
-
-	b, err := h.bounties.GetByID(r.Context(), id)
-	if err != nil {
+	// CanSetDifficulty needs the bounty (not just the actor) since I2: it also
+	// refuses once the bounty has been settled, so the fetch above must
+	// happen before this check now, not after it.
+	if err := domain.CanSetDifficulty(me, b); err != nil {
+		slog.Warn("set difficulty denied",
+			"bounty_id", id, "actor_id", me.ID, "actor_roles", me.Roles,
+			"settled_at", b.SettledAt, "error", err)
 		writeError(w, r, err)
 		return
 	}
@@ -134,17 +138,33 @@ type unscorableItem struct {
 	Reason   string    `json:"reason"`
 }
 
+// failedItem is a bounty that was a candidate for settlement but whose write
+// genuinely failed for a reason other than "someone already settled it" (I1)
+// — e.g. an infrastructure or database error. This bucket exists specifically
+// so these are never folded into AlreadySettledCount, which is the benign,
+// expected outcome of a re-run.
+type failedItem struct {
+	BountyID uuid.UUID `json:"bounty_id"`
+	Title    string    `json:"title"`
+	Reason   string    `json:"reason"`
+}
+
 type settlementResponse struct {
 	Settled             []settledItem    `json:"settled"`
 	SettledCount        int              `json:"settled_count"`
 	AlreadySettledCount int              `json:"already_settled_count"`
 	Unscorable          []unscorableItem `json:"unscorable"`
 	UnscorableCount     int              `json:"unscorable_count"`
+	Failed              []failedItem     `json:"failed"`
+	FailedCount         int              `json:"failed_count"`
 }
 
 // settle is the steward-invoked endpoint required by spec §7.2 and the task
-// brief's §3: for every terminal bounty whose completed_at falls in
-// [from, to], compute and snapshot its score exactly once.
+// brief's §3: for every terminal bounty whose completed_at falls in the
+// half-open period [from, to), compute and snapshot its score exactly once.
+// The period is half-open, not inclusive at both ends, so that adjacent
+// settlement runs (e.g. back-to-back months) do not both claim the boundary
+// instant.
 //
 // Already-settled records are skipped and counted, not recomputed — spec
 // §7.2 requires reading a settled score to always read the snapshot, so a
@@ -153,6 +173,15 @@ type settlementResponse struct {
 // logged with its full input state, and reported in the response — never
 // given an invented default, since a grade nobody gave would be fiction in
 // the archive.
+//
+// A genuine write failure (I1) is its own bucket (Failed/FailedCount), never
+// folded into AlreadySettledCount: only a Settle error satisfying
+// errors.Is(err, domain.ErrAlreadySettled) — meaning the database's own
+// "WHERE settled_at IS NULL" guard found nothing to update because another
+// run already settled this row — belongs in that count. Anything else (a
+// dropped connection, a constraint violation, a context cancellation) is a
+// real failure the steward must be told about, not a silently-swallowed skip
+// that makes an infrastructure outage look like ordinary idempotency.
 func (h *settlementHandler) settle(w http.ResponseWriter, r *http.Request) {
 	me := CurrentUser(r)
 	if !me.HasRole(domain.UserRoleSteward) {
@@ -183,7 +212,7 @@ func (h *settlementHandler) settle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := settlementResponse{Settled: []settledItem{}, Unscorable: []unscorableItem{}}
+	resp := settlementResponse{Settled: []settledItem{}, Unscorable: []unscorableItem{}, Failed: []failedItem{}}
 	settledAt := time.Now().UTC()
 	for _, b := range list {
 		if b.SettledAt != nil {
@@ -206,11 +235,24 @@ func (h *settlementHandler) settle(w http.ResponseWriter, r *http.Request) {
 
 		updated, err := h.bounties.Settle(r.Context(), b.ID, score, settledAt)
 		if err != nil {
-			// A concurrent settlement run beat this one to the same row —
-			// surfaced loudly rather than silently dropped, since it changes
-			// the already_settled_count the caller sees.
+			if isAlreadySettledError(err) {
+				// A concurrent settlement run beat this one to the same row.
+				// This is the one genuinely benign Settle failure — the
+				// database's own "WHERE settled_at IS NULL" guard is what
+				// produced it — so it belongs in AlreadySettledCount exactly
+				// like the pre-check skip above.
+				slog.Info("settlement skip: already settled (race)", "bounty_id", b.ID, "error", err)
+				resp.AlreadySettledCount++
+				continue
+			}
+			// I1: anything else is a real failure — a dropped connection, a
+			// constraint violation, a cancelled context — and must not be
+			// folded into already_settled_count. That count is the report a
+			// steward reads to confirm a re-run is safe; hiding an
+			// infrastructure failure inside it would make the report false.
 			slog.Error("settlement write failed", "bounty_id", b.ID, "error", err)
-			resp.AlreadySettledCount++
+			resp.Failed = append(resp.Failed, failedItem{BountyID: b.ID, Title: b.Title, Reason: err.Error()})
+			resp.FailedCount++
 			continue
 		}
 		resp.Settled = append(resp.Settled, settledItem{BountyID: updated.ID, Title: updated.Title, Score: score})
@@ -224,6 +266,22 @@ func (h *settlementHandler) settle(w http.ResponseWriter, r *http.Request) {
 	slog.Info("settlement run complete",
 		"actor_id", me.ID, "from", req.From, "to", req.To,
 		"settled_count", resp.SettledCount, "already_settled_count", resp.AlreadySettledCount,
-		"unscorable_count", resp.UnscorableCount)
+		"unscorable_count", resp.UnscorableCount, "failed_count", resp.FailedCount)
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// isAlreadySettledError is the I1 classification: the ONLY Settle failure
+// that belongs in AlreadySettledCount is one that satisfies
+// errors.Is(err, domain.ErrAlreadySettled) — the database's own
+// "WHERE settled_at IS NULL" guard finding nothing to update because another
+// run already settled the row (BountyStore.Settle translates the resulting
+// pgx.ErrNoRows into domain.ErrAlreadySettled itself). Every other error
+// (a dropped connection, a constraint violation, a cancelled context) must
+// fall through to the Failed bucket instead. Pulled out as its own function
+// so the branch this settlement run's report correctness hinges on can be
+// pinned by a direct unit test against synthetic errors, independent of
+// whether a real infrastructure failure can be reproduced deterministically
+// in an integration test.
+func isAlreadySettledError(err error) bool {
+	return errors.Is(err, domain.ErrAlreadySettled)
 }
