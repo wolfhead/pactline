@@ -33,11 +33,12 @@ test('a search that matches nothing shows guidance distinct from "no tasks at al
   await page.getByLabel('搜索任务').fill(`nonexistent-${runTag}`)
 
   await expect(page.getByText(/没有符合筛选条件的任务/)).toBeVisible()
-  // Distinct from the genuinely-empty-table message: "press C" would be
-  // misleading here, since a task created via C wouldn't itself satisfy the
-  // still-active search — a user could create one, watch it not appear, and
-  // think capture is broken.
-  await expect(page.getByText('没有任务 — 按 C 创建一个吧')).not.toBeVisible()
+  // Distinct from the genuinely-empty-table message: pointing at the capture
+  // row would be misleading here, since a task created there wouldn't itself
+  // satisfy the still-active search — a user could create one, watch it not
+  // appear, and think capture is broken. (The copy no longer mentions the C
+  // shortcut, which the list page no longer has.)
+  await expect(page.getByText('没有任务 — 在上面输入标题就能创建一个')).not.toBeVisible()
 
   // Clearing resets the search and the matching task reappears.
   await page.getByRole('button', { name: '清除筛选条件' }).click()

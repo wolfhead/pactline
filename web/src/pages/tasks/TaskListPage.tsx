@@ -229,10 +229,22 @@ export default function TaskListPage() {
   const detailReplacesList = tier === 'phone' && selected !== null
   const detailIsSheet = (tier === 'md' || tier === 'lg') && selected !== null
 
+  // The page's own copy of the open task, handed down so the seam between
+  // the two views runs both ways: `onPatched` carries detail → list,
+  // `syncedTask` carries list → detail. At xl the selected row is right
+  // beside the open detail with every control live, so a status changed
+  // from the row has to move the detail too — otherwise the two panes show
+  // different values for the same task, side by side, which is the exact
+  // divergence this page exists to prevent. `undefined` when the task isn't
+  // in the current page/filter: TaskDetail then simply has nothing to sync
+  // against and keeps its own fetched copy.
+  const selectedTask = selected === null ? null : (tasks.find((t) => t.number === selected) ?? null)
+
   const detailPane = selected !== null && (
     <TaskDetail
       number={selected}
       users={users}
+      syncedTask={selectedTask}
       onPatched={handlePatched}
       // At xl the detail is a column, not something layered over the list;
       // there is nothing to close, so no close affordance is offered.

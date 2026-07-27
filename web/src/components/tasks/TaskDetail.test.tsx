@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import TaskDetail from './TaskDetail'
 import * as tasksApi from '@/api/tasks'
+import type { Task } from '@/task-types'
 
 vi.mock('@/api/tasks')
 
@@ -11,6 +12,7 @@ vi.mock('@/api/tasks')
 // identical workaround in TaskRow.test.tsx / StatusControl.test.tsx.
 afterEach(() => {
   cleanup()
+  vi.clearAllMocks()
 })
 
 const USERS = [{ id: 'u1', name: '张沁', email: 'a@x.com' }]
@@ -77,5 +79,98 @@ describe('TaskDetail', () => {
     renderDetail({ onClose: () => {} })
     await screen.findByText('修复竞价超时导致的丢量')
     expect(screen.getByRole('button', { name: '关闭' })).toBeVisible()
+  })
+
+  // At xl the `number` prop changes in place — clicking another row in the
+  // list column never remounts TaskDetail — so anything resolving from the
+  // task that just left has to be dropped rather than written into state.
+  describe('when `number` changes without a remount', () => {
+    const OTHER = {
+      ...TASK,
+      id: 'id-143',
+      number: 143,
+      title: '另一条任务',
+      status: 'todo' as const,
+    }
+
+    beforeEach(() => {
+      vi.mocked(tasksApi.getTask).mockImplementation((n: number) =>
+        Promise.resolve(n === OTHER.number ? OTHER : TASK),
+      )
+    })
+
+    it('drops a patch response that belongs to the task that just left', async () => {
+      const onPatched = vi.fn()
+      let resolvePatch!: (task: Task) => void
+      vi.mocked(tasksApi.updateTask).mockReturnValue(
+        new Promise((resolve) => {
+          resolvePatch = resolve
+        }),
+      )
+
+      const { rerender } = render(
+        <MemoryRouter>
+          <TaskDetail number={142} users={USERS} onPatched={onPatched} />
+        </MemoryRouter>,
+      )
+      await screen.findByText('修复竞价超时导致的丢量')
+
+      // Commit a change on #142, leaving the request in flight.
+      fireEvent.click(screen.getByRole('combobox', { name: '状态' }))
+      fireEvent.click(await screen.findByRole('option', { name: '已完成' }))
+      expect(vi.mocked(tasksApi.updateTask)).toHaveBeenCalledWith(142, { status: 'done' })
+
+      // Now #143 is selected and loads — same component instance.
+      rerender(
+        <MemoryRouter>
+          <TaskDetail number={143} users={USERS} onPatched={onPatched} />
+        </MemoryRouter>,
+      )
+      await screen.findByText('另一条任务')
+
+      // ... and only then does #142's PATCH come back.
+      resolvePatch({ ...TASK, status: 'done' as const })
+      // onPatched still fires — the list wants the change regardless of
+      // what the detail happens to be showing — and gives a deterministic
+      // point at which the response has definitely been handled.
+      await waitFor(() => expect(onPatched).toHaveBeenCalled())
+
+      // The pane must still be #143's. Writing #142's response here would
+      // put its title, status and comments under the URL /tasks/143 with
+      // nothing left to correct it.
+      expect(screen.getByRole('textbox', { name: '任务标题' })).toHaveValue('另一条任务')
+      expect(screen.getByRole('combobox', { name: '状态' })).toHaveTextContent('待办')
+      expect(screen.queryByText('修复竞价超时导致的丢量')).not.toBeInTheDocument()
+    })
+
+    it('drops the undo toast, so 撤销 cannot restore a task the user has left', async () => {
+      vi.mocked(tasksApi.archiveTask).mockResolvedValue({
+        ...TASK,
+        archived_at: '2026-07-27T00:00:00Z',
+      })
+
+      const { rerender } = render(
+        <MemoryRouter>
+          <TaskDetail number={142} users={USERS} onPatched={() => {}} />
+        </MemoryRouter>,
+      )
+      await screen.findByText('修复竞价超时导致的丢量')
+
+      fireEvent.click(screen.getByRole('button', { name: '归档' }))
+      await screen.findByText('已归档任务。')
+
+      rerender(
+        <MemoryRouter>
+          <TaskDetail number={143} users={USERS} onPatched={() => {}} />
+        </MemoryRouter>,
+      )
+      await screen.findByText('另一条任务')
+
+      // The toast belongs to #142. Left up, it reads as #143's outcome, and
+      // its 撤销 button still closes over restoreTask(142) — one click away
+      // from silently un-archiving a task the user is no longer looking at.
+      expect(screen.queryByText('已归档任务。')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: '撤销' })).not.toBeInTheDocument()
+    })
   })
 })
