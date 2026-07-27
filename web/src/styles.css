@@ -319,3 +319,198 @@ form label { display: grid; gap: var(--sp-1); font-size: var(--fs-sm); color: va
   .credits .role { min-width: 0; }
   form { padding: var(--sp-4); }
 }
+
+/* ==========================================================================
+ * Task product — list, board, detail (Phase 1 core loop).
+ *
+ * Shares every token and control style above (buttons, inputs, .tag, .card,
+ * .board, .meta, .row, .hint, .error) rather than inventing a parallel
+ * vocabulary. What follows is additive: the capture row, inline-editable
+ * fields, pill selects for the fields that must commit on change, the list
+ * grid, board drag affordances, the shortcuts overlay and the undo toast.
+ * ========================================================================== */
+
+/* ---------- capture row ----------
+ * The one row that must never feel like "opening a form": no border-heavy
+ * form chrome, just a plain input with a quiet leading mark. Sits directly
+ * above the list, always focused-ready.
+ */
+.quick-add {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  margin-bottom: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.quick-add:focus-within { border-color: var(--accent); }
+.quick-add-mark { color: var(--text-subtle); font-size: var(--fs-lg); line-height: 1; }
+.quick-add input {
+  flex: 1;
+  border: none;
+  padding: var(--sp-1) 0;
+  background: transparent;
+}
+.quick-add input:hover { border-color: transparent; }
+
+/* ---------- inline-editable fields ----------
+ * Title/description are edited exactly where they're read: borderless
+ * until interacted with, so the page reads as text, not a form, until the
+ * user's cursor is actually in the field.
+ */
+.inline-editable {
+  display: block;
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: var(--sp-1) var(--sp-2);
+  margin: 0 calc(var(--sp-2) * -1);
+}
+.inline-editable:hover { border-color: var(--border); }
+.inline-editable:focus { border-color: var(--accent); background: var(--surface); }
+.task-title-input { font-size: var(--fs-xl); font-weight: 600; letter-spacing: -0.01em; }
+.task-description-input { min-height: 4.5em; line-height: 1.6; }
+
+.task-detail-header { display: flex; align-items: baseline; gap: var(--sp-3); margin-bottom: var(--sp-2); }
+.task-detail-header .task-title-input { flex: 1; }
+
+/* ---------- pill selects ----------
+ * Status/priority/assignee: a plain <select> dressed as a quiet pill so it
+ * reads as a property, not a form field, but keeps full native keyboard
+ * and screen-reader behaviour.
+ */
+.pill-select {
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+  font-size: var(--fs-sm);
+}
+.pill-select:hover { border-color: var(--border-strong); }
+
+/* ---------- task list ---------- */
+.task-list { display: flex; flex-direction: column; }
+.task-row {
+  display: grid;
+  grid-template-columns: 48px 1fr 130px 96px 140px 92px;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-2);
+  border-bottom: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  position: relative;
+}
+.task-row.focused { background: var(--accent-subtle); }
+.task-number { font-variant-numeric: tabular-nums; }
+.task-title { font-weight: 500; }
+.task-title:hover { color: var(--accent); }
+.task-due { font-variant-numeric: tabular-nums; text-align: right; }
+.task-row-error { grid-column: 1 / -1; }
+.load-more { align-self: flex-start; margin-top: var(--sp-3); }
+
+@media (max-width: 640px) {
+  .task-row { grid-template-columns: 32px 1fr; row-gap: var(--sp-1); }
+  .task-due { text-align: left; }
+}
+
+/* ---------- filter bar ---------- */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+  padding-bottom: var(--sp-4);
+  border-bottom: 1px solid var(--border);
+}
+.filter-bar label { display: flex; align-items: center; gap: var(--sp-1); font-size: var(--fs-sm); color: var(--text-muted); }
+.search-input { min-width: 220px; flex: 1 1 220px; }
+.filter-group { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+.filter-chip { background: var(--surface); cursor: pointer; }
+.filter-chip.active { background: var(--accent-subtle); border-color: var(--accent); color: var(--accent); }
+
+.label-manager { font-size: var(--fs-sm); }
+.label-manager summary { cursor: pointer; color: var(--text-muted); }
+.label-manage-list { list-style: none; margin: var(--sp-2) 0; padding: 0; display: grid; gap: var(--sp-1); }
+
+/* ---------- board ---------- */
+.task-board { display: grid; grid-template-columns: repeat(6, minmax(180px, 1fr)); gap: var(--sp-3); overflow-x: auto; }
+.board-column {
+  display: flex;
+  flex-direction: column;
+  min-height: 120px;
+  padding: var(--sp-2);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  transition: background 120ms ease;
+}
+.board-column.drag-over { background: var(--accent-subtle); }
+.board-column h3 { display: flex; justify-content: space-between; font-size: var(--fs-sm); color: var(--text-muted); font-weight: 600; }
+.task-card { cursor: grab; }
+.task-card.focused { border-color: var(--accent); background: var(--accent-subtle); }
+.task-card .pill-select { margin-top: var(--sp-2); }
+
+@media (max-width: 640px) {
+  .task-board { grid-template-columns: minmax(220px, 1fr); grid-auto-flow: column; }
+}
+
+/* ---------- shortcuts overlay ----------
+ * Never traps: click on the backdrop or Escape both close it.
+ */
+.overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.overlay-panel {
+  width: min(420px, 90vw);
+  padding: var(--sp-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+}
+.shortcut-list { display: grid; gap: var(--sp-2); margin: var(--sp-4) 0; }
+.shortcut-item { display: flex; align-items: center; gap: var(--sp-3); }
+.shortcut-item dt { min-width: 64px; }
+.shortcut-item dd { margin: 0; color: var(--text-muted); }
+kbd {
+  display: inline-block;
+  padding: 1px var(--sp-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  font-size: var(--fs-xs);
+  font-family: inherit;
+}
+
+/* ---------- undo toast ----------
+ * Archiving never asks first — it acts immediately and offers this instead.
+ */
+.undo-toast {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin: var(--sp-3) 0;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  font-size: var(--fs-sm);
+}
+
+/* ---------- task detail ---------- */
+.property-panel { display: flex; flex-wrap: wrap; gap: var(--sp-4); margin: var(--sp-4) 0; }
+.property-panel label { display: grid; gap: var(--sp-1); font-size: var(--fs-sm); color: var(--text-muted); }
+.label-picker { display: flex; flex-wrap: wrap; gap: var(--sp-1); margin-bottom: var(--sp-4); }
+.label-picker .filter-chip { cursor: pointer; }
+
+.comment-list { list-style: none; margin: var(--sp-3) 0; padding: 0; display: grid; gap: var(--sp-3); }
+.comment-item { padding: var(--sp-3); border: 1px solid var(--border); border-radius: var(--radius); }
+.comment-body { margin: 0 0 var(--sp-2); width: 100%; }

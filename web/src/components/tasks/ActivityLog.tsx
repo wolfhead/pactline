@@ -1,0 +1,65 @@
+import { useEffect, useMemo, useState } from 'react'
+import { listActivity } from '../../api/tasks'
+import { useIdentity } from '../../identity'
+import type { Task } from '../../task-types'
+import { describeActivity } from './activity-prose'
+import type { Activity } from '../../task-types'
+
+interface ActivityLogProps {
+  task: Task
+}
+
+/** The activity history as readable prose, not a raw field dump — each
+ * entry reads like "王芳 将状态从「待办」改为「进行中」", newest first. */
+export default function ActivityLog({ task }: ActivityLogProps) {
+  const { me, users } = useIdentity()
+  const [activity, setActivity] = useState<Activity[]>([])
+  const [error, setError] = useState('')
+
+  // Fetches whenever the task changes or identity changes, guarded against
+  // out-of-order resolution — mirrors the cancelled-flag idiom in
+  // identity.tsx / WorkFeed.tsx / Board.tsx.
+  useEffect(() => {
+    let cancelled = false
+    listActivity(task.number)
+      .then((loaded) => {
+        if (cancelled) return
+        setActivity(loaded)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setError(String((err as Error).message))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [task.number, me?.id])
+
+  // Assignee/actor activity entries carry bare user UUIDs (see
+  // activity-prose.ts); resolve names from the active-user roster, filling
+  // in the task's own creator/assignee too since a since-deactivated user
+  // still needs their name shown on history they made while active.
+  const userNameById = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const u of users) map[u.id] = u.name
+    map[task.creator.id] = task.creator.name
+    if (task.assignee) map[task.assignee.id] = task.assignee.name
+    return map
+  }, [users, task.creator, task.assignee])
+
+  return (
+    <section className="activity-log">
+      <h3>历史记录</h3>
+      {error && <p className="error">{error}</p>}
+      {activity.length === 0 && !error && <p className="hint">还没有记录。</p>}
+      <ul>
+        {[...activity].reverse().map((a) => (
+          <li key={a.id}>
+            <span>{describeActivity(a, userNameById[a.actor_id] ?? '某用户', userNameById)}</span>
+            <span className="hint"> · {new Date(a.created_at).toLocaleString()}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
