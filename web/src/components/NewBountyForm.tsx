@@ -1,10 +1,16 @@
 import { useState, type FormEvent } from 'react'
 import { apiPost } from '../api/client'
-import type { Bounty, BountyType, Commitment, Visibility } from '../types'
+import { VALUE_LEVELS, VALUE_LEVEL_LABELS, type Bounty, type BountyType, type Commitment, type ValueLevel, type Visibility } from '../types'
 
 /**
- * Opening a bounty states a goal, not a decomposed task list. Value and
- * difficulty levels are absent on purpose — scoring arrives in Phase 2.
+ * Opening a bounty states a goal, not a decomposed task list. Difficulty is
+ * absent on purpose: it is never the sponsor's call, even on their own
+ * bounty (domain.CanSetDifficulty), so it is set only from the bounty detail
+ * page by a TECH_LEAD or STEWARD. Value level IS the sponsor's call
+ * (domain.CanSetValueLevel) and is offered here as optional, exactly
+ * mirroring createBountyRequest's ValueLevel field in
+ * internal/api/bounty_handler.go — leaving it unset now and setting it later
+ * from the detail page (while still DRAFT/OPEN) works just as well.
  */
 export default function NewBountyForm({ onCreated }: { onCreated: () => void }) {
   const [title, setTitle] = useState('')
@@ -15,6 +21,7 @@ export default function NewBountyForm({ onCreated }: { onCreated: () => void }) 
   const [visibility, setVisibility] = useState<Visibility>('PUBLIC')
   const [restriction, setRestriction] = useState('')
   const [tags, setTags] = useState('DSP:1')
+  const [valueLevel, setValueLevel] = useState<ValueLevel | ''>('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -39,11 +46,13 @@ export default function NewBountyForm({ onCreated }: { onCreated: () => void }) 
         visibility,
         restriction: visibility === 'RESTRICTED' ? restriction : '',
         business_lines: parsed.lines,
+        value_level: valueLevel || undefined,
       })
       setTitle('')
       setGoal('')
       setAcceptance('')
       setRestriction('')
+      setValueLevel('')
       onCreated()
     } catch (err) {
       setError(String((err as Error).message))
@@ -74,6 +83,12 @@ export default function NewBountyForm({ onCreated }: { onCreated: () => void }) 
         <select value={visibility} onChange={(e) => setVisibility(e.target.value as Visibility)}>
           <option value="PUBLIC">公开池</option>
           <option value="RESTRICTED">限定池</option>
+        </select>
+        <select value={valueLevel} onChange={(e) => setValueLevel(e.target.value as ValueLevel | '')}>
+          <option value="">价值档(可选)</option>
+          {VALUE_LEVELS.map((v) => (
+            <option key={v} value={v}>{VALUE_LEVEL_LABELS[v]}</option>
+          ))}
         </select>
       </div>
       {visibility === 'RESTRICTED' && (

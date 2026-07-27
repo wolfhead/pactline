@@ -114,4 +114,20 @@ describe('WorkCard', () => {
     expect(within(items[2]).getByText('深度评审')).toBeInTheDocument()
     expect(within(items[2]).getByText('Carol')).toBeInTheDocument()
   })
+
+  it('never renders a settled score, even if one is present on the bounty (a score is a fact about a work, never a person; the feed and every portfolio are exactly where it must not leak)', () => {
+    const work: WorkView = {
+      // The real API (decorate() in internal/api/feed_handler.go) never
+      // sends settled_score/settled_at inside a WorkView at all — but this
+      // guards WorkCard itself, independent of what the backend currently
+      // does, against ever being the component that renders one.
+      bounty: makeBounty({ settled_score: 42, settled_at: '2026-04-01T00:00:00Z' }),
+      credits: [],
+    }
+
+    renderCard(work)
+
+    expect(screen.queryByText(/42/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/排名|排行榜|总分|得分|积分|score/i)).not.toBeInTheDocument()
+  })
 })
