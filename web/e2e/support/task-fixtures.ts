@@ -4,12 +4,7 @@ import * as tasksApi from './tasks-api'
 import { DATABASE_URL } from './config'
 
 /**
- * Fixtures for the task-management e2e specs (10+), parallel to
- * e2e/support/fixtures.ts which the legacy bounty specs use. Kept as a
- * separate file rather than extending the existing one: the two domains
- * have unrelated schemas (tasks/labels/task_comments/task_activity vs
- * bounties/credits) and unrelated cleanup targets, and the brief requires
- * the legacy specs stay untouched.
+ * Fixtures for the task-management e2e specs (10+).
  *
  * Every test here creates its own tasks/labels and must leave the database
  * exactly as it found it. Comments and activity rows cascade-delete with

@@ -4,10 +4,9 @@ import { BACKEND_URL } from './config'
  * Thin Node-side REST client for the task-management API (internal/api/
  * task_handler.go, task_comment_handler.go, task_activity_handler.go,
  * label_handler.go), talking to the Go backend directly on :8080 and
- * bypassing the browser. Mirrors e2e/support/api.ts (the bounty-domain
- * client already used by the legacy specs): setup that doesn't need to be
- * driven through the UI goes through here, so each test's actual browser
- * interaction stays focused on the one behaviour under test.
+ * bypassing the browser: setup that doesn't need to be driven through the
+ * UI goes through here, so each test's actual browser interaction stays
+ * focused on the one behaviour under test.
  */
 
 export type TaskStatus = 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancelled'

@@ -8,8 +8,7 @@ import type { Task, TaskListResponse } from '../../task-types'
 
 // Mocks both modules so apiGet/apiPost/apiPatch resolution and the current
 // identity are fully controllable per test, without touching global fetch,
-// a real backend, or IdentityProvider. Mirrors the pattern established in
-// src/legacy/pages/Board.test.tsx.
+// a real backend, or IdentityProvider.
 vi.mock('../../api/client')
 vi.mock('../../identity')
 
@@ -21,7 +20,7 @@ const mockedUseIdentity = vi.mocked(useIdentity)
 // vitest.config's test block doesn't set `globals: true`, so
 // @testing-library/react's own auto-cleanup never registers; without this, a
 // component rendered by one test stays mounted and pollutes the next test's
-// queries. Mirrors src/legacy/pages/Board.test.tsx.
+// queries.
 afterEach(() => {
   cleanup()
   vi.resetAllMocks()

@@ -9,7 +9,7 @@ import type { Task } from '../../task-types'
 // Mocks both modules so apiGet/apiPatch resolution and the current identity
 // are fully controllable per test, without touching global fetch, a real
 // backend, or IdentityProvider. Mirrors the pattern established in
-// src/legacy/pages/Board.test.tsx and src/pages/tasks/TaskListPage.test.tsx.
+// src/pages/tasks/TaskListPage.test.tsx.
 vi.mock('../../api/client')
 vi.mock('../../identity')
 

@@ -1,8 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react'
-import { IdentityProvider, useIdentity } from './identity'
+import { IdentityProvider, useIdentity, type User } from './identity'
 import { getCurrentUserId } from './api/client'
-import type { User } from './types'
 
 const STORAGE_KEY = 'bountyboard.currentUserId'
 const SEED_PM = '00000000-0000-0000-0000-000000000001'

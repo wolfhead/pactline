@@ -1,9 +1,22 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { apiGet, setCurrentUserId } from './api/client'
-import type { User } from './types'
 
 const SEED_PM = '00000000-0000-0000-0000-000000000001'
 const STORAGE_KEY = 'bountyboard.currentUserId'
+
+// Mirrors domain.User / domain.UserRole (internal/domain/user.go), the
+// account/identity model shared by every part of the product — not part of
+// the retired bounty/credit mechanism, so it stays here rather than in the
+// (now-deleted) legacy types module.
+export type UserRole = 'SPONSOR' | 'ENGINEER' | 'TECH_LEAD' | 'STEWARD'
+
+export interface User {
+  id: string
+  name: string
+  email: string
+  roles: UserRole[]
+  active: boolean
+}
 
 interface IdentityValue {
   me: User | null
