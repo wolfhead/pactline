@@ -1,5 +1,5 @@
-import { forwardRef, useImperativeHandle, useRef } from 'react'
-import { useIdentity } from '../../identity'
+import { Plus } from 'lucide-react'
+import { useIdentity } from '@/identity'
 import {
   PRIORITY_LABELS,
   STATUS_LABELS,
@@ -8,9 +8,13 @@ import {
   type Label,
   type TaskPriority,
   type TaskStatus,
-} from '../../task-types'
+} from '@/task-types'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { cn } from '@/lib/utils'
+import { CONTROL_TRIGGER_CLASS } from './controls/trigger'
 import LabelManager from './LabelManager'
-import QuietSelect from './QuietSelect'
 
 export interface TaskFilters {
   statuses: TaskStatus[]
@@ -19,7 +23,7 @@ export interface TaskFilters {
   labelId: string // '' = any label
   search: string
   sort: string
-  order: 'asc' | 'desc'
+  order: string
 }
 
 export const DEFAULT_FILTERS: TaskFilters = {
@@ -39,11 +43,23 @@ const SORT_OPTIONS: [string, string][] = [
   ['priority', '优先级'],
   ['number', '编号'],
 ]
-const SORT_VALUES = SORT_OPTIONS.map(([v]) => v)
-const SORT_LABELS: Record<string, string> = Object.fromEntries(SORT_OPTIONS)
 
-export interface FilterBarHandle {
-  focusSearch: () => void
+// Radix Select treats "" as "no value" and would fall back to the
+// placeholder instead of showing 所有人 — same reasoning as AssigneeControl's
+// UNASSIGNED sentinel. Never leaves this component: onChange maps it back to
+// '', which is what TaskFilters.assignee's "anyone" state needs.
+const ANY_ASSIGNEE = '__any__'
+
+// Shared shape for the two Popover-based multi-select triggers (状态/优先级),
+// so both sit in the row with the same size as the five row controls
+// (CONTROL_TRIGGER_CLASS) while still showing whether they're narrowing the
+// list — the only cue an always-visible filter row has, since nothing here
+// is hidden behind a single master disclosure anymore.
+function filterTriggerClass(active: boolean) {
+  return cn(
+    CONTROL_TRIGGER_CLASS,
+    active && 'border-accent bg-accent-subtle text-accent',
+  )
 }
 
 interface FilterBarProps {
@@ -51,28 +67,23 @@ interface FilterBarProps {
   onChange: (next: TaskFilters) => void
   labels: Label[]
   onLabelsChanged: (labels: Label[]) => void
+  onRequestCreate: () => void
 }
 
 /** Every filter is independent and additive — toggling one never clears
- * another, since "filters combine" is the whole point of a list view over
- * a fixed dataset.
+ * another, since "filters combine" is the whole point of a list view over a
+ * fixed dataset. Status/priority are Popover + checkbox list (they're the
+ * two multi-value filters); assignee and sort are single-value Selects;
+ * label is a Popover too, since LabelManager's create/rename/delete UI folds
+ * into the bottom of it rather than living behind its own top-level entry.
  *
- * The bar itself reads as one quiet line: search, a "筛选" disclosure
- * (with a count badge — the only sign anything is active), sort, and the
- * label manager. Status/priority chips plus the assignee/label selects
- * used to render unconditionally, spilling across two rows even with
- * nothing active; they now live inside the disclosure and only cost
- * screen space once opened. */
-const FilterBar = forwardRef<FilterBarHandle, FilterBarProps>(function FilterBar(
-  { filters, onChange, labels, onLabelsChanged },
-  ref,
-) {
+ * There is no longer one master "筛选" disclosure hiding all of this: each
+ * filter is its own permanently visible trigger, in the same register as
+ * the five per-row property controls, and highlights itself
+ * (`aria-pressed`/accent background) only when it's actually narrowing the
+ * list. */
+export default function FilterBar({ filters, onChange, labels, onLabelsChanged, onRequestCreate }: FilterBarProps) {
   const { users } = useIdentity()
-  const searchRef = useRef<HTMLInputElement>(null)
-
-  useImperativeHandle(ref, () => ({
-    focusSearch: () => searchRef.current?.focus(),
-  }))
 
   function toggleStatus(s: TaskStatus) {
     const has = filters.statuses.includes(s)
@@ -84,107 +95,146 @@ const FilterBar = forwardRef<FilterBarHandle, FilterBarProps>(function FilterBar
     onChange({ ...filters, priorities: has ? filters.priorities.filter((x) => x !== p) : [...filters.priorities, p] })
   }
 
-  const activeCount =
-    filters.statuses.length + filters.priorities.length + (filters.assignee !== '' ? 1 : 0) + (filters.labelId !== '' ? 1 : 0)
+  function toggleLabel(id: string) {
+    onChange({ ...filters, labelId: filters.labelId === id ? '' : id })
+  }
+
+  const statusActive = filters.statuses.length > 0
+  const priorityActive = filters.priorities.length > 0
+  const assigneeActive = filters.assignee !== ''
+  const labelActive = filters.labelId !== ''
+  const selectedLabel = labelActive ? labels.find((l) => l.ID === filters.labelId) : undefined
 
   return (
-    <div className="filter-bar">
+    <div className="mt-2 flex flex-wrap items-center gap-2">
       <input
-        ref={searchRef}
-        className="search-input"
         value={filters.search}
         onChange={(e) => onChange({ ...filters, search: e.target.value })}
-        placeholder="搜索标题或描述…（按 / 聚焦）"
+        placeholder="搜索标题或描述…"
         aria-label="搜索任务"
+        className="h-8 min-h-11 min-w-[180px] max-w-xs flex-1 rounded-md border border-border-strong bg-surface px-2.5 text-sm text-fg outline-none placeholder:text-fg-muted focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/50 pointer-coarse:min-h-11 sm:min-h-8"
       />
 
-      <details className="filter-disclosure">
-        <summary>
-          筛选
-          {activeCount > 0 && <span className="filter-count">{activeCount}</span>}
-        </summary>
-        <div className="filter-disclosure-body">
-          <div className="filter-group" role="group" aria-label="按状态筛选">
+      <Popover>
+        <PopoverTrigger aria-pressed={statusActive} className={filterTriggerClass(statusActive)}>
+          状态{statusActive && ` · ${filters.statuses.length}`}
+        </PopoverTrigger>
+        <PopoverContent className="w-48 p-2" role="group" aria-label="按状态筛选">
+          {/* list-none/pl-0: Tailwind is imported without preflight here (see
+              index.css), so nothing resets the UA default marker/40px indent
+              a bare <ul> gets — without this every list in a popover shows
+              bullets pushed well past the checkboxes (caught by screenshot). */}
+          <ul className="flex list-none flex-col gap-1 pl-0">
             {TASK_STATUSES.map((s) => (
-              <button
-                key={s}
-                type="button"
-                className={`tag filter-chip ${filters.statuses.includes(s) ? 'active' : ''}`}
-                onClick={() => toggleStatus(s)}
-                aria-pressed={filters.statuses.includes(s)}
-              >
-                {STATUS_LABELS[s]}
-              </button>
+              <li key={s}>
+                <label className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent-subtle">
+                  <Checkbox
+                    aria-label={STATUS_LABELS[s]}
+                    checked={filters.statuses.includes(s)}
+                    onCheckedChange={() => toggleStatus(s)}
+                  />
+                  {STATUS_LABELS[s]}
+                </label>
+              </li>
             ))}
-          </div>
+          </ul>
+        </PopoverContent>
+      </Popover>
 
-          <div className="filter-group" role="group" aria-label="按优先级筛选">
+      <Popover>
+        <PopoverTrigger aria-pressed={priorityActive} className={filterTriggerClass(priorityActive)}>
+          优先级{priorityActive && ` · ${filters.priorities.length}`}
+        </PopoverTrigger>
+        <PopoverContent className="w-48 p-2" role="group" aria-label="按优先级筛选">
+          <ul className="flex list-none flex-col gap-1 pl-0">
             {TASK_PRIORITIES.map((p) => (
-              <button
-                key={p}
-                type="button"
-                className={`tag filter-chip ${filters.priorities.includes(p) ? 'active' : ''}`}
-                onClick={() => togglePriority(p)}
-                aria-pressed={filters.priorities.includes(p)}
-              >
-                {PRIORITY_LABELS[p]}
-              </button>
+              <li key={p}>
+                <label className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent-subtle">
+                  <Checkbox
+                    aria-label={PRIORITY_LABELS[p]}
+                    checked={filters.priorities.includes(p)}
+                    onCheckedChange={() => togglePriority(p)}
+                  />
+                  {PRIORITY_LABELS[p]}
+                </label>
+              </li>
             ))}
+          </ul>
+        </PopoverContent>
+      </Popover>
+
+      <Select
+        value={filters.assignee === '' ? ANY_ASSIGNEE : filters.assignee}
+        onValueChange={(v) => onChange({ ...filters, assignee: v === ANY_ASSIGNEE ? '' : v })}
+      >
+        <SelectTrigger aria-label="按负责人筛选" className={filterTriggerClass(assigneeActive)}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ANY_ASSIGNEE}>所有人</SelectItem>
+          <SelectItem value="none">未分配</SelectItem>
+          {users.map((u) => (
+            <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Popover>
+        <PopoverTrigger aria-pressed={labelActive} className={filterTriggerClass(labelActive)}>
+          {selectedLabel ? selectedLabel.Name : '标签'}
+        </PopoverTrigger>
+        <PopoverContent className="w-56 p-2">
+          <ul className="flex list-none flex-col gap-1 pl-0" role="group" aria-label="按标签筛选">
+            {labels.map((l) => (
+              <li key={l.ID}>
+                <label className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent-subtle">
+                  <Checkbox
+                    aria-label={l.Name}
+                    checked={filters.labelId === l.ID}
+                    onCheckedChange={() => toggleLabel(l.ID)}
+                  />
+                  {l.Name}
+                </label>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-2 border-t border-border pt-2">
+            <LabelManager labels={labels} onChanged={onLabelsChanged} />
           </div>
+        </PopoverContent>
+      </Popover>
 
-          <label>
-            负责人
-            <select
-              value={filters.assignee}
-              onChange={(e) => onChange({ ...filters, assignee: e.target.value })}
-              aria-label="按负责人筛选"
-            >
-              <option value="">所有人</option>
-              <option value="none">未分配</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>{u.name}</option>
-              ))}
-            </select>
-          </label>
+      <Select value={filters.sort} onValueChange={(sort) => onChange({ ...filters, sort })}>
+        <SelectTrigger aria-label="排序字段" className={CONTROL_TRIGGER_CLASS}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {SORT_OPTIONS.map(([value, label]) => (
+            <SelectItem key={value} value={value}>{label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
-          <label>
-            标签
-            <select
-              value={filters.labelId}
-              onChange={(e) => onChange({ ...filters, labelId: e.target.value })}
-              aria-label="按标签筛选"
-            >
-              <option value="">所有标签</option>
-              {labels.map((l) => (
-                <option key={l.ID} value={l.ID}>{l.Name}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </details>
+      <button
+        type="button"
+        onClick={() => onChange({ ...filters, order: filters.order === 'asc' ? 'desc' : 'asc' })}
+        aria-label={filters.order === 'asc' ? '升序，点击切换为降序' : '降序，点击切换为升序'}
+        className={cn(CONTROL_TRIGGER_CLASS, 'justify-center')}
+      >
+        {filters.order === 'asc' ? '↑ 升序' : '↓ 降序'}
+      </button>
 
-      <div className="filter-sort">
-        <span className="filter-sort-label">排序</span>
-        <QuietSelect
-          value={filters.sort}
-          options={SORT_VALUES}
-          labels={SORT_LABELS}
-          onChange={(sort) => onChange({ ...filters, sort })}
-          ariaLabel="排序字段"
-        />
-        <button
-          type="button"
-          className="quiet-value"
-          onClick={() => onChange({ ...filters, order: filters.order === 'asc' ? 'desc' : 'asc' })}
-          aria-label={filters.order === 'asc' ? '升序，点击切换为降序' : '降序，点击切换为升序'}
-        >
-          {filters.order === 'asc' ? '↑ 升序' : '↓ 降序'}
-        </button>
-      </div>
-
-      <LabelManager labels={labels} onChanged={onLabelsChanged} />
+      <button
+        type="button"
+        onClick={onRequestCreate}
+        className={cn(
+          CONTROL_TRIGGER_CLASS,
+          'ml-auto justify-center border-accent bg-accent px-3 text-accent-fg hover:opacity-90',
+        )}
+      >
+        <Plus className="size-3.5" aria-hidden="true" />
+        新建任务
+      </button>
     </div>
   )
-})
-
-export default FilterBar
+}

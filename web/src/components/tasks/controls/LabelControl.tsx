@@ -36,7 +36,12 @@ export default function LabelControl({
         {value.length > 0 ? value.map((l) => l.Name).join(', ') : '无标签'}
       </PopoverTrigger>
       <PopoverContent className="w-56 p-2">
-        <ul className="flex flex-col gap-1">
+        {/* list-none/pl-0: Tailwind is imported without preflight (see
+            index.css), so a bare <ul> keeps the UA default bullet marker and
+            40px indent — found via FilterBar's near-identical popover list
+            in Task 10's screenshot pass; same fix applies here since this
+            component never had labels to render it visible before. */}
+        <ul className="flex list-none flex-col gap-1 pl-0">
           {all.map((label) => {
             const checked = value.some((l) => l.ID === label.ID)
             return (

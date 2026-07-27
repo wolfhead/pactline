@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import FilterBar, { DEFAULT_FILTERS, type TaskFilters } from '@/components/tasks/FilterBar'
-import InlineCreateRow, { type InlineCreateRowHandle } from '@/components/tasks/InlineCreateRow'
+import InlineCreate, { type InlineCreateHandle } from '@/components/tasks/InlineCreate'
 import TaskDetail from '@/components/tasks/TaskDetail'
 import TaskList from '@/components/tasks/TaskList'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
@@ -46,10 +46,10 @@ export default function TaskListPage() {
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({})
   const [reloadToken, setReloadToken] = useState(0)
 
-  // FilterBar still exposes a focusSearch() handle, but nothing calls it any
-  // more: the "/" shortcut that did is gone with the rest of the
-  // application-level keyboard layer, so no ref is held here.
-  const createRef = useRef<InlineCreateRowHandle>(null)
+  // Held so both the "＋ 新建任务" filter-bar button and the focusCreate
+  // navigation state (below) can jump focus into the capture row without it
+  // ever opening a dialog of its own.
+  const createRef = useRef<InlineCreateHandle>(null)
 
   // Labels load once per identity — shared by the filter dropdown and the
   // inline label manager folded into the filter bar.
@@ -219,9 +219,9 @@ export default function TaskListPage() {
   }
 
   // Status grouping only holds under the default creation-order sort; any
-  // other sort interleaves statuses, so a status heading would lie about
-  // what sits under it.
-  const grouped = filters.sort === DEFAULT_FILTERS.sort
+  // other sort — or the same field in the non-default direction — interleaves
+  // statuses, so a status heading would lie about what sits under it.
+  const grouped = filters.sort === DEFAULT_FILTERS.sort && filters.order === DEFAULT_FILTERS.order
 
   // A phone has room for one thing at a time: an open task replaces the
   // list outright rather than sliding over it. Every other tier keeps the
@@ -261,12 +261,13 @@ export default function TaskListPage() {
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="shrink-0 border-b border-border px-3 py-2">
           <h2 className="text-sm font-semibold text-fg">任务列表</h2>
-          <InlineCreateRow ref={createRef} onCreated={handleCreated} />
+          <InlineCreate ref={createRef} onCreated={handleCreated} />
           <FilterBar
             filters={filters}
             onChange={setFilters}
             labels={labels}
             onLabelsChanged={setLabels}
+            onRequestCreate={() => createRef.current?.focus()}
           />
         </div>
 
