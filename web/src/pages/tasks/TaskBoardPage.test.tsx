@@ -1,169 +1,100 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import TaskBoardPage from './TaskBoardPage'
-import { apiGet, apiPatch } from '../../api/client'
-import { useIdentity } from '../../identity'
-import type { Task, TaskListResponse, TaskStatus } from '../../task-types'
+import * as tasksApi from '@/api/tasks'
+import type { Task } from '@/task-types'
 
-// Mocks both modules so apiGet/apiPatch resolution and the current identity
-// are fully controllable per test, without touching global fetch, a real
-// backend, or IdentityProvider. Mirrors the pattern established in
-// src/pages/tasks/TaskListPage.test.tsx and TaskDetailPage.test.tsx.
-vi.mock('../../api/client')
-vi.mock('../../identity')
-
-const mockedApiGet = vi.mocked(apiGet)
-const mockedApiPatch = vi.mocked(apiPatch)
-const mockedUseIdentity = vi.mocked(useIdentity)
-
+// @testing-library/react's own auto-cleanup never registers here (no
+// `globals: true` in vitest.config.ts); without this, each test's render
+// leaks into the next one — see TaskList.test.tsx/TaskListPage.test.tsx for
+// the same pattern.
 afterEach(() => {
   cleanup()
-  vi.resetAllMocks()
 })
 
-const ME = { id: 'u-1', name: 'Alice', email: 'alice@example.com', roles: ['ENGINEER'], active: true }
+vi.mock('@/api/tasks')
+vi.mock('@/identity', async () => ({
+  ...(await vi.importActual<typeof import('@/identity')>('@/identity')),
+  useIdentity: () => ({
+    me: { id: 'u1', name: '张沁', email: 'a@x.com' },
+    users: [{ id: 'u1', name: '张沁', email: 'a@x.com' }],
+    setMe: () => {},
+  }),
+}))
 
-function makeTask(overrides: Partial<Task> = {}): Task {
+function setWidth(px: number) {
+  Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: px })
+  window.dispatchEvent(new Event('resize'))
+}
+
+const CREATOR = { id: 'u1', name: '张沁', email: 'a@x.com' }
+function task(n: number, status: Task['status']): Task {
   return {
-    id: 't-1',
-    number: 1,
-    title: '任务标题',
-    description: '',
-    status: 'backlog',
-    priority: 'medium',
-    assignee: null,
-    creator: { id: ME.id, name: ME.name, email: ME.email },
-    due_date: null,
-    labels: [],
-    created_at: '2026-01-01T00:00:00Z',
-    updated_at: '2026-01-01T00:00:00Z',
-    completed_at: null,
-    archived_at: null,
-    ...overrides,
+    id: `id-${n}`, number: n, title: `任务 ${n}`, description: '',
+    status, priority: 'none', assignee: null, creator: CREATOR,
+    due_date: null, labels: [], created_at: '', updated_at: '',
+    completed_at: null, archived_at: null,
   }
 }
 
-function renderBoard(tasks: Task[]) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  mockedUseIdentity.mockReturnValue({ me: ME as any, users: [ME] as any, switchTo: vi.fn() })
-  mockedApiGet.mockImplementation(() => Promise.resolve({ items: tasks, has_more: false } satisfies TaskListResponse))
-  return render(
-    <MemoryRouter>
-      <TaskBoardPage />
-    </MemoryRouter>,
-  )
-}
-
-/** A minimal stand-in for the browser's real DataTransfer (jsdom doesn't
- * implement it) — enough for TaskBoardPage's dragstart/dragover/drop
- * handlers, which only call setData/getData('text/plain', ...) and set
- * effectAllowed. Mirrors what web/e2e/13-board-drag-and-keyboard.spec.ts
- * exercises against a real DataTransfer in a real browser. */
-function makeDataTransfer() {
-  let stored = ''
-  return {
-    setData: (_type: string, value: string) => {
-      stored = value
-    },
-    getData: () => stored,
-    effectAllowed: '',
-  }
-}
-
-function columnFor(status: TaskStatus, labelPattern: RegExp): HTMLElement {
-  const heading = screen.getByRole('heading', { name: labelPattern })
-  return heading.closest('.board-column') as HTMLElement
-}
-
-describe('TaskBoardPage — column render cap', () => {
-  it('caps a column at 50 cards, reports how many are hidden, and revealing shows the rest', async () => {
-    const tasks = Array.from({ length: 60 }, (_, i) =>
-      makeTask({ id: `t-${i + 1}`, number: i + 1, status: 'backlog', title: `积压任务${i + 1}` }),
-    )
-    renderBoard(tasks)
-
-    // Card text is "#<number> <title>" split across sibling text nodes
-    // inside the same <a>, so the full concatenated string is matched here
-    // rather than the title alone (which would also substring-match
-    // "积压任务10".."积压任务19" etc. and make the query ambiguous).
-    await screen.findByText('#1 积压任务1')
-    expect(screen.getAllByRole('article')).toHaveLength(50)
-    // The 51st through 60th cards are not rendered at all — not merely
-    // visually hidden, actually absent — until revealed.
-    expect(screen.queryByText('#60 积压任务60')).not.toBeInTheDocument()
-    expect(screen.getByText('还有 10 条未显示，点击展开')).toBeInTheDocument()
-
-    fireEvent.click(screen.getByText('还有 10 条未显示，点击展开'))
-
-    expect(await screen.findByText('#60 积压任务60')).toBeInTheDocument()
-    expect(screen.getAllByRole('article')).toHaveLength(60)
-    expect(screen.queryByText(/还有 \d+ 条未显示/)).not.toBeInTheDocument()
+beforeEach(() => {
+  vi.mocked(tasksApi.listTasks).mockResolvedValue({
+    items: [task(1, 'todo'), task(2, 'in_progress'), task(3, 'in_progress')],
+    has_more: false,
   })
-
-  it('does not swallow a card dragged into a column that is already at the cap', async () => {
-    const backlogTasks = Array.from({ length: 50 }, (_, i) =>
-      makeTask({ id: `t-${i + 1}`, number: i + 1, status: 'backlog', title: `积压任务${i + 1}` }),
-    )
-    const moving = makeTask({ id: 't-99', number: 99, status: 'todo', title: '待移动任务' })
-    renderBoard([...backlogTasks, moving])
-    mockedApiPatch.mockResolvedValue({ ...moving, status: 'backlog' })
-
-    await screen.findByText('#99 待移动任务')
-    // Backlog is exactly at the cap already: 50 visible, nothing hidden yet.
-    const backlogColumn = columnFor('backlog', /待定/)
-    expect(within(backlogColumn).getAllByRole('article')).toHaveLength(50)
-
-    const card = screen.getByText('#99 待移动任务').closest('article') as HTMLElement
-
-    const dataTransfer = makeDataTransfer()
-    fireEvent.dragStart(card, { dataTransfer })
-    fireEvent.dragOver(backlogColumn, { dataTransfer })
-    fireEvent.drop(backlogColumn, { dataTransfer })
-
-    await waitFor(() => expect(mockedApiPatch).toHaveBeenCalledWith('/api/tasks/99', { status: 'backlog' }))
-
-    // The just-moved card is visible immediately, even though the column it
-    // landed in was already full — this is the failure mode a naive
-    // slice(0, CAP) would produce: the 51st card silently never rendering.
-    expect(screen.getByText('#99 待移动任务')).toBeInTheDocument()
-    expect(within(backlogColumn).getAllByRole('article')).toHaveLength(51)
-  })
+  vi.mocked(tasksApi.listLabels).mockResolvedValue([])
 })
 
-describe('TaskBoardPage — no per-card status control', () => {
-  it('carries no permanent <select> on any card, and a card can still be moved by keyboard via its quiet trigger', async () => {
-    const task = makeTask({ id: 't-5', number: 5, status: 'todo', title: '待移动任务' })
-    renderBoard([task])
-    mockedApiPatch.mockResolvedValue({ ...task, status: 'in_progress' })
+function renderBoard() {
+  return render(<MemoryRouter><TaskBoardPage /></MemoryRouter>)
+}
 
-    await screen.findByText('#5 待移动任务')
+describe('TaskBoardPage', () => {
+  it('renders one column per status, each carrying its own count', async () => {
+    setWidth(1440)
+    renderBoard()
+    const inProgress = await screen.findByRole('group', { name: /进行中/ })
+    const todo = screen.getByRole('group', { name: /待办/ })
+    // Real per-column counts. A decoy printing the total (3) in every column
+    // fails here, and so does one that always prints 1.
+    expect(within(inProgress).getByRole('heading')).toHaveTextContent('2')
+    expect(within(todo).getByRole('heading')).toHaveTextContent('1')
+    // Six statuses means six columns, including the empty ones.
+    expect(screen.getAllByRole('group')).toHaveLength(6)
+  })
 
-    // The whole point of the redesign: the column already says the status,
-    // so the card itself carries no <select> at all — not even a hidden
-    // one — until something reveals it.
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  it('puts each card in its own status column, not merely on screen', async () => {
+    setWidth(1440)
+    renderBoard()
+    const inProgress = await screen.findByRole('group', { name: /进行中/ })
+    expect(within(inProgress).getByText('任务 2')).toBeInTheDocument()
+    expect(within(inProgress).queryByText('任务 1')).not.toBeInTheDocument()
+  })
 
-    // The keyboard path: a quiet "移动" trigger (a plain button, not a
-    // dropdown sitting open on the card) reveals the real <select> the
-    // moment it's activated.
-    const trigger = screen.getByRole('button', { name: /移动任务 #5/ })
-    expect(trigger).toHaveAttribute('aria-label', expect.stringContaining('当前状态：待办'))
-    fireEvent.click(trigger)
+  it('drops the drag affordance on a phone but still shows every card', async () => {
+    setWidth(390)
+    renderBoard()
+    const cards = await screen.findAllByRole('article')
+    // Decoy this catches: hiding the board entirely on a phone, or leaving
+    // draggable=true where a touch drag would fight the scroll container.
+    expect(cards).toHaveLength(3)
+    for (const c of cards) expect(c).not.toHaveAttribute('draggable', 'true')
+  })
 
-    const select = screen.getByRole('combobox', { name: /移动任务 #5/ })
-    expect(select).toHaveValue('todo')
+  it('marks cards draggable on the desktop tiers', async () => {
+    setWidth(1440)
+    renderBoard()
+    const cards = await screen.findAllByRole('article')
+    expect(cards).toHaveLength(3)
+    for (const c of cards) expect(c).toHaveAttribute('draggable', 'true')
+  })
 
-    fireEvent.change(select, { target: { value: 'in_progress' } })
-
-    await waitFor(() => expect(mockedApiPatch).toHaveBeenCalledWith('/api/tasks/5', { status: 'in_progress' }))
-    // Choosing a status collapses the <select> straight back to the quiet
-    // trigger, whose accessible name now reports the new status — and
-    // still no permanent <select> is left on screen.
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /移动任务 #5/ })).toHaveAttribute(
-      'aria-label',
-      expect.stringContaining('当前状态：进行中'),
-    )
+  it('gives every card a status control named after its task', async () => {
+    setWidth(1440)
+    renderBoard()
+    // Same accessible-name convention as the list rows (see Task 4), so e2e
+    // 13 can assert the post-drag status through a single lookup.
+    expect(await screen.findByRole('combobox', { name: '任务 #2 状态' })).toBeVisible()
   })
 })
