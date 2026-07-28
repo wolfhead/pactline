@@ -10,7 +10,8 @@ test: up
 	DATABASE_URL="$(DSN)" go test ./... -count=1 -p 1
 
 run: up
-	DATABASE_URL="$(DSN)" go run ./cmd/server
+	APP_ENV=development AUTH_PROVIDER=development APP_BASE_URL=http://localhost:5173 \
+	SESSION_SECRET=development-only-session-secret-32b DATABASE_URL="$(DSN)" go run ./cmd/server
 
 web-install:
 	cd web && npm install

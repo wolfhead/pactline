@@ -19,6 +19,12 @@ import (
 func main() {
 	logging.Setup(os.Getenv("LOG_LEVEL"))
 
+	cfg, err := LoadConfig()
+	if err != nil {
+		slog.Error("invalid server configuration", "error", err)
+		os.Exit(1)
+	}
+
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		slog.Error("DATABASE_URL is required")
@@ -70,7 +76,7 @@ func main() {
 	if addr == "" {
 		addr = ":8080"
 	}
-	slog.Info("server listening", "addr", addr)
+	slog.Info("server listening", "addr", addr, "app_env", cfg.AppEnv, "auth_provider", cfg.AuthProvider)
 	if err := http.ListenAndServe(addr, handler); err != nil {
 		slog.Error("server stopped", "error", err)
 		os.Exit(1)
