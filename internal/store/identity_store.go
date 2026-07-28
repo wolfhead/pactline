@@ -20,6 +20,8 @@ type IdentityStore struct {
 	db *DB
 }
 
+var primarySeedUserID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
+
 func NewIdentityStore(db *DB) *IdentityStore {
 	return &IdentityStore{db: db}
 }
@@ -190,10 +192,16 @@ func (s *IdentityStore) AcceptInvitation(ctx context.Context, command identity.A
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
+	lookup := `token_hash=$1`
+	lookupValue := any(command.TokenHash)
+	if command.InvitationID != uuid.Nil {
+		lookup = `id=$1`
+		lookupValue = command.InvitationID
+	}
 	invitation, err := scanInvitation(tx.QueryRow(ctx, `
 		SELECT id, provider, tenant_id, target_subject_id, target_snapshot, token_hash, status,
 		       created_by_user_id, expires_at, accepted_by_user_id, accepted_at, revoked_at, created_at, updated_at
-		FROM invitations WHERE token_hash=$1 FOR UPDATE`, command.TokenHash))
+		FROM invitations WHERE `+lookup+` FOR UPDATE`, lookupValue))
 	if errors.Is(err, pgx.ErrNoRows) ||
 		err == nil && !identity.InvitationMatches(invitation, command.Principal.Key, command.Now) {
 		return domain.User{}, identity.ErrInvitationInvalid
@@ -271,6 +279,212 @@ func (s *IdentityStore) GetCredential(ctx context.Context, externalIdentityID uu
 		SELECT access_token_ciphertext, refresh_token_ciphertext,
 		       access_token_expires_at, refresh_token_expires_at, encryption_key_id
 		FROM oauth_credentials WHERE external_identity_id=$1`, externalIdentityID))
+}
+
+func (s *IdentityStore) GetExternalIdentityForUser(ctx context.Context, userID uuid.UUID) (identity.ExternalIdentity, error) {
+	var external identity.ExternalIdentity
+	err := s.db.Pool.QueryRow(ctx, `
+		SELECT e.id, e.user_id, e.provider, e.tenant_id, e.subject_id, e.provider_profile,
+		       e.last_verified_at, e.created_at, e.updated_at,
+		       c.access_token_ciphertext, c.refresh_token_ciphertext,
+		       c.access_token_expires_at, c.refresh_token_expires_at, c.encryption_key_id
+		FROM external_identities e
+		JOIN oauth_credentials c ON c.external_identity_id=e.id
+		WHERE e.user_id=$1`, userID).Scan(
+		&external.ID, &external.UserID, &external.Key.Provider, &external.Key.TenantID,
+		&external.Key.SubjectID, &external.ProviderProfile, &external.LastVerifiedAt,
+		&external.CreatedAt, &external.UpdatedAt,
+		&external.EncryptedCredential.AccessTokenCiphertext,
+		&external.EncryptedCredential.RefreshTokenCiphertext,
+		&external.EncryptedCredential.AccessTokenExpiresAt,
+		&external.EncryptedCredential.RefreshTokenExpiresAt,
+		&external.EncryptedCredential.EncryptionKeyID,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return identity.ExternalIdentity{}, identity.ErrCredentialNotFound
+	}
+	if err != nil {
+		return identity.ExternalIdentity{}, fmt.Errorf("get user external identity: %w", err)
+	}
+	return external, nil
+}
+
+func (s *IdentityStore) FindExternalIdentity(ctx context.Context, key identity.PrincipalKey) (identity.ExternalIdentity, domain.User, error) {
+	var external identity.ExternalIdentity
+	var user domain.User
+	var roles []string
+	err := s.db.Pool.QueryRow(ctx, `
+		SELECT e.id, e.user_id, e.provider, e.tenant_id, e.subject_id, e.provider_profile,
+		       e.last_verified_at, e.created_at, e.updated_at,
+		       c.access_token_ciphertext, c.refresh_token_ciphertext,
+		       c.access_token_expires_at, c.refresh_token_expires_at, c.encryption_key_id,
+		       u.id, u.name, u.email, u.avatar_url, u.platform_role, u.roles, u.active, u.created_at, u.updated_at
+		FROM external_identities e
+		JOIN oauth_credentials c ON c.external_identity_id=e.id
+		JOIN users u ON u.id=e.user_id
+		WHERE e.provider=$1 AND e.tenant_id=$2 AND e.subject_id=$3`,
+		key.Provider, key.TenantID, key.SubjectID).Scan(
+		&external.ID, &external.UserID, &external.Key.Provider, &external.Key.TenantID,
+		&external.Key.SubjectID, &external.ProviderProfile, &external.LastVerifiedAt,
+		&external.CreatedAt, &external.UpdatedAt,
+		&external.EncryptedCredential.AccessTokenCiphertext,
+		&external.EncryptedCredential.RefreshTokenCiphertext,
+		&external.EncryptedCredential.AccessTokenExpiresAt,
+		&external.EncryptedCredential.RefreshTokenExpiresAt,
+		&external.EncryptedCredential.EncryptionKeyID,
+		&user.ID, &user.Name, &user.Email, &user.AvatarURL, &user.PlatformRole,
+		&roles, &user.Active, &user.CreatedAt, &user.UpdatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return identity.ExternalIdentity{}, domain.User{}, domain.ErrNotFound
+	}
+	if err != nil {
+		return identity.ExternalIdentity{}, domain.User{}, fmt.Errorf("find external identity: %w", err)
+	}
+	user.Roles = userRoles(roles)
+	return external, user, nil
+}
+
+func (s *IdentityStore) BootstrapAdmin(ctx context.Context, command identity.BootstrapAdminCommand) (domain.User, error) {
+	var user domain.User
+	err := s.inTransaction(ctx, "bootstrap administrator", func(tx pgx.Tx) error {
+		var adminCount int
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM users WHERE platform_role='ADMIN'`).Scan(&adminCount); err != nil {
+			return fmt.Errorf("count administrators: %w", err)
+		}
+		if adminCount != 0 {
+			return identity.ErrLoginDenied
+		}
+		var roles []string
+		err := tx.QueryRow(ctx, `
+			SELECT id,name,email,avatar_url,platform_role,roles,active,created_at,updated_at
+			FROM users WHERE id=$1 FOR UPDATE`, primarySeedUserID).Scan(
+			&user.ID, &user.Name, &user.Email, &user.AvatarURL, &user.PlatformRole,
+			&roles, &user.Active, &user.CreatedAt, &user.UpdatedAt)
+		if err != nil {
+			return fmt.Errorf("lock bootstrap user: %w", err)
+		}
+		user.Roles = userRoles(roles)
+		_, err = tx.Exec(ctx, `
+			UPDATE users SET name=$2,email=$3,avatar_url=$4,platform_role='ADMIN',active=true,updated_at=$5
+			WHERE id=$1`, primarySeedUserID, command.Principal.Name, command.Principal.Email,
+			command.Principal.AvatarURL, command.Now)
+		if err != nil {
+			if isUniqueViolation(err) {
+				return identity.ErrLoginDenied
+			}
+			return fmt.Errorf("update bootstrap user: %w", err)
+		}
+		externalID := uuid.New()
+		if err := insertExternalIdentityAndCredential(ctx, tx, externalID, primarySeedUserID,
+			command.Principal, command.Credential, command.Now); err != nil {
+			if isUniqueViolation(err) {
+				return identity.ErrLoginDenied
+			}
+			return err
+		}
+		if err := insertSession(ctx, tx, command.Session); err != nil {
+			return err
+		}
+		command.Audit.SubjectUserID = &primarySeedUserID
+		command.Audit.SessionID = &command.Session.ID
+		if err := insertAudit(ctx, tx, command.Audit); err != nil {
+			return err
+		}
+		user.Name, user.Email, user.AvatarURL = command.Principal.Name, command.Principal.Email, command.Principal.AvatarURL
+		user.PlatformRole, user.Active, user.UpdatedAt = domain.PlatformRoleAdmin, true, command.Now
+		return nil
+	})
+	return user, err
+}
+
+func (s *IdentityStore) LoginExternal(ctx context.Context, command identity.LoginCommand) (domain.User, error) {
+	var user domain.User
+	err := s.inTransaction(ctx, "login external identity", func(tx pgx.Tx) error {
+		var externalID uuid.UUID
+		var roles []string
+		err := tx.QueryRow(ctx, `
+			SELECT e.id,u.id,u.name,u.email,u.avatar_url,u.platform_role,u.roles,u.active,u.created_at,u.updated_at
+			FROM external_identities e JOIN users u ON u.id=e.user_id
+			WHERE e.provider=$1 AND e.tenant_id=$2 AND e.subject_id=$3
+			FOR UPDATE OF e,u`,
+			command.Principal.Key.Provider, command.Principal.Key.TenantID, command.Principal.Key.SubjectID).Scan(
+			&externalID, &user.ID, &user.Name, &user.Email, &user.AvatarURL,
+			&user.PlatformRole, &roles, &user.Active, &user.CreatedAt, &user.UpdatedAt)
+		if errors.Is(err, pgx.ErrNoRows) || err == nil && !user.Active {
+			return identity.ErrLoginDenied
+		}
+		if err != nil {
+			return fmt.Errorf("lock external login identity: %w", err)
+		}
+		user.Roles = userRoles(roles)
+		_, err = tx.Exec(ctx, `
+			UPDATE external_identities SET provider_profile=$2,last_verified_at=$3,updated_at=$3 WHERE id=$1`,
+			externalID, jsonOrEmpty(command.Principal.Profile), command.Now)
+		if err != nil {
+			return fmt.Errorf("update external profile: %w", err)
+		}
+		_, err = tx.Exec(ctx, `
+			UPDATE oauth_credentials SET access_token_ciphertext=$2,refresh_token_ciphertext=$3,
+			    access_token_expires_at=$4,refresh_token_expires_at=$5,encryption_key_id=$6,updated_at=$7
+			WHERE external_identity_id=$1`,
+			externalID, command.Credential.AccessTokenCiphertext, command.Credential.RefreshTokenCiphertext,
+			command.Credential.AccessTokenExpiresAt, command.Credential.RefreshTokenExpiresAt,
+			command.Credential.EncryptionKeyID, command.Now)
+		if err != nil {
+			return fmt.Errorf("update login credential: %w", err)
+		}
+		_, err = tx.Exec(ctx, `
+			UPDATE users SET name=$2,email=$3,avatar_url=$4,updated_at=$5 WHERE id=$1`,
+			user.ID, command.Principal.Name, command.Principal.Email, command.Principal.AvatarURL, command.Now)
+		if err != nil {
+			return fmt.Errorf("update login user profile: %w", err)
+		}
+		if err := insertSession(ctx, tx, command.Session); err != nil {
+			return err
+		}
+		command.Audit.SubjectUserID = &user.ID
+		command.Audit.SessionID = &command.Session.ID
+		if err := insertAudit(ctx, tx, command.Audit); err != nil {
+			return err
+		}
+		user.Name, user.Email, user.AvatarURL, user.UpdatedAt =
+			command.Principal.Name, command.Principal.Email, command.Principal.AvatarURL, command.Now
+		return nil
+	})
+	return user, err
+}
+
+func (s *IdentityStore) RefreshCredentialLocked(
+	ctx context.Context,
+	externalIdentityID uuid.UUID,
+	refresh func(identity.OAuthCredential) (identity.OAuthCredential, error),
+) (identity.OAuthCredential, error) {
+	var updated identity.OAuthCredential
+	err := s.inTransaction(ctx, "refresh credential", func(tx pgx.Tx) error {
+		current, err := scanCredential(tx.QueryRow(ctx, `
+			SELECT access_token_ciphertext,refresh_token_ciphertext,access_token_expires_at,
+			       refresh_token_expires_at,encryption_key_id
+			FROM oauth_credentials WHERE external_identity_id=$1 FOR UPDATE`, externalIdentityID))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return identity.ErrCredentialNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("lock refresh credential: %w", err)
+		}
+		updated, err = refresh(current)
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, `
+			UPDATE oauth_credentials SET access_token_ciphertext=$2,refresh_token_ciphertext=$3,
+			    access_token_expires_at=$4,refresh_token_expires_at=$5,encryption_key_id=$6,updated_at=now()
+			WHERE external_identity_id=$1`,
+			externalIdentityID, updated.AccessTokenCiphertext, updated.RefreshTokenCiphertext,
+			updated.AccessTokenExpiresAt, updated.RefreshTokenExpiresAt, updated.EncryptionKeyID)
+		return err
+	})
+	return updated, err
 }
 
 func (s *IdentityStore) UpdateCredential(ctx context.Context, externalIdentityID uuid.UUID, credential identity.OAuthCredential) error {

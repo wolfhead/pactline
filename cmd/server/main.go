@@ -12,6 +12,7 @@ import (
 	"bountyboard/internal/application"
 	"bountyboard/internal/identity"
 	"bountyboard/internal/integrations/devauth"
+	"bountyboard/internal/integrations/lark"
 	legacyapi "bountyboard/internal/legacy/api"
 	legacystore "bountyboard/internal/legacy/store"
 	"bountyboard/internal/logging"
@@ -26,7 +27,6 @@ func main() {
 		slog.Error("invalid server configuration", "error", err)
 		os.Exit(1)
 	}
-
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		slog.Error("DATABASE_URL is required")
@@ -63,6 +63,31 @@ func main() {
 		slog.Error("configure application sessions", "error", err)
 		os.Exit(1)
 	}
+	if cfg.AuthProvider == AuthProviderLark {
+		cipher, cipherErr := identity.NewCredentialCipher(map[string][]byte{
+			cfg.TokenEncryptionKeyID: cfg.TokenEncryptionKey,
+		})
+		if cipherErr != nil {
+			slog.Error("configure credential encryption", "error", cipherErr)
+			os.Exit(1)
+		}
+		larkClient, clientErr := lark.NewClient(lark.Config{
+			AppID: cfg.LarkAppID, AppSecret: cfg.LarkAppSecret, TenantKey: cfg.LarkTenantKey,
+			Cipher: cipher, EncryptionKeyID: cfg.TokenEncryptionKeyID,
+		})
+		if clientErr != nil {
+			slog.Error("configure Lark client", "error", clientErr)
+			os.Exit(1)
+		}
+		if configureErr := identityService.ConfigureLark(identity.LarkServiceConfig{
+			Repository: identityStore, Authenticator: larkClient, Verifier: larkClient,
+			TenantID: cfg.LarkTenantKey, RedirectURI: cfg.LarkRedirectURI.String(),
+			BootstrapAdminEmail: cfg.BootstrapAdminEmail,
+		}); configureErr != nil {
+			slog.Error("configure Lark identity service", "error", configureErr)
+			os.Exit(1)
+		}
+	}
 	var developmentAuth *devauth.Provider
 	if cfg.AuthProvider == AuthProviderDevelopment {
 		developmentAuth = devauth.New(users, identityService)
@@ -87,6 +112,7 @@ func main() {
 	handler := api.NewRouter(users, legacyHandler, api.RouterOptions{
 		Auth: api.AuthSurface{
 			Sessions: identityService, Development: developmentAuth, AppBaseURL: cfg.AppBaseURL,
+			LarkEnabled:   cfg.AuthProvider == AuthProviderLark,
 			SecureCookies: cfg.AppEnv != EnvironmentDevelopment && cfg.AppEnv != EnvironmentTest,
 		},
 		Tasks: taskSurface,

@@ -28,6 +28,28 @@ type UserRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (domain.User, error)
 }
 
+type IdentityRepository interface {
+	CreateAuthorizationTransaction(ctx context.Context, transaction AuthorizationTransaction) error
+	ConsumeAuthorizationState(ctx context.Context, stateHash []byte, now time.Time) (AuthorizationTransaction, error)
+	BootstrapAdmin(ctx context.Context, command BootstrapAdminCommand) (domain.User, error)
+	LoginExternal(ctx context.Context, command LoginCommand) (domain.User, error)
+	GetExternalIdentityForUser(ctx context.Context, userID uuid.UUID) (ExternalIdentity, error)
+	RefreshCredentialLocked(ctx context.Context, externalIdentityID uuid.UUID, refresh func(OAuthCredential) (OAuthCredential, error)) (OAuthCredential, error)
+	RecordProviderVerification(ctx context.Context, sessionID uuid.UUID, verifiedAt time.Time) error
+	RecordProviderFailure(ctx context.Context, sessionID uuid.UUID, failedAt time.Time, audit AuditEvent) error
+	DeactivateUser(ctx context.Context, userID, actorID uuid.UUID, reason string) error
+	AcceptInvitation(ctx context.Context, command AcceptInvitationCommand) (domain.User, error)
+}
+
+type LarkServiceConfig struct {
+	Repository          IdentityRepository
+	Authenticator       Authenticator
+	Verifier            PrincipalVerifier
+	TenantID            string
+	RedirectURI         string
+	BootstrapAdminEmail string
+}
+
 type SystemClock struct{}
 
 func (SystemClock) Now() time.Time {
@@ -41,11 +63,17 @@ func (CryptoSecretGenerator) NewSecret() (string, error) {
 }
 
 type Service struct {
-	sessions      SessionRepository
-	users         UserRepository
-	sessionSecret []byte
-	clock         Clock
-	secrets       SecretGenerator
+	sessions       SessionRepository
+	users          UserRepository
+	sessionSecret  []byte
+	clock          Clock
+	secrets        SecretGenerator
+	identity       IdentityRepository
+	authenticator  Authenticator
+	verifier       PrincipalVerifier
+	tenantID       string
+	redirectURI    string
+	bootstrapEmail string
 }
 
 func NewService(
@@ -70,6 +98,145 @@ func NewService(
 	}, nil
 }
 
+func (s *Service) ConfigureLark(config LarkServiceConfig) error {
+	if config.Repository == nil || config.Authenticator == nil || config.Verifier == nil ||
+		config.TenantID == "" || config.RedirectURI == "" || strings.TrimSpace(config.BootstrapAdminEmail) == "" {
+		return errors.New("complete Lark service configuration is required")
+	}
+	s.identity = config.Repository
+	s.authenticator = config.Authenticator
+	s.verifier = config.Verifier
+	s.tenantID = config.TenantID
+	s.redirectURI = config.RedirectURI
+	s.bootstrapEmail = strings.TrimSpace(config.BootstrapAdminEmail)
+	return nil
+}
+
+func (s *Service) StartAuthorization(ctx context.Context, purpose AuthorizationPurpose, invitationID *uuid.UUID) (AuthorizationStart, error) {
+	if s.identity == nil || s.authenticator == nil {
+		return AuthorizationStart{}, ErrLoginDenied
+	}
+	if purpose == AuthorizationLogin && invitationID != nil ||
+		purpose == AuthorizationInvitation && invitationID == nil {
+		return AuthorizationStart{}, ErrAuthorizationInvalid
+	}
+	state, err := s.secrets.NewSecret()
+	if err != nil {
+		return AuthorizationStart{}, fmt.Errorf("generate authorization state: %w", err)
+	}
+	stateHash := HashSecret([]byte(state))
+	now := s.clock.Now()
+	transaction := AuthorizationTransaction{
+		ID: uuid.New(), Purpose: purpose, StateHash: stateHash[:], InvitationID: invitationID,
+		ExpiresAt: now.Add(10 * time.Minute), CreatedAt: now,
+	}
+	if err := s.identity.CreateAuthorizationTransaction(ctx, transaction); err != nil {
+		return AuthorizationStart{}, fmt.Errorf("persist authorization state: %w", err)
+	}
+	start, err := s.authenticator.StartAuthorization(ctx, AuthorizationRequest{State: state, RedirectURI: s.redirectURI})
+	if err != nil {
+		return AuthorizationStart{}, fmt.Errorf("start provider authorization: %w", err)
+	}
+	return start, nil
+}
+
+func (s *Service) CompleteAuthorization(ctx context.Context, state, code, requestID string) (SessionTokens, error) {
+	if s.identity == nil || s.authenticator == nil || state == "" || code == "" {
+		return SessionTokens{}, ErrAuthorizationInvalid
+	}
+	stateHash := HashSecret([]byte(state))
+	transaction, err := s.identity.ConsumeAuthorizationState(ctx, stateHash[:], s.clock.Now())
+	if err != nil {
+		return SessionTokens{}, ErrAuthorizationInvalid
+	}
+	authenticated, err := s.authenticator.ExchangeAuthorizationCode(ctx, code)
+	if err != nil {
+		return SessionTokens{}, ErrLoginDenied
+	}
+	if authenticated.Principal.Key.Provider != "lark" ||
+		authenticated.Principal.Key.TenantID != s.tenantID || !authenticated.Principal.Active {
+		return SessionTokens{}, ErrLoginDenied
+	}
+	tokens, session, err := s.newSession(uuid.Nil)
+	if err != nil {
+		return SessionTokens{}, err
+	}
+	now := s.clock.Now()
+	audit := AuditEvent{
+		ID: uuid.New(), EventType: "login_succeeded", SessionID: &session.ID,
+		Metadata: json.RawMessage(`{}`), OccurredAt: now,
+	}
+	if requestID != "" {
+		audit.RequestID = &requestID
+	}
+	switch transaction.Purpose {
+	case AuthorizationInvitation:
+		if transaction.InvitationID == nil {
+			return SessionTokens{}, ErrLoginDenied
+		}
+		userID := uuid.New()
+		session.UserID = userID
+		audit.EventType = "invitation_accepted"
+		_, err = s.identity.AcceptInvitation(ctx, AcceptInvitationCommand{
+			InvitationID: *transaction.InvitationID,
+			Principal:    authenticated.Principal, Credential: authenticated.Credential,
+			UserID: userID, UserName: authenticated.Principal.Name,
+			UserEmail: authenticated.Principal.Email, UserAvatarURL: authenticated.Principal.AvatarURL,
+			Session: session, Audit: audit, Now: now,
+		})
+		if err != nil {
+			return SessionTokens{}, ErrLoginDenied
+		}
+		return tokens, nil
+	case AuthorizationLogin:
+	default:
+		return SessionTokens{}, ErrLoginDenied
+	}
+
+	session.UserID = uuid.Nil
+	_, user, findErr := s.findLoginUser(ctx, authenticated.Principal.Key)
+	if findErr == nil {
+		session.UserID = user.ID
+		_, err = s.identity.LoginExternal(ctx, LoginCommand{
+			Principal: authenticated.Principal, Credential: authenticated.Credential,
+			Session: session, Audit: audit, Now: now,
+		})
+		if err != nil {
+			return SessionTokens{}, ErrLoginDenied
+		}
+		return tokens, nil
+	}
+	if !errors.Is(findErr, domain.ErrNotFound) {
+		return SessionTokens{}, fmt.Errorf("lookup external login: %w", findErr)
+	}
+	emailMatches := authenticated.Principal.Email != nil && authenticated.Principal.EmailVerified &&
+		strings.EqualFold(strings.TrimSpace(*authenticated.Principal.Email), s.bootstrapEmail)
+	if !emailMatches {
+		return SessionTokens{}, ErrLoginDenied
+	}
+	primarySeed := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	session.UserID = primarySeed
+	audit.EventType = "administrator_bootstrapped"
+	if _, err := s.identity.BootstrapAdmin(ctx, BootstrapAdminCommand{
+		Principal: authenticated.Principal, Credential: authenticated.Credential,
+		Session: session, Audit: audit, Now: now,
+	}); err != nil {
+		return SessionTokens{}, ErrLoginDenied
+	}
+	return tokens, nil
+}
+
+func (s *Service) findLoginUser(ctx context.Context, key PrincipalKey) (ExternalIdentity, domain.User, error) {
+	type externalFinder interface {
+		FindExternalIdentity(context.Context, PrincipalKey) (ExternalIdentity, domain.User, error)
+	}
+	finder, ok := s.identity.(externalFinder)
+	if !ok {
+		return ExternalIdentity{}, domain.User{}, domain.ErrNotFound
+	}
+	return finder.FindExternalIdentity(ctx, key)
+}
+
 func (s *Service) IssueSession(ctx context.Context, userID uuid.UUID, requestID string) (SessionTokens, error) {
 	user, err := s.users.GetByID(ctx, userID)
 	if err != nil {
@@ -81,13 +248,32 @@ func (s *Service) IssueSession(ctx context.Context, userID uuid.UUID, requestID 
 	if !user.Active {
 		return SessionTokens{}, ErrUserInactive
 	}
+	tokens, session, err := s.newSession(userID)
+	if err != nil {
+		return SessionTokens{}, err
+	}
+	now := s.clock.Now()
+	audit := AuditEvent{
+		ID: uuid.New(), EventType: "session_created", SubjectUserID: &userID,
+		SessionID: &session.ID, Metadata: json.RawMessage(`{}`), OccurredAt: now,
+	}
+	if requestID != "" {
+		audit.RequestID = &requestID
+	}
+	if err := s.sessions.CreateSession(ctx, session, audit); err != nil {
+		return SessionTokens{}, fmt.Errorf("persist session: %w", err)
+	}
+	return tokens, nil
+}
+
+func (s *Service) newSession(userID uuid.UUID) (SessionTokens, Session, error) {
 	sessionSecret, err := s.secrets.NewSecret()
 	if err != nil {
-		return SessionTokens{}, fmt.Errorf("generate session secret: %w", err)
+		return SessionTokens{}, Session{}, fmt.Errorf("generate session secret: %w", err)
 	}
 	csrfSecret, err := s.secrets.NewSecret()
 	if err != nil {
-		return SessionTokens{}, fmt.Errorf("generate csrf secret: %w", err)
+		return SessionTokens{}, Session{}, fmt.Errorf("generate csrf secret: %w", err)
 	}
 	now := s.clock.Now()
 	idleExpiresAt, absoluteExpiresAt := NewSessionTimes(now)
@@ -97,17 +283,7 @@ func (s *Service) IssueSession(ctx context.Context, userID uuid.UUID, requestID 
 		ID: sessionID, UserID: userID, SecretHash: sessionHash[:], CSRFSecretHash: csrfHash[:],
 		CreatedAt: now, LastSeenAt: now, IdleExpiresAt: idleExpiresAt, AbsoluteExpiresAt: absoluteExpiresAt,
 	}
-	audit := AuditEvent{
-		ID: uuid.New(), EventType: "session_created", SubjectUserID: &userID,
-		SessionID: &sessionID, Metadata: json.RawMessage(`{}`), OccurredAt: now,
-	}
-	if requestID != "" {
-		audit.RequestID = &requestID
-	}
-	if err := s.sessions.CreateSession(ctx, session, audit); err != nil {
-		return SessionTokens{}, fmt.Errorf("persist session: %w", err)
-	}
-	return SessionTokens{SessionID: sessionID, SessionSecret: sessionSecret, CSRFSecret: csrfSecret}, nil
+	return SessionTokens{SessionID: sessionID, SessionSecret: sessionSecret, CSRFSecret: csrfSecret}, session, nil
 }
 
 func (s *Service) SessionCookieValue(tokens SessionTokens) string {
@@ -124,6 +300,11 @@ func (s *Service) Authenticate(ctx context.Context, cookieValue string) (Request
 	bundle, err := s.sessions.ResolveSession(ctx, sessionID, secretHash, now)
 	if err != nil {
 		return RequestIdentity{}, Session{}, err
+	}
+	if s.identity != nil && s.verifier != nil && ProviderVerificationDue(bundle.Session.LastProviderVerifiedAt, now) {
+		if err := s.revalidate(ctx, &bundle, now); err != nil {
+			return RequestIdentity{}, Session{}, err
+		}
 	}
 	requestIdentity := RequestIdentity{
 		SessionID: sessionID, Actor: bundle.User, Subject: bundle.User, Impersonation: bundle.Impersonation,
@@ -143,6 +324,66 @@ func (s *Service) Authenticate(ctx context.Context, cookieValue string) (Request
 		bundle.Session.IdleExpiresAt = nextExpiry
 	}
 	return requestIdentity, bundle.Session, nil
+}
+
+func (s *Service) revalidate(ctx context.Context, bundle *SessionBundle, now time.Time) error {
+	external, err := s.identity.GetExternalIdentityForUser(ctx, bundle.User.ID)
+	if err != nil {
+		return ErrSessionInvalid
+	}
+	credential := external.EncryptedCredential
+	if !now.Before(credential.AccessTokenExpiresAt) {
+		if !now.Before(credential.RefreshTokenExpiresAt) {
+			return ErrSessionInvalid
+		}
+		credential, err = s.identity.RefreshCredentialLocked(ctx, external.ID, func(current OAuthCredential) (OAuthCredential, error) {
+			refreshed, refreshErr := s.authenticator.RefreshCredential(ctx, current)
+			return refreshed.Credential, refreshErr
+		})
+		if err != nil {
+			return ErrSessionInvalid
+		}
+	}
+	result, err := s.verifier.VerifyPrincipal(ctx, credential, external.Key)
+	if err != nil {
+		result = VerificationResult{State: VerificationTransient, Category: ProviderUnavailable}
+	}
+	switch result.State {
+	case VerificationValid:
+		if err := s.identity.RecordProviderVerification(ctx, bundle.Session.ID, now); err != nil {
+			return fmt.Errorf("record provider verification: %w", err)
+		}
+		bundle.Session.LastProviderVerifiedAt = &now
+		bundle.Session.ProviderFailureSince = nil
+		return nil
+	case VerificationInvalid:
+		if !IsExplicitInvalid(result.Category) {
+			return ErrProviderContract
+		}
+		if err := s.identity.DeactivateUser(ctx, bundle.User.ID, bundle.User.ID, string(result.Category)); err != nil {
+			return fmt.Errorf("deactivate invalid provider principal: %w", err)
+		}
+		return ErrUserInactive
+	case VerificationTransient:
+		audit := AuditEvent{
+			ID: uuid.New(), EventType: "provider_verification_failed", SubjectUserID: &bundle.User.ID,
+			SessionID: &bundle.Session.ID, Metadata: json.RawMessage(fmt.Sprintf(`{"category":%q}`, result.Category)),
+			OccurredAt: now,
+		}
+		if err := s.identity.RecordProviderFailure(ctx, bundle.Session.ID, now, audit); err != nil {
+			return fmt.Errorf("record provider failure: %w", err)
+		}
+		if bundle.Session.ProviderFailureSince == nil {
+			bundle.Session.ProviderFailureSince = &now
+			return nil
+		}
+		if WithinProviderGrace(bundle.Session.ProviderFailureSince, now) {
+			return nil
+		}
+		return ErrProviderTransient
+	default:
+		return ErrProviderContract
+	}
 }
 
 func (s *Service) VerifyCSRF(session Session, token string) bool {

@@ -15,4 +15,7 @@ var (
 	ErrImpersonationActive   = errors.New("impersonation already active")
 	ErrImpersonationNotFound = errors.New("active impersonation not found")
 	ErrProviderTransient     = errors.New("provider verification is temporarily unavailable")
+	ErrProviderContract      = errors.New("provider response is invalid")
+	ErrLoginDenied           = errors.New("login denied")
+	ErrAdminRequired         = errors.New("administrator access required")
 )

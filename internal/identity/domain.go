@@ -189,6 +189,7 @@ type VerificationResult struct {
 }
 
 type AcceptInvitationCommand struct {
+	InvitationID  uuid.UUID
 	TokenHash     []byte
 	Principal     Principal
 	Credential    OAuthCredential
@@ -199,4 +200,21 @@ type AcceptInvitationCommand struct {
 	Session       Session
 	Audit         AuditEvent
 	Now           time.Time
+}
+
+type BootstrapAdminCommand struct {
+	Principal  Principal
+	Credential OAuthCredential
+	Session    Session
+	CSRFSecret string
+	Audit      AuditEvent
+	Now        time.Time
+}
+
+type LoginCommand struct {
+	Principal  Principal
+	Credential OAuthCredential
+	Session    Session
+	Audit      AuditEvent
+	Now        time.Time
 }

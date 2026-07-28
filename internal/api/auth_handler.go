@@ -60,6 +60,29 @@ func (h *authHandler) developmentSession(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *authHandler) larkStart(w http.ResponseWriter, r *http.Request) {
+	start, err := h.sessions.StartAuthorization(r.Context(), identity.AuthorizationLogin, nil)
+	if err != nil {
+		slog.Warn("Lark authorization start rejected", "error_category", sessionErrorCategory(err))
+		WriteJSON(w, http.StatusForbidden, ErrorBody{Error: "authentication unavailable"})
+		return
+	}
+	http.Redirect(w, r, start.URL, http.StatusFound)
+}
+
+func (h *authHandler) larkCallback(w http.ResponseWriter, r *http.Request) {
+	state, code := r.URL.Query().Get("state"), r.URL.Query().Get("code")
+	tokens, err := h.sessions.CompleteAuthorization(r.Context(), state, code, requestID(r))
+	if err != nil {
+		slog.Warn("Lark authorization callback rejected",
+			"error_category", sessionErrorCategory(err), "request_id", requestID(r))
+		WriteJSON(w, http.StatusForbidden, ErrorBody{Error: "authentication failed"})
+		return
+	}
+	h.cookies.set(w, h.sessions, tokens)
+	http.Redirect(w, r, "/", http.StatusFound)
+}
+
 func (h *authHandler) me(w http.ResponseWriter, r *http.Request) {
 	requestIdentity, ok := identity.FromContext(r.Context())
 	if !ok {

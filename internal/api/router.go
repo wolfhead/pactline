@@ -28,6 +28,7 @@ type TaskSurface struct {
 type AuthSurface struct {
 	Sessions      *identity.Service
 	Development   developmentAuthenticator
+	LarkEnabled   bool
 	AppBaseURL    *url.URL
 	SecureCookies bool
 }
@@ -71,6 +72,10 @@ func NewRouter(
 	root := http.NewServeMux()
 	if options.Auth.Development != nil {
 		root.HandleFunc("POST /api/auth/dev/session", auth.developmentSession)
+	}
+	if options.Auth.LarkEnabled {
+		root.HandleFunc("GET /api/auth/lark/start", auth.larkStart)
+		root.HandleFunc("GET /api/auth/lark/callback", auth.larkCallback)
 	}
 	middleware := identityMiddleware{
 		sessions: options.Auth.Sessions, appBaseURL: options.Auth.AppBaseURL, cookies: cookies,
