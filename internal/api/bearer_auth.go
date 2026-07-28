@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"math"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"bountyboard/internal/access"
 	"bountyboard/internal/domain"
@@ -21,8 +24,10 @@ type tokenOwnerVerifier interface {
 }
 
 type bearerAuthentication struct {
-	tokens BearerAuthenticator
-	owners tokenOwnerVerifier
+	tokens  BearerAuthenticator
+	owners  tokenOwnerVerifier
+	limiter TokenLimiter
+	now     func() time.Time
 }
 
 func (m bearerAuthentication) wrap(bearerNext, sessionFallback http.Handler) http.Handler {
@@ -42,6 +47,28 @@ func (m bearerAuthentication) wrap(bearerNext, sessionFallback http.Handler) htt
 			writeBearerProblem(w, r, err)
 			return
 		}
+		if m.limiter != nil {
+			if principal.TokenID == nil {
+				writeBearerProblem(w, r, errors.New("authenticated bearer principal has no token ID"))
+				return
+			}
+			now := time.Now()
+			if m.now != nil {
+				now = m.now()
+			}
+			decision := m.limiter.Allow(*principal.TokenID, now)
+			writeRateLimitHeaders(w, decision)
+			if !decision.Allowed {
+				retryable := true
+				w.Header().Set("Retry-After", strconv.Itoa(durationSecondsCeil(decision.ResetAfter)))
+				WriteProblem(w, r, Problem{
+					Title: "Rate limit exceeded", Status: http.StatusTooManyRequests,
+					Detail: "The bearer token has exceeded its request rate limit.",
+					Code:   "RATE_LIMITED", Retryable: &retryable,
+				})
+				return
+			}
+		}
 		if m.owners != nil {
 			if err := m.owners.VerifyTokenOwner(r.Context(), principal.User); err != nil {
 				writeBearerProblem(w, r, err)
@@ -57,6 +84,16 @@ func (m bearerAuthentication) wrap(bearerNext, sessionFallback http.Handler) htt
 		ctx := identity.WithRequestIdentity(r.Context(), requestIdentity)
 		bearerNext.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func writeRateLimitHeaders(w http.ResponseWriter, decision LimitDecision) {
+	w.Header().Set("RateLimit-Limit", strconv.Itoa(decision.Limit))
+	w.Header().Set("RateLimit-Remaining", strconv.Itoa(decision.Remaining))
+	w.Header().Set("RateLimit-Reset", strconv.Itoa(durationSecondsCeil(decision.ResetAfter)))
+}
+
+func durationSecondsCeil(value time.Duration) int {
+	return max(1, int(math.Ceil(value.Seconds())))
 }
 
 func parseBearerAuthorization(value string) (string, bool) {

@@ -104,8 +104,9 @@ func NewRouter(
 		sessions: options.Auth.Sessions, appBaseURL: options.Auth.AppBaseURL, cookies: cookies,
 	}.wrap(v1)
 	v1Protected := bearerAuthentication{
-		tokens: options.Auth.Tokens,
-		owners: options.Auth.Sessions,
+		tokens:  options.Auth.Tokens,
+		owners:  options.Auth.Sessions,
+		limiter: newTokenBucketLimiter(),
 	}.wrap(v1, v1Session)
 	root.Handle("/api/v1", v1Protected)
 	root.Handle("/api/v1/", v1Protected)
