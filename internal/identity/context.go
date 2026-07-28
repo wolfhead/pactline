@@ -3,16 +3,21 @@ package identity
 import (
 	"context"
 
+	"bountyboard/internal/access"
 	"bountyboard/internal/domain"
 
 	"github.com/google/uuid"
 )
 
 type RequestIdentity struct {
-	SessionID     uuid.UUID
-	Actor         domain.User
-	Subject       domain.User
-	Impersonation *Impersonation
+	SessionID            uuid.UUID
+	Actor                domain.User
+	Subject              domain.User
+	Impersonation        *Impersonation
+	AuthenticationMethod access.AuthenticationMethod
+	APITokenID           *uuid.UUID
+	APITokenName         string
+	Scopes               []access.Scope
 }
 
 func (i RequestIdentity) IsAdmin() bool {

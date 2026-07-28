@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"bountyboard/internal/access"
 	"bountyboard/internal/domain"
 
 	"github.com/google/uuid"
@@ -708,6 +709,7 @@ func (s *Service) Authenticate(ctx context.Context, cookieValue string) (Request
 	}
 	requestIdentity := RequestIdentity{
 		SessionID: sessionID, Actor: bundle.User, Subject: bundle.User, Impersonation: bundle.Impersonation,
+		AuthenticationMethod: access.AuthenticationMethodSession,
 	}
 	if bundle.Impersonation != nil {
 		if bundle.Subject == nil || !bundle.Subject.Active {

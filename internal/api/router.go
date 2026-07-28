@@ -94,7 +94,7 @@ func NewRouter(
 		routes: protected,
 	}
 	root.Handle("/", middleware.wrap(protected))
-	return root
+	return RequestIDMiddleware(root)
 }
 
 // mountTaskRoutes registers the task/comment/activity/label endpoints on

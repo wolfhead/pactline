@@ -95,7 +95,10 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 		status = http.StatusConflict
 	}
 
-	logger := slog.With("method", r.Method, "path", r.URL.Path, "status", status, "error", err.Error())
+	logger := slog.With(
+		"method", r.Method, "path", r.URL.Path, "status", status,
+		"request_id", requestID(r), "error", err.Error(),
+	)
 	if status >= 500 {
 		logger.Error("request failed")
 	} else {
@@ -108,7 +111,7 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 // false on failure.
 func DecodeBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
-		slog.Warn("decode request body", "path", r.URL.Path, "error", err)
+		slog.Warn("decode request body", "path", r.URL.Path, "request_id", requestID(r), "error", err)
 		WriteJSON(w, http.StatusBadRequest, ErrorBody{Error: "invalid JSON body"})
 		return false
 	}

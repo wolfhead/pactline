@@ -158,7 +158,3 @@ func (c cookieSettings) clear(w http.ResponseWriter) {
 		HttpOnly: false, Secure: c.secure, SameSite: http.SameSiteLaxMode,
 	})
 }
-
-func requestID(r *http.Request) string {
-	return r.Header.Get("X-Request-Id")
-}
