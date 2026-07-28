@@ -582,6 +582,9 @@ func (s *Service) CompleteAuthorization(ctx context.Context, state, code, reques
 	emailMatches := authenticated.Principal.Email != nil && authenticated.Principal.EmailVerified &&
 		strings.EqualFold(strings.TrimSpace(*authenticated.Principal.Email), s.bootstrapEmail)
 	if !emailMatches {
+		slog.Warn("Lark administrator bootstrap email rejected",
+			"email_present", authenticated.Principal.Email != nil,
+			"email_verified", authenticated.Principal.EmailVerified)
 		s.recordAuthenticationRejection(ctx, "unbound_principal", requestID)
 		return SessionTokens{}, ErrLoginDenied
 	}
