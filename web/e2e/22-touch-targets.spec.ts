@@ -15,15 +15,44 @@ import { USERS } from './support/config'
  *
  * It sweeps by selector rather than by a hand-written list of controls,
  * because the failure mode being guarded against is precisely "someone adds
- * a control and forgets the floor". The selector set is exactly what
+ * a control and forgets the floor". The selector set mostly mirrors what
  * index.css's blanket rule covers — plain inline text links (a task title in
- * a desktop row) are deliberately outside both.
+ * a desktop row) are deliberately outside both — plus two additions the CSS
+ * rule does NOT cover by itself, each closing a gap a prior review missed:
+ *
+ * - `[role="menuitem"]` — RowActionsMenu's 复制链接/归档/恢复 render as
+ *   Radix's default `div[role="menuitem"]`, and 打开详情 as a plain `<a>`
+ *   (via `asChild`) that also carries `role="menuitem"`. Neither tag is in
+ *   the blanket rule's selector list, so both were floored directly on
+ *   DropdownMenuItem instead (`pointer-coarse:min-h-11`); this selector is
+ *   what proves that floor is actually in effect rather than just present in
+ *   source.
+ * - `label:has([role="checkbox"])` — Radix's `CheckboxPrimitive.Root` is a
+ *   `<button role="checkbox">`, which the blanket rule's `button` clause used
+ *   to match and inflate to 44x44 regardless of the component's own `size-4`
+ *   (16px) styling — min-height/min-width clamp the *used* size, a different
+ *   property from the competing height/width utility, not a cascade
+ *   conflict a utility could win back. The fix excludes `[role="checkbox"]`
+ *   from `button` and floors the wrapping `<label>` row instead (a `<button>`
+ *   is a labelable element, so a click anywhere in the row still reaches the
+ *   checkbox). `button` alone would no longer catch this row at all, so it
+ *   is added explicitly, scoped to rows that actually wrap a checkbox — a
+ *   bare `label` would also match DueDateControl's plain inline caption,
+ *   which is correctly NOT floored (min-height does nothing to an inline
+ *   box) and would be a false failure here.
+ *
+ * `[role="checkbox"]` itself is deliberately NOT in this selector: the whole
+ * point of the label-row fix is that the checkbox glyph stays 16px while the
+ * row around it grows, so a checkbox matching this "must be >=44" sweep
+ * would fail by design. Its glyph size is asserted separately, by
+ * `expectCheckboxGlyphsNotOversized` below.
  *
  * 820x1100 is not decoration either: it is a coarse-pointer tablet, the case
  * a width-keyed `sm:min-h-8` gets wrong while a 390px test still passes.
  */
 
-const COVERED = 'button, input, select, textarea, summary, nav a'
+const COVERED =
+  'button:not([role="checkbox"]), input, select, textarea, summary, nav a, [role="menuitem"], label:has([role="checkbox"])'
 
 interface Short {
   tag: string
@@ -57,6 +86,44 @@ async function expectAllFloored(page: Page, where: string) {
   expect(short, `${where}: ${short.map((s) => `${s.tag} “${s.name}” ${s.height}px`).join('; ')}`).toEqual([])
 }
 
+interface Oversized {
+  name: string
+  width: number
+  height: number
+}
+
+/**
+ * The glyph inside `Checkbox` is styled `size-4` (16px). A sweep that only
+ * ever checks ">= 44" cannot catch a 44px thing that should have been 16px —
+ * this is the assertion that closes that gap. 20px leaves headroom above the
+ * real 16px value for sub-pixel rendering without coming anywhere near the
+ * 44px the regression produced.
+ */
+async function oversizedCheckboxGlyphs(page: Page): Promise<Oversized[]> {
+  return page.evaluate(() => {
+    const out: Oversized[] = []
+    for (const el of document.querySelectorAll('[role="checkbox"]')) {
+      const rect = el.getBoundingClientRect()
+      if (rect.width === 0 && rect.height === 0) continue
+      if (rect.height <= 20 && rect.width <= 20) continue
+      out.push({
+        name: (el.getAttribute('aria-label') || '').trim().slice(0, 30),
+        width: Math.round(rect.width * 10) / 10,
+        height: Math.round(rect.height * 10) / 10,
+      })
+    }
+    return out
+  })
+}
+
+async function expectCheckboxGlyphsNotOversized(page: Page, where: string) {
+  const oversized = await oversizedCheckboxGlyphs(page)
+  expect(
+    oversized,
+    `${where}: ${oversized.map((s) => `“${s.name}” ${s.width}x${s.height}px`).join('; ')}`,
+  ).toEqual([])
+}
+
 test('the coarse-pointer context this file needs is actually in effect', async ({ page }) => {
   await page.goto('/tasks')
   const media = await page.evaluate(() => ({
@@ -79,6 +146,25 @@ test('every covered control clears 44px on a phone', async ({ page, uniqueTitle,
   await page.goto('/tasks')
   await expect(page.getByRole('link', { name: title, exact: true })).toBeVisible()
   await expectAllFloored(page, 'phone 390 list')
+
+  // FilterBar's 状态 popover: a `Checkbox` per row, wrapped in a `<label>`.
+  // This is the exact case the previous review missed — `button` matched
+  // Radix's `role="checkbox"` button and clamped the 16px glyph to 44x44.
+  await page.getByRole('button', { name: '状态', exact: true }).click()
+  await expect(page.getByRole('group', { name: '按状态筛选' })).toBeVisible()
+  await page.waitForTimeout(300)
+  await expectAllFloored(page, 'phone 390 状态 popover')
+  await expectCheckboxGlyphsNotOversized(page, 'phone 390 状态 popover')
+  await page.keyboard.press('Escape')
+
+  // RowActionsMenu's "⋯" menu: 打开详情 renders as a plain `<a>` outside any
+  // `<nav>`, 复制链接/归档 as Radix's default `div[role="menuitem"]` — neither
+  // tag is in the blanket rule's selector set, so both were 32px.
+  await page.getByRole('button', { name: `任务 #${task.number} 更多操作` }).click()
+  await expect(page.getByRole('menuitem', { name: '打开详情' })).toBeVisible()
+  await page.waitForTimeout(300)
+  await expectAllFloored(page, 'phone 390 row actions menu')
+  await page.keyboard.press('Escape')
 
   // The 我的 sheet is where the phone's theme/identity switchers now live —
   // off the standing header, but still real controls a finger has to hit.

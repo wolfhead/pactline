@@ -40,16 +40,38 @@
  * audit flagged. `nav a` IS included: the sidebar's and the bottom bar's
  * links are tap targets that happen to be anchors, not prose.
  *
+ * `button:not([role="checkbox"])`: Radix's `CheckboxPrimitive.Root` renders
+ * `<button type="button" role="checkbox">`, so the bare `button` clause used
+ * to match it — clamping the 16px (`size-4`) glyph up to 44px, a regression
+ * measured in FilterBar's 状态/优先级 popovers and LabelControl. min-height
+ * and min-width clamp the *used* size regardless of the competing
+ * `height`/`width` utility on the element (different properties, not a
+ * cascade conflict), so no utility on `Checkbox` itself could win this back.
+ * Excluding the role is what keeps the glyph at its real size; anything else
+ * Radix renders as a bare `<button>` with its own sizing (a future Switch,
+ * RadioGroup item) would need the same treatment if it shows up.
+ *
+ * `label` is included instead, so the tap target moves to the row rather
+ * than disappearing: FilterBar's and LabelControl's `<label className="flex
+ * items-center ...">` rows each wrap one `Checkbox` plus its text, and a
+ * `<button>` is a labelable element, so a click anywhere in the floored row
+ * still reaches the checkbox via the browser's native label-forwarding, not
+ * a listener of ours. Safe to float `label` globally: every other `<label>`
+ * in the product (DueDateControl's 截止日期 caption) is a plain inline label
+ * with no box around an input, so min-height does nothing to it — same
+ * reasoning as the inline-link carve-out above.
+ *
  * In @layer base deliberately, so a utility still wins where a smaller box is
  * genuinely correct (LabelManager's rename field keeps its `min-w-0`). */
 @layer base {
   @media (pointer: coarse) {
-    button,
+    button:not([role="checkbox"]),
     input,
     select,
     textarea,
     summary,
-    nav a {
+    nav a,
+    label {
       min-height: 44px;
       min-width: 44px;
     }

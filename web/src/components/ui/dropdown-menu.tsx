@@ -74,7 +74,13 @@ function DropdownMenuItem({
       data-inset={inset}
       data-variant={variant}
       className={cn(
-        "relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none focus:bg-accent-subtle focus:text-fg data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 data-[variant=destructive]:text-danger data-[variant=destructive]:focus:bg-danger-subtle data-[variant=destructive]:focus:text-danger [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-fg-muted data-[variant=destructive]:*:[svg]:text-danger!",
+        // pointer-coarse:min-h-11 is NOT redundant with index.css's blanket
+        // touch floor: that rule's selector set is button/input/select/
+        // textarea/summary/nav a, and Radix renders this as `div[role="menuitem"]`
+        // (or, via `asChild`, whatever element the caller passes — RowActionsMenu
+        // passes a plain `<a>` outside any `<nav>`), neither of which the
+        // blanket rule reaches. Measured 32px on a coarse pointer without this.
+        "relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none focus:bg-accent-subtle focus:text-fg data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 data-[variant=destructive]:text-danger data-[variant=destructive]:focus:bg-danger-subtle data-[variant=destructive]:focus:text-danger [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-fg-muted data-[variant=destructive]:*:[svg]:text-danger! pointer-coarse:min-h-11",
         className
       )}
       {...props}

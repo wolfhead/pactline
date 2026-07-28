@@ -85,7 +85,7 @@ const InlineCreate = forwardRef<InlineCreateHandle, InlineCreateProps>(function 
 
   return (
     <form
-      className="flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 focus-within:border-accent"
+      className="flex items-center gap-2 rounded-md border border-border-strong bg-surface px-3 py-2 focus-within:border-accent"
       onSubmit={handleFormSubmit}
     >
       <Plus className="size-4 shrink-0 text-fg-subtle" aria-hidden="true" />
