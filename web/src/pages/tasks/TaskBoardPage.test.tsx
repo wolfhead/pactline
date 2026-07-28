@@ -19,7 +19,7 @@ vi.mock('@/identity', async () => ({
   useIdentity: () => ({
     me: { id: 'u1', name: '张沁', email: 'a@x.com' },
     users: [{ id: 'u1', name: '张沁', email: 'a@x.com' }],
-    setMe: () => {},
+    switchTo: () => {},
   }),
 }))
 

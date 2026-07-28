@@ -128,8 +128,19 @@ export default function TaskListPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queryKey, me?.id, reloadToken])
 
+  // Which query the rows on screen belong to. loadMore is fired from a click
+  // handler, so unlike the effect above it has no cleanup to flip a
+  // `cancelled` flag — yet it appends to the same `tasks` array. Change a
+  // filter while a page-2 request is in flight and its rows, fetched under
+  // the OLD filter, land in the NEW filter's list with nothing to correct
+  // them until the next filter change. Hence a ref holding the live key,
+  // read again after the await.
+  const listKeyRef = useRef('')
+  listKeyRef.current = `${queryKey}|${me?.id ?? ''}|${reloadToken}`
+
   async function loadMore() {
     if (!nextCursor || loadingMore) return
+    const forKey = listKeyRef.current
     setLoadingMore(true)
     try {
       const res = await listTasks({
@@ -143,10 +154,12 @@ export default function TaskListPage() {
         cursor: nextCursor,
         limit: PAGE_SIZE,
       })
+      if (listKeyRef.current !== forKey) return
       setTasks((ts) => [...ts, ...res.items])
       setNextCursor(res.next_cursor)
       setHasMore(res.has_more)
     } catch (err) {
+      if (listKeyRef.current !== forKey) return
       setError(String((err as Error).message))
     } finally {
       setLoadingMore(false)

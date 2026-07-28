@@ -101,7 +101,7 @@ export function ThemeToggle() {
         value={preference}
         aria-label="主题"
         onChange={(e) => setPreference(e.target.value as ThemePreference)}
-        className="min-h-11 min-w-0 flex-1 rounded-md border border-border-strong bg-surface px-2 py-1.5 text-sm text-fg shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/50 pointer-coarse:min-h-11 sm:min-h-8 sm:flex-none"
+        className="min-w-0 flex-1 rounded-md border border-border-strong bg-surface px-2 py-1.5 text-sm text-fg shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/50 sm:flex-none"
       >
         {ORDER.map((p) => (
           <option key={p} value={p}>

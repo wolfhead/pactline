@@ -30,8 +30,6 @@ describe('theme bridge', () => {
   })
 
   it('removes the attribute under "system" so prefers-color-scheme takes over', async () => {
-    const { default: userEventless } = { default: null as unknown as never }
-    void userEventless
     render(<ThemeToggle />)
     const select = screen.getByLabelText('主题') as HTMLSelectElement
     const { fireEvent } = await import('@testing-library/react')

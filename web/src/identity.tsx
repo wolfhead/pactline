@@ -131,7 +131,7 @@ export function UserSwitcher() {
       <select
         value={me?.id ?? ''}
         onChange={(e) => switchTo(e.target.value)}
-        className="min-h-11 min-w-0 flex-1 rounded-md border border-border-strong bg-surface px-2 py-1.5 text-sm text-fg shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/50 pointer-coarse:min-h-11 sm:min-h-8 sm:flex-none"
+        className="min-w-0 flex-1 rounded-md border border-border-strong bg-surface px-2 py-1.5 text-sm text-fg shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/50 sm:flex-none"
       >
         {users.map((u) => (
           <option key={u.id} value={u.id}>

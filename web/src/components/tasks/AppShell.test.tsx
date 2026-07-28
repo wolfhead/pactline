@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { render, screen, cleanup } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import AppShell from './AppShell'
 
@@ -47,6 +47,26 @@ describe('AppShell', () => {
     renderShell()
     expect(screen.getByRole('navigation', { name: '底部导航' })).toBeVisible()
     expect(screen.queryByRole('button', { name: '打开导航' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the theme/identity switchers in the header above a phone', () => {
+    setWidth(900)
+    renderShell()
+    expect(screen.getByLabelText('主题')).toBeVisible()
+    expect(screen.getByLabelText('当前身份')).toBeVisible()
+  })
+
+  it('moves the switchers off the phone header and behind the 我的 tab', () => {
+    setWidth(390)
+    renderShell()
+    // Not standing chrome: two full-width selects in the header cost ~90px
+    // above the first task on the tier with the least room.
+    expect(screen.queryByLabelText('主题')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('当前身份')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '我的' }))
+    expect(screen.getByLabelText('主题')).toBeVisible()
+    expect(screen.getByLabelText('当前身份')).toBeVisible()
   })
 
   it('renders its children in every tier', () => {

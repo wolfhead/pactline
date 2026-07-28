@@ -1,4 +1,3 @@
-import type { Locator } from '@playwright/test'
 import { test, expect } from './support/task-fixtures'
 import { switchIdentity } from './support/identity'
 import { USERS } from './support/config'
@@ -50,48 +49,31 @@ test('navigation is permanent at lg, a drawer at md, and a bottom bar on a phone
   await expect(page.getByRole('navigation', { name: '底部导航' })).toBeVisible()
 })
 
-test('every interactive target on a phone clears 44px in real layout', async ({
-  page,
-  uniqueTitle,
-  trackTask,
-  tasksApi,
-}) => {
-  const title = uniqueTitle('Touch target')
-  const task = await tasksApi.createTask(USERS.engineerC.id, { title })
-  trackTask(task.id)
+// The touch-target sweep that used to live here ran on Desktop Chrome at
+// 390px — `pointer: fine`, where the rule it claimed to check cannot even
+// apply. It moved to 22-touch-targets.spec.ts, which runs under the
+// chromium-touch project.
 
+test('the phone header carries no switchers and the filter bar no create button', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/tasks')
-  await switchIdentity(page, USERS.engineerC.id)
-  await expect(page.getByRole('link', { name: title, exact: true })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: '底部导航' })).toBeVisible()
 
-  // Measured, not asserted on a class name: a min-h-11 that a parent's
-  // flex settings quietly override would pass a className check and fail
-  // here, which is the point.
-  async function expectTallEnough(target: Locator, what: string) {
-    // hover() first, for its actionability checks rather than the hover
-    // itself: boundingBox() reports the live, transformed box, so a target
-    // inside a popover that is still playing its zoom-in-95 entry animation
-    // measures ~42px for a 44px element. hover() waits until the box has
-    // been stable for two animation frames — and, as a bonus, proves the
-    // target is actually reachable by a pointer rather than merely present.
-    await target.hover()
-    const box = await target.boundingBox()
-    expect(box, `${what} has no box`).not.toBeNull()
-    expect(box!.height, `${what} is only ${box!.height}px tall`).toBeGreaterThanOrEqual(44)
-  }
+  // Both are reachable, neither is standing chrome: the switchers sit behind
+  // 我的, and 新建任务 would be a third route to the capture row directly
+  // above it.
+  await expect(page.getByLabel('当前身份')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '新建任务' })).toHaveCount(0)
 
-  await expectTallEnough(page.getByRole('combobox', { name: `任务 #${task.number} 状态` }), '行内状态控件')
-  await expectTallEnough(page.getByRole('button', { name: `任务 #${task.number} 更多操作` }), '行内更多操作')
-  await expectTallEnough(page.getByRole('navigation', { name: '底部导航' }).getByRole('link').first(), '底部导航项')
-  await expectTallEnough(page.getByRole('button', { name: '标签', exact: true }), '标签筛选触发器')
+  await page.getByRole('button', { name: '我的' }).click()
+  await expect(page.getByLabel('当前身份')).toBeVisible()
+  await expect(page.getByLabel('主题')).toBeVisible()
 
-  // LabelManager's <summary> lives inside the 标签 popover and is the one
-  // target the deleted stylesheet used to floor at 44px on coarse pointers;
-  // nothing replaced that when it went, so it is measured here explicitly
-  // rather than assumed to have come along with the shared trigger class.
-  await page.getByRole('button', { name: '标签', exact: true }).click()
-  await expectTallEnough(page.getByText('管理标签', { exact: true }), '管理标签展开器')
+  // …and they are standing chrome again the moment there is room for them.
+  await page.keyboard.press('Escape')
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await expect(page.getByLabel('当前身份')).toBeVisible()
+  await expect(page.getByRole('button', { name: '新建任务' })).toBeVisible()
 })
 
 test('opening a task from deep in the list keeps the list position', async ({

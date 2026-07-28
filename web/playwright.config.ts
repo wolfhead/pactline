@@ -43,7 +43,22 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
+      // The touch-target sweep belongs to the project below and only there:
+      // run under this one it would silently measure a `pointer: fine`
+      // context and prove nothing.
+      testIgnore: /22-touch-targets\.spec\.ts/,
       use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      // A genuine coarse-pointer context. `hasTouch` is what makes Chromium
+      // report `(pointer: coarse)` / `(hover: none)` — the media query
+      // index.css's 44px floor is keyed on. Without a project like this
+      // there is no way to exercise that rule at all from Playwright, and a
+      // phone-width run under Desktop Chrome would pass whether the floor
+      // exists or not.
+      name: 'chromium-touch',
+      testMatch: /22-touch-targets\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], hasTouch: true },
     },
   ],
   webServer: [

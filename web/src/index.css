@@ -18,6 +18,44 @@
   }
 }
 
+/* The 44x44 touch floor (WCAG 2.5.5), as ONE blanket rule rather than a floor
+ * hand-placed per control. styles.css carried exactly this rule; deleting it
+ * left six sites floored and everything else short — measured on a real
+ * coarse-pointer context, 打开导航 was 32px, the drawer's nav links 36px, the
+ * capture input 20px, 归档 16px, 关闭 28px, 任务标题 34px. One rule re-covers
+ * all of them, and — the reason it is a rule and not seven className edits —
+ * it also covers the controls nobody has written yet.
+ *
+ * Keyed on `(pointer: coarse)`, never on width. This is a dense tool used
+ * daily with a mouse, where a 44px floor everywhere would destroy exactly the
+ * density the product is built around; and a coarse-pointer tablet at 820px
+ * is the case a width-keyed floor (`sm:min-h-8`) gets wrong in both
+ * directions. Any `pointer-coarse:`/`sm:min-h-*` pair in a className is now
+ * redundant with this and was removed — a utility would silently outrank it.
+ *
+ * Carve-out, carried over from styles.css: plain inline text links — a task
+ * title in a desktop row, the 重试 link inside an error message — are NOT
+ * included. They are inline by design, min-height does nothing to an inline
+ * box, and forcing a box model onto them would reflow prose for a case no
+ * audit flagged. `nav a` IS included: the sidebar's and the bottom bar's
+ * links are tap targets that happen to be anchors, not prose.
+ *
+ * In @layer base deliberately, so a utility still wins where a smaller box is
+ * genuinely correct (LabelManager's rename field keeps its `min-w-0`). */
+@layer base {
+  @media (pointer: coarse) {
+    button,
+    input,
+    select,
+    textarea,
+    summary,
+    nav a {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
+}
+
 /* The repo picks the theme with a data-theme attribute on <html>, and under
  * "system" it REMOVES the attribute so prefers-color-scheme keeps handling it
  * with no listener of ours (see web/src/theme.tsx). shadcn's own convention is

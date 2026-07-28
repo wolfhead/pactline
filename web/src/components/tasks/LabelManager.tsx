@@ -57,13 +57,14 @@ export default function LabelManager({ labels, onChanged }: LabelManagerProps) {
 
   return (
     <details className="text-sm">
-      {/* min-h-11 / py-2.5, dropping back to sm:min-h-8 / sm:py-1 for mouse
-          widths: the old stylesheet carried a coarse-pointer 44px floor for
-          this disclosure and its deletion left the summary a ~20px line —
-          the smallest tap target in the phone layout. Height rather than
-          `flex items-center`, because `display:flex` on a <summary> drops
-          the native disclosure marker. */}
-      <summary className="min-h-11 cursor-pointer py-2.5 text-fg-muted hover:text-fg sm:min-h-8 sm:py-1">
+      {/* No min-height here on purpose. The previous `min-h-11 sm:min-h-8`
+          was keyed on viewport width, so a coarse-pointer tablet at 820px
+          dropped this disclosure back to ~32px — the rule it replaced was
+          width-independent. index.css's `@media (pointer: coarse)` base rule
+          now floors it at 44px for touch and leaves it a compact line for a
+          mouse. Not `flex items-center`, which on a <summary> would drop the
+          native disclosure marker. */}
+      <summary className="cursor-pointer py-1 text-fg-muted hover:text-fg">
         管理标签
       </summary>
       <ul className="my-2 flex list-none flex-col gap-1 pl-0">

@@ -2,7 +2,10 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover is what makes iOS report a non-zero
+         env(safe-area-inset-bottom); without it AppShell's bottom tab bar
+         padding for the home-indicator area is silently always 0. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Bounty Board</title>
   </head>
   <body>

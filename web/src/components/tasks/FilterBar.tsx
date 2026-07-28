@@ -1,4 +1,5 @@
 import { Plus } from 'lucide-react'
+import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useIdentity } from '@/identity'
 import {
   PRIORITY_LABELS,
@@ -84,6 +85,7 @@ interface FilterBarProps {
  * list. */
 export default function FilterBar({ filters, onChange, labels, onLabelsChanged, onRequestCreate }: FilterBarProps) {
   const { users } = useIdentity()
+  const tier = useBreakpoint()
 
   function toggleStatus(s: TaskStatus) {
     const has = filters.statuses.includes(s)
@@ -112,7 +114,7 @@ export default function FilterBar({ filters, onChange, labels, onLabelsChanged, 
         onChange={(e) => onChange({ ...filters, search: e.target.value })}
         placeholder="搜索标题或描述…"
         aria-label="搜索任务"
-        className="h-8 min-h-11 min-w-[180px] max-w-xs flex-1 rounded-md border border-border-strong bg-surface px-2.5 text-sm text-fg outline-none placeholder:text-fg-muted focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/50 pointer-coarse:min-h-11 sm:min-h-8"
+        className="h-8 min-w-[180px] max-w-xs flex-1 rounded-md border border-border-strong bg-surface px-2.5 text-sm text-fg outline-none placeholder:text-fg-muted focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/50"
       />
 
       <Popover>
@@ -120,10 +122,11 @@ export default function FilterBar({ filters, onChange, labels, onLabelsChanged, 
           状态{statusActive && ` · ${filters.statuses.length}`}
         </PopoverTrigger>
         <PopoverContent className="w-48 p-2" role="group" aria-label="按状态筛选">
-          {/* list-none/pl-0: Tailwind is imported without preflight here (see
-              index.css), so nothing resets the UA default marker/40px indent
-              a bare <ul> gets — without this every list in a popover shows
-              bullets pushed well past the checkboxes (caught by screenshot). */}
+          {/* list-none/pl-0 are stated rather than left to preflight: they
+              are what a bare <ul> in a popover needs either way, and spelling
+              them out keeps this list from silently regrowing the UA marker
+              and 40px indent if the reset ever moves (caught by screenshot
+              when the old stylesheet went). */}
           <ul className="flex list-none flex-col gap-1 pl-0">
             {TASK_STATUSES.map((s) => (
               <li key={s}>
@@ -224,17 +227,24 @@ export default function FilterBar({ filters, onChange, labels, onLabelsChanged, 
         {filters.order === 'asc' ? '↑ 升序' : '↓ 降序'}
       </button>
 
-      <button
-        type="button"
-        onClick={onRequestCreate}
-        className={cn(
-          CONTROL_TRIGGER_CLASS,
-          'ml-auto justify-center border-accent bg-accent px-3 text-accent-fg hover:opacity-90',
-        )}
-      >
-        <Plus className="size-3.5" aria-hidden="true" />
-        新建任务
-      </button>
+      {/* Not on a phone. There it is the third way to reach the same capture
+       * row — which sits directly above this bar, and which the bottom tab
+       * bar's 新建 tab already jumps focus into — and it wraps onto a fourth
+       * filter row of its own, ~52px of pure duplication on the tier with
+       * the least vertical room. Every other tier keeps it. */}
+      {tier !== 'phone' && (
+        <button
+          type="button"
+          onClick={onRequestCreate}
+          className={cn(
+            CONTROL_TRIGGER_CLASS,
+            'ml-auto justify-center border-accent bg-accent px-3 text-accent-fg hover:opacity-90',
+          )}
+        >
+          <Plus className="size-3.5" aria-hidden="true" />
+          新建任务
+        </button>
+      )}
     </div>
   )
 }

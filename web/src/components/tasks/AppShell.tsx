@@ -20,23 +20,29 @@ const BOTTOM_TABS = [
 export default function AppShell({ children }: { children: ReactNode }) {
   const tier = useBreakpoint()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [meOpen, setMeOpen] = useState(false)
 
   const showPermanentNav = tier === 'lg' || tier === 'xl'
   const showDrawer = tier === 'md'
   const showBottomTabs = tier === 'phone'
 
+  const switchers = (
+    <>
+      <ThemeToggle />
+      <UserSwitcher />
+    </>
+  )
+
   return (
     <div className="flex h-dvh flex-col bg-surface text-fg">
       <header
-        className={cn(
-          'flex shrink-0 border-b border-border px-3 py-2 sm:px-4',
-          // A phone header stacks: title first, switchers on their own
-          // full-width row below. Sharing one row forced 当前身份's label
-          // into single-character line wraps at 390px — Chinese text has no
-          // spaces to break on, so a squeezed flex item wraps mid-word
-          // instead of just truncating (caught in the Step 6 screenshots).
-          tier === 'phone' ? 'flex-col items-stretch gap-2' : 'flex-wrap items-center justify-between gap-2',
-        )}
+        // One row on every tier now. The phone header used to stack the two
+        // switchers onto a full-width row of their own below the title,
+        // which cost ~90px of a 844px screen before a single task was
+        // visible; they live behind the 我的 tab instead (see below), so
+        // there is nothing left to stack and the 390px mid-word wrap that
+        // forced the stacking cannot happen either.
+        className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2 sm:px-4"
       >
         <div className="flex items-center gap-2">
           {showDrawer && (
@@ -45,7 +51,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 type="button"
                 aria-label="打开导航"
                 onClick={() => setDrawerOpen(true)}
-                className="flex min-h-11 items-center justify-center rounded-md border border-border px-2.5 text-fg sm:min-h-8"
+                className="flex h-8 items-center justify-center rounded-md border border-border-strong px-2.5 text-fg"
               >
                 <Menu className="size-5" aria-hidden="true" />
               </button>
@@ -57,10 +63,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           )}
           <span className="text-sm font-semibold">任务面板</span>
         </div>
-        <div className={cn('flex items-center gap-3', tier === 'phone' && 'flex-col items-stretch gap-2')}>
-          <ThemeToggle />
-          <UserSwitcher />
-        </div>
+        {!showBottomTabs && <div className="flex items-center gap-3">{switchers}</div>}
       </header>
 
       <div className="flex min-h-0 flex-1">
@@ -106,17 +109,34 @@ export default function AppShell({ children }: { children: ReactNode }) {
             <Plus className="size-5" aria-hidden="true" />
             新建
           </Link>
-          {/* A dedicated "my tasks" view is out of scope here (see
-           * NavSidebar's tags-view note) — this degrades to the plain list
-           * for now rather than staying inert, and deliberately isn't a
-           * NavLink so it never doubles up the active indicator with 列表. */}
-          <Link
-            to="/tasks"
-            className="flex min-h-11 flex-col items-center justify-center gap-0.5 py-1.5 text-[11px] text-fg-muted"
-          >
-            <User className="size-5" aria-hidden="true" />
-            我的
-          </Link>
+          {/* 我的 is where the two switchers went. Permanently parked in the
+           * phone header they cost ~90px — two full-width 44px selects and a
+           * gap — above every task, on the one tier that has the least room
+           * and the least reason to change theme or identity mid-scroll.
+           * A sheet is the right trade: still one tap away, zero standing
+           * cost. (A dedicated "my tasks" list stays out of scope — see
+           * NavSidebar's tags-view note.) */}
+          <Sheet open={meOpen} onOpenChange={setMeOpen}>
+            <button
+              type="button"
+              onClick={() => setMeOpen(true)}
+              className="flex min-h-11 flex-col items-center justify-center gap-0.5 py-1.5 text-[11px] text-fg-muted"
+            >
+              <User className="size-5" aria-hidden="true" />
+              我的
+            </button>
+            <SheetContent
+              side="bottom"
+              // The same home-indicator reasoning as the tab bar above, and
+              // now actually load-bearing: index.html declares
+              // viewport-fit=cover, so the inset resolves to a real value on
+              // a notched phone instead of always 0.
+              className="gap-4 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+            >
+              <SheetTitle className="text-sm">我的</SheetTitle>
+              <div className="flex flex-col gap-3">{switchers}</div>
+            </SheetContent>
+          </Sheet>
         </nav>
       )}
     </div>
