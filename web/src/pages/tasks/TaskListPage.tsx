@@ -202,9 +202,15 @@ export default function TaskListPage() {
       .catch((err) => setRowErrors((e) => ({ ...e, [task.number]: `恢复失败：${(err as Error).message}` })))
   }
 
-  // Arrived here with a request to focus the capture row once mounted — the
-  // phone bottom bar's 新建 tab and the board both navigate that way, since
-  // neither has a capture row of its own.
+  // Arrived here with a request to focus the capture row — the phone bottom
+  // bar's 新建 tab navigates this way, since it has no capture row of its
+  // own. Keyed on `location.state`, not `[]`: a phone visiting `/tasks/143`
+  // keeps this same TaskListPage instance mounted (the URL's :number just
+  // selects a row, per the module doc above), so tapping 新建 from there
+  // changes location without ever remounting the component. An
+  // on-mount-only effect would fire once for the detail view and never
+  // again — the capture row would silently stay unfocused every time after
+  // the first cold load.
   useEffect(() => {
     const state = location.state as { focusCreate?: boolean } | null
     if (state?.focusCreate) {
@@ -212,7 +218,7 @@ export default function TaskListPage() {
       navigate(location.pathname, { replace: true, state: {} })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [location.state])
 
   function closeDetail() {
     navigate('/tasks')

@@ -115,7 +115,7 @@ export default function TaskRow({ task, selected, tier, users, error, onPatch, o
         <div className="flex items-start justify-between gap-2">
           <Link
             to={`/tasks/${task.number}`}
-            className={cn('min-w-0 flex-1 text-sm font-medium', dimmedTextClass)}
+            className={cn('flex min-h-11 min-w-0 flex-1 items-center text-sm font-medium', dimmedTextClass)}
           >
             {task.title}
           </Link>
@@ -154,13 +154,16 @@ export default function TaskRow({ task, selected, tier, users, error, onPatch, o
         {task.title}
       </Link>
       {labelChips}
-      <div className="flex shrink-0 items-center justify-end gap-1.5">
-        <div className="w-28">{statusControl}</div>
-        <div className="w-24">{priorityControl}</div>
-        <div className="w-28">{assigneeControl}</div>
-        <div className="w-24">{dueDateControl}</div>
-        {actionsMenu}
-      </div>
+      <div className="w-28 shrink-0">{statusControl}</div>
+      <div className="w-24 shrink-0">{priorityControl}</div>
+      <div className="w-28 shrink-0">{assigneeControl}</div>
+      {/* Not width-wrapped like the three controls above: a due date is
+          near-fixed-width regardless of value ("YYYY-MM-DD" or 无截止), so
+          this stays a direct sibling of the title in one flat flex row
+          instead of nesting through a column wrapper — see the desktop
+          single-line test in TaskRow.test.tsx. */}
+      {dueDateControl}
+      {actionsMenu}
       {error && (
         <p role="alert" className="ml-2 shrink-0 text-xs text-danger">
           {error}

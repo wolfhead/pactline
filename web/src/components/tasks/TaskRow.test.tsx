@@ -72,4 +72,33 @@ describe('TaskRow', () => {
     expect(screen.getByRole('link', { name: '修复竞价超时导致的丢量' }))
       .toHaveAttribute('href', '/tasks/142')
   })
+
+  const LONG = { ...TASK, number: 143, title: '把竞价链路端到端的 P99 压到 50ms 以下并补齐全链路埋点' }
+
+  it('gives the phone row a second line for the metadata', () => {
+    render(
+      <MemoryRouter>
+        <TaskRow task={LONG} selected={false} tier="phone" users={USERS}
+          onPatch={vi.fn()} onArchive={() => {}} onRestore={() => {}} />
+      </MemoryRouter>,
+    )
+    // The phone row is two lines: the title owns the first one outright, so
+    // it is NOT a sibling of the metadata. Decoy this catches: reusing the
+    // desktop single-line row, where title and metadata share one flex row.
+    const title = screen.getByRole('link', { name: LONG.title })
+    const due = screen.getByText('2026-07-30')
+    expect(title.parentElement).not.toBe(due.parentElement)
+  })
+
+  it('renders the desktop row as a single line', () => {
+    render(
+      <MemoryRouter>
+        <TaskRow task={LONG} selected={false} tier="xl" users={USERS}
+          onPatch={vi.fn()} onArchive={() => {}} onRestore={() => {}} />
+      </MemoryRouter>,
+    )
+    const title = screen.getByRole('link', { name: LONG.title })
+    const due = screen.getByText('2026-07-30')
+    expect(title.parentElement).toBe(due.parentElement)
+  })
 })
