@@ -5,7 +5,7 @@
 The primary product is now a task-management platform. Its current delivery
 surface includes:
 
-- responsive task list and board views;
+- responsive task list with on-demand task detail;
 - a desktop three-column workspace with a half-width task detail pane;
 - first-class projects and ordered milestones;
 - structured, revisioned acceptance criteria shared by projects, milestones,

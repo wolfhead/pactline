@@ -14,7 +14,7 @@ func TestCreateTaskDefaultsAndEmbedsCreator(t *testing.T) {
 
 	out := mustCreateTaskHTTP(t, h, db, userA, map[string]any{"title": "Write API docs"})
 
-	require.Equal(t, "backlog", out.Status)
+	require.Equal(t, "todo", out.Status)
 	require.Equal(t, "none", out.Priority)
 	require.Nil(t, out.Assignee)
 	require.Equal(t, uuid.MustParse(userA), out.Creator.ID)
@@ -96,6 +96,9 @@ func TestUpdateTaskRejectsUnknownStatus(t *testing.T) {
 	h, db := newTaskTestServer(t)
 	created := mustCreateTaskHTTP(t, h, db, userA, map[string]any{"title": "x"})
 	rec := do(t, h, http.MethodPatch, fmt.Sprintf("/api/tasks/%d", created.Number), userA, map[string]any{"status": "not-a-status"})
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+
+	rec = do(t, h, http.MethodPatch, fmt.Sprintf("/api/tasks/%d", created.Number), userA, map[string]any{"status": "backlog"})
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
 

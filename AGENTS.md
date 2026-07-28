@@ -122,7 +122,7 @@ For the accepted task UI rewrite:
 - Mouse-visible controls are the primary interaction. Do not add application
   keyboard shortcuts. `Escape` behavior supplied by accessible Radix overlays
   remains valid.
-- Board view remains a peer view; bulk-selection UI is out of scope.
+- The task list is the primary task surface; bulk-selection UI is out of scope.
 - Preserve theme behavior exactly: `system | light | dark`, storage key
   `bountyboard.theme.v2`, `data-theme`, and light as the default. Do not write a
   default preference to storage as if the user selected it.

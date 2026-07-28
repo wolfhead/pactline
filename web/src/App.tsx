@@ -1,6 +1,5 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import AppShell from './components/tasks/AppShell'
-import TaskBoardPage from './pages/tasks/TaskBoardPage'
 import TaskListPage from './pages/tasks/TaskListPage'
 import ProjectListPage from './pages/projects/ProjectListPage'
 import ProjectDetailPage from './pages/projects/ProjectDetailPage'
@@ -29,7 +28,6 @@ function ProtectedApplication() {
     <AppShell>
       <Routes>
         <Route path="/tasks" element={<TaskListPage />} />
-        <Route path="/tasks/board" element={<TaskBoardPage />} />
         <Route path="/tasks/:number" element={<TaskListPage />} />
         <Route path="/projects" element={<ProjectListPage />} />
         <Route path="/projects/:number" element={<ProjectDetailPage />} />

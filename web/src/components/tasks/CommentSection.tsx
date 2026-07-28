@@ -21,7 +21,7 @@ export default function CommentSection({ taskNumber }: CommentSectionProps) {
 
   // Fetches whenever the task changes or identity changes, guarded against
   // out-of-order resolution — mirrors the cancelled-flag idiom in
-  // identity.tsx / WorkFeed.tsx / Board.tsx.
+  // identity.tsx / WorkFeed.tsx.
   useEffect(() => {
     let cancelled = false
     listComments(taskNumber)

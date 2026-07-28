@@ -4,7 +4,6 @@ import { cn } from '@/lib/utils'
 import { CONTROL_TRIGGER_CLASS, PROPERTY_ICON_SLOT_CLASS } from './trigger'
 
 const DOT: Record<TaskStatus, string> = {
-  backlog: 'border-status-backlog',
   todo: 'border-status-todo',
   in_progress: 'border-status-in-progress',
   in_review: 'border-status-in-review',

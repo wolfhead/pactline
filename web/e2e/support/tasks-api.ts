@@ -9,7 +9,7 @@ import { BACKEND_URL, WEB_URL } from './config'
  * focused on the one behaviour under test.
  */
 
-export type TaskStatus = 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancelled'
+export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancelled'
 export type TaskPriority = 'none' | 'low' | 'medium' | 'high' | 'urgent'
 
 export interface UserRef {

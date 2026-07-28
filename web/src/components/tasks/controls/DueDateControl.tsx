@@ -42,7 +42,7 @@ function triggerLabel(value: string | null): string {
   return `${date.getMonth() + 1}月${date.getDate()}日`
 }
 
-/** A product-styled date popover shared by list rows, task detail and board
+/** A product-styled date popover shared by list rows and task detail
  * cards. It deliberately avoids the browser-native date picker, whose
  * appearance and behavior vary by platform. */
 export default function DueDateControl({

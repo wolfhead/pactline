@@ -16,7 +16,12 @@ for (const key of ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'http
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '..')
 
-const DSN = 'postgres://bounty:bounty@localhost:5433/bountyboard?sslmode=disable'
+const DSN = process.env.E2E_DATABASE_URL ??
+  'postgres://bounty:bounty@localhost:5433/bountyboard?sslmode=disable'
+const BACKEND_URL = process.env.E2E_BACKEND_URL ?? 'http://localhost:8080'
+const WEB_URL = process.env.E2E_WEB_URL ?? 'http://localhost:5173'
+const backendPort = new URL(BACKEND_URL).port || '8080'
+const webPort = new URL(WEB_URL).port || '5173'
 
 export default defineConfig({
   testDir: './e2e',
@@ -27,7 +32,7 @@ export default defineConfig({
   reporter: [['list']],
   timeout: 30_000,
   use: {
-    baseURL: process.env.E2E_WEB_URL ?? 'http://localhost:5173',
+    baseURL: WEB_URL,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     // The sandboxed dev environment sets HTTP_PROXY/ALL_PROXY env vars that
@@ -75,10 +80,11 @@ export default defineConfig({
         DATABASE_URL: DSN,
         APP_ENV: 'development',
         AUTH_PROVIDER: 'development',
-        APP_BASE_URL: 'http://localhost:5173',
+        APP_BASE_URL: WEB_URL,
+        ADDR: `:${backendPort}`,
         SESSION_SECRET: 'cGxheXdyaWdodC1zZXNzaW9uLXNlY3JldC0zMi1ieXQ=',
       },
-      url: 'http://localhost:8080/api/users',
+      url: `${BACKEND_URL}/api/users`,
       reuseExistingServer: true,
       timeout: 30_000,
     },
@@ -87,8 +93,10 @@ export default defineConfig({
       cwd: __dirname,
       env: {
         VITE_AUTH_PROVIDER: 'development',
+        VITE_API_TARGET: BACKEND_URL,
+        VITE_PORT: webPort,
       },
-      url: 'http://localhost:5173/',
+      url: WEB_URL,
       reuseExistingServer: true,
       timeout: 30_000,
     },

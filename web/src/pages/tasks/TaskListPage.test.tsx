@@ -63,21 +63,25 @@ function renderAt(path: string) {
 }
 
 describe('TaskListPage', () => {
-  it('keeps the detail column at half the workspace with nothing selected', async () => {
+  it('keeps the task list full width when nothing is selected', async () => {
     setWidth(1440)
     renderAt('/tasks')
     await screen.findByText('修复竞价超时')
-    // The empty state is what holds the column open. Without it the list
-    // would widen on deselect and jump back on select.
-    expect(screen.getByText('从左边选一条任务')).toBeVisible()
-    expect(screen.getByRole('complementary', { name: '任务详情' })).toHaveClass('w-1/2')
+    expect(screen.queryByRole('complementary', { name: '任务详情' })).not.toBeInTheDocument()
   })
 
-  it('shows the detail in the third column, not a dialog, at xl', async () => {
+  it('shows a bounded, closable third column only after selection at xl', async () => {
     setWidth(1440)
     renderAt('/tasks/142')
     await screen.findAllByText('修复竞价超时')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('complementary', { name: '任务详情' }))
+      .toHaveClass('w-[clamp(28rem,36vw,36rem)]')
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('complementary', { name: '任务详情' })).not.toBeInTheDocument(),
+    )
   })
 
   it('shows the detail as a dialog below xl', async () => {

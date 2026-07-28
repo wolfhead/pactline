@@ -14,7 +14,6 @@ import (
 type TaskStatus string
 
 const (
-	TaskStatusBacklog    TaskStatus = "backlog"
 	TaskStatusTodo       TaskStatus = "todo"
 	TaskStatusInProgress TaskStatus = "in_progress"
 	TaskStatusInReview   TaskStatus = "in_review"
@@ -22,10 +21,10 @@ const (
 	TaskStatusCancelled  TaskStatus = "cancelled"
 )
 
-// Valid reports whether s is one of the six defined statuses.
+// Valid reports whether s is one of the five defined statuses.
 func (s TaskStatus) Valid() bool {
 	switch s {
-	case TaskStatusBacklog, TaskStatusTodo, TaskStatusInProgress, TaskStatusInReview, TaskStatusDone, TaskStatusCancelled:
+	case TaskStatusTodo, TaskStatusInProgress, TaskStatusInReview, TaskStatusDone, TaskStatusCancelled:
 		return true
 	}
 	return false

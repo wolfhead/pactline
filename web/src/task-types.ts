@@ -11,14 +11,13 @@
 // `labels` array. The Label type below matches the real wire shape, not the
 // house style, on purpose.
 
-export type TaskStatus = 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancelled'
+export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancelled'
 export type TaskPriority = 'none' | 'low' | 'medium' | 'high' | 'urgent'
 
-export const TASK_STATUSES: TaskStatus[] = ['backlog', 'todo', 'in_progress', 'in_review', 'done', 'cancelled']
+export const TASK_STATUSES: TaskStatus[] = ['todo', 'in_progress', 'in_review', 'done', 'cancelled']
 export const TASK_PRIORITIES: TaskPriority[] = ['none', 'low', 'medium', 'high', 'urgent']
 
 export const STATUS_LABELS: Record<TaskStatus, string> = {
-  backlog: '待定',
   todo: '待办',
   in_progress: '进行中',
   in_review: '待评审',

@@ -61,17 +61,17 @@ func mustParseDate(t *testing.T, s string) time.Time {
 	return d
 }
 
-// TestTaskCreateDefaultsToBacklogAndNone pins the store-level defaults: a
-// bare Task{} with no Status/Priority set must land as backlog/none, not as
+// TestTaskCreateDefaultsToTodoAndNone pins the store-level defaults: a
+// bare Task{} with no Status/Priority set must land as todo/none, not as
 // an empty string that would fail every later status comparison silently.
-func TestTaskCreateDefaultsToBacklogAndNone(t *testing.T) {
+func TestTaskCreateDefaultsToTodoAndNone(t *testing.T) {
 	db := newTestDB(t)
 	ts := store.NewTaskStore(db)
 
 	out := mustCreateTask(t, ts, domain.Task{Title: "Write onboarding doc", CreatorID: userA}, nil)
 	cleanupTask(t, db, out.Task.ID)
 
-	require.Equal(t, domain.TaskStatusBacklog, out.Task.Status)
+	require.Equal(t, domain.TaskStatusTodo, out.Task.Status)
 	require.Equal(t, domain.TaskPriorityNone, out.Task.Priority)
 	require.Nil(t, out.Task.AssigneeID)
 	require.Nil(t, out.Assignee, "unassigned must be a first-class nil, not a zero-value user")
@@ -122,7 +122,10 @@ func TestTaskCreateRejectsUnknownStatusAndPriority(t *testing.T) {
 	ts := store.NewTaskStore(db)
 	ctx := context.Background()
 
-	_, err := ts.Create(ctx, domain.Task{Title: "x", CreatorID: userA, Status: "not-a-status"}, nil)
+	_, err := ts.Create(ctx, domain.Task{Title: "x", CreatorID: userA, Status: "backlog"}, nil)
+	require.ErrorIs(t, err, domain.ErrInvalidInput)
+
+	_, err = ts.Create(ctx, domain.Task{Title: "x", CreatorID: userA, Status: "not-a-status"}, nil)
 	require.ErrorIs(t, err, domain.ErrInvalidInput)
 
 	_, err = ts.Create(ctx, domain.Task{Title: "x", CreatorID: userA, Priority: "not-a-priority"}, nil)
@@ -146,7 +149,7 @@ func TestTaskCreateWritesCreatedActivity(t *testing.T) {
 	require.Equal(t, domain.ActivityFieldCreated, entries[0].Field)
 	require.Equal(t, userB, entries[0].ActorID)
 	require.NotNil(t, entries[0].NewValue)
-	require.Equal(t, "backlog", *entries[0].NewValue)
+	require.Equal(t, "todo", *entries[0].NewValue)
 }
 
 // TestTaskUpdateAppliesOnlyProvidedFields plants a decoy: Description is left

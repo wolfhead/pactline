@@ -66,7 +66,7 @@ func TestActivityListRecordsCreationAndStatusChange(t *testing.T) {
 	require.Equal(t, "created", entries[0].Field)
 	require.Equal(t, "status", entries[1].Field)
 	require.Equal(t, uuid.MustParse(userB), entries[1].ActorID)
-	require.Equal(t, "backlog", *entries[1].OldValue)
+	require.Equal(t, "todo", *entries[1].OldValue)
 	require.Equal(t, "in_progress", *entries[1].NewValue)
 }
 

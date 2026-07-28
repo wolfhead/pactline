@@ -33,7 +33,7 @@ describe('StatusControl', () => {
     render(<StatusControl value="todo" onChange={() => {}} ariaLabel="状态" />)
     fireEvent.click(screen.getByRole('combobox', { name: '状态' }))
     const names = (await screen.findAllByRole('option')).map((o) => o.textContent)
-    // Six statuses, no gating: every status may move to every other status.
-    expect(names).toEqual(['待定', '待办', '进行中', '待评审', '已完成', '已取消'])
+    // Five statuses, no gating: every status may move to every other status.
+    expect(names).toEqual(['待办', '进行中', '待评审', '已完成', '已取消'])
   })
 })

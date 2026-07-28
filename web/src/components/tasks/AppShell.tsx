@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { Link, NavLink } from 'react-router-dom'
-import { Columns3, FolderKanban, LayoutList, LogOut, Menu, Plus, User } from 'lucide-react'
+import { FolderKanban, LayoutList, LogOut, Menu, Plus, User } from 'lucide-react'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { ThemeToggle } from '@/theme'
 import { useIdentity } from '@/identity'
@@ -10,7 +10,6 @@ import NavSidebar from './NavSidebar'
 
 const BOTTOM_TABS = [
   { to: '/tasks', label: '列表', icon: LayoutList, end: true },
-  { to: '/tasks/board', label: '看板', icon: Columns3, end: false },
   { to: '/projects', label: '项目', icon: FolderKanban, end: false },
 ] as const
 
@@ -117,7 +116,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           // source scanner emit a broken rule for it.)
           className={cn(
             'grid shrink-0 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)]',
-            isReadOnly ? 'grid-cols-4' : 'grid-cols-5',
+            isReadOnly ? 'grid-cols-3' : 'grid-cols-4',
           )}
         >
           {BOTTOM_TABS.map((tab) => (

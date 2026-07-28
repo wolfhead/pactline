@@ -8,7 +8,7 @@ vi.mock('@/api/tasks')
 
 const CREATED = {
   id: 'id-9', number: 9, title: '新记一条', description: '',
-  status: 'backlog' as const, priority: 'none' as const, assignee: null,
+  status: 'todo' as const, priority: 'none' as const, assignee: null,
   creator: { id: 'u1', name: '张沁', email: 'a@x.com' },
   due_date: null, project: null, milestone: null, labels: [], created_at: '', updated_at: '',
   completed_at: null, archived_at: null,

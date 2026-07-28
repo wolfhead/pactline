@@ -165,7 +165,6 @@
    * #d97706 — the new --color-surface-raised/--color-accent-subtle surfaces
    * didn't exist when that value was measured and it fell just under 3:1
    * against them (2.85-2.89:1); see task-3-report.md. */
-  --color-status-backlog: light-dark(#76767e, #8a8a92);
   --color-status-todo: light-dark(#3b6fd6, #6a9ee8);
   --color-status-in-progress: light-dark(#cd7106, #e0a33e);
   --color-status-in-review: light-dark(#a15c00, #d9a441);

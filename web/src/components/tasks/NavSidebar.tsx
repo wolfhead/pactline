@@ -4,7 +4,6 @@ import { useIdentity } from '@/identity'
 
 const ITEMS = [
   { to: '/tasks', label: '列表', end: true },
-  { to: '/tasks/board', label: '看板', end: false },
   { to: '/projects', label: '项目', end: false },
 ] as const
 

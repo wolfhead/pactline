@@ -18,7 +18,7 @@ export default function ActivityLog({ task }: ActivityLogProps) {
 
   // Fetches whenever the task changes, is mutated, or identity changes,
   // guarded against out-of-order resolution — mirrors the cancelled-flag
-  // idiom in identity.tsx / WorkFeed.tsx / Board.tsx. `task.updated_at` (not
+  // idiom in identity.tsx / WorkFeed.tsx. `task.updated_at` (not
   // just `task.number`) is a dependency because every server-confirmed
   // mutation (status, priority, assignee, due date, labels, title,
   // description, archive/restore — see task_store.go's `updated_at=now()`

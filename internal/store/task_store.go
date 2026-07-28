@@ -125,7 +125,7 @@ func derefStr(s *string) string {
 
 // Create inserts a task, assigning an ID and a sequential Number, and
 // records the creation in the activity log within the same transaction so
-// the two can never drift apart. Status/Priority default to backlog/none
+// the two can never drift apart. Status/Priority default to todo/none
 // when left blank, mirroring the column defaults.
 func (s *TaskStore) Create(ctx context.Context, t domain.Task, labelIDs []uuid.UUID) (TaskWithRelations, error) {
 	if t.ID == uuid.Nil {
@@ -135,7 +135,7 @@ func (s *TaskStore) Create(ctx context.Context, t domain.Task, labelIDs []uuid.U
 		return TaskWithRelations{}, fmt.Errorf("%w: title is required", domain.ErrInvalidInput)
 	}
 	if t.Status == "" {
-		t.Status = domain.TaskStatusBacklog
+		t.Status = domain.TaskStatusTodo
 	}
 	if t.Priority == "" {
 		t.Priority = domain.TaskPriorityNone

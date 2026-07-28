@@ -85,7 +85,7 @@ export default function TaskListPage() {
 
   // Fetches whenever a filter changes, a reload is requested, or identity
   // changes — mirrors the cancelled-flag idiom in identity.tsx / WorkFeed.tsx
-  // / Board.tsx: switching identity (or any filter) must replace an
+  // / WorkFeed.tsx: switching identity (or any filter) must replace an
   // already-mounted list's rows, and a slow stale response must never
   // overwrite a newer one's result.
   //
@@ -265,9 +265,7 @@ export default function TaskListPage() {
       users={users}
       syncedTask={selectedTask}
       onPatched={handlePatched}
-      // At xl the detail is a column, not something layered over the list;
-      // there is nothing to close, so no close affordance is offered.
-      onClose={tier === 'xl' ? undefined : closeDetail}
+      onClose={closeDetail}
     />
   )
 
@@ -348,19 +346,16 @@ export default function TaskListPage() {
         </div>
       </div>
 
-      {/* The third column is permanent at xl, selection or not: an empty
-          state holds its width so the list never widens on deselect and
-          jumps back the moment a row is clicked. */}
-      {tier === 'xl' && (
+      {/* Desktop keeps the list at full width until a task is selected.
+          The detail then becomes a deliberately bounded third column:
+          wide enough for acceptance and activity content without taking
+          the half-screen footprint of the earlier permanent pane. */}
+      {tier === 'xl' && selected !== null && (
         <aside
           aria-label="任务详情"
-          className="w-1/2 shrink-0 overflow-y-auto border-l border-border"
+          className="w-[clamp(28rem,36vw,36rem)] shrink-0 overflow-y-auto border-l border-border"
         >
-          {selected === null ? (
-            <p className="p-4 text-sm text-fg-muted">从左边选一条任务</p>
-          ) : (
-            detailPane
-          )}
+          {detailPane}
         </aside>
       )}
 

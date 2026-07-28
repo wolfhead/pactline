@@ -38,7 +38,7 @@ interface TaskDetailProps {
   // on a later page) simply isn't synced, and TaskDetail still owns its own
   // fetch for everything else — comments, activity, the initial load.
   syncedTask?: Task | null
-  // Lets the caller (list column, board) fold a server-confirmed change
+  // Lets the list page fold a server-confirmed change
   // into its own copy of the task without a full reload.
   onPatched: (task: Task) => void
   // Only the shell knows whether it needs a close affordance at all — a
@@ -104,7 +104,7 @@ export default function TaskDetail({
 
   // Fetches whenever `number` changes, a reload is requested, or identity
   // changes — mirrors the cancelled-flag idiom in identity.tsx /
-  // WorkFeed.tsx / Board.tsx / BountyDetail.tsx. `number` changing without a
+  // WorkFeed.tsx / BountyDetail.tsx. `number` changing without a
   // remount is the normal case at xl: clicking another row in the list
   // column changes this prop in place, it never unmounts/remounts
   // TaskDetail, so this effect (not initial-mount logic) is what has to
