@@ -11,7 +11,8 @@ test: up
 
 run: up
 	APP_ENV=development AUTH_PROVIDER=development APP_BASE_URL=http://localhost:5173 \
-	SESSION_SECRET=development-only-session-secret-32b DATABASE_URL="$(DSN)" go run ./cmd/server
+	SESSION_SECRET=ZGV2ZWxvcG1lbnQtc2Vzc2lvbi1zZWNyZXQtMzJieXQ= \
+	DATABASE_URL="$(DSN)" go run ./cmd/server
 
 web-install:
 	cd web && npm install

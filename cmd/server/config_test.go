@@ -60,7 +60,7 @@ func TestLoadConfigDecodesEncryptionKey(t *testing.T) {
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("AUTH_PROVIDER", "lark")
 	t.Setenv("APP_BASE_URL", "https://tasks.example.test")
-	t.Setenv("SESSION_SECRET", "01234567890123456789012345678901")
+	t.Setenv("SESSION_SECRET", base64.StdEncoding.EncodeToString(make([]byte, 32)))
 	t.Setenv("OAUTH_TOKEN_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(make([]byte, 32)))
 	t.Setenv("OAUTH_TOKEN_ENCRYPTION_KEY_ID", "key-1")
 	t.Setenv("LARK_APP_ID", "app-id")
@@ -75,4 +75,23 @@ func TestLoadConfigDecodesEncryptionKey(t *testing.T) {
 	t.Setenv("OAUTH_TOKEN_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(make([]byte, 31)))
 	_, err = LoadConfig()
 	require.ErrorContains(t, err, "exactly 32 bytes")
+}
+
+func TestDevelopmentAndTestRequireDecoded32ByteSessionSecret(t *testing.T) {
+	base, err := url.Parse("http://localhost:5173")
+	require.NoError(t, err)
+	for _, environment := range []string{EnvironmentDevelopment, EnvironmentTest} {
+		cfg := Config{
+			AppEnv: environment, AuthProvider: AuthProviderDevelopment,
+			AppBaseURL: base, SessionSecret: make([]byte, 31),
+		}
+		require.ErrorContains(t, cfg.Validate(), "SESSION_SECRET must decode to exactly 32 bytes")
+	}
+
+	t.Setenv("APP_ENV", EnvironmentDevelopment)
+	t.Setenv("AUTH_PROVIDER", AuthProviderDevelopment)
+	t.Setenv("APP_BASE_URL", "http://localhost:5173")
+	t.Setenv("SESSION_SECRET", "not-base64!")
+	_, err = LoadConfig()
+	require.ErrorContains(t, err, "SESSION_SECRET must be base64 encoded")
 }

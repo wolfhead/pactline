@@ -4,18 +4,50 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
+	"bountyboard/internal/api"
 	"bountyboard/internal/domain"
+	"bountyboard/internal/identity"
+	"bountyboard/internal/integrations/devauth"
 	"bountyboard/internal/store"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
+
+type failingLogoutSessions struct {
+	session identity.Session
+	user    domain.User
+}
+
+func (f *failingLogoutSessions) CreateSession(_ context.Context, session identity.Session, _ identity.AuditEvent) error {
+	f.session = session
+	return nil
+}
+
+func (f *failingLogoutSessions) ResolveSession(
+	context.Context,
+	uuid.UUID,
+	[]byte,
+	time.Time,
+) (identity.SessionBundle, error) {
+	return identity.SessionBundle{Session: f.session, User: f.user}, nil
+}
+
+func (f *failingLogoutSessions) TouchSession(context.Context, uuid.UUID, time.Time, time.Time) (bool, error) {
+	return false, nil
+}
+
+func (f *failingLogoutSessions) LogoutSession(context.Context, uuid.UUID, time.Time, string) error {
+	return errors.New("forced logout failure")
+}
 
 func developmentLogin(t *testing.T, handler http.Handler, userID string) ([]*http.Cookie, string) {
 	t.Helper()
@@ -202,6 +234,39 @@ func TestLogoutRevokesSessionAndClearsCookies(t *testing.T) {
 	for _, cookie := range response.Result().Cookies() {
 		require.Less(t, cookie.MaxAge, 0)
 	}
+}
+
+func TestLogoutClearsCookiesWhenPersistenceFails(t *testing.T) {
+	_, db := newTaskTestServer(t)
+	users := store.NewUserStore(db)
+	user, err := users.GetByID(context.Background(), uuid.MustParse(userA))
+	require.NoError(t, err)
+	repository := &failingLogoutSessions{user: user}
+	service, err := identity.NewService(
+		repository, users, []byte("01234567890123456789012345678901"),
+		identity.SystemClock{}, identity.CryptoSecretGenerator{},
+	)
+	require.NoError(t, err)
+	baseURL, err := url.Parse("http://app.test")
+	require.NoError(t, err)
+	handler := api.NewRouter(users, http.NotFoundHandler(), api.RouterOptions{
+		Auth: api.AuthSurface{
+			Sessions: service, Development: devauth.New(users, service), AppBaseURL: baseURL,
+		},
+	})
+	cookies, csrf := developmentLogin(t, handler, userA)
+	request := authenticatedHTTPTestRequest(http.MethodPost, "/api/auth/logout", nil, cookies, csrf)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	require.Equal(t, http.StatusInternalServerError, response.Code)
+	cleared := map[string]bool{}
+	for _, cookie := range response.Result().Cookies() {
+		if cookie.MaxAge < 0 {
+			cleared[cookie.Name] = true
+		}
+	}
+	require.True(t, cleared["bb_session"])
+	require.True(t, cleared["bb_csrf"])
 }
 
 func TestDevelopmentSessionRejectsInactiveUser(t *testing.T) {

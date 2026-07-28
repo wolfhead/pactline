@@ -228,6 +228,137 @@ func TestSessionRollingProviderFailureRevocationAndDeactivation(t *testing.T) {
 	require.ErrorIs(t, err, identity.ErrUserInactive)
 }
 
+func TestCreateSessionRejectsInactiveUserInRepositoryTransaction(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	repository := store.NewIdentityStore(db)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	userID, sessionID, auditID := uuid.New(), uuid.New(), uuid.New()
+	_, err := db.Pool.Exec(ctx, `
+		INSERT INTO users (id,name,email,platform_role,active)
+		VALUES ($1,'Inactive Session User',$2,'MEMBER',false)`,
+		userID, userID.String()+"@example.test")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		cleanupCtx := context.Background()
+		_, cleanupErr := db.Pool.Exec(cleanupCtx, `DELETE FROM identity_audit_events WHERE id=$1`, auditID)
+		require.NoError(t, cleanupErr)
+		_, cleanupErr = db.Pool.Exec(cleanupCtx, `DELETE FROM sessions WHERE id=$1`, sessionID)
+		require.NoError(t, cleanupErr)
+		_, cleanupErr = db.Pool.Exec(cleanupCtx, `DELETE FROM users WHERE id=$1`, userID)
+		require.NoError(t, cleanupErr)
+	})
+	sessionHash, csrfHash := identity.HashSecret([]byte("session")), identity.HashSecret([]byte("csrf"))
+	err = repository.CreateSession(ctx, identity.Session{
+		ID: sessionID, UserID: userID, SecretHash: sessionHash[:], CSRFSecretHash: csrfHash[:],
+		CreatedAt: now, LastSeenAt: now, IdleExpiresAt: now.Add(time.Hour),
+		AbsoluteExpiresAt: now.Add(24 * time.Hour),
+	}, identity.AuditEvent{
+		ID: auditID, EventType: "session_created", SubjectUserID: &userID,
+		SessionID: &sessionID, Metadata: json.RawMessage(`{}`), OccurredAt: now,
+	})
+	require.ErrorIs(t, err, identity.ErrUserInactive)
+	var sessionCount, auditCount int
+	require.NoError(t, db.Pool.QueryRow(ctx, `SELECT count(*) FROM sessions WHERE id=$1`, sessionID).Scan(&sessionCount))
+	require.NoError(t, db.Pool.QueryRow(ctx, `SELECT count(*) FROM identity_audit_events WHERE id=$1`, auditID).Scan(&auditCount))
+	require.Zero(t, sessionCount)
+	require.Zero(t, auditCount)
+}
+
+func TestLogoutSessionAtomicallyEndsImpersonationAndAuditsOwner(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	repository := store.NewIdentityStore(db)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	subjectID := uuid.New()
+	_, err := db.Pool.Exec(ctx, `
+		INSERT INTO users (id,name,email,platform_role,active)
+		VALUES ($1,'Logout Subject',$2,'MEMBER',true)`,
+		subjectID, subjectID.String()+"@example.test")
+	require.NoError(t, err)
+	sessionIDs := []uuid.UUID{uuid.New(), uuid.New(), uuid.New()}
+	impersonationIDs := []uuid.UUID{uuid.New(), uuid.New()}
+	for _, sessionID := range sessionIDs {
+		_, err = db.Pool.Exec(ctx, `
+			INSERT INTO sessions
+				(id,user_id,secret_hash,csrf_secret_hash,created_at,last_seen_at,idle_expires_at,absolute_expires_at)
+			VALUES ($1,$2,$3,$4,$5,$5,$6,$7)`,
+			sessionID, primarySeedID, []byte("session-hash"), []byte("csrf-hash"), now,
+			now.Add(24*time.Hour), now.Add(30*24*time.Hour))
+		require.NoError(t, err)
+	}
+	_, err = db.Pool.Exec(ctx, `
+		INSERT INTO impersonations (id,session_id,actor_user_id,subject_user_id,started_at)
+		VALUES ($1,$2,$3,$4,$5)`,
+		impersonationIDs[0], sessionIDs[0], primarySeedID, subjectID, now)
+	require.NoError(t, err)
+	_, err = db.Pool.Exec(ctx, `
+		INSERT INTO impersonations (id,session_id,actor_user_id,subject_user_id,started_at,ended_at)
+		VALUES ($1,$2,$3,$4,$5,$6)`,
+		impersonationIDs[1], sessionIDs[2], primarySeedID, subjectID, now.Add(-time.Hour), now.Add(-time.Minute))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		cleanupCtx := context.Background()
+		_, cleanupErr := db.Pool.Exec(cleanupCtx, `DELETE FROM identity_audit_events WHERE session_id=ANY($1)`, sessionIDs)
+		require.NoError(t, cleanupErr)
+		_, cleanupErr = db.Pool.Exec(cleanupCtx, `DELETE FROM impersonations WHERE session_id=ANY($1)`, sessionIDs)
+		require.NoError(t, cleanupErr)
+		_, cleanupErr = db.Pool.Exec(cleanupCtx, `DELETE FROM sessions WHERE id=ANY($1)`, sessionIDs)
+		require.NoError(t, cleanupErr)
+		_, cleanupErr = db.Pool.Exec(cleanupCtx, `DELETE FROM users WHERE id=$1`, subjectID)
+		require.NoError(t, cleanupErr)
+	})
+
+	impersonatingRequestID := "logout-impersonating-" + uuid.NewString()
+	require.NoError(t, repository.LogoutSession(ctx, sessionIDs[0], now, impersonatingRequestID))
+	var revokedAt, endedAt *time.Time
+	var revokeReason *string
+	require.NoError(t, db.Pool.QueryRow(ctx, `
+		SELECT s.revoked_at, s.revoke_reason, i.ended_at
+		FROM sessions s JOIN impersonations i ON i.session_id=s.id
+		WHERE s.id=$1`, sessionIDs[0]).Scan(&revokedAt, &revokeReason, &endedAt))
+	require.NotNil(t, revokedAt)
+	require.Equal(t, "logout", *revokeReason)
+	require.NotNil(t, endedAt)
+	rows, err := db.Pool.Query(ctx, `
+		SELECT event_type, actor_user_id, subject_user_id
+		FROM identity_audit_events
+		WHERE request_id=$1 ORDER BY event_type`, impersonatingRequestID)
+	require.NoError(t, err)
+	defer rows.Close()
+	type auditIdentity struct {
+		eventType string
+		actorID   uuid.UUID
+		subjectID uuid.UUID
+	}
+	var audits []auditIdentity
+	for rows.Next() {
+		var audit auditIdentity
+		require.NoError(t, rows.Scan(&audit.eventType, &audit.actorID, &audit.subjectID))
+		audits = append(audits, audit)
+	}
+	require.NoError(t, rows.Err())
+	require.Equal(t, []auditIdentity{
+		{eventType: "impersonation_ended", actorID: primarySeedID, subjectID: subjectID},
+		{eventType: "session_revoked", actorID: primarySeedID, subjectID: primarySeedID},
+	}, audits)
+
+	normalRequestID := "logout-normal-" + uuid.NewString()
+	require.NoError(t, repository.LogoutSession(ctx, sessionIDs[1], now, normalRequestID))
+	endedRequestID := "logout-ended-" + uuid.NewString()
+	require.NoError(t, repository.LogoutSession(ctx, sessionIDs[2], now, endedRequestID))
+	for _, requestID := range []string{normalRequestID, endedRequestID} {
+		var sessionAudits, impersonationAudits int
+		require.NoError(t, db.Pool.QueryRow(ctx, `
+			SELECT count(*) FILTER (WHERE event_type='session_revoked'),
+			       count(*) FILTER (WHERE event_type='impersonation_ended')
+			FROM identity_audit_events WHERE request_id=$1`, requestID).
+			Scan(&sessionAudits, &impersonationAudits))
+		require.Equal(t, 1, sessionAudits)
+		require.Zero(t, impersonationAudits)
+	}
+}
+
 func TestImpersonationDeliveryAndAuditAreAppendOnly(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()

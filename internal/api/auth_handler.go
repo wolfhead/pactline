@@ -83,9 +83,9 @@ func (h *authHandler) me(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *authHandler) logout(w http.ResponseWriter, r *http.Request) {
+	h.cookies.clear(w)
 	requestIdentity, ok := identity.FromContext(r.Context())
 	if !ok {
-		h.cookies.clear(w)
 		WriteJSON(w, http.StatusUnauthorized, ErrorBody{Error: "authentication required"})
 		return
 	}
@@ -96,7 +96,6 @@ func (h *authHandler) logout(w http.ResponseWriter, r *http.Request) {
 		WriteJSON(w, http.StatusInternalServerError, ErrorBody{Error: "logout failed"})
 		return
 	}
-	h.cookies.clear(w)
 	w.WriteHeader(http.StatusNoContent)
 }
 

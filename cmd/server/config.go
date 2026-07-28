@@ -35,7 +35,6 @@ func LoadConfig() (Config, error) {
 	cfg := Config{
 		AppEnv:               strings.TrimSpace(os.Getenv("APP_ENV")),
 		AuthProvider:         strings.TrimSpace(os.Getenv("AUTH_PROVIDER")),
-		SessionSecret:        []byte(os.Getenv("SESSION_SECRET")),
 		TokenEncryptionKeyID: strings.TrimSpace(os.Getenv("OAUTH_TOKEN_ENCRYPTION_KEY_ID")),
 		LarkAppID:            strings.TrimSpace(os.Getenv("LARK_APP_ID")),
 		LarkAppSecret:        os.Getenv("LARK_APP_SECRET"),
@@ -43,6 +42,10 @@ func LoadConfig() (Config, error) {
 		BootstrapAdminEmail:  strings.TrimSpace(os.Getenv("BOOTSTRAP_ADMIN_EMAIL")),
 	}
 	var err error
+	cfg.SessionSecret, err = decodeSecret("SESSION_SECRET", os.Getenv("SESSION_SECRET"))
+	if err != nil {
+		return Config{}, err
+	}
 	cfg.AppBaseURL, err = parseConfiguredURL("APP_BASE_URL", os.Getenv("APP_BASE_URL"))
 	if err != nil {
 		return Config{}, err
@@ -77,15 +80,15 @@ func (c Config) Validate() error {
 	if c.AppBaseURL == nil || c.AppBaseURL.Scheme == "" || c.AppBaseURL.Host == "" {
 		return errors.New("APP_BASE_URL must be an absolute URL")
 	}
+	if len(c.SessionSecret) != 32 {
+		return errors.New("SESSION_SECRET must decode to exactly 32 bytes")
+	}
 	if c.AppEnv == EnvironmentProduction {
 		if c.AuthProvider == AuthProviderDevelopment {
 			return errors.New("development authentication is not allowed in production")
 		}
 		if c.AppBaseURL.Scheme != "https" {
 			return errors.New("APP_BASE_URL must use HTTPS in production")
-		}
-		if len(c.SessionSecret) < 32 {
-			return errors.New("SESSION_SECRET must contain at least 32 bytes in production")
 		}
 	}
 	if c.AuthProvider == AuthProviderLark {
@@ -115,15 +118,23 @@ func (c Config) Validate() error {
 }
 
 func decodeEncryptionKey(encoded string) ([]byte, error) {
+	key, err := decodeSecret("OAUTH_TOKEN_ENCRYPTION_KEY", encoded)
+	if err != nil {
+		return nil, err
+	}
+	return key, nil
+}
+
+func decodeSecret(name, encoded string) ([]byte, error) {
 	key, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
 		key, err = base64.RawStdEncoding.DecodeString(encoded)
 	}
 	if err != nil {
-		return nil, errors.New("OAUTH_TOKEN_ENCRYPTION_KEY must be base64 encoded")
+		return nil, fmt.Errorf("%s must be base64 encoded", name)
 	}
 	if len(key) != 32 {
-		return nil, errors.New("OAUTH_TOKEN_ENCRYPTION_KEY must decode to exactly 32 bytes")
+		return nil, fmt.Errorf("%s must decode to exactly 32 bytes", name)
 	}
 	return key, nil
 }

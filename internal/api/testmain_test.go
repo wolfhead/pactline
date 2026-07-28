@@ -84,7 +84,7 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 		legacystore.NewCalibrationStore(db), legacystore.NewAnchorStore(db),
 	)
 	identityService, err := identity.NewService(
-		store.NewIdentityStore(db), users, []byte("api-tests-session-secret-32-bytes!"),
+		store.NewIdentityStore(db), users, []byte("api-tests-session-secret-32-byte"),
 		identity.SystemClock{}, identity.CryptoSecretGenerator{},
 	)
 	require.NoError(t, err)

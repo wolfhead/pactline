@@ -77,7 +77,7 @@ func newTestServer(t *testing.T) http.Handler {
 		legacystore.NewCalibrationStore(db), legacystore.NewAnchorStore(db),
 	)
 	identityService, err := identity.NewService(
-		store.NewIdentityStore(db), users, []byte("legacy-api-tests-session-secret!!"),
+		store.NewIdentityStore(db), users, []byte("legacy-api-session-secret-32byte"),
 		identity.SystemClock{}, identity.CryptoSecretGenerator{},
 	)
 	require.NoError(t, err)

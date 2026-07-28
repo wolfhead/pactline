@@ -76,7 +76,7 @@ export default defineConfig({
         APP_ENV: 'development',
         AUTH_PROVIDER: 'development',
         APP_BASE_URL: 'http://localhost:5173',
-        SESSION_SECRET: 'playwright-development-session-secret',
+        SESSION_SECRET: 'cGxheXdyaWdodC1zZXNzaW9uLXNlY3JldC0zMi1ieXQ=',
       },
       url: 'http://localhost:8080/api/users',
       reuseExistingServer: true,

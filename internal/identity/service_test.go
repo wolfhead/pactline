@@ -30,12 +30,13 @@ type serviceUsers struct{ user domain.User }
 func (s serviceUsers) GetByID(context.Context, uuid.UUID) (domain.User, error) { return s.user, nil }
 
 type serviceSessions struct {
-	session            Session
-	bundle             SessionBundle
-	resolveCalls       int
-	touchCalls         int
-	revoked            bool
-	impersonationEnded bool
+	session       Session
+	bundle        SessionBundle
+	resolveCalls  int
+	touchCalls    int
+	logoutCalls   int
+	logoutSession uuid.UUID
+	logoutErr     error
 }
 
 func (s *serviceSessions) CreateSession(_ context.Context, session Session, _ AuditEvent) error {
@@ -59,14 +60,10 @@ func (s *serviceSessions) TouchSession(context.Context, uuid.UUID, time.Time, ti
 	return true, nil
 }
 
-func (s *serviceSessions) EndImpersonation(context.Context, uuid.UUID, time.Time, AuditEvent) error {
-	s.impersonationEnded = true
-	return nil
-}
-
-func (s *serviceSessions) RevokeSession(context.Context, uuid.UUID, string, time.Time, AuditEvent) error {
-	s.revoked = true
-	return nil
+func (s *serviceSessions) LogoutSession(_ context.Context, sessionID uuid.UUID, _ time.Time, _ string) error {
+	s.logoutCalls++
+	s.logoutSession = sessionID
+	return s.logoutErr
 }
 
 func TestSessionEnvelopeRejectsBadMACBeforeLookup(t *testing.T) {
@@ -114,7 +111,7 @@ func TestSessionActorSubjectAndCSRF(t *testing.T) {
 	require.False(t, service.VerifyCSRF(session, tokens.CSRFSecret+"x"))
 }
 
-func TestLogoutEndsImpersonationBeforeRevokingSession(t *testing.T) {
+func TestImpersonatingLogoutUsesSingleRepositoryOperation(t *testing.T) {
 	now := time.Date(2026, 7, 28, 1, 2, 3, 0, time.UTC)
 	repository := &serviceSessions{}
 	service, err := NewService(
@@ -132,6 +129,26 @@ func TestLogoutEndsImpersonationBeforeRevokingSession(t *testing.T) {
 		Impersonation: &Impersonation{ID: uuid.New(), ActorUserID: actor.ID, SubjectUserID: subject.ID},
 	}
 	require.NoError(t, service.Logout(context.Background(), requestIdentity, "request"))
-	require.True(t, repository.impersonationEnded)
-	require.True(t, repository.revoked)
+	require.Equal(t, 1, repository.logoutCalls)
+	require.Equal(t, requestIdentity.SessionID, repository.logoutSession)
+}
+
+func TestNormalLogoutUsesSingleRepositoryOperation(t *testing.T) {
+	now := time.Date(2026, 7, 28, 1, 2, 3, 0, time.UTC)
+	repository := &serviceSessions{}
+	service, err := NewService(
+		repository,
+		serviceUsers{user: domain.User{ID: uuid.New(), Active: true}},
+		[]byte("01234567890123456789012345678901"),
+		fixedClock{now},
+		&fixedSecrets{},
+	)
+	require.NoError(t, err)
+	requestIdentity := RequestIdentity{
+		SessionID: uuid.New(),
+		Actor:     domain.User{ID: uuid.New(), Active: true, PlatformRole: domain.PlatformRoleMember},
+	}
+	requestIdentity.Subject = requestIdentity.Actor
+	require.NoError(t, service.Logout(context.Background(), requestIdentity, "request"))
+	require.Equal(t, 1, repository.logoutCalls)
 }

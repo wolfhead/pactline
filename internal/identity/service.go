@@ -21,8 +21,7 @@ type SessionRepository interface {
 	CreateSession(ctx context.Context, session Session, audit AuditEvent) error
 	ResolveSession(ctx context.Context, id uuid.UUID, secretHash []byte, now time.Time) (SessionBundle, error)
 	TouchSession(ctx context.Context, id uuid.UUID, now, idleExpiresAt time.Time) (bool, error)
-	EndImpersonation(ctx context.Context, sessionID uuid.UUID, endedAt time.Time, audit AuditEvent) error
-	RevokeSession(ctx context.Context, id uuid.UUID, reason string, now time.Time, audit AuditEvent) error
+	LogoutSession(ctx context.Context, sessionID uuid.UUID, now time.Time, requestID string) error
 }
 
 type UserRepository interface {
@@ -56,8 +55,8 @@ func NewService(
 	clock Clock,
 	secrets SecretGenerator,
 ) (*Service, error) {
-	if len(sessionSecret) < 32 {
-		return nil, errors.New("session envelope secret must contain at least 32 bytes")
+	if len(sessionSecret) != 32 {
+		return nil, errors.New("session envelope secret must contain exactly 32 bytes")
 	}
 	if clock == nil {
 		clock = SystemClock{}
@@ -156,30 +155,8 @@ func (s *Service) VerifyCSRF(session Session, token string) bool {
 }
 
 func (s *Service) Logout(ctx context.Context, requestIdentity RequestIdentity, requestID string) error {
-	now := s.clock.Now()
-	if requestIdentity.Impersonation != nil {
-		audit := AuditEvent{
-			ID: uuid.New(), EventType: "impersonation_ended", ActorUserID: &requestIdentity.Actor.ID,
-			SubjectUserID: &requestIdentity.Subject.ID, SessionID: &requestIdentity.SessionID,
-			Metadata: json.RawMessage(`{"reason":"logout"}`), OccurredAt: now,
-		}
-		if requestID != "" {
-			audit.RequestID = &requestID
-		}
-		if err := s.sessions.EndImpersonation(ctx, requestIdentity.SessionID, now, audit); err != nil {
-			return fmt.Errorf("end impersonation during logout: %w", err)
-		}
-	}
-	audit := AuditEvent{
-		ID: uuid.New(), EventType: "session_revoked", ActorUserID: &requestIdentity.Actor.ID,
-		SubjectUserID: &requestIdentity.Subject.ID, SessionID: &requestIdentity.SessionID,
-		Metadata: json.RawMessage(`{"reason":"logout"}`), OccurredAt: now,
-	}
-	if requestID != "" {
-		audit.RequestID = &requestID
-	}
-	if err := s.sessions.RevokeSession(ctx, requestIdentity.SessionID, "logout", now, audit); err != nil {
-		return fmt.Errorf("revoke session during logout: %w", err)
+	if err := s.sessions.LogoutSession(ctx, requestIdentity.SessionID, s.clock.Now(), requestID); err != nil {
+		return fmt.Errorf("persist logout: %w", err)
 	}
 	return nil
 }

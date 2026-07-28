@@ -300,8 +300,80 @@ func (s *IdentityStore) UpdateCredential(ctx context.Context, externalIdentityID
 
 func (s *IdentityStore) CreateSession(ctx context.Context, session identity.Session, audit identity.AuditEvent) error {
 	return s.inTransaction(ctx, "create session", func(tx pgx.Tx) error {
+		var active bool
+		if err := tx.QueryRow(ctx, `
+			SELECT active FROM users WHERE id=$1 FOR UPDATE`, session.UserID).Scan(&active); errors.Is(err, pgx.ErrNoRows) {
+			return identity.ErrSessionInvalid
+		} else if err != nil {
+			return fmt.Errorf("lock session user: %w", err)
+		}
+		if !active {
+			return identity.ErrUserInactive
+		}
 		if err := insertSession(ctx, tx, session); err != nil {
 			return err
+		}
+		return insertAudit(ctx, tx, audit)
+	})
+}
+
+// LogoutSession atomically closes any active impersonation, revokes the
+// session, and appends the corresponding audit events. The session owner is
+// loaded under lock and remains both actor and subject of session revocation;
+// an impersonated Member is only the subject of the impersonation-ended event.
+func (s *IdentityStore) LogoutSession(ctx context.Context, sessionID uuid.UUID, now time.Time, requestID string) error {
+	return s.inTransaction(ctx, "logout session", func(tx pgx.Tx) error {
+		var ownerID uuid.UUID
+		if err := tx.QueryRow(ctx, `
+			SELECT user_id FROM sessions WHERE id=$1 FOR UPDATE`, sessionID).Scan(&ownerID); errors.Is(err, pgx.ErrNoRows) {
+			return identity.ErrSessionInvalid
+		} else if err != nil {
+			return fmt.Errorf("lock logout session: %w", err)
+		}
+
+		var impersonationID, subjectID uuid.UUID
+		err := tx.QueryRow(ctx, `
+			SELECT id, subject_user_id
+			FROM impersonations
+			WHERE session_id=$1 AND ended_at IS NULL
+			FOR UPDATE`, sessionID).Scan(&impersonationID, &subjectID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			// Ending impersonation is idempotent at logout. A concurrent
+			// boundary change may have already closed it while waiting for
+			// the session lock.
+		case err != nil:
+			return fmt.Errorf("lock logout impersonation: %w", err)
+		default:
+			if _, err := tx.Exec(ctx, `UPDATE impersonations SET ended_at=$2 WHERE id=$1`, impersonationID, now); err != nil {
+				return fmt.Errorf("end impersonation during logout: %w", err)
+			}
+			audit := identity.AuditEvent{
+				ID: uuid.New(), EventType: "impersonation_ended", ActorUserID: &ownerID,
+				SubjectUserID: &subjectID, SessionID: &sessionID,
+				Metadata: json.RawMessage(`{"reason":"logout"}`), OccurredAt: now,
+			}
+			if requestID != "" {
+				audit.RequestID = &requestID
+			}
+			if err := insertAudit(ctx, tx, audit); err != nil {
+				return err
+			}
+		}
+
+		if _, err := tx.Exec(ctx, `
+			UPDATE sessions
+			SET revoked_at=COALESCE(revoked_at,$2), revoke_reason=COALESCE(revoke_reason,'logout')
+			WHERE id=$1`, sessionID, now); err != nil {
+			return fmt.Errorf("revoke session during logout: %w", err)
+		}
+		audit := identity.AuditEvent{
+			ID: uuid.New(), EventType: "session_revoked", ActorUserID: &ownerID,
+			SubjectUserID: &ownerID, SessionID: &sessionID,
+			Metadata: json.RawMessage(`{"reason":"logout"}`), OccurredAt: now,
+		}
+		if requestID != "" {
+			audit.RequestID = &requestID
 		}
 		return insertAudit(ctx, tx, audit)
 	})
