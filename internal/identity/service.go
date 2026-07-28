@@ -48,6 +48,10 @@ type IdentityRepository interface {
 	RotateInvitation(ctx context.Context, id, actorID uuid.UUID, tokenHash []byte, expiresAt time.Time) (Invitation, error)
 	RevokeInvitation(ctx context.Context, id uuid.UUID, now time.Time, audit AuditEvent) error
 	RecordDelivery(ctx context.Context, delivery InvitationDelivery) error
+	ReactivateUser(ctx context.Context, userID, actorID uuid.UUID) error
+	StartImpersonation(ctx context.Context, impersonation Impersonation, audit AuditEvent) error
+	EndImpersonation(ctx context.Context, sessionID uuid.UUID, endedAt time.Time, audit AuditEvent) error
+	AppendAudit(ctx context.Context, audit AuditEvent) error
 }
 
 type LarkServiceConfig struct {
@@ -107,10 +111,14 @@ func NewService(
 	if secrets == nil {
 		secrets = CryptoSecretGenerator{}
 	}
-	return &Service{
+	service := &Service{
 		sessions: sessions, users: users, sessionSecret: append([]byte(nil), sessionSecret...),
 		clock: clock, secrets: secrets,
-	}, nil
+	}
+	if repository, ok := sessions.(IdentityRepository); ok {
+		service.identity = repository
+	}
+	return service, nil
 }
 
 func (s *Service) ConfigureLark(config LarkServiceConfig) error {
@@ -318,6 +326,96 @@ func (s *Service) deliverInvitation(ctx context.Context, invitation Invitation, 
 
 func (s *Service) invitationURL(rawToken string) string {
 	return s.appBaseURL + "/invite#" + rawToken
+}
+
+func (s *Service) ListAdminUsers(ctx context.Context, actor domain.User) ([]domain.User, error) {
+	if actor.PlatformRole != domain.PlatformRoleAdmin || !actor.Active {
+		return nil, ErrAdminRequired
+	}
+	lister, ok := s.users.(interface {
+		ListAll(context.Context) ([]domain.User, error)
+	})
+	if !ok {
+		return nil, errors.New("user repository does not support administration")
+	}
+	return lister.ListAll(ctx)
+}
+
+func (s *Service) SetUserActive(ctx context.Context, actor domain.User, userID uuid.UUID, active bool) error {
+	if actor.PlatformRole != domain.PlatformRoleAdmin || !actor.Active {
+		return ErrAdminRequired
+	}
+	target, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if target.PlatformRole == domain.PlatformRoleAdmin || target.ID == actor.ID {
+		return domain.ErrForbidden
+	}
+	if active {
+		return s.identity.ReactivateUser(ctx, target.ID, actor.ID)
+	}
+	return s.identity.DeactivateUser(ctx, target.ID, actor.ID, "administrator_deactivated")
+}
+
+func (s *Service) StartImpersonation(ctx context.Context, current RequestIdentity, subjectID uuid.UUID, requestID string) error {
+	if current.IsImpersonating() || current.Actor.PlatformRole != domain.PlatformRoleAdmin || !current.Actor.Active {
+		return ErrImpersonationDenied
+	}
+	subject, err := s.users.GetByID(ctx, subjectID)
+	if err != nil || !CanImpersonate(current.Actor, subject) {
+		return ErrImpersonationDenied
+	}
+	now := s.clock.Now()
+	impersonation := Impersonation{
+		ID: uuid.New(), SessionID: current.SessionID, ActorUserID: current.Actor.ID,
+		SubjectUserID: subject.ID, StartedAt: now,
+	}
+	audit := AuditEvent{
+		ID: uuid.New(), EventType: "impersonation_started", ActorUserID: &current.Actor.ID,
+		SubjectUserID: &subject.ID, SessionID: &current.SessionID,
+		Metadata: json.RawMessage(`{}`), OccurredAt: now,
+	}
+	if requestID != "" {
+		audit.RequestID = &requestID
+	}
+	return s.identity.StartImpersonation(ctx, impersonation, audit)
+}
+
+func (s *Service) EndImpersonation(ctx context.Context, current RequestIdentity, requestID string) error {
+	if !current.IsImpersonating() || current.Actor.PlatformRole != domain.PlatformRoleAdmin {
+		return ErrImpersonationNotFound
+	}
+	now := s.clock.Now()
+	audit := AuditEvent{
+		ID: uuid.New(), EventType: "impersonation_ended", ActorUserID: &current.Actor.ID,
+		SubjectUserID: &current.Subject.ID, SessionID: &current.SessionID,
+		Metadata: json.RawMessage(`{}`), OccurredAt: now,
+	}
+	if requestID != "" {
+		audit.RequestID = &requestID
+	}
+	return s.identity.EndImpersonation(ctx, current.SessionID, now, audit)
+}
+
+func (s *Service) RecordImpersonationWriteRejected(
+	ctx context.Context,
+	current RequestIdentity,
+	method, route, requestID string,
+) error {
+	if !current.IsImpersonating() {
+		return nil
+	}
+	metadata, _ := json.Marshal(map[string]string{"method": method, "route": route})
+	audit := AuditEvent{
+		ID: uuid.New(), EventType: "impersonation_write_rejected", ActorUserID: &current.Actor.ID,
+		SubjectUserID: &current.Subject.ID, SessionID: &current.SessionID,
+		Metadata: metadata, OccurredAt: s.clock.Now(),
+	}
+	if requestID != "" {
+		audit.RequestID = &requestID
+	}
+	return s.identity.AppendAudit(ctx, audit)
 }
 
 func (s *Service) StartAuthorization(ctx context.Context, purpose AuthorizationPurpose, invitationID *uuid.UUID) (AuthorizationStart, error) {

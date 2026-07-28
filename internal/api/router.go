@@ -75,6 +75,10 @@ func NewRouter(
 	protected.HandleFunc("POST /api/admin/invitations/{id}/resend", adminIdentity.resendInvitation)
 	protected.HandleFunc("POST /api/admin/invitations/{id}/link", adminIdentity.rotateInvitationLink)
 	protected.HandleFunc("DELETE /api/admin/invitations/{id}", adminIdentity.revokeInvitation)
+	protected.HandleFunc("GET /api/admin/users", adminIdentity.listUsers)
+	protected.HandleFunc("PATCH /api/admin/users/{id}", adminIdentity.updateUser)
+	protected.HandleFunc("POST /api/admin/impersonation", adminIdentity.startImpersonation)
+	protected.HandleFunc("DELETE /api/admin/impersonation", adminIdentity.endImpersonation)
 
 	root := http.NewServeMux()
 	if options.Auth.Development != nil {
@@ -87,6 +91,7 @@ func NewRouter(
 	}
 	middleware := identityMiddleware{
 		sessions: options.Auth.Sessions, appBaseURL: options.Auth.AppBaseURL, cookies: cookies,
+		routes: protected,
 	}
 	root.Handle("/", middleware.wrap(protected))
 	return root

@@ -110,12 +110,48 @@ func TestInvitationCreationDeliveryRotationAndAcceptanceState(t *testing.T) {
 	require.Contains(t, start.URL, "oauth-state")
 }
 
+func TestUserLifecycleAndImpersonationUseRealAdminActor(t *testing.T) {
+	now := time.Date(2026, 7, 28, 13, 0, 0, 0, time.UTC)
+	admin := domain.User{ID: uuid.New(), Active: true, PlatformRole: domain.PlatformRoleAdmin}
+	member := domain.User{ID: uuid.New(), Active: true, PlatformRole: domain.PlatformRoleMember}
+	users := lifecycleUsers{users: map[uuid.UUID]domain.User{admin.ID: admin, member.ID: member}}
+	repository := &larkServiceRepository{}
+	service, err := NewService(repository, users, []byte("01234567890123456789012345678901"),
+		fixedLarkClock{now}, &sequenceSecrets{})
+	require.NoError(t, err)
+
+	require.NoError(t, service.SetUserActive(context.Background(), admin, member.ID, false))
+	require.Equal(t, member.ID, repository.deactivated)
+	require.Equal(t, admin.ID, repository.lifecycleActor)
+	require.ErrorIs(t, service.SetUserActive(context.Background(), admin, admin.ID, false), domain.ErrForbidden)
+
+	current := RequestIdentity{SessionID: uuid.New(), Actor: admin, Subject: admin}
+	require.NoError(t, service.StartImpersonation(context.Background(), current, member.ID, "request"))
+	require.NotNil(t, repository.impersonation)
+	require.Equal(t, admin.ID, repository.impersonation.ActorUserID)
+	require.Equal(t, member.ID, repository.impersonation.SubjectUserID)
+
+	current.Subject = member
+	current.Impersonation = repository.impersonation
+	require.NoError(t, service.RecordImpersonationWriteRejected(
+		context.Background(), current, "PATCH", "/api/tasks/{number}", "request"))
+	require.Equal(t, "impersonation_write_rejected", repository.lastAudit.EventType)
+	require.JSONEq(t, `{"method":"PATCH","route":"/api/tasks/{number}"}`, string(repository.lastAudit.Metadata))
+	require.NoError(t, service.EndImpersonation(context.Background(), current, "request"))
+	require.True(t, repository.impersonationEnded)
+}
+
 type larkServiceRepository struct {
-	authorization *AuthorizationTransaction
-	bootstrap     *BootstrapAdminCommand
-	external      ExternalIdentity
-	invitations   map[uuid.UUID]Invitation
-	deliveries    []InvitationDelivery
+	authorization      *AuthorizationTransaction
+	bootstrap          *BootstrapAdminCommand
+	external           ExternalIdentity
+	invitations        map[uuid.UUID]Invitation
+	deliveries         []InvitationDelivery
+	deactivated        uuid.UUID
+	lifecycleActor     uuid.UUID
+	impersonation      *Impersonation
+	impersonationEnded bool
+	lastAudit          AuditEvent
 }
 
 func (r *larkServiceRepository) CreateAuthorizationTransaction(_ context.Context, transaction AuthorizationTransaction) error {
@@ -157,7 +193,8 @@ func (r *larkServiceRepository) RecordProviderVerification(context.Context, uuid
 func (r *larkServiceRepository) RecordProviderFailure(context.Context, uuid.UUID, time.Time, AuditEvent) error {
 	return nil
 }
-func (r *larkServiceRepository) DeactivateUser(context.Context, uuid.UUID, uuid.UUID, string) error {
+func (r *larkServiceRepository) DeactivateUser(_ context.Context, userID, actorID uuid.UUID, _ string) error {
+	r.deactivated, r.lifecycleActor = userID, actorID
 	return nil
 }
 func (r *larkServiceRepository) AcceptInvitation(context.Context, AcceptInvitationCommand) (domain.User, error) {
@@ -221,6 +258,21 @@ func (r *larkServiceRepository) RecordDelivery(_ context.Context, delivery Invit
 	r.deliveries = append(r.deliveries, delivery)
 	return nil
 }
+func (r *larkServiceRepository) ReactivateUser(context.Context, uuid.UUID, uuid.UUID) error {
+	return nil
+}
+func (r *larkServiceRepository) StartImpersonation(_ context.Context, value Impersonation, _ AuditEvent) error {
+	r.impersonation = &value
+	return nil
+}
+func (r *larkServiceRepository) EndImpersonation(context.Context, uuid.UUID, time.Time, AuditEvent) error {
+	r.impersonationEnded = true
+	return nil
+}
+func (r *larkServiceRepository) AppendAudit(_ context.Context, audit AuditEvent) error {
+	r.lastAudit = audit
+	return nil
+}
 func (r *larkServiceRepository) FindExternalIdentity(context.Context, PrincipalKey) (ExternalIdentity, domain.User, error) {
 	return ExternalIdentity{}, domain.User{}, domain.ErrNotFound
 }
@@ -279,6 +331,23 @@ func (larkUsers) GetByID(_ context.Context, id uuid.UUID) (domain.User, error) {
 	return domain.User{ID: id, Active: true}, nil
 }
 func (larkUsers) ListAll(context.Context) ([]domain.User, error) { return nil, nil }
+
+type lifecycleUsers struct{ users map[uuid.UUID]domain.User }
+
+func (u lifecycleUsers) GetByID(_ context.Context, id uuid.UUID) (domain.User, error) {
+	user, ok := u.users[id]
+	if !ok {
+		return domain.User{}, domain.ErrNotFound
+	}
+	return user, nil
+}
+func (u lifecycleUsers) ListAll(context.Context) ([]domain.User, error) {
+	var users []domain.User
+	for _, user := range u.users {
+		users = append(users, user)
+	}
+	return users, nil
+}
 
 type fixedLarkClock struct{ now time.Time }
 

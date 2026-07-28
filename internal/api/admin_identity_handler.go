@@ -172,6 +172,92 @@ func (h *adminIdentityHandler) acceptInvitation(w http.ResponseWriter, r *http.R
 	WriteJSON(w, http.StatusOK, map[string]string{"authorization_url": start.URL})
 }
 
+func (h *adminIdentityHandler) listUsers(w http.ResponseWriter, r *http.Request) {
+	current, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	users, err := h.service.ListAdminUsers(r.Context(), current.Actor)
+	if err != nil {
+		WriteJSON(w, http.StatusInternalServerError, ErrorBody{Error: "failed to list users"})
+		return
+	}
+	WriteJSON(w, http.StatusOK, userResponses(users))
+}
+
+func (h *adminIdentityHandler) updateUser(w http.ResponseWriter, r *http.Request) {
+	current, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		WriteJSON(w, http.StatusNotFound, ErrorBody{Error: "user not found"})
+		return
+	}
+	var request struct {
+		Active *bool `json:"active"`
+	}
+	if !decodeStrictBody(w, r, &request) {
+		return
+	}
+	if request.Active == nil {
+		WriteJSON(w, http.StatusBadRequest, ErrorBody{Error: "active is required"})
+		return
+	}
+	if err := h.service.SetUserActive(r.Context(), current.Actor, id, *request.Active); err != nil {
+		switch {
+		case errors.Is(err, domain.ErrNotFound):
+			WriteJSON(w, http.StatusNotFound, ErrorBody{Error: "user not found"})
+		case errors.Is(err, domain.ErrForbidden):
+			WriteJSON(w, http.StatusForbidden, ErrorBody{Error: "administrator cannot be deactivated"})
+		default:
+			WriteJSON(w, http.StatusInternalServerError, ErrorBody{Error: "failed to update user"})
+		}
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *adminIdentityHandler) startImpersonation(w http.ResponseWriter, r *http.Request) {
+	current, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	var request struct {
+		UserID uuid.UUID `json:"user_id"`
+	}
+	if !decodeStrictBody(w, r, &request) {
+		return
+	}
+	if request.UserID == uuid.Nil {
+		WriteJSON(w, http.StatusBadRequest, ErrorBody{Error: "user_id is required"})
+		return
+	}
+	if err := h.service.StartImpersonation(r.Context(), current, request.UserID, requestID(r)); err != nil {
+		if errors.Is(err, identity.ErrImpersonationActive) {
+			WriteJSON(w, http.StatusConflict, ErrorBody{Error: "impersonation already active"})
+			return
+		}
+		WriteJSON(w, http.StatusForbidden, ErrorBody{Error: "impersonation denied"})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *adminIdentityHandler) endImpersonation(w http.ResponseWriter, r *http.Request) {
+	current, ok := identity.FromContext(r.Context())
+	if !ok || !current.IsImpersonating() || current.Actor.PlatformRole != domain.PlatformRoleAdmin {
+		WriteJSON(w, http.StatusNotFound, ErrorBody{Error: "active impersonation not found"})
+		return
+	}
+	if err := h.service.EndImpersonation(r.Context(), current, requestID(r)); err != nil {
+		WriteJSON(w, http.StatusNotFound, ErrorBody{Error: "active impersonation not found"})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *adminIdentityHandler) requireAdmin(w http.ResponseWriter, r *http.Request) (identity.RequestIdentity, bool) {
 	current, ok := identity.FromContext(r.Context())
 	if !ok || !current.Actor.Active || current.Actor.PlatformRole != domain.PlatformRoleAdmin ||

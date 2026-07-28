@@ -23,6 +23,7 @@ type identityMiddleware struct {
 	sessions   *identity.Service
 	appBaseURL *url.URL
 	cookies    cookieSettings
+	routes     *http.ServeMux
 }
 
 func (m identityMiddleware) wrap(next http.Handler) http.Handler {
@@ -47,12 +48,40 @@ func (m identityMiddleware) wrap(next http.Handler) http.Handler {
 			WriteJSON(w, status, ErrorBody{Error: message})
 			return
 		}
-		if requestIdentity.IsImpersonating() && !identity.RequestAllowedDuringImpersonation(r.Method, r.URL.Path) {
+		routePattern := "unmatched"
+		if m.routes != nil {
+			_, pattern := m.routes.Handler(r)
+			if pattern != "" {
+				routePattern = pattern
+				if separator := strings.IndexByte(routePattern, ' '); separator >= 0 {
+					routePattern = routePattern[separator+1:]
+				}
+			}
+		}
+		adminRouteDenied := requestIdentity.IsImpersonating() &&
+			strings.HasPrefix(r.URL.Path, "/api/admin/") &&
+			!(r.Method == http.MethodDelete && routePattern == "/api/admin/impersonation")
+		writeDenied := requestIdentity.IsImpersonating() &&
+			!identity.RequestAllowedDuringImpersonation(r.Method, routePattern)
+		if adminRouteDenied || writeDenied {
+			if writeDenied {
+				if auditErr := m.sessions.RecordImpersonationWriteRejected(
+					r.Context(), requestIdentity, r.Method, routePattern, requestID(r),
+				); auditErr != nil {
+					slog.Error("record impersonation write rejection failed",
+						"method", r.Method, "route", routePattern, "session_id", requestIdentity.SessionID,
+						"error", auditErr)
+				}
+			}
 			slog.Warn("impersonated state change rejected",
-				"method", r.Method, "path", r.URL.Path,
+				"method", r.Method, "route", routePattern,
 				"actor_user_id", requestIdentity.Actor.ID, "subject_user_id", requestIdentity.Subject.ID,
 				"session_id", requestIdentity.SessionID)
-			WriteJSON(w, http.StatusForbidden, ErrorBody{Error: "impersonation is read-only"})
+			message := "impersonation is read-only"
+			if adminRouteDenied {
+				message = "administrator routes are unavailable during impersonation"
+			}
+			WriteJSON(w, http.StatusForbidden, ErrorBody{Error: message})
 			return
 		}
 		if methodRequiresCSRF(r.Method) {
