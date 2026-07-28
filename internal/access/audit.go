@@ -34,3 +34,21 @@ type RequestAuditEvent struct {
 	UserAgent           string               `json:"user_agent"`
 	NetworkAddress      string               `json:"network_address,omitempty"`
 }
+
+type RequestAuditCursor struct {
+	OccurredAt time.Time
+	ID         uuid.UUID
+}
+
+type RequestAuditFilter struct {
+	UserID       *uuid.UUID
+	TokenID      *uuid.UUID
+	Method       string
+	RoutePattern string
+	StatusCode   *int
+	RequestID    string
+	From         *time.Time
+	To           *time.Time
+	Before       *RequestAuditCursor
+	Limit        int
+}

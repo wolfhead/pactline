@@ -58,11 +58,19 @@ func (r *testRepository) ListUserTokens(_ context.Context, _ uuid.UUID) ([]Token
 	return r.listed, r.listErr
 }
 
+func (r *testRepository) ListAllTokens(context.Context) ([]TokenWithUser, error) {
+	return nil, nil
+}
+
 func (r *testRepository) RevokeToken(_ context.Context, tokenID, actorID uuid.UUID, now time.Time) error {
 	r.revokedID = tokenID
 	r.revokedBy = actorID
 	r.revokedAt = now
 	return r.revokeErr
+}
+
+func (r *testRepository) RevokeTokenAsAdmin(context.Context, uuid.UUID, uuid.UUID, time.Time) error {
+	return nil
 }
 
 func (r *testRepository) TouchToken(_ context.Context, _ uuid.UUID, now, before time.Time) error {

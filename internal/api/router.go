@@ -29,7 +29,7 @@ type TaskSurface struct {
 type AuthSurface struct {
 	Sessions      *identity.Service
 	Tokens        *access.Service
-	AccessAudit   accessAuditWriter
+	AccessAudit   accessAuditStore
 	Idempotency   idempotencyRepository
 	Development   developmentAuthenticator
 	LarkEnabled   bool
@@ -41,6 +41,11 @@ type RouterOptions struct {
 	Auth  AuthSurface
 	Tasks *TaskSurface
 	V1    http.Handler
+}
+
+type accessAuditStore interface {
+	accessAuditWriter
+	accessAuditReader
 }
 
 // NewRouter builds the top-level API handler: user listing, every mechanism
@@ -84,6 +89,19 @@ func NewRouter(
 	protected.HandleFunc("PATCH /api/admin/users/{id}", adminIdentity.updateUser)
 	protected.HandleFunc("POST /api/admin/impersonation", adminIdentity.startImpersonation)
 	protected.HandleFunc("DELETE /api/admin/impersonation", adminIdentity.endImpersonation)
+	accountAccess := &accountTokenHandler{
+		tokens: options.Auth.Tokens, audit: options.Auth.AccessAudit,
+	}
+	protected.HandleFunc("GET /api/account/tokens", accountAccess.list)
+	protected.HandleFunc("POST /api/account/tokens", accountAccess.create)
+	protected.HandleFunc("DELETE /api/account/tokens/{id}", accountAccess.revoke)
+	protected.HandleFunc("GET /api/account/api-activity", accountAccess.activity)
+	adminAccess := &adminAccessHandler{
+		tokens: options.Auth.Tokens, audit: options.Auth.AccessAudit,
+	}
+	protected.HandleFunc("GET /api/admin/api-tokens", adminAccess.listTokens)
+	protected.HandleFunc("DELETE /api/admin/api-tokens/{id}", adminAccess.revokeToken)
+	protected.HandleFunc("GET /api/admin/api-activity", adminAccess.activity)
 
 	root := http.NewServeMux()
 	if options.Auth.Development != nil {

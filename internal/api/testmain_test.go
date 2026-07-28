@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"bountyboard"
+	"bountyboard/internal/access"
 	"bountyboard/internal/api"
 	"bountyboard/internal/application"
 	"bountyboard/internal/identity"
@@ -88,6 +89,10 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 		identity.SystemClock{}, identity.CryptoSecretGenerator{},
 	)
 	require.NoError(t, err)
+	tokenService := access.NewService(
+		store.NewAccessStore(db), identity.SystemClock{}, access.CryptoSecretGenerator{},
+	)
+	accessAuditStore := store.NewAccessAuditStore(db)
 	baseURL, err := url.Parse("http://app.test")
 	require.NoError(t, err)
 	taskSurface := &api.TaskSurface{
@@ -97,7 +102,9 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 	}
 	h := api.NewRouter(users, legacyHandler, api.RouterOptions{
 		Auth: api.AuthSurface{
-			Sessions: identityService, Development: devauth.New(users, identityService), AppBaseURL: baseURL,
+			Sessions: identityService, Tokens: tokenService,
+			AccessAudit: accessAuditStore, Idempotency: store.NewIdempotencyStore(db),
+			Development: devauth.New(users, identityService), AppBaseURL: baseURL,
 		},
 		Tasks: taskSurface,
 	})

@@ -87,6 +87,36 @@ func (s *AccessStore) ListUserTokens(ctx context.Context, userID uuid.UUID) ([]a
 	return tokens, nil
 }
 
+func (s *AccessStore) ListAllTokens(ctx context.Context) ([]access.TokenWithUser, error) {
+	rows, err := s.db.Pool.Query(ctx, `
+		SELECT
+			t.id, t.user_id, t.name, t.secret_hash, t.display_prefix, t.scopes,
+			t.expires_at, t.last_used_at, t.revoked_at, t.revoked_by_user_id,
+			t.created_at,
+			u.id, u.name, u.email, u.avatar_url, u.platform_role, u.roles,
+			u.active, u.created_at, u.updated_at
+		FROM api_tokens t
+		JOIN users u ON u.id=t.user_id
+		ORDER BY t.created_at DESC, t.id DESC`)
+	if err != nil {
+		return nil, fmt.Errorf("query all API tokens: %w", err)
+	}
+	defer rows.Close()
+
+	var tokens []access.TokenWithUser
+	for rows.Next() {
+		token, err := scanTokenWithUser(rows)
+		if err != nil {
+			return nil, fmt.Errorf("list all API tokens: %w", err)
+		}
+		tokens = append(tokens, token)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list all API tokens: %w", err)
+	}
+	return tokens, nil
+}
+
 func (s *AccessStore) RevokeToken(
 	ctx context.Context,
 	tokenID uuid.UUID,
@@ -100,6 +130,26 @@ func (s *AccessStore) RevokeToken(
 		tokenID, actorID, now)
 	if err != nil {
 		return fmt.Errorf("revoke API token: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return access.ErrTokenNotFound
+	}
+	return nil
+}
+
+func (s *AccessStore) RevokeTokenAsAdmin(
+	ctx context.Context,
+	tokenID uuid.UUID,
+	adminID uuid.UUID,
+	now time.Time,
+) error {
+	tag, err := s.db.Pool.Exec(ctx, `
+		UPDATE api_tokens
+		SET revoked_at=$3, revoked_by_user_id=$2
+		WHERE id=$1 AND revoked_at IS NULL`,
+		tokenID, adminID, now)
+	if err != nil {
+		return fmt.Errorf("revoke API token as administrator: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return access.ErrTokenNotFound

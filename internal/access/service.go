@@ -125,6 +125,23 @@ func (s *Service) Revoke(ctx context.Context, tokenID, actorID uuid.UUID) error 
 	return nil
 }
 
+func (s *Service) ListAllTokens(ctx context.Context) ([]TokenWithUser, error) {
+	tokens, err := s.repository.ListAllTokens(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list all API tokens: %w", err)
+	}
+	return tokens, nil
+}
+
+func (s *Service) RevokeAsAdmin(ctx context.Context, tokenID, adminID uuid.UUID) error {
+	if err := s.repository.RevokeTokenAsAdmin(
+		ctx, tokenID, adminID, s.clock.Now().UTC(),
+	); err != nil {
+		return fmt.Errorf("revoke API token as administrator: %w", err)
+	}
+	return nil
+}
+
 func FormatToken(id uuid.UUID, secret []byte) string {
 	return tokenPrefix +
 		base64.RawURLEncoding.EncodeToString(id[:]) + "_" +

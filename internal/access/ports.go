@@ -11,7 +11,9 @@ type Repository interface {
 	CreateToken(context.Context, Token) error
 	GetToken(context.Context, uuid.UUID) (TokenWithUser, error)
 	ListUserTokens(context.Context, uuid.UUID) ([]Token, error)
+	ListAllTokens(context.Context) ([]TokenWithUser, error)
 	RevokeToken(context.Context, uuid.UUID, uuid.UUID, time.Time) error
+	RevokeTokenAsAdmin(context.Context, uuid.UUID, uuid.UUID, time.Time) error
 	TouchToken(context.Context, uuid.UUID, time.Time, time.Time) error
 }
 
