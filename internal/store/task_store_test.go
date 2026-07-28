@@ -19,13 +19,22 @@ var (
 	userD = uuid.MustParse("00000000-0000-0000-0000-000000000004") // 研发 D
 )
 
-// cleanupTask deletes a task row (cascading to task_labels, task_comments,
-// task_activity via ON DELETE CASCADE) once the test finishes, so this
-// package's shared database is left with the tasks table empty as required.
+// cleanupTask deletes task-owned acceptance history before deleting the task.
+// The other task children cascade from tasks; acceptance history is retained
+// deliberately in production and therefore needs explicit test cleanup.
 func cleanupTask(t *testing.T, db *store.DB, id uuid.UUID) {
 	t.Helper()
 	t.Cleanup(func() {
-		_, err := db.Pool.Exec(context.Background(), `DELETE FROM tasks WHERE id = $1`, id)
+		_, err := db.Pool.Exec(context.Background(), `
+			DELETE FROM acceptance_checks
+			WHERE criterion_id IN (
+				SELECT id FROM acceptance_criteria WHERE task_id=$1
+			)`, id)
+		require.NoError(t, err)
+		_, err = db.Pool.Exec(context.Background(),
+			`DELETE FROM acceptance_criteria WHERE task_id=$1`, id)
+		require.NoError(t, err)
+		_, err = db.Pool.Exec(context.Background(), `DELETE FROM tasks WHERE id = $1`, id)
 		require.NoError(t, err)
 	})
 }
@@ -235,6 +244,50 @@ func TestTaskUpdateStatusToDoneSetsCompletedAtAndClearingReverts(t *testing.T) {
 	moved, err := ts.Update(ctx, out.Task.Number, domain.TaskPatch{Status: &todo}, userA)
 	require.NoError(t, err)
 	require.Nil(t, moved.Task.CompletedAt, "moving between two non-done statuses must not resurrect completed_at")
+}
+
+func TestTaskCompletionRequiresCurrentAcceptanceChecks(t *testing.T) {
+	db := newTestDB(t)
+	tasks := store.NewTaskStore(db)
+	acceptance := store.NewAcceptanceStore(db)
+	ctx := context.Background()
+
+	task := mustCreateTask(t, tasks, domain.Task{
+		Title: "Verify completion gate", CreatorID: userA, Status: domain.TaskStatusInReview,
+	}, nil)
+	cleanupTask(t, db, task.Task.ID)
+	criterion, err := acceptance.Create(ctx, domain.AcceptanceCriterion{
+		TaskID: &task.Task.ID, Criterion: "The workflow is verified",
+		VerificationInstructions: "Run the workflow test", Position: 0,
+	})
+	require.NoError(t, err)
+
+	done := domain.TaskStatusDone
+	_, err = tasks.Update(ctx, task.Task.Number, domain.TaskPatch{Status: &done}, userA)
+	require.ErrorIs(t, err, domain.ErrConflict)
+
+	_, err = acceptance.AddCheck(ctx, domain.AcceptanceCheck{
+		CriterionID: criterion.ID, CriterionRevision: criterion.Revision,
+		Outcome: domain.AcceptanceOutcomePassed, Evidence: "Workflow test passed",
+		Checker: domain.Actor{Type: domain.ActorTypeUser, UserID: &userA},
+	})
+	require.NoError(t, err)
+
+	completed, err := tasks.Update(ctx, task.Task.Number, domain.TaskPatch{Status: &done}, userA)
+	require.NoError(t, err)
+	require.Equal(t, domain.TaskStatusDone, completed.Task.Status)
+	require.NotNil(t, completed.Task.CompletedAt)
+
+	err = acceptance.RemoveCriterion(ctx, criterion.ID, domain.Actor{
+		Type: domain.ActorTypeUser, UserID: &userA,
+	}, "")
+	require.NoError(t, err, "task criterion removal does not use project scope-change rules")
+	var archived bool
+	err = db.Pool.QueryRow(ctx,
+		`SELECT archived_at IS NOT NULL FROM acceptance_criteria WHERE id=$1`, criterion.ID).
+		Scan(&archived)
+	require.NoError(t, err)
+	require.True(t, archived, "a criterion with check history must be archived")
 }
 
 // TestTaskUpdateResendingSameValueWritesNoActivity plants a decoy for

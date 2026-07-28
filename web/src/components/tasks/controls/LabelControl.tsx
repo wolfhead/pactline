@@ -1,7 +1,7 @@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Checkbox } from '@/components/ui/checkbox'
 import type { Label } from '@/task-types'
-import { CONTROL_TRIGGER_CLASS } from './trigger'
+import { CONTROL_TRIGGER_CLASS, PROPERTY_ICON_SLOT_CLASS } from './trigger'
 import { cn } from '@/lib/utils'
 
 /** Labels as a permanently visible control. The trigger always shows the
@@ -30,10 +30,12 @@ export default function LabelControl({
   return (
     <Popover>
       <PopoverTrigger
+        data-property-control
         aria-label={ariaLabel}
         className={cn(CONTROL_TRIGGER_CLASS, value.length === 0 && 'text-fg-muted')}
       >
-        {value.length > 0 ? value.map((l) => l.Name).join(', ') : '无标签'}
+        <span className={PROPERTY_ICON_SLOT_CLASS} aria-hidden="true" />
+        <span>{value.length > 0 ? value.map((l) => l.Name).join(', ') : '无标签'}</span>
       </PopoverTrigger>
       <PopoverContent className="w-56 p-2">
         {/* list-none/pl-0, matching FilterBar's near-identical popover list:

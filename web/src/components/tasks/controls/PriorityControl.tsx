@@ -1,7 +1,7 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { PRIORITY_LABELS, TASK_PRIORITIES, type TaskPriority } from '@/task-types'
 import { cn } from '@/lib/utils'
-import { CONTROL_TRIGGER_CLASS } from './trigger'
+import { CONTROL_TRIGGER_CLASS, PROPERTY_ICON_SLOT_CLASS } from './trigger'
 
 // Only low/medium/high/urgent have a dedicated --color-priority-* token
 // (see index.css); 'none' carries no priority colour of its own and reads
@@ -34,15 +34,19 @@ export default function PriorityControl({
   return (
     <Select value={value} onValueChange={(v) => onChange(v as TaskPriority)} disabled={disabled}>
       <SelectTrigger
+        data-property-control
         aria-label={ariaLabel}
-        className={cn(CONTROL_TRIGGER_CLASS, 'font-medium', TEXT[value])}
+        className={cn(CONTROL_TRIGGER_CLASS, TEXT[value])}
       >
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
         {TASK_PRIORITIES.map((p) => (
           <SelectItem key={p} value={p}>
-            <span className={cn('font-medium', TEXT[p])}>{PRIORITY_LABELS[p]}</span>
+            <span className="flex items-center gap-1.5">
+              <span className={PROPERTY_ICON_SLOT_CLASS} aria-hidden="true" />
+              <span className={TEXT[p]}>{PRIORITY_LABELS[p]}</span>
+            </span>
           </SelectItem>
         ))}
       </SelectContent>

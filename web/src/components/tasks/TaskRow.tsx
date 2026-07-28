@@ -164,7 +164,7 @@ export default function TaskRow({ task, selected, tier, users, error, onPatch, o
           priority and assignee ~36px left of the rows that don't, and the
           five control columns read as ragged down the whole list (found in
           Task 14's screenshot pass, at every tier and in both themes). */}
-      <div className="w-24 shrink-0">{dueDateControl}</div>
+      <div className="w-24 shrink-0 max-[1399px]:hidden">{dueDateControl}</div>
       {actionsMenu}
       {error && (
         <p role="alert" className="ml-2 shrink-0 text-xs text-danger">

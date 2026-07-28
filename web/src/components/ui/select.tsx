@@ -3,6 +3,7 @@ import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react"
 import { Select as SelectPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
+import { useOverlayPortalContainer } from "@/components/ui/overlay-portal"
 
 function Select({
   ...props
@@ -42,7 +43,7 @@ function SelectTrigger({
     >
       {children}
       <SelectPrimitive.Icon asChild>
-        <ChevronDownIcon className="size-4 opacity-50" />
+        <ChevronDownIcon data-select-chevron className="size-4 opacity-50" />
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   )
@@ -55,8 +56,9 @@ function SelectContent({
   align = "center",
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content>) {
+  const portalContainer = useOverlayPortalContainer()
   return (
-    <SelectPrimitive.Portal>
+    <SelectPrimitive.Portal container={portalContainer ?? undefined}>
       <SelectPrimitive.Content
         data-slot="select-content"
         className={cn(

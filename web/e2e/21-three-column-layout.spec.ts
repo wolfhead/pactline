@@ -27,6 +27,12 @@ test('the detail takes a third column at xl and slides over the list below it', 
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(page.getByRole('listitem').first()).toBeVisible()
 
+  // At the lower edge of xl, a half-width detail leaves the list about
+  // 550px wide. The row drops its due-date shortcut there so the task title
+  // remains a real visible link instead of collapsing to zero width.
+  await page.setViewportSize({ width: 1280, height: 820 })
+  await expect(page.getByRole('link', { name: title, exact: true })).toBeVisible()
+
   // lg: the same URL now slides the detail over an unshrunken list.
   await page.setViewportSize({ width: 1120, height: 820 })
   await expect(page.getByRole('dialog')).toBeVisible()
@@ -35,6 +41,13 @@ test('the detail takes a third column at xl and slides over the list below it', 
   // tree reports zero listitems here even though the list is very much
   // still mounted underneath — which is the one thing this line is for.
   await expect(page.locator('[role="listitem"]').first()).toBeAttached()
+
+  // Portaled property controls must stay inside the modal sheet's
+  // accessibility boundary. A body-level popover is hidden by Radix's modal
+  // isolation even though the same control works in the xl column.
+  await page.getByRole('dialog', { name: '任务详情' })
+    .getByRole('button', { name: '截止日期' }).click()
+  await expect(page.getByRole('dialog', { name: '选择截止日期' })).toBeVisible()
 })
 
 test('navigation is permanent at lg, a drawer at md, and a bottom bar on a phone', async ({ page }) => {

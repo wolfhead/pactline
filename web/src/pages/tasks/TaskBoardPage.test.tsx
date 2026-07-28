@@ -33,7 +33,7 @@ function task(n: number, status: Task['status']): Task {
   return {
     id: `id-${n}`, number: n, title: `任务 ${n}`, description: '',
     status, priority: 'none', assignee: null, creator: CREATOR,
-    due_date: null, labels: [], created_at: '', updated_at: '',
+    due_date: null, project: null, milestone: null, labels: [], created_at: '', updated_at: '',
     completed_at: null, archived_at: null,
   }
 }
@@ -96,5 +96,14 @@ describe('TaskBoardPage', () => {
     // Same accessible-name convention as the list rows (see Task 4), so e2e
     // 13 can assert the post-drag status through a single lookup.
     expect(await screen.findByRole('combobox', { name: '任务 #2 状态' })).toBeVisible()
+  })
+
+  it('aligns every card property in a stable two-column grid', async () => {
+    setWidth(1440)
+    renderBoard()
+    const cards = await screen.findAllByRole('article')
+    for (const card of cards) {
+      expect(card.querySelector('[data-task-properties]')).toHaveClass('grid-cols-2')
+    }
   })
 })

@@ -1,28 +1,15 @@
-/** Shared trigger sizing/shape for every permanently-visible property
- * control — Status/Priority/Assignee's `Select` trigger and DueDate/Label's
- * `Popover` trigger alike — so all five controls sit uniformly in a row.
- * `h-8` is the mouse size; the 44px coarse-pointer floor is NOT stated here.
- * It comes from index.css's single `@media (pointer: coarse)` base rule, and
- * a `min-h-*` utility here would outrank that rule rather than agree with it.
+/** Shared inline-property trigger.
  *
- * `border-border-strong`, not `border-border`: this is a real UI-component
- * boundary, which WCAG 1.4.11 holds to 3:1. `--color-border` is the hairline
- * divider token and measures 1.25:1 light / 1.26:1 dark against the trigger's
- * own surface — index.css's own token comment says as much, and that comment
- * is the whole justification for exempting `--color-border` from the contrast
- * sweep. Stating it here also settles the tailwind-merge race with
- * `SelectTrigger`, whose own `border-border-strong` this class arrives as
- * `className` on top of and used to overwrite.
- *
- * The box itself — inline-flex, the 1px border, the radius — is stated here
- * rather than assumed. shadcn's `SelectTrigger` brings its own; Radix's
- * `PopoverTrigger` and `DropdownMenuTrigger` render a completely bare
- * <button>, which until Task 13 was dressed by styles.css's element-level
- * `button { padding; border; border-radius }` rule. With that stylesheet
- * gone and preflight on (border-width 0, padding 0, and svg children set to
- * `display: block`), those triggers rendered as unboxed text and the
- * "＋ 新建任务" button broke its icon onto a line of its own. Keep all four
- * of inline-flex / items-center / border / rounded-md here.
+ * Task properties should read as content rather than a row of form fields.
+ * The transparent border preserves geometry and a stable focus ring without
+ * drawing a permanent box. Hover, keyboard focus, and the open state provide
+ * the interaction affordance. The coarse-pointer 44px floor still comes from
+ * index.css, so this remains dense for mouse users and touch-safe elsewhere.
  */
 export const CONTROL_TRIGGER_CLASS =
-  'inline-flex h-8 items-center gap-1.5 rounded-md border border-border-strong bg-surface px-2 text-xs whitespace-nowrap'
+  'group inline-flex h-8 items-center gap-1.5 rounded-md border border-transparent bg-transparent px-2 text-xs whitespace-nowrap shadow-none outline-none transition-colors hover:bg-surface-subtle focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/30 data-[state=open]:bg-surface-subtle [&>[data-select-chevron]]:opacity-0 hover:[&>[data-select-chevron]]:opacity-50 focus-visible:[&>[data-select-chevron]]:opacity-50 data-[state=open]:[&>[data-select-chevron]]:opacity-50'
+
+/** A stable leading column keeps property text aligned when only some values
+ * have a meaningful visual cue, such as status and due date. */
+export const PROPERTY_ICON_SLOT_CLASS =
+  'inline-flex w-4 shrink-0 items-center justify-center'

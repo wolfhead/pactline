@@ -1,0 +1,352 @@
+package store
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"bountyboard/internal/domain"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+)
+
+type AcceptanceStore struct{ db *DB }
+
+func NewAcceptanceStore(db *DB) *AcceptanceStore { return &AcceptanceStore{db: db} }
+
+type CriterionWithCurrentCheck struct {
+	Criterion    domain.AcceptanceCriterion
+	CurrentCheck *domain.AcceptanceCheck
+}
+
+const criterionColumns = `ac.id, ac.project_id, ac.milestone_id, ac.task_id, ac.criterion,
+	ac.verification_instructions, ac.revision, ac.position, ac.archived_at,
+	ac.created_at, ac.updated_at`
+
+const criterionReturnColumns = `id, project_id, milestone_id, task_id, criterion,
+	verification_instructions, revision, position, archived_at, created_at, updated_at`
+
+func scanCriterion(s scanner) (domain.AcceptanceCriterion, error) {
+	var criterion domain.AcceptanceCriterion
+	err := s.Scan(
+		&criterion.ID, &criterion.ProjectID, &criterion.MilestoneID, &criterion.TaskID,
+		&criterion.Criterion, &criterion.VerificationInstructions,
+		&criterion.Revision, &criterion.Position, &criterion.ArchivedAt,
+		&criterion.CreatedAt, &criterion.UpdatedAt,
+	)
+	if err != nil {
+		return domain.AcceptanceCriterion{}, fmt.Errorf("scan acceptance criterion: %w", err)
+	}
+	return criterion, nil
+}
+
+func (s *AcceptanceStore) Create(ctx context.Context, criterion domain.AcceptanceCriterion) (domain.AcceptanceCriterion, error) {
+	if criterion.ID == uuid.Nil {
+		criterion.ID = uuid.New()
+	}
+	if criterion.Revision == 0 {
+		criterion.Revision = 1
+	}
+	if err := criterion.Validate(); err != nil {
+		return domain.AcceptanceCriterion{}, err
+	}
+	out, err := scanCriterion(s.db.Pool.QueryRow(ctx, `
+		INSERT INTO acceptance_criteria
+			(id, project_id, milestone_id, task_id, criterion, verification_instructions, revision, position)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+		RETURNING `+criterionReturnColumns,
+		criterion.ID, criterion.ProjectID, criterion.MilestoneID, criterion.TaskID, criterion.Criterion,
+		criterion.VerificationInstructions, criterion.Revision, criterion.Position))
+	if err != nil {
+		return domain.AcceptanceCriterion{}, mapPgError(err)
+	}
+	return out, nil
+}
+
+func (s *AcceptanceStore) Get(ctx context.Context, criterionID uuid.UUID) (domain.AcceptanceCriterion, error) {
+	out, err := scanCriterion(s.db.Pool.QueryRow(ctx,
+		`SELECT `+criterionColumns+` FROM acceptance_criteria ac WHERE ac.id=$1`, criterionID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.AcceptanceCriterion{}, domain.ErrNotFound
+	}
+	return out, err
+}
+
+func (s *AcceptanceStore) ListForProject(ctx context.Context, projectID uuid.UUID) ([]CriterionWithCurrentCheck, error) {
+	return s.list(ctx, `ac.project_id=$1`, projectID)
+}
+
+func (s *AcceptanceStore) ListForMilestone(ctx context.Context, milestoneID uuid.UUID) ([]CriterionWithCurrentCheck, error) {
+	return s.list(ctx, `ac.milestone_id=$1`, milestoneID)
+}
+
+func (s *AcceptanceStore) ListForTask(ctx context.Context, taskID uuid.UUID) ([]CriterionWithCurrentCheck, error) {
+	return s.list(ctx, `ac.task_id=$1`, taskID)
+}
+
+func (s *AcceptanceStore) list(ctx context.Context, predicate string, ownerID uuid.UUID) ([]CriterionWithCurrentCheck, error) {
+	rows, err := s.db.Pool.Query(ctx, `
+		SELECT `+criterionColumns+`,
+			ch.id, ch.criterion_revision, ch.outcome, ch.evidence,
+			ch.checker_type, ch.checked_by_user_id, ch.checker_ref, ch.checked_at
+		FROM acceptance_criteria ac
+		LEFT JOIN LATERAL (
+			SELECT *
+			FROM acceptance_checks candidate
+			WHERE candidate.criterion_id=ac.id AND candidate.criterion_revision=ac.revision
+			ORDER BY candidate.checked_at DESC, candidate.id DESC
+			LIMIT 1
+		) ch ON true
+		WHERE `+predicate+` AND ac.archived_at IS NULL
+		ORDER BY ac.position, ac.created_at, ac.id`, ownerID)
+	if err != nil {
+		return nil, fmt.Errorf("list acceptance criteria: %w", err)
+	}
+	defer rows.Close()
+	out := []CriterionWithCurrentCheck{}
+	for rows.Next() {
+		var (
+			item          CriterionWithCurrentCheck
+			checkID       *uuid.UUID
+			revision      *int
+			outcome       *domain.AcceptanceOutcome
+			evidence      *string
+			checkerType   *domain.ActorType
+			checkerUserID *uuid.UUID
+			checkerRef    *string
+			checkedAt     *time.Time
+		)
+		err := rows.Scan(
+			&item.Criterion.ID, &item.Criterion.ProjectID, &item.Criterion.MilestoneID, &item.Criterion.TaskID,
+			&item.Criterion.Criterion, &item.Criterion.VerificationInstructions,
+			&item.Criterion.Revision, &item.Criterion.Position, &item.Criterion.ArchivedAt,
+			&item.Criterion.CreatedAt, &item.Criterion.UpdatedAt,
+			&checkID, &revision, &outcome, &evidence, &checkerType,
+			&checkerUserID, &checkerRef, &checkedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan acceptance criterion with check: %w", err)
+		}
+		if checkID != nil {
+			item.CurrentCheck = &domain.AcceptanceCheck{
+				ID:                *checkID,
+				CriterionID:       item.Criterion.ID,
+				CriterionRevision: *revision,
+				Outcome:           *outcome,
+				Evidence:          *evidence,
+				Checker: domain.Actor{
+					Type:   *checkerType,
+					UserID: checkerUserID,
+					Ref:    derefStr(checkerRef),
+				},
+				CheckedAt: *checkedAt,
+			}
+		}
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func (s *AcceptanceStore) Update(
+	ctx context.Context,
+	criterionID uuid.UUID,
+	criterionText, instructions *string,
+	position *int,
+) (domain.AcceptanceCriterion, error) {
+	tx, err := s.db.Pool.Begin(ctx)
+	if err != nil {
+		return domain.AcceptanceCriterion{}, fmt.Errorf("begin update acceptance criterion: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	current, err := scanCriterion(tx.QueryRow(ctx,
+		`SELECT `+criterionColumns+` FROM acceptance_criteria ac WHERE ac.id=$1 FOR UPDATE`, criterionID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.AcceptanceCriterion{}, domain.ErrNotFound
+	}
+	if err != nil {
+		return domain.AcceptanceCriterion{}, err
+	}
+	newText := current.Criterion
+	newInstructions := current.VerificationInstructions
+	if criterionText != nil {
+		newText = *criterionText
+	}
+	if instructions != nil {
+		newInstructions = *instructions
+	}
+	current.Edit(newText, newInstructions)
+	if position != nil {
+		current.Move(*position)
+	}
+	if err := current.Validate(); err != nil {
+		return domain.AcceptanceCriterion{}, err
+	}
+	_, err = tx.Exec(ctx, `
+		UPDATE acceptance_criteria
+		SET criterion=$2, verification_instructions=$3, revision=$4,
+			position=$5, updated_at=now()
+		WHERE id=$1`,
+		current.ID, current.Criterion, current.VerificationInstructions,
+		current.Revision, current.Position)
+	if err != nil {
+		return domain.AcceptanceCriterion{}, mapPgError(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return domain.AcceptanceCriterion{}, fmt.Errorf("commit update acceptance criterion: %w", err)
+	}
+	return s.Get(ctx, criterionID)
+}
+
+func (s *AcceptanceStore) AddCheck(ctx context.Context, check domain.AcceptanceCheck) (domain.AcceptanceCheck, error) {
+	tx, err := s.db.Pool.Begin(ctx)
+	if err != nil {
+		return domain.AcceptanceCheck{}, fmt.Errorf("begin acceptance check: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	criterion, err := scanCriterion(tx.QueryRow(ctx,
+		`SELECT `+criterionColumns+` FROM acceptance_criteria ac WHERE ac.id=$1 FOR UPDATE`,
+		check.CriterionID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.AcceptanceCheck{}, domain.ErrNotFound
+	}
+	if err != nil {
+		return domain.AcceptanceCheck{}, err
+	}
+	if err := check.ValidateAgainst(criterion); err != nil {
+		return domain.AcceptanceCheck{}, err
+	}
+	if check.ID == uuid.Nil {
+		check.ID = uuid.New()
+	}
+	if check.CheckedAt.IsZero() {
+		check.CheckedAt = time.Now().UTC()
+	}
+	var userID *uuid.UUID
+	var checkerRef *string
+	if check.Checker.Type == domain.ActorTypeUser {
+		userID = check.Checker.UserID
+	} else {
+		ref := strings.TrimSpace(check.Checker.Ref)
+		checkerRef = &ref
+	}
+	err = tx.QueryRow(ctx, `
+		INSERT INTO acceptance_checks
+			(id, criterion_id, criterion_revision, outcome, evidence,
+			 checker_type, checked_by_user_id, checker_ref, checked_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+		RETURNING checked_at`,
+		check.ID, check.CriterionID, check.CriterionRevision, check.Outcome,
+		check.Evidence, check.Checker.Type, userID, checkerRef, check.CheckedAt,
+	).Scan(&check.CheckedAt)
+	if err != nil {
+		return domain.AcceptanceCheck{}, mapPgError(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return domain.AcceptanceCheck{}, fmt.Errorf("commit acceptance check: %w", err)
+	}
+	return check, nil
+}
+
+func (s *AcceptanceStore) RemoveCriterion(
+	ctx context.Context,
+	criterionID uuid.UUID,
+	actor domain.Actor,
+	reason string,
+) error {
+	if !actor.IsHuman() {
+		return fmt.Errorf("%w: only a human user may remove an acceptance criterion", domain.ErrForbidden)
+	}
+	tx, err := s.db.Pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin remove acceptance criterion: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	var (
+		projectID          *uuid.UUID
+		projectStatus      *domain.ProjectStatus
+		taskID             *uuid.UUID
+		checkCount         int
+		isProjectCriterion bool
+	)
+	err = tx.QueryRow(ctx, `
+		SELECT COALESCE(ac.project_id, m.project_id), p.status, ac.task_id,
+			ac.project_id IS NOT NULL,
+			(SELECT count(*) FROM acceptance_checks chk WHERE chk.criterion_id=ac.id)
+		FROM acceptance_criteria ac
+		LEFT JOIN milestones m ON m.id=ac.milestone_id
+		LEFT JOIN projects p ON p.id=COALESCE(ac.project_id, m.project_id)
+		WHERE ac.id=$1 AND ac.archived_at IS NULL
+		FOR UPDATE OF ac`, criterionID).
+		Scan(&projectID, &projectStatus, &taskID, &isProjectCriterion, &checkCount)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("lock acceptance criterion: %w", err)
+	}
+	if taskID != nil {
+		if checkCount == 0 {
+			_, err = tx.Exec(ctx, `DELETE FROM acceptance_criteria WHERE id=$1`, criterionID)
+		} else {
+			_, err = tx.Exec(ctx,
+				`UPDATE acceptance_criteria SET archived_at=now(), updated_at=now() WHERE id=$1`,
+				criterionID)
+		}
+		if err != nil {
+			return fmt.Errorf("remove task acceptance criterion: %w", err)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit task criterion removal: %w", err)
+		}
+		return nil
+	}
+	if projectID == nil || projectStatus == nil {
+		return fmt.Errorf("acceptance criterion owner is invalid")
+	}
+	if (*projectStatus == domain.ProjectStatusActive || *projectStatus == domain.ProjectStatusPaused) &&
+		strings.TrimSpace(reason) == "" {
+		return fmt.Errorf("%w: a reason is required to change active project scope", domain.ErrInvalidInput)
+	}
+	if isProjectCriterion &&
+		(*projectStatus == domain.ProjectStatusActive || *projectStatus == domain.ProjectStatusPaused) {
+		var activeProjectCriteria int
+		if err := tx.QueryRow(ctx,
+			`SELECT count(*) FROM acceptance_criteria
+			 WHERE project_id=$1 AND archived_at IS NULL`,
+			*projectID,
+		).Scan(&activeProjectCriteria); err != nil {
+			return fmt.Errorf("count active project criteria: %w", err)
+		}
+		if activeProjectCriteria <= 1 {
+			return fmt.Errorf("%w: an active project requires an acceptance criterion", domain.ErrConflict)
+		}
+	}
+
+	action := "acceptance_criterion_archived"
+	if *projectStatus == domain.ProjectStatusPlanned && checkCount == 0 {
+		action = "acceptance_criterion_removed"
+		_, err = tx.Exec(ctx, `DELETE FROM acceptance_criteria WHERE id=$1`, criterionID)
+	} else {
+		_, err = tx.Exec(ctx,
+			`UPDATE acceptance_criteria SET archived_at=now(), updated_at=now() WHERE id=$1`,
+			criterionID)
+	}
+	if err != nil {
+		return fmt.Errorf("remove acceptance criterion: %w", err)
+	}
+	_, err = tx.Exec(ctx, `
+		INSERT INTO project_activity (id, project_id, actor_id, action, reason, old_value)
+		VALUES ($1,$2,$3,$4,$5,$6)`,
+		uuid.New(), *projectID, *actor.UserID, action, strings.TrimSpace(reason), criterionID.String())
+	if err != nil {
+		return fmt.Errorf("record criterion removal: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit criterion removal: %w", err)
+	}
+	return nil
+}

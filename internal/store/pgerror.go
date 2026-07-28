@@ -26,6 +26,8 @@ func mapPgError(err error) error {
 			return fmt.Errorf("%w: %s", domain.ErrConflict, pgErr.Message)
 		case "23503": // foreign_key_violation
 			return fmt.Errorf("%w: %s", domain.ErrInvalidInput, pgErr.Message)
+		case "23514": // check_violation
+			return fmt.Errorf("%w: %s", domain.ErrInvalidInput, pgErr.Message)
 		}
 	}
 	return fmt.Errorf("query: %w", err)

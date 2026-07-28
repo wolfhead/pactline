@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils'
 const ITEMS = [
   { to: '/tasks', label: '列表', end: true },
   { to: '/tasks/board', label: '看板', end: false },
+  { to: '/projects', label: '项目', end: false },
 ] as const
 
 // Label management belongs to the tags-and-relations plan, not this pass —

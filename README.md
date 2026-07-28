@@ -1,5 +1,22 @@
 # Bounty Board
 
+## Current Task Platform
+
+The primary product is now a task-management platform. Its current delivery
+surface includes:
+
+- responsive task list and board views;
+- a desktop three-column workspace with a half-width task detail pane;
+- first-class projects and ordered milestones;
+- structured, revisioned acceptance criteria shared by projects, milestones,
+  and tasks, with evidence-backed checks and task completion gating;
+- task-to-project and task-to-milestone association; and
+- audited project and milestone lifecycle transitions.
+
+Project and milestone semantics are defined in
+[`docs/superpowers/specs/2026-07-27-projects-and-milestones-design.md`](docs/superpowers/specs/2026-07-27-projects-and-milestones-design.md).
+Lark identity, authorization, and notifications are intentionally deferred.
+
 作品制研发任务管理系统。机制设计见 [`docs/mechanism-design.md`](docs/mechanism-design.md),
 系统规格见 [`docs/superpowers/specs/2026-07-26-bounty-board-design.md`](docs/superpowers/specs/2026-07-26-bounty-board-design.md)。
 

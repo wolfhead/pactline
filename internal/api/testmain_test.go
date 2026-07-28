@@ -15,6 +15,7 @@ import (
 
 	"bountyboard"
 	"bountyboard/internal/api"
+	"bountyboard/internal/application"
 	legacyapi "bountyboard/internal/legacy/api"
 	legacystore "bountyboard/internal/legacy/store"
 	"bountyboard/internal/store"
@@ -54,11 +55,21 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 	tasks := store.NewTaskStore(db)
 	comments := store.NewCommentStore(db)
 	labels := store.NewLabelStore(db)
+	projects := store.NewProjectStore(db)
+	milestones := store.NewMilestoneStore(db)
+	acceptance := store.NewAcceptanceStore(db)
+	projectService := &application.ProjectService{
+		Projects: projects, Milestones: milestones, Acceptance: acceptance, Tasks: tasks,
+	}
 	legacyHandler := legacyapi.NewRouter(
 		users, legacystore.NewBountyStore(db), legacystore.NewCreditStore(db),
 		legacystore.NewCalibrationStore(db), legacystore.NewAnchorStore(db),
 	)
-	h := api.NewRouter(users, legacyHandler, api.TaskSurface{Tasks: tasks, Comments: comments, Labels: labels})
+	h := api.NewRouter(users, legacyHandler, api.TaskSurface{
+		Tasks: tasks, Comments: comments, Labels: labels,
+		Projects: projects, Milestones: milestones, Acceptance: acceptance,
+		ProjectService: projectService,
+	})
 	return h, db
 }
 
@@ -98,20 +109,33 @@ func decodeJSON(t *testing.T, rec *httptest.ResponseRecorder, dst any) {
 // (black-box, api_test) tests can decode what the HTTP layer actually sent
 // without importing an unexported type.
 type taskResponse struct {
-	ID          uuid.UUID    `json:"id"`
-	Number      int64        `json:"number"`
-	Title       string       `json:"title"`
-	Description string       `json:"description"`
-	Status      string       `json:"status"`
-	Priority    string       `json:"priority"`
-	Assignee    *userRefJSON `json:"assignee"`
-	Creator     userRefJSON  `json:"creator"`
-	DueDate     *string      `json:"due_date"`
-	Labels      []labelJSON  `json:"labels"`
-	CreatedAt   time.Time    `json:"created_at"`
-	UpdatedAt   time.Time    `json:"updated_at"`
-	CompletedAt *time.Time   `json:"completed_at"`
-	ArchivedAt  *time.Time   `json:"archived_at"`
+	ID          uuid.UUID              `json:"id"`
+	Number      int64                  `json:"number"`
+	Title       string                 `json:"title"`
+	Description string                 `json:"description"`
+	Status      string                 `json:"status"`
+	Priority    string                 `json:"priority"`
+	Assignee    *userRefJSON           `json:"assignee"`
+	Creator     userRefJSON            `json:"creator"`
+	DueDate     *string                `json:"due_date"`
+	Project     *taskProjectResponse   `json:"project"`
+	Milestone   *taskMilestoneResponse `json:"milestone"`
+	Labels      []labelJSON            `json:"labels"`
+	CreatedAt   time.Time              `json:"created_at"`
+	UpdatedAt   time.Time              `json:"updated_at"`
+	CompletedAt *time.Time             `json:"completed_at"`
+	ArchivedAt  *time.Time             `json:"archived_at"`
+}
+
+type taskProjectResponse struct {
+	ID     uuid.UUID `json:"id"`
+	Number int64     `json:"number"`
+	Name   string    `json:"name"`
+}
+
+type taskMilestoneResponse struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
 }
 
 type userRefJSON struct {
@@ -152,7 +176,16 @@ type activityResponse struct {
 func cleanupTaskRow(t *testing.T, db *store.DB, id uuid.UUID) {
 	t.Helper()
 	t.Cleanup(func() {
-		_, err := db.Pool.Exec(context.Background(), `DELETE FROM tasks WHERE id = $1`, id)
+		ctx := context.Background()
+		_, err := db.Pool.Exec(ctx, `
+			DELETE FROM acceptance_checks
+			WHERE criterion_id IN (
+				SELECT id FROM acceptance_criteria WHERE task_id=$1
+			)`, id)
+		require.NoError(t, err)
+		_, err = db.Pool.Exec(ctx, `DELETE FROM acceptance_criteria WHERE task_id=$1`, id)
+		require.NoError(t, err)
+		_, err = db.Pool.Exec(ctx, `DELETE FROM tasks WHERE id = $1`, id)
 		require.NoError(t, err)
 	})
 }

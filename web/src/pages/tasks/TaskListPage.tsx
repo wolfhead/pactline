@@ -354,7 +354,7 @@ export default function TaskListPage() {
       {tier === 'xl' && (
         <aside
           aria-label="任务详情"
-          className="w-96 shrink-0 overflow-y-auto border-l border-border"
+          className="w-1/2 shrink-0 overflow-y-auto border-l border-border"
         >
           {selected === null ? (
             <p className="p-4 text-sm text-fg-muted">从左边选一条任务</p>

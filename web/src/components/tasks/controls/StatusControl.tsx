@@ -1,7 +1,7 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { STATUS_LABELS, TASK_STATUSES, type TaskStatus } from '@/task-types'
 import { cn } from '@/lib/utils'
-import { CONTROL_TRIGGER_CLASS } from './trigger'
+import { CONTROL_TRIGGER_CLASS, PROPERTY_ICON_SLOT_CLASS } from './trigger'
 
 const DOT: Record<TaskStatus, string> = {
   backlog: 'border-status-backlog',
@@ -29,6 +29,7 @@ export default function StatusControl({
   return (
     <Select value={value} onValueChange={(v) => onChange(v as TaskStatus)} disabled={disabled}>
       <SelectTrigger
+        data-property-control
         aria-label={ariaLabel}
         className={CONTROL_TRIGGER_CLASS}
       >
@@ -43,9 +44,11 @@ export default function StatusControl({
       <SelectContent>
         {TASK_STATUSES.map((s) => (
           <SelectItem key={s} value={s}>
-            <span className="flex items-center gap-2">
-              <span className={cn('size-2.5 shrink-0 rounded-full border-[1.6px]', DOT[s])} aria-hidden="true" />
-              {STATUS_LABELS[s]}
+            <span className="flex items-center gap-1.5">
+              <span className={PROPERTY_ICON_SLOT_CLASS} aria-hidden="true">
+                <span className={cn('size-2.5 rounded-full border-[1.6px]', DOT[s])} />
+              </span>
+              <span>{STATUS_LABELS[s]}</span>
             </span>
           </SelectItem>
         ))}

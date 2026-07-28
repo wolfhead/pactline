@@ -7,10 +7,9 @@ import { DATABASE_URL } from './config'
  * Fixtures for the task-management e2e specs (10+).
  *
  * Every test here creates its own tasks/labels and must leave the database
- * exactly as it found it. Comments and activity rows cascade-delete with
- * their task (migrations/0005_tasks.sql: `task_comments.task_id ... ON
- * DELETE CASCADE`, same for task_activity and task_labels), so cleanup only
- * ever needs to delete rows from `tasks` and `labels` directly.
+ * exactly as it found it. Most task children cascade-delete; acceptance
+ * history is retained by design, so task cleanup removes its checks and
+ * criteria explicitly before deleting the task.
  */
 
 type TrackedTasksApi = typeof tasksApi
@@ -24,6 +23,7 @@ interface TestFixtures {
   uniqueTitle: (base: string) => string
   trackTask: (taskId: string) => void
   trackLabel: (labelId: string) => void
+  trackProject: (projectId: string) => void
   tasksApi: TrackedTasksApi
 }
 
@@ -59,6 +59,16 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       ids.push(id)
     })
     if (ids.length > 0) {
+      await taskDbPool.query(
+        `DELETE FROM acceptance_checks WHERE criterion_id IN (
+          SELECT id FROM acceptance_criteria WHERE task_id = ANY($1::uuid[])
+        )`,
+        [ids],
+      )
+      await taskDbPool.query(
+        'DELETE FROM acceptance_criteria WHERE task_id = ANY($1::uuid[])',
+        [ids],
+      )
       await taskDbPool.query('DELETE FROM tasks WHERE id = ANY($1::uuid[])', [ids])
     }
   },
@@ -70,6 +80,31 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     })
     if (ids.length > 0) {
       await taskDbPool.query('DELETE FROM labels WHERE id = ANY($1::uuid[])', [ids])
+    }
+  },
+
+  trackProject: async ({ taskDbPool }, use) => {
+    const ids: string[] = []
+    await use((id: string) => {
+      ids.push(id)
+    })
+    for (const id of ids) {
+      await taskDbPool.query(
+        `DELETE FROM acceptance_checks WHERE criterion_id IN (
+          SELECT id FROM acceptance_criteria
+          WHERE project_id=$1 OR milestone_id IN (SELECT id FROM milestones WHERE project_id=$1)
+        )`,
+        [id],
+      )
+      await taskDbPool.query(
+        `DELETE FROM acceptance_criteria
+         WHERE project_id=$1 OR milestone_id IN (SELECT id FROM milestones WHERE project_id=$1)`,
+        [id],
+      )
+      await taskDbPool.query('DELETE FROM project_activity WHERE project_id=$1', [id])
+      await taskDbPool.query('UPDATE tasks SET milestone_id=NULL, project_id=NULL WHERE project_id=$1', [id])
+      await taskDbPool.query('DELETE FROM milestones WHERE project_id=$1', [id])
+      await taskDbPool.query('DELETE FROM projects WHERE id=$1', [id])
     }
   },
 

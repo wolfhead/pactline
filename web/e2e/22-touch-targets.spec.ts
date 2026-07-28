@@ -177,6 +177,16 @@ test('every covered control clears 44px on a phone', async ({ page, uniqueTitle,
   await page.goto(`/tasks/${task.number}`)
   await expect(page.getByLabel('任务标题')).toBeVisible()
   await expectAllFloored(page, 'phone 390 detail')
+
+  await page.getByRole('button', { name: '截止日期' }).click()
+  const calendar = page.getByRole('dialog', { name: '选择截止日期' })
+  await expect(calendar).toBeVisible()
+  await page.waitForTimeout(300)
+  await expectAllFloored(page, 'phone 390 due-date calendar')
+  const calendarBox = await calendar.boundingBox()
+  expect(calendarBox).not.toBeNull()
+  expect(calendarBox!.x).toBeGreaterThanOrEqual(0)
+  expect(calendarBox!.x + calendarBox!.width).toBeLessThanOrEqual(390)
 })
 
 test('every covered control clears 44px on a coarse-pointer tablet', async ({ page }) => {

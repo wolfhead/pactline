@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 
+	"bountyboard/internal/application"
 	"bountyboard/internal/store"
 )
 
@@ -13,9 +14,13 @@ import (
 // unchanged; every real caller (cmd/server/main.go, this package's own
 // tests) passes one.
 type TaskSurface struct {
-	Tasks    *store.TaskStore
-	Comments *store.CommentStore
-	Labels   *store.LabelStore
+	Tasks          *store.TaskStore
+	Comments       *store.CommentStore
+	Labels         *store.LabelStore
+	Projects       *store.ProjectStore
+	Milestones     *store.MilestoneStore
+	Acceptance     *store.AcceptanceStore
+	ProjectService *application.ProjectService
 }
 
 // NewRouter builds the top-level API handler: user listing, every mechanism
@@ -50,7 +55,7 @@ func NewRouter(
 // mux. Split out of NewRouter purely for readability — it has no meaning on
 // its own outside a NewRouter call.
 func mountTaskRoutes(mux *http.ServeMux, ts TaskSurface) {
-	th := &taskHandler{tasks: ts.Tasks}
+	th := &taskHandler{tasks: ts.Tasks, projects: ts.ProjectService}
 	mux.HandleFunc("POST /api/tasks", th.create)
 	mux.HandleFunc("GET /api/tasks", th.list)
 	mux.HandleFunc("GET /api/tasks/{number}", th.get)
@@ -72,4 +77,38 @@ func mountTaskRoutes(mux *http.ServeMux, ts TaskSurface) {
 	mux.HandleFunc("POST /api/labels", lh.create)
 	mux.HandleFunc("PATCH /api/labels/{id}", lh.rename)
 	mux.HandleFunc("DELETE /api/labels/{id}", lh.delete)
+
+	ph := &projectHandler{service: ts.ProjectService, projects: ts.Projects}
+	mux.HandleFunc("POST /api/projects", ph.create)
+	mux.HandleFunc("GET /api/projects", ph.list)
+	mux.HandleFunc("GET /api/projects/{number}", ph.get)
+	mux.HandleFunc("PATCH /api/projects/{number}", ph.update)
+	mux.HandleFunc("POST /api/projects/{number}/activate", ph.lifecycle(store.ProjectActionActivate))
+	mux.HandleFunc("POST /api/projects/{number}/pause", ph.lifecycle(store.ProjectActionPause))
+	mux.HandleFunc("POST /api/projects/{number}/complete", ph.lifecycle(store.ProjectActionComplete))
+	mux.HandleFunc("POST /api/projects/{number}/cancel", ph.lifecycle(store.ProjectActionCancel))
+	mux.HandleFunc("POST /api/projects/{number}/reopen", ph.lifecycle(store.ProjectActionReopen))
+	mux.HandleFunc("POST /api/projects/{number}/archive", ph.lifecycle(store.ProjectActionArchive))
+	mux.HandleFunc("POST /api/projects/{number}/restore", ph.lifecycle(store.ProjectActionRestore))
+
+	mh := &milestoneHandler{service: ts.ProjectService, projects: ts.Projects, milestones: ts.Milestones}
+	mux.HandleFunc("POST /api/projects/{number}/milestones", mh.create)
+	mux.HandleFunc("PATCH /api/projects/{number}/milestones/{id}", mh.update)
+	mux.HandleFunc("POST /api/projects/{number}/milestones/{id}/complete", mh.lifecycle(store.MilestoneActionComplete))
+	mux.HandleFunc("POST /api/projects/{number}/milestones/{id}/cancel", mh.lifecycle(store.MilestoneActionCancel))
+	mux.HandleFunc("POST /api/projects/{number}/milestones/{id}/reopen", mh.lifecycle(store.MilestoneActionReopen))
+
+	ach := &acceptanceHandler{
+		tasks: ts.Tasks, projects: ts.Projects,
+		milestones: ts.Milestones, acceptance: ts.Acceptance,
+	}
+	mux.HandleFunc("GET /api/tasks/{number}/acceptance-criteria", ach.listTask)
+	mux.HandleFunc("POST /api/tasks/{number}/acceptance-criteria", ach.createTask)
+	mux.HandleFunc("GET /api/projects/{number}/acceptance-criteria", ach.listProject)
+	mux.HandleFunc("POST /api/projects/{number}/acceptance-criteria", ach.createProject)
+	mux.HandleFunc("GET /api/projects/{number}/milestones/{id}/acceptance-criteria", ach.listMilestone)
+	mux.HandleFunc("POST /api/projects/{number}/milestones/{id}/acceptance-criteria", ach.createMilestone)
+	mux.HandleFunc("PATCH /api/acceptance-criteria/{id}", ach.update)
+	mux.HandleFunc("DELETE /api/acceptance-criteria/{id}", ach.remove)
+	mux.HandleFunc("POST /api/acceptance-criteria/{id}/checks", ach.check)
 }

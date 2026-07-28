@@ -76,18 +76,27 @@ export default function BoardCard({ task, tier, users, error, onPatch }: BoardCa
           ))}
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <StatusControl value={task.status} onChange={handleChangeStatus} ariaLabel={`任务 #${task.number} 状态`} />
-        <PriorityControl value={task.priority} onChange={handleChangePriority} ariaLabel={`任务 #${task.number} 优先级`} />
-      </div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <AssigneeControl
-          value={task.assignee?.id ?? null}
-          users={users}
-          onChange={handleChangeAssignee}
-          ariaLabel={`任务 #${task.number} 负责人`}
-        />
-        <DueDateControl value={task.due_date} onChange={handleChangeDueDate} ariaLabel={`任务 #${task.number} 截止日期`} />
+      <div
+        data-task-properties
+        className="grid grid-cols-2 gap-x-2 gap-y-1 [&>div]:min-w-0 [&>div>button]:w-full [&>div>button]:justify-start"
+      >
+        <div>
+          <StatusControl value={task.status} onChange={handleChangeStatus} ariaLabel={`任务 #${task.number} 状态`} />
+        </div>
+        <div>
+          <PriorityControl value={task.priority} onChange={handleChangePriority} ariaLabel={`任务 #${task.number} 优先级`} />
+        </div>
+        <div>
+          <AssigneeControl
+            value={task.assignee?.id ?? null}
+            users={users}
+            onChange={handleChangeAssignee}
+            ariaLabel={`任务 #${task.number} 负责人`}
+          />
+        </div>
+        <div>
+          <DueDateControl value={task.due_date} onChange={handleChangeDueDate} ariaLabel={`任务 #${task.number} 截止日期`} />
+        </div>
       </div>
       {error && (
         <p role="alert" className="text-xs text-danger">

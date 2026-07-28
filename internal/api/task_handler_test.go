@@ -99,6 +99,53 @@ func TestUpdateTaskRejectsUnknownStatus(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
+func TestTaskAcceptanceCriteriaGateCompletion(t *testing.T) {
+	h, db := newTaskTestServer(t)
+	task := mustCreateTaskHTTP(t, h, db, userA, map[string]any{
+		"title": "Acceptance-gated task", "status": "in_review",
+	})
+
+	rec := do(t, h, http.MethodPost,
+		fmt.Sprintf("/api/tasks/%d/acceptance-criteria", task.Number), userA,
+		map[string]any{
+			"criterion":                 "The task result is observable",
+			"verification_instructions": "Run the task workflow test",
+			"position":                  0,
+		})
+	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+	var criterion criterionResponse
+	decodeJSON(t, rec, &criterion)
+
+	rec = do(t, h, http.MethodGet,
+		fmt.Sprintf("/api/tasks/%d/acceptance-criteria", task.Number), userA, nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var criteria []criterionResponse
+	decodeJSON(t, rec, &criteria)
+	require.Len(t, criteria, 1)
+	require.Equal(t, criterion.ID, criteria[0].ID)
+
+	rec = do(t, h, http.MethodPatch, fmt.Sprintf("/api/tasks/%d", task.Number), userA,
+		map[string]any{"status": "done"})
+	require.Equal(t, http.StatusConflict, rec.Code, rec.Body.String())
+
+	rec = do(t, h, http.MethodPost,
+		fmt.Sprintf("/api/acceptance-criteria/%s/checks", criterion.ID), userA,
+		map[string]any{
+			"criterion_revision": criterion.Revision,
+			"outcome":            "passed",
+			"evidence":           "Task workflow passed",
+		})
+	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+
+	rec = do(t, h, http.MethodPatch, fmt.Sprintf("/api/tasks/%d", task.Number), userA,
+		map[string]any{"status": "done"})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var completed taskResponse
+	decodeJSON(t, rec, &completed)
+	require.Equal(t, "done", completed.Status)
+	require.NotNil(t, completed.CompletedAt)
+}
+
 // TestArchiveAndRestoreTaskRoundTrip pins that archiving is reachable and
 // reversible through HTTP and that the default list hides an archived task
 // while the direct GET still finds it — archiving removes a task from view,

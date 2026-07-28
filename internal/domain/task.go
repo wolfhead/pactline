@@ -1,15 +1,16 @@
 package domain
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 )
 
-// TaskStatus is the task's place in its (ungated) lifecycle. Every status may
-// move to every other status — there is no status graph and no terminal
-// state, unlike the legacy mechanism's bounty status. Status is a plain
-// label, not a workflow gate.
+// TaskStatus is the task's place in its lifecycle. Every status may move to
+// every other status and there is no terminal state. Entering done is the
+// one readiness gate: if the task defines acceptance criteria, their current
+// revisions must all be passed or human-waived.
 type TaskStatus string
 
 const (
@@ -68,10 +69,28 @@ type Task struct {
 	AssigneeID  *uuid.UUID
 	CreatorID   uuid.UUID
 	DueDate     *time.Time
+	ProjectID   *uuid.UUID
+	MilestoneID *uuid.UUID
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	CompletedAt *time.Time
 	ArchivedAt  *time.Time
+}
+
+// TaskCompletionReadiness is a snapshot taken while the task row is locked.
+// A task with no active criteria remains intentionally lightweight and may be
+// completed directly; once criteria exist, every active criterion is binding.
+type TaskCompletionReadiness struct {
+	ActiveCriteria      int
+	UnsatisfiedCriteria int
+}
+
+// ValidateCompletion enforces the task's optional acceptance contract.
+func (t Task) ValidateCompletion(readiness TaskCompletionReadiness) error {
+	if readiness.ActiveCriteria > 0 && readiness.UnsatisfiedCriteria > 0 {
+		return fmt.Errorf("%w: task acceptance is not satisfied", ErrConflict)
+	}
+	return nil
 }
 
 // TaskPatch is a partial update to a Task. Every field is optional; the
@@ -95,11 +114,17 @@ type TaskPatch struct {
 
 	LabelsSet bool
 	LabelIDs  []uuid.UUID
+
+	ProjectSet bool
+	ProjectID  *uuid.UUID
+
+	MilestoneSet bool
+	MilestoneID  *uuid.UUID
 }
 
 // IsEmpty reports whether the patch changes nothing at all, in which case a
 // store Update becomes a harmless no-op read rather than a write.
 func (p TaskPatch) IsEmpty() bool {
 	return p.Title == nil && p.Description == nil && p.Status == nil && p.Priority == nil &&
-		!p.AssigneeSet && !p.DueDateSet && !p.LabelsSet
+		!p.AssigneeSet && !p.DueDateSet && !p.LabelsSet && !p.ProjectSet && !p.MilestoneSet
 }

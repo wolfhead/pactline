@@ -22,6 +22,8 @@ type taskView struct {
 	Assignee    *domain.UserRef     `json:"assignee"`
 	Creator     domain.UserRef      `json:"creator"`
 	DueDate     *string             `json:"due_date"`
+	Project     *taskProjectView    `json:"project"`
+	Milestone   *taskMilestoneView  `json:"milestone"`
 	Labels      []domain.Label      `json:"labels"`
 	CreatedAt   time.Time           `json:"created_at"`
 	UpdatedAt   time.Time           `json:"updated_at"`
@@ -39,6 +41,14 @@ func newTaskView(twr store.TaskWithRelations) taskView {
 	if labels == nil {
 		labels = []domain.Label{}
 	}
+	var project *taskProjectView
+	if twr.Project != nil {
+		project = &taskProjectView{ID: twr.Project.ID, Number: twr.Project.Number, Name: twr.Project.Name}
+	}
+	var milestone *taskMilestoneView
+	if twr.Milestone != nil {
+		milestone = &taskMilestoneView{ID: twr.Milestone.ID, Name: twr.Milestone.Name}
+	}
 	return taskView{
 		ID:          twr.Task.ID,
 		Number:      twr.Task.Number,
@@ -49,12 +59,25 @@ func newTaskView(twr store.TaskWithRelations) taskView {
 		Assignee:    twr.Assignee,
 		Creator:     twr.Creator,
 		DueDate:     due,
+		Project:     project,
+		Milestone:   milestone,
 		Labels:      labels,
 		CreatedAt:   twr.Task.CreatedAt,
 		UpdatedAt:   twr.Task.UpdatedAt,
 		CompletedAt: twr.Task.CompletedAt,
 		ArchivedAt:  twr.Task.ArchivedAt,
 	}
+}
+
+type taskProjectView struct {
+	ID     uuid.UUID `json:"id"`
+	Number int64     `json:"number"`
+	Name   string    `json:"name"`
+}
+
+type taskMilestoneView struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
 }
 
 // taskListResponse is the envelope GET /api/tasks returns: a page of tasks

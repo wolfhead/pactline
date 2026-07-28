@@ -34,6 +34,8 @@ export interface Task {
   assignee: UserRef | null
   creator: UserRef
   due_date: string | null
+  project: { id: string; number: number; name: string } | null
+  milestone: { id: string; name: string } | null
   labels: Label[]
   created_at: string
   updated_at: string
@@ -57,6 +59,14 @@ export interface Activity {
   old_value: string | null
   new_value: string | null
   created_at: string
+}
+
+export interface AcceptanceCriterion {
+  id: string
+  criterion: string
+  verification_instructions: string
+  revision: number
+  position: number
 }
 
 export class ApiRequestError extends Error {
@@ -93,6 +103,8 @@ export interface CreateTaskInput {
   assignee_id?: string | null
   due_date?: string | null
   label_ids?: string[]
+  project_number?: number | null
+  milestone_id?: string | null
 }
 
 export function createTask(userId: string, input: CreateTaskInput): Promise<Task> {
@@ -111,6 +123,8 @@ export interface TaskPatchInput {
   assignee_id?: string | null
   due_date?: string | null
   label_ids?: string[]
+  project_number?: number | null
+  milestone_id?: string | null
 }
 
 export function updateTask(userId: string, number: number, patch: TaskPatchInput): Promise<Task> {
@@ -123,6 +137,25 @@ export function archiveTask(userId: string, number: number): Promise<Task> {
 
 export function restoreTask(userId: string, number: number): Promise<Task> {
   return call<Task>(userId, 'POST', `/api/tasks/${number}/restore`)
+}
+
+export function createTaskCriterion(
+  userId: string,
+  number: number,
+  criterion: string,
+  verificationInstructions: string,
+  position = 0,
+): Promise<AcceptanceCriterion> {
+  return call<AcceptanceCriterion>(
+    userId,
+    'POST',
+    `/api/tasks/${number}/acceptance-criteria`,
+    {
+      criterion,
+      verification_instructions: verificationInstructions,
+      position,
+    },
+  )
 }
 
 export function listComments(userId: string, number: number): Promise<Comment[]> {

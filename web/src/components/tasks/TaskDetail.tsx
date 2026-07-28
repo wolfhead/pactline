@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { XIcon } from 'lucide-react'
+import AcceptanceChecklist from '@/components/projects/AcceptanceChecklist'
 import ActivityLog from './ActivityLog'
 import CommentSection from './CommentSection'
 import InlineEditable from './InlineEditable'
@@ -8,7 +9,17 @@ import DueDateControl from './controls/DueDateControl'
 import LabelControl from './controls/LabelControl'
 import PriorityControl from './controls/PriorityControl'
 import StatusControl from './controls/StatusControl'
+import ProjectControl from './controls/ProjectControl'
 import { archiveTask, getTask, listLabels, restoreTask, updateTask } from '@/api/tasks'
+import {
+  checkCriterion,
+  createTaskCriterion,
+  listTaskCriteria,
+  removeCriterion,
+  updateCriterion,
+  type AcceptanceCriterion,
+  type AcceptanceOutcome,
+} from '@/api/acceptance'
 import { useIdentity } from '@/identity'
 import type { Label, Task, TaskPatchBody, UserRef } from '@/task-types'
 
@@ -59,6 +70,7 @@ export default function TaskDetail({
   const [error, setError] = useState('')
   const [fieldError, setFieldError] = useState('')
   const [allLabels, setAllLabels] = useState<Label[]>([])
+  const [acceptanceCriteria, setAcceptanceCriteria] = useState<AcceptanceCriterion[]>([])
   const [reloadToken, setReloadToken] = useState(0)
   const [undoMessage, setUndoMessage] = useState<string | null>(null)
   const undoTimerRef = useRef<number | null>(null)
@@ -102,6 +114,7 @@ export default function TaskDetail({
   useEffect(() => {
     if (!Number.isFinite(number)) return
     setTask(null)
+    setAcceptanceCriteria([])
     setError('')
     // Everything else on screen belongs to the task being replaced, not the
     // one arriving. A `更新失败：…，已恢复原状态` raised against A would
@@ -111,10 +124,11 @@ export default function TaskDetail({
     setFieldError('')
     clearUndo()
     let cancelled = false
-    getTask(number)
-      .then((loaded) => {
+    Promise.all([getTask(number), listTaskCriteria(number)])
+      .then(([loaded, criteria]) => {
         if (cancelled) return
         setTask(loaded)
+        setAcceptanceCriteria(criteria)
       })
       .catch((err) => {
         if (cancelled) return
@@ -242,6 +256,53 @@ export default function TaskDetail({
     patchOptimistic({ label_ids: nextIds }, { labels: nextLabels })
   }
 
+  async function reloadAcceptance(forNumber: number) {
+    const criteria = await listTaskCriteria(forNumber)
+    if (!isStale(forNumber)) {
+      setAcceptanceCriteria(criteria)
+      setFieldError('')
+    }
+  }
+
+  async function addAcceptanceCriterion(criterion: string, instructions: string) {
+    const forNumber = number
+    await createTaskCriterion(forNumber, {
+      criterion,
+      verification_instructions: instructions,
+      position: acceptanceCriteria.length,
+    })
+    await reloadAcceptance(forNumber)
+  }
+
+  async function recordAcceptanceCheck(
+    criterion: AcceptanceCriterion,
+    outcome: AcceptanceOutcome,
+    evidence: string,
+  ) {
+    const forNumber = number
+    await checkCriterion(criterion.id, criterion.revision, outcome, evidence)
+    await reloadAcceptance(forNumber)
+  }
+
+  async function editAcceptanceCriterion(
+    criterion: AcceptanceCriterion,
+    text: string,
+    instructions: string,
+  ) {
+    const forNumber = number
+    await updateCriterion(criterion.id, {
+      criterion: text,
+      verification_instructions: instructions,
+    })
+    await reloadAcceptance(forNumber)
+  }
+
+  async function removeAcceptanceCriterion(criterion: AcceptanceCriterion) {
+    const forNumber = number
+    await removeCriterion(criterion.id)
+    await reloadAcceptance(forNumber)
+  }
+
   if (error) {
     return (
       <p className="p-4 text-sm text-danger">
@@ -324,8 +385,11 @@ export default function TaskDetail({
 
       {task.archived_at && <p className="text-sm text-fg-muted">此任务已归档。</p>}
 
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-3">
+      <div
+        data-task-properties
+        className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 [&_[data-property-control]]:text-sm [&_[data-slot=select-trigger]]:justify-start"
+      >
+        <div className="contents">
           <span className="text-sm text-fg-muted">状态</span>
           <StatusControl
             value={task.status}
@@ -333,7 +397,7 @@ export default function TaskDetail({
             ariaLabel="状态"
           />
         </div>
-        <div className="flex items-center justify-between gap-3">
+        <div className="contents">
           <span className="text-sm text-fg-muted">优先级</span>
           <PriorityControl
             value={task.priority}
@@ -341,7 +405,7 @@ export default function TaskDetail({
             ariaLabel="优先级"
           />
         </div>
-        <div className="flex items-center justify-between gap-3">
+        <div className="contents">
           <span className="text-sm text-fg-muted">负责人</span>
           <AssigneeControl
             value={task.assignee?.id ?? null}
@@ -353,7 +417,7 @@ export default function TaskDetail({
             ariaLabel="负责人"
           />
         </div>
-        <div className="flex items-center justify-between gap-3">
+        <div className="contents">
           <span className="text-sm text-fg-muted">截止日期</span>
           <DueDateControl
             value={task.due_date}
@@ -361,10 +425,23 @@ export default function TaskDetail({
             ariaLabel="截止日期"
           />
         </div>
-        <div className="flex items-center justify-between gap-3">
+        <div className="contents">
           <span className="text-sm text-fg-muted">标签</span>
           <LabelControl value={task.labels} all={allLabels} onChange={toggleLabels} ariaLabel="标签" />
         </div>
+        <ProjectControl
+          project={task.project ?? null}
+          milestone={task.milestone ?? null}
+          onProjectChange={(project) => {
+            patchOptimistic(
+              { project_number: project?.number ?? null },
+              { project, milestone: null },
+            )
+          }}
+          onMilestoneChange={(milestone) => {
+            patchOptimistic({ milestone_id: milestone?.id ?? null }, { milestone })
+          }}
+        />
       </div>
 
       <InlineEditable
@@ -374,6 +451,15 @@ export default function TaskDetail({
         placeholder="添加描述…"
         ariaLabel="任务描述"
         className="text-sm text-fg"
+      />
+
+      <AcceptanceChecklist
+        title="验收标准"
+        criteria={acceptanceCriteria}
+        onAdd={addAcceptanceCriterion}
+        onCheck={recordAcceptanceCheck}
+        onUpdate={editAcceptanceCriterion}
+        onRemove={removeAcceptanceCriterion}
       />
 
       {fieldError && <p className="text-sm text-danger">{fieldError}</p>}

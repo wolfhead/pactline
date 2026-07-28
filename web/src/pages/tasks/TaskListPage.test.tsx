@@ -2,9 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import TaskListPage from './TaskListPage'
+import * as acceptanceApi from '@/api/acceptance'
 import * as tasksApi from '@/api/tasks'
+import * as projectsApi from '@/api/projects'
 
 vi.mock('@/api/tasks')
+vi.mock('@/api/projects')
+vi.mock('@/api/acceptance')
 vi.mock('@/identity', async () => ({
   ...(await vi.importActual<typeof import('@/identity')>('@/identity')),
   useIdentity: () => ({
@@ -23,7 +27,7 @@ const TASK = {
   id: 'id-142', number: 142, title: '修复竞价超时', description: '',
   status: 'todo' as const, priority: 'none' as const, assignee: null,
   creator: { id: 'u1', name: '张沁', email: 'a@x.com' },
-  due_date: null, labels: [], created_at: '', updated_at: '',
+  due_date: null, project: null, milestone: null, labels: [], created_at: '', updated_at: '',
   completed_at: null, archived_at: null,
 }
 
@@ -33,6 +37,8 @@ beforeEach(() => {
   vi.mocked(tasksApi.getTask).mockResolvedValue(TASK)
   vi.mocked(tasksApi.listComments).mockResolvedValue([])
   vi.mocked(tasksApi.listActivity).mockResolvedValue([])
+  vi.mocked(projectsApi.listProjects).mockResolvedValue([])
+  vi.mocked(acceptanceApi.listTaskCriteria).mockResolvedValue([])
 })
 
 // vitest.config's test block doesn't set `globals: true`, so
@@ -57,13 +63,14 @@ function renderAt(path: string) {
 }
 
 describe('TaskListPage', () => {
-  it('keeps the detail column occupying its space with nothing selected', async () => {
+  it('keeps the detail column at half the workspace with nothing selected', async () => {
     setWidth(1440)
     renderAt('/tasks')
     await screen.findByText('修复竞价超时')
     // The empty state is what holds the column open. Without it the list
     // would widen on deselect and jump back on select.
     expect(screen.getByText('从左边选一条任务')).toBeVisible()
+    expect(screen.getByRole('complementary', { name: '任务详情' })).toHaveClass('w-1/2')
   })
 
   it('shows the detail in the third column, not a dialog, at xl', async () => {

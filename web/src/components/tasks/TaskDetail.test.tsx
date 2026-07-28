@@ -2,10 +2,14 @@ import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import TaskDetail from './TaskDetail'
+import * as acceptanceApi from '@/api/acceptance'
 import * as tasksApi from '@/api/tasks'
+import * as projectsApi from '@/api/projects'
 import type { Task } from '@/task-types'
 
 vi.mock('@/api/tasks')
+vi.mock('@/api/projects')
+vi.mock('@/api/acceptance')
 
 // vitest.config's test block doesn't set `globals: true`, so
 // @testing-library/react's own auto-cleanup never registers; see the
@@ -20,7 +24,7 @@ const TASK = {
   id: 'id-142', number: 142, title: '修复竞价超时导致的丢量',
   description: '丢量比例升到 4.2%', status: 'in_progress' as const,
   priority: 'high' as const, assignee: USERS[0], creator: USERS[0],
-  due_date: '2026-07-30', labels: [], created_at: '', updated_at: '',
+  due_date: '2026-07-30', project: null, milestone: null, labels: [], created_at: '', updated_at: '',
   completed_at: null, archived_at: null,
 }
 
@@ -29,6 +33,8 @@ beforeEach(() => {
   vi.mocked(tasksApi.listComments).mockResolvedValue([])
   vi.mocked(tasksApi.listActivity).mockResolvedValue([])
   vi.mocked(tasksApi.listLabels).mockResolvedValue([])
+  vi.mocked(projectsApi.listProjects).mockResolvedValue([])
+  vi.mocked(acceptanceApi.listTaskCriteria).mockResolvedValue([])
 })
 
 function renderDetail(props: Partial<React.ComponentProps<typeof TaskDetail>> = {}) {
@@ -53,6 +59,27 @@ describe('TaskDetail', () => {
     await screen.findByText('修复竞价超时导致的丢量')
     expect(screen.getByRole('combobox', { name: '状态' })).toBeVisible()
     expect(screen.queryByRole('combobox', { name: /任务 #142 状态/ })).not.toBeInTheDocument()
+  })
+
+  it('aligns labels and values on one shared property grid', async () => {
+    const { container } = renderDetail()
+    await screen.findByText('修复竞价超时导致的丢量')
+    expect(container.querySelector('[data-task-properties]'))
+      .toHaveClass('grid-cols-[5rem_minmax(0,1fr)]')
+  })
+
+  it('renders the shared acceptance checklist for tasks', async () => {
+    vi.mocked(acceptanceApi.listTaskCriteria).mockResolvedValue([{
+      id: 'criterion-1',
+      criterion: '结果可被观察',
+      verification_instructions: '运行任务工作流测试',
+      revision: 1,
+      position: 0,
+      current_check: null,
+    }])
+    renderDetail()
+    await screen.findByText('结果可被观察')
+    expect(screen.getByRole('region', { name: '验收标准' })).toBeVisible()
   })
 
   it('tells the caller about a change so the list can follow it', async () => {

@@ -20,6 +20,8 @@ const (
 	ActivityFieldAssignee    ActivityField = "assignee"
 	ActivityFieldDueDate     ActivityField = "due_date"
 	ActivityFieldLabels      ActivityField = "labels"
+	ActivityFieldProject     ActivityField = "project"
+	ActivityFieldMilestone   ActivityField = "milestone"
 	ActivityFieldArchived    ActivityField = "archived"
 )
 

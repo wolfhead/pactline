@@ -48,6 +48,17 @@ export interface Label {
   CreatedAt: string
 }
 
+export interface TaskProjectRef {
+  id: string
+  number: number
+  name: string
+}
+
+export interface TaskMilestoneRef {
+  id: string
+  name: string
+}
+
 export interface Task {
   id: string
   number: number
@@ -58,6 +69,8 @@ export interface Task {
   assignee: UserRef | null
   creator: UserRef
   due_date: string | null
+  project: TaskProjectRef | null
+  milestone: TaskMilestoneRef | null
   labels: Label[]
   created_at: string
   updated_at: string
@@ -89,6 +102,8 @@ export type ActivityField =
   | 'assignee'
   | 'due_date'
   | 'labels'
+  | 'project'
+  | 'milestone'
   | 'archived'
 
 export interface Activity {
@@ -110,6 +125,8 @@ export interface TaskPatchBody {
   assignee_id?: string | null
   due_date?: string | null
   label_ids?: string[]
+  project_number?: number | null
+  milestone_id?: string | null
 }
 
 export interface CreateTaskBody {
@@ -118,6 +135,8 @@ export interface CreateTaskBody {
   status?: TaskStatus
   priority?: TaskPriority
   assignee_id?: string | null
+  project_number?: number | null
+  milestone_id?: string | null
   due_date?: string | null
   label_ids?: string[]
 }

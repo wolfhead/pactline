@@ -24,7 +24,8 @@ type TaskStore struct{ db *DB }
 func NewTaskStore(db *DB) *TaskStore { return &TaskStore{db: db} }
 
 const taskColumns = `t.id, t.number, t.title, t.description, t.status, t.priority,
-	t.assignee_id, t.creator_id, t.due_date, t.created_at, t.updated_at, t.completed_at, t.archived_at`
+	t.assignee_id, t.creator_id, t.due_date, t.project_id, t.milestone_id,
+	t.created_at, t.updated_at, t.completed_at, t.archived_at`
 
 // taskSelectColumns adds the joined creator/assignee/labels columns that
 // let every task-reading query (Create, GetByNumber, List, Update,
@@ -33,11 +34,15 @@ const taskColumns = `t.id, t.number, t.title, t.description, t.status, t.priorit
 const taskSelectColumns = taskColumns + `,
 	cu.id, cu.name, cu.email,
 	au.id, au.name, au.email,
+	p.id, p.number, p.name,
+	m.id, m.name,
 	COALESCE(lbl.labels, '[]'::json)`
 
 const taskFromJoins = `FROM tasks t
 	JOIN users cu ON cu.id = t.creator_id
 	LEFT JOIN users au ON au.id = t.assignee_id
+	LEFT JOIN projects p ON p.id = t.project_id
+	LEFT JOIN milestones m ON m.id = t.milestone_id
 	LEFT JOIN LATERAL (
 		SELECT json_agg(json_build_object('id', l.id, 'name', l.name, 'created_at', l.created_at) ORDER BY l.name) AS labels
 		FROM task_labels tl JOIN labels l ON l.id = tl.label_id
@@ -48,10 +53,23 @@ const taskFromJoins = `FROM tasks t
 // alongside it in one response: the creator, the assignee (nil when
 // unassigned — a normal, first-class state), and every label it wears.
 type TaskWithRelations struct {
-	Task     domain.Task
-	Creator  domain.UserRef
-	Assignee *domain.UserRef
-	Labels   []domain.Label
+	Task      domain.Task
+	Creator   domain.UserRef
+	Assignee  *domain.UserRef
+	Project   *ProjectRef
+	Milestone *MilestoneRef
+	Labels    []domain.Label
+}
+
+type ProjectRef struct {
+	ID     uuid.UUID
+	Number int64
+	Name   string
+}
+
+type MilestoneRef struct {
+	ID   uuid.UUID
+	Name string
 }
 
 func scanTaskWithRelations(s scanner) (TaskWithRelations, error) {
@@ -60,14 +78,22 @@ func scanTaskWithRelations(s scanner) (TaskWithRelations, error) {
 		assigneeID    *uuid.UUID
 		assigneeName  *string
 		assigneeEmail *string
+		projectID     *uuid.UUID
+		projectNumber *int64
+		projectName   *string
+		milestoneID   *uuid.UUID
+		milestoneName *string
 		labelsJSON    []byte
 	)
 	err := s.Scan(
 		&twr.Task.ID, &twr.Task.Number, &twr.Task.Title, &twr.Task.Description, &twr.Task.Status, &twr.Task.Priority,
-		&twr.Task.AssigneeID, &twr.Task.CreatorID, &twr.Task.DueDate, &twr.Task.CreatedAt, &twr.Task.UpdatedAt,
+		&twr.Task.AssigneeID, &twr.Task.CreatorID, &twr.Task.DueDate, &twr.Task.ProjectID, &twr.Task.MilestoneID,
+		&twr.Task.CreatedAt, &twr.Task.UpdatedAt,
 		&twr.Task.CompletedAt, &twr.Task.ArchivedAt,
 		&twr.Creator.ID, &twr.Creator.Name, &twr.Creator.Email,
 		&assigneeID, &assigneeName, &assigneeEmail,
+		&projectID, &projectNumber, &projectName,
+		&milestoneID, &milestoneName,
 		&labelsJSON,
 	)
 	if err != nil {
@@ -75,6 +101,12 @@ func scanTaskWithRelations(s scanner) (TaskWithRelations, error) {
 	}
 	if assigneeID != nil {
 		twr.Assignee = &domain.UserRef{ID: *assigneeID, Name: derefStr(assigneeName), Email: derefStr(assigneeEmail)}
+	}
+	if projectID != nil {
+		twr.Project = &ProjectRef{ID: *projectID, Number: *projectNumber, Name: derefStr(projectName)}
+	}
+	if milestoneID != nil {
+		twr.Milestone = &MilestoneRef{ID: *milestoneID, Name: derefStr(milestoneName)}
 	}
 	labels := []domain.Label{}
 	if err := json.Unmarshal(labelsJSON, &labels); err != nil {
@@ -129,10 +161,13 @@ func (s *TaskStore) Create(ctx context.Context, t domain.Task, labelIDs []uuid.U
 
 	var id uuid.UUID
 	err = tx.QueryRow(ctx, `
-		INSERT INTO tasks (id, title, description, status, priority, assignee_id, creator_id, due_date, completed_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+		INSERT INTO tasks
+			(id, title, description, status, priority, assignee_id, creator_id,
+			 due_date, project_id, milestone_id, completed_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
 		RETURNING id`,
-		t.ID, t.Title, t.Description, string(t.Status), string(t.Priority), t.AssigneeID, t.CreatorID, t.DueDate, completedAt,
+		t.ID, t.Title, t.Description, string(t.Status), string(t.Priority), t.AssigneeID,
+		t.CreatorID, t.DueDate, t.ProjectID, t.MilestoneID, completedAt,
 	).Scan(&id)
 	if err != nil {
 		return TaskWithRelations{}, mapPgError(err)
@@ -204,12 +239,16 @@ func (s *TaskStore) Update(ctx context.Context, number int64, patch domain.TaskP
 		oldPriority              domain.TaskPriority
 		oldAssignee              *uuid.UUID
 		oldDueDate               *time.Time
+		oldProject               *uuid.UUID
+		oldMilestone             *uuid.UUID
 		oldCompletedAt           *time.Time
 	)
 	err = tx.QueryRow(ctx,
-		`SELECT id, title, description, status, priority, assignee_id, due_date, completed_at
+		`SELECT id, title, description, status, priority, assignee_id, due_date,
+		        project_id, milestone_id, completed_at
 		 FROM tasks WHERE number = $1 FOR UPDATE`, number,
-	).Scan(&id, &oldTitle, &oldDescription, &oldStatus, &oldPriority, &oldAssignee, &oldDueDate, &oldCompletedAt)
+	).Scan(&id, &oldTitle, &oldDescription, &oldStatus, &oldPriority, &oldAssignee,
+		&oldDueDate, &oldProject, &oldMilestone, &oldCompletedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return TaskWithRelations{}, domain.ErrNotFound
 	}
@@ -220,6 +259,7 @@ func (s *TaskStore) Update(ctx context.Context, number int64, patch domain.TaskP
 	newTitle, newDescription := oldTitle, oldDescription
 	newStatus, newPriority := oldStatus, oldPriority
 	newAssignee, newDueDate := oldAssignee, oldDueDate
+	newProject, newMilestone := oldProject, oldMilestone
 
 	if patch.Title != nil {
 		if strings.TrimSpace(*patch.Title) == "" {
@@ -248,9 +288,46 @@ func (s *TaskStore) Update(ctx context.Context, number int64, patch domain.TaskP
 	if patch.DueDateSet {
 		newDueDate = patch.DueDate
 	}
+	if patch.ProjectSet {
+		projectChanged := uuidPtrString(oldProject) != uuidPtrString(patch.ProjectID)
+		newProject = patch.ProjectID
+		if projectChanged && !patch.MilestoneSet {
+			newMilestone = nil
+		}
+	}
+	if patch.MilestoneSet {
+		newMilestone = patch.MilestoneID
+	}
+	if newProject == nil && newMilestone != nil {
+		return TaskWithRelations{}, fmt.Errorf("%w: a milestone requires a project", domain.ErrInvalidInput)
+	}
 
 	newCompletedAt := oldCompletedAt
 	if oldStatus != domain.TaskStatusDone && newStatus == domain.TaskStatusDone {
+		var readiness domain.TaskCompletionReadiness
+		if err := tx.QueryRow(ctx, `
+			SELECT count(*),
+				count(*) FILTER (
+					WHERE latest.outcome IS NULL
+						OR latest.outcome NOT IN ('passed', 'waived')
+				)
+			FROM acceptance_criteria ac
+			LEFT JOIN LATERAL (
+				SELECT chk.outcome
+				FROM acceptance_checks chk
+				WHERE chk.criterion_id=ac.id
+					AND chk.criterion_revision=ac.revision
+				ORDER BY chk.checked_at DESC, chk.id DESC
+				LIMIT 1
+			) latest ON true
+			WHERE ac.task_id=$1 AND ac.archived_at IS NULL`,
+			id,
+		).Scan(&readiness.ActiveCriteria, &readiness.UnsatisfiedCriteria); err != nil {
+			return TaskWithRelations{}, fmt.Errorf("read task acceptance readiness: %w", err)
+		}
+		if err := (domain.Task{ID: id, Status: oldStatus}).ValidateCompletion(readiness); err != nil {
+			return TaskWithRelations{}, err
+		}
 		now := time.Now().UTC()
 		newCompletedAt = &now
 	} else if oldStatus == domain.TaskStatusDone && newStatus != domain.TaskStatusDone {
@@ -260,9 +337,11 @@ func (s *TaskStore) Update(ctx context.Context, number int64, patch domain.TaskP
 	if _, err := tx.Exec(ctx, `
 		UPDATE tasks SET
 			title=$2, description=$3, status=$4, priority=$5,
-			assignee_id=$6, due_date=$7, completed_at=$8, updated_at=now()
+			assignee_id=$6, due_date=$7, project_id=$8, milestone_id=$9,
+			completed_at=$10, updated_at=now()
 		WHERE id=$1`,
-		id, newTitle, newDescription, string(newStatus), string(newPriority), newAssignee, newDueDate, newCompletedAt,
+		id, newTitle, newDescription, string(newStatus), string(newPriority),
+		newAssignee, newDueDate, newProject, newMilestone, newCompletedAt,
 	); err != nil {
 		return TaskWithRelations{}, mapPgError(err)
 	}
@@ -283,6 +362,12 @@ func (s *TaskStore) Update(ctx context.Context, number int64, patch domain.TaskP
 		return TaskWithRelations{}, err
 	}
 	if err := recordFieldChange(ctx, tx, id, actorID, domain.ActivityFieldDueDate, datePtrString(oldDueDate), datePtrString(newDueDate)); err != nil {
+		return TaskWithRelations{}, err
+	}
+	if err := recordFieldChange(ctx, tx, id, actorID, domain.ActivityFieldProject, uuidPtrString(oldProject), uuidPtrString(newProject)); err != nil {
+		return TaskWithRelations{}, err
+	}
+	if err := recordFieldChange(ctx, tx, id, actorID, domain.ActivityFieldMilestone, uuidPtrString(oldMilestone), uuidPtrString(newMilestone)); err != nil {
 		return TaskWithRelations{}, err
 	}
 
@@ -476,8 +561,9 @@ type TaskListFilter struct {
 	AssigneeID *uuid.UUID
 	Unassigned bool
 
-	LabelIDs []uuid.UUID
-	Search   string
+	LabelIDs  []uuid.UUID
+	Search    string
+	ProjectID *uuid.UUID
 
 	// Archived selects which tasks the archived_at column admits: "" (the
 	// zero value) excludes archived tasks, "only" returns exclusively
@@ -618,6 +704,9 @@ func (s *TaskStore) List(ctx context.Context, f TaskListFilter) (TaskListResult,
 	}
 	if len(f.LabelIDs) > 0 {
 		where = append(where, "EXISTS (SELECT 1 FROM task_labels tl WHERE tl.task_id = t.id AND tl.label_id = ANY("+arg(f.LabelIDs)+"::uuid[]))")
+	}
+	if f.ProjectID != nil {
+		where = append(where, "t.project_id = "+arg(*f.ProjectID))
 	}
 	if strings.TrimSpace(f.Search) != "" {
 		needle := "%" + escapeLike(f.Search) + "%"

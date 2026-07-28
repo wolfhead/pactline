@@ -11,7 +11,7 @@ const USERS = [
 const TASK: Task = {
   id: 'id-142', number: 142, title: '修复竞价超时导致的丢量', description: '',
   status: 'todo', priority: 'high', assignee: USERS[0],
-  creator: USERS[0], due_date: '2026-07-30', labels: [],
+  creator: USERS[0], due_date: '2026-07-30', project: null, milestone: null, labels: [],
   created_at: '', updated_at: '', completed_at: null, archived_at: null,
 }
 
@@ -86,7 +86,7 @@ describe('TaskRow', () => {
     // it is NOT a sibling of the metadata. Decoy this catches: reusing the
     // desktop single-line row, where title and metadata share one flex row.
     const title = screen.getByRole('link', { name: LONG.title })
-    const due = screen.getByText('2026-07-30')
+    const due = screen.getByText('7月30日')
     expect(title.parentElement).not.toBe(due.parentElement)
   })
 

@@ -2,11 +2,13 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
 
+	"bountyboard/internal/application"
 	"bountyboard/internal/domain"
 	"bountyboard/internal/store"
 
@@ -14,7 +16,8 @@ import (
 )
 
 type taskHandler struct {
-	tasks *store.TaskStore
+	tasks    *store.TaskStore
+	projects *application.ProjectService
 }
 
 // parseTaskNumber reads the {number} path value, writing a 400 and
@@ -41,13 +44,15 @@ func parseDueDate(w http.ResponseWriter, raw string) (time.Time, bool) {
 }
 
 type createTaskRequest struct {
-	Title       string      `json:"title"`
-	Description string      `json:"description"`
-	Status      string      `json:"status"`
-	Priority    string      `json:"priority"`
-	AssigneeID  *uuid.UUID  `json:"assignee_id"`
-	DueDate     *string     `json:"due_date"`
-	LabelIDs    []uuid.UUID `json:"label_ids"`
+	Title         string      `json:"title"`
+	Description   string      `json:"description"`
+	Status        string      `json:"status"`
+	Priority      string      `json:"priority"`
+	AssigneeID    *uuid.UUID  `json:"assignee_id"`
+	DueDate       *string     `json:"due_date"`
+	LabelIDs      []uuid.UUID `json:"label_ids"`
+	ProjectNumber *int64      `json:"project_number"`
+	MilestoneID   *uuid.UUID  `json:"milestone_id"`
 }
 
 func (h *taskHandler) create(w http.ResponseWriter, r *http.Request) {
@@ -65,6 +70,11 @@ func (h *taskHandler) create(w http.ResponseWriter, r *http.Request) {
 		}
 		dueDate = &d
 	}
+	projectID, milestoneID, err := h.projects.ResolveTaskAssociation(r.Context(), req.ProjectNumber, req.MilestoneID)
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
 
 	out, err := h.tasks.Create(r.Context(), domain.Task{
 		Title:       req.Title,
@@ -74,6 +84,8 @@ func (h *taskHandler) create(w http.ResponseWriter, r *http.Request) {
 		AssigneeID:  req.AssigneeID,
 		CreatorID:   me.ID,
 		DueDate:     dueDate,
+		ProjectID:   projectID,
+		MilestoneID: milestoneID,
 	}, req.LabelIDs)
 	if err != nil {
 		WriteError(w, r, err)
@@ -102,15 +114,24 @@ func (h *taskHandler) get(w http.ResponseWriter, r *http.Request) {
 // field to nil for both cases. Decoding into a map of raw messages first,
 // and checking key presence, is what lets update-any-field PATCH semantics
 // actually mean "any field, including unsetting the nullable ones".
-func decodeTaskPatch(w http.ResponseWriter, r *http.Request) (domain.TaskPatch, bool) {
+type decodedTaskPatch struct {
+	Patch            domain.TaskPatch
+	ProjectNumberSet bool
+	ProjectNumber    *int64
+	MilestoneSet     bool
+	MilestoneID      *uuid.UUID
+}
+
+func decodeTaskPatch(w http.ResponseWriter, r *http.Request) (decodedTaskPatch, bool) {
 	var raw map[string]json.RawMessage
 	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
 		slog.Warn("decode task patch body", "path", r.URL.Path, "error", err)
 		WriteJSON(w, http.StatusBadRequest, ErrorBody{Error: "invalid JSON body"})
-		return domain.TaskPatch{}, false
+		return decodedTaskPatch{}, false
 	}
 
 	var patch domain.TaskPatch
+	var decoded decodedTaskPatch
 	badField := func(field string) {
 		WriteJSON(w, http.StatusBadRequest, ErrorBody{Error: field + " is malformed"})
 	}
@@ -119,7 +140,7 @@ func decodeTaskPatch(w http.ResponseWriter, r *http.Request) (domain.TaskPatch, 
 		var s string
 		if err := json.Unmarshal(v, &s); err != nil {
 			badField("title")
-			return domain.TaskPatch{}, false
+			return decodedTaskPatch{}, false
 		}
 		patch.Title = &s
 	}
@@ -127,7 +148,7 @@ func decodeTaskPatch(w http.ResponseWriter, r *http.Request) (domain.TaskPatch, 
 		var s string
 		if err := json.Unmarshal(v, &s); err != nil {
 			badField("description")
-			return domain.TaskPatch{}, false
+			return decodedTaskPatch{}, false
 		}
 		patch.Description = &s
 	}
@@ -135,7 +156,7 @@ func decodeTaskPatch(w http.ResponseWriter, r *http.Request) (domain.TaskPatch, 
 		var s string
 		if err := json.Unmarshal(v, &s); err != nil {
 			badField("status")
-			return domain.TaskPatch{}, false
+			return decodedTaskPatch{}, false
 		}
 		st := domain.TaskStatus(s)
 		patch.Status = &st
@@ -144,7 +165,7 @@ func decodeTaskPatch(w http.ResponseWriter, r *http.Request) (domain.TaskPatch, 
 		var s string
 		if err := json.Unmarshal(v, &s); err != nil {
 			badField("priority")
-			return domain.TaskPatch{}, false
+			return decodedTaskPatch{}, false
 		}
 		p := domain.TaskPriority(s)
 		patch.Priority = &p
@@ -155,7 +176,7 @@ func decodeTaskPatch(w http.ResponseWriter, r *http.Request) (domain.TaskPatch, 
 			var id uuid.UUID
 			if err := json.Unmarshal(v, &id); err != nil {
 				badField("assignee_id")
-				return domain.TaskPatch{}, false
+				return decodedTaskPatch{}, false
 			}
 			patch.AssigneeID = &id
 		}
@@ -166,11 +187,11 @@ func decodeTaskPatch(w http.ResponseWriter, r *http.Request) (domain.TaskPatch, 
 			var s string
 			if err := json.Unmarshal(v, &s); err != nil {
 				badField("due_date")
-				return domain.TaskPatch{}, false
+				return decodedTaskPatch{}, false
 			}
 			d, ok := parseDueDate(w, s)
 			if !ok {
-				return domain.TaskPatch{}, false
+				return decodedTaskPatch{}, false
 			}
 			patch.DueDate = &d
 		}
@@ -181,12 +202,35 @@ func decodeTaskPatch(w http.ResponseWriter, r *http.Request) (domain.TaskPatch, 
 			var ids []uuid.UUID
 			if err := json.Unmarshal(v, &ids); err != nil {
 				badField("label_ids")
-				return domain.TaskPatch{}, false
+				return decodedTaskPatch{}, false
 			}
 			patch.LabelIDs = ids
 		}
 	}
-	return patch, true
+	if v, ok := raw["project_number"]; ok {
+		decoded.ProjectNumberSet = true
+		if !isJSONNull(v) {
+			var number int64
+			if err := json.Unmarshal(v, &number); err != nil || number <= 0 {
+				badField("project_number")
+				return decodedTaskPatch{}, false
+			}
+			decoded.ProjectNumber = &number
+		}
+	}
+	if v, ok := raw["milestone_id"]; ok {
+		decoded.MilestoneSet = true
+		if !isJSONNull(v) {
+			var id uuid.UUID
+			if err := json.Unmarshal(v, &id); err != nil {
+				badField("milestone_id")
+				return decodedTaskPatch{}, false
+			}
+			decoded.MilestoneID = &id
+		}
+	}
+	decoded.Patch = patch
+	return decoded, true
 }
 
 func isJSONNull(raw json.RawMessage) bool {
@@ -198,9 +242,43 @@ func (h *taskHandler) update(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	patch, ok := decodeTaskPatch(w, r)
+	decoded, ok := decodeTaskPatch(w, r)
 	if !ok {
 		return
+	}
+	patch := decoded.Patch
+	if decoded.ProjectNumberSet {
+		projectID, milestoneID, err := h.projects.ResolveTaskAssociation(r.Context(), decoded.ProjectNumber, decoded.MilestoneID)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		patch.ProjectSet = true
+		patch.ProjectID = projectID
+		if decoded.MilestoneSet {
+			patch.MilestoneSet = true
+			patch.MilestoneID = milestoneID
+		}
+	} else if decoded.MilestoneSet {
+		patch.MilestoneSet = true
+		if decoded.MilestoneID != nil {
+			current, err := h.tasks.GetByNumber(r.Context(), number)
+			if err != nil {
+				WriteError(w, r, err)
+				return
+			}
+			if current.Project == nil {
+				WriteError(w, r, fmt.Errorf("%w: a milestone requires a project", domain.ErrInvalidInput))
+				return
+			}
+			projectNumber := current.Project.Number
+			_, milestoneID, err := h.projects.ResolveTaskAssociation(r.Context(), &projectNumber, decoded.MilestoneID)
+			if err != nil {
+				WriteError(w, r, err)
+				return
+			}
+			patch.MilestoneID = milestoneID
+		}
 	}
 	me := CurrentUser(r)
 	out, err := h.tasks.Update(r.Context(), number, patch, me.ID)

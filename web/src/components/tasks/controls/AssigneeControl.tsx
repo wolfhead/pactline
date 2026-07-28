@@ -1,6 +1,6 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { UserRef } from '@/task-types'
-import { CONTROL_TRIGGER_CLASS } from './trigger'
+import { CONTROL_TRIGGER_CLASS, PROPERTY_ICON_SLOT_CLASS } from './trigger'
 
 // Radix Select treats "" as "no value" and would render the placeholder
 // instead of 未分配, so unassigned needs a sentinel that is not the empty
@@ -28,16 +28,25 @@ export default function AssigneeControl({
       disabled={disabled}
     >
       <SelectTrigger
+        data-property-control
         aria-label={ariaLabel}
         className={CONTROL_TRIGGER_CLASS}
       >
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value={UNASSIGNED}>未分配</SelectItem>
+        <SelectItem value={UNASSIGNED}>
+          <span className="flex items-center gap-1.5">
+            <span className={PROPERTY_ICON_SLOT_CLASS} aria-hidden="true" />
+            <span>未分配</span>
+          </span>
+        </SelectItem>
         {users.map((u) => (
           <SelectItem key={u.id} value={u.id}>
-            {u.name}
+            <span className="flex items-center gap-1.5">
+              <span className={PROPERTY_ICON_SLOT_CLASS} aria-hidden="true" />
+              <span>{u.name}</span>
+            </span>
           </SelectItem>
         ))}
       </SelectContent>
