@@ -37,6 +37,10 @@ func (m bearerAuthentication) wrap(bearerNext, sessionFallback http.Handler) htt
 			sessionFallback.ServeHTTP(w, r)
 			return
 		}
+		markAccessAuthentication(
+			r, access.AuthenticationMethodAPIToken, access.AuthOutcomeRejected,
+			nil, nil, "",
+		)
 		raw, valid := parseBearerAuthorization(authorization)
 		if !valid || m.tokens == nil {
 			writeBearerProblem(w, r, access.ErrTokenInvalid)
@@ -47,6 +51,11 @@ func (m bearerAuthentication) wrap(bearerNext, sessionFallback http.Handler) htt
 			writeBearerProblem(w, r, err)
 			return
 		}
+		userID := principal.User.ID
+		markAccessAuthentication(
+			r, access.AuthenticationMethodAPIToken, access.AuthOutcomeAuthenticated,
+			&userID, principal.TokenID, principal.TokenName,
+		)
 		if m.limiter != nil {
 			if principal.TokenID == nil {
 				writeBearerProblem(w, r, errors.New("authenticated bearer principal has no token ID"))

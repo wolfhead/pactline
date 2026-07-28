@@ -25,6 +25,7 @@ type Problem struct {
 }
 
 func WriteProblem(w http.ResponseWriter, r *http.Request, problem Problem) {
+	markProblemCode(r, problem.Code)
 	if problem.Type == "" {
 		problem.Type = "about:blank"
 	}

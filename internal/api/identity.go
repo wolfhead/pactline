@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 
+	"bountyboard/internal/access"
 	"bountyboard/internal/domain"
 	"bountyboard/internal/identity"
 
@@ -28,6 +29,10 @@ type identityMiddleware struct {
 
 func (m identityMiddleware) wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		markAccessAuthentication(
+			r, access.AuthenticationMethodSession, access.AuthOutcomeRejected,
+			nil, nil, "",
+		)
 		cookie, err := r.Cookie(sessionCookieName)
 		if err != nil {
 			slog.Warn("request without application session", "method", r.Method, "path", r.URL.Path)
@@ -48,6 +53,11 @@ func (m identityMiddleware) wrap(next http.Handler) http.Handler {
 			WriteJSON(w, status, ErrorBody{Error: message})
 			return
 		}
+		actorID := requestIdentity.Actor.ID
+		markAccessAuthentication(
+			r, access.AuthenticationMethodSession, access.AuthOutcomeAuthenticated,
+			&actorID, nil, "",
+		)
 		routePattern := "unmatched"
 		if m.routes != nil {
 			_, pattern := m.routes.Handler(r)

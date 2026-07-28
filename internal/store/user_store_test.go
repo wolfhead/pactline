@@ -98,7 +98,9 @@ func TestUserStoreRoundTripsIdentityProfile(t *testing.T) {
 	require.Equal(t, []domain.UserRole{domain.UserRoleEngineer}, u.Roles)
 	require.True(t, u.Active)
 	require.False(t, u.CreatedAt.IsZero())
-	require.WithinDuration(t, time.Now(), u.UpdatedAt, time.Minute)
+	var databaseNow time.Time
+	require.NoError(t, db.Pool.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&databaseNow))
+	require.WithinDuration(t, databaseNow, u.UpdatedAt, time.Minute)
 }
 
 func TestUsersPermitOneAdminOnly(t *testing.T) {

@@ -29,6 +29,7 @@ type TaskSurface struct {
 type AuthSurface struct {
 	Sessions      *identity.Service
 	Tokens        *access.Service
+	AccessAudit   accessAuditWriter
 	Development   developmentAuthenticator
 	LarkEnabled   bool
 	AppBaseURL    *url.URL
@@ -108,8 +109,12 @@ func NewRouter(
 		owners:  options.Auth.Sessions,
 		limiter: newTokenBucketLimiter(),
 	}.wrap(v1, v1Session)
-	root.Handle("/api/v1", v1Protected)
-	root.Handle("/api/v1/", v1Protected)
+	resolver, _ := v1.(routeResolver)
+	v1Audited := apiAccessAudit{
+		store: options.Auth.AccessAudit, routes: resolver,
+	}.wrap(v1Protected)
+	root.Handle("/api/v1", v1Audited)
+	root.Handle("/api/v1/", v1Audited)
 	root.Handle("/", middleware.wrap(protected))
 	return RequestIDMiddleware(isolateBearerFromInternal(root))
 }

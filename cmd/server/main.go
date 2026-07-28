@@ -67,6 +67,10 @@ func main() {
 	tokenService := access.NewService(
 		store.NewAccessStore(db), identity.SystemClock{}, access.CryptoSecretGenerator{},
 	)
+	accessAuditStore := store.NewAccessAuditStore(db)
+	maintenanceContext, stopMaintenance := context.WithCancel(context.Background())
+	defer stopMaintenance()
+	go (application.Maintenance{Store: accessAuditStore}).Run(maintenanceContext)
 	if cfg.AuthProvider == AuthProviderLark {
 		cipher, cipherErr := identity.NewCredentialCipher(map[string][]byte{
 			cfg.TokenEncryptionKeyID: cfg.TokenEncryptionKey,
@@ -118,6 +122,7 @@ func main() {
 	handler := api.NewRouter(users, legacyHandler, api.RouterOptions{
 		Auth: api.AuthSurface{
 			Sessions: identityService, Tokens: tokenService,
+			AccessAudit: accessAuditStore,
 			Development: developmentAuth, AppBaseURL: cfg.AppBaseURL,
 			LarkEnabled:   cfg.AuthProvider == AuthProviderLark,
 			SecureCookies: cfg.AppEnv != EnvironmentDevelopment && cfg.AppEnv != EnvironmentTest,
