@@ -11,11 +11,14 @@ surface includes:
 - structured, revisioned acceptance criteria shared by projects, milestones,
   and tasks, with evidence-backed checks and task completion gating;
 - task-to-project and task-to-milestone association; and
-- audited project and milestone lifecycle transitions.
+- audited project and milestone lifecycle transitions;
+- invite-only Lark authentication for one company; and
+- single-Administrator user management with read-only impersonation.
 
 Project and milestone semantics are defined in
 [`docs/superpowers/specs/2026-07-27-projects-and-milestones-design.md`](docs/superpowers/specs/2026-07-27-projects-and-milestones-design.md).
-Lark identity, authorization, and notifications are intentionally deferred.
+The identity model and operating procedure are documented in
+[`docs/operations/lark-identity.md`](docs/operations/lark-identity.md).
 
 作品制研发任务管理系统。机制设计见 [`docs/mechanism-design.md`](docs/mechanism-design.md),
 系统规格见 [`docs/superpowers/specs/2026-07-26-bounty-board-design.md`](docs/superpowers/specs/2026-07-26-bounty-board-design.md)。
@@ -45,7 +48,7 @@ Lark identity, authorization, and notifications are intentionally deferred.
 make up          # 启动 PostgreSQL(:5433)
 make run         # 启动后端(:8080),自动执行迁移与用户 seed
 make web-install # 首次
-make web-dev     # 启动前端(:5173)
+make web-dev     # 启动前端(:5173),使用 Development 登录
 ```
 
 打开 http://localhost:5173
@@ -66,7 +69,7 @@ PostgreSQL(`docker compose up -d --wait`)、Go 后端与 Vite 前端;若开发�
 (`credits` 随其 `bounty` 级联删除),不依赖、也不修改数据库里已有的行 ——
 整套 e2e 跑完后 `bounties`、`credits` 的行数应与跑之前完全一致。
 
-## Phase 1 边界
+## Legacy mechanism boundary
 
 当前为 Phase 1,实现核心闭环与 Credits 署名。以下**尚未实现**,按规格分阶段推进:
 
@@ -76,15 +79,19 @@ PostgreSQL(`docker compose up -d --wait`)、Go 后端与 Vite 前端;若开发�
 | 3 | 承诺日期、逾期公开预警、改约(含阻塞指名)、月度瓶颈报告 |
 | 4 | 业务线聚合(投入 / 产出 / 比值) |
 | 5 | Owner 契约与基线账、`BASELINE` credit 自动生成 |
-| 6 | 飞书 OAuth 登录与通知 |
+| 6 | 已由当前 Lark identity 实现取代 |
 
-## 认证
+## Authentication
 
-Phase 1 **没有认证**。身份由 `X-User-Id` 请求头携带,前端提供用户切换器。
-迁移中 seed 了六个内置用户覆盖各角色组合。
+The application uses server-owned `bb_session` cookies and a separate
+`bb_csrf` cookie/header pair for mutations. Production supports only Lark
+OAuth. Development authentication is available only when
+`APP_ENV=development` or `test`; production startup rejects it.
 
-接入飞书 OAuth 时,`internal/api/identity.go` 的 `withIdentity` 与
-`web/src/identity.tsx` 的 `UserSwitcher` 一并移除。
+There is no production `X-User-Id` fallback and no user switcher. The first
+Lark account whose verified tenant email matches `BOOTSTRAP_ADMIN_EMAIL`
+becomes the single Administrator. Every later account must enter through a
+one-time invitation created by that Administrator.
 
 ## 两条不可回归的规则
 

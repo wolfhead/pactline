@@ -62,8 +62,11 @@ overlap rather than guessing which version should win.
   the task explicitly concerns unreleased migration history.
 
 The task API uses human-facing sequential task numbers in URLs, not UUIDs.
-Phase 1 identity is intentionally supplied by `X-User-Id`; all API routes,
-including `/api/users`, pass through that middleware.
+Protected routes use server-owned application sessions. Production identity
+comes only from invite-bound international Lark OAuth; Development auth is
+startup-rejected in production. Mutations require the `bb_csrf` cookie value
+in `X-CSRF-Token` and a same-origin request. There is no production
+`X-User-Id` fallback.
 
 ### Frontend
 
@@ -103,6 +106,14 @@ including `/api/users`, pass through that middleware.
   mapped to a domain error and logged; unexpected errors become logged 500s.
 - External and boundary failures must remain diagnosable without logging
   secrets or sensitive personal data.
+- The product serves one Lark tenant with one Administrator. Members are
+  invitation-only; there is no Administrator promotion or multi-tenant path.
+- During impersonation, the real Administrator remains the actor and an active
+  Member becomes the effective subject. The backend rejects all writes except
+  ending impersonation and logout, and denies other Administrator routes.
+- Active Lark principals are request-revalidated after 15 minutes. Explicitly
+  invalid principals are deactivated and have all sessions revoked; transient
+  provider failures receive a one-hour grace window.
 
 For the accepted task UI rewrite:
 
@@ -115,8 +126,8 @@ For the accepted task UI rewrite:
 - Preserve theme behavior exactly: `system | light | dark`, storage key
   `bountyboard.theme.v2`, `data-theme`, and light as the default. Do not write a
   default preference to storage as if the user selected it.
-- Preserve identity bootstrap ordering: requests must not race ahead with an
-  empty or stale `X-User-Id`.
+- Preserve identity bootstrap ordering: protected pages must wait for
+  `/api/me`; requests use same-origin cookies and never synthesize a user ID.
 
 ## Legacy Boundaries
 
