@@ -96,7 +96,8 @@ func TestInvitationAuthorizationStateIsInvalidatedByResendLinkRotationAndRevoke(
 			transaction := identity.AuthorizationTransaction{
 				ID: uuid.New(), Purpose: identity.AuthorizationInvitation,
 				StateHash: stateHash[:], InvitationID: &invitation.ID,
-				ExpiresAt: now.Add(10 * time.Minute), CreatedAt: now,
+				InvitationTokenHash: tokenHash[:],
+				ExpiresAt:           now.Add(10 * time.Minute), CreatedAt: now,
 			}
 			require.NoError(t, repository.CreateAuthorizationTransaction(ctx, transaction))
 			t.Cleanup(func() {
@@ -126,6 +127,106 @@ func TestInvitationAuthorizationStateIsInvalidatedByResendLinkRotationAndRevoke(
 
 			_, err := repository.ConsumeAuthorizationState(ctx, stateHash[:], now.Add(time.Second))
 			require.ErrorIs(t, err, identity.ErrAuthorizationInvalid)
+		})
+	}
+}
+
+func TestConsumedInvitationAuthorizationRejectsRotatedTokenVersion(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	repository := store.NewIdentityStore(db)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	for _, testCase := range []struct {
+		name   string
+		rotate bool
+		valid  bool
+	}{
+		{name: "unchanged token succeeds", valid: true},
+		{name: "rotation after state consumption fails", rotate: true},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			tokenHash := identity.HashSecret([]byte("invitation-token-" + uuid.NewString()))
+			key := identity.PrincipalKey{
+				Provider: "lark", TenantID: "tenant-" + uuid.NewString(),
+				SubjectID: "subject-" + uuid.NewString(),
+			}
+			invitation := identity.Invitation{
+				ID: uuid.New(), Target: key, TargetSnapshot: json.RawMessage(`{"name":"Invitee"}`),
+				TokenHash: tokenHash[:], Status: identity.InvitationPending,
+				CreatedByUserID: primarySeedID, ExpiresAt: now.Add(identity.InvitationLifetime),
+				CreatedAt: now, UpdatedAt: now,
+			}
+			require.NoError(t, repository.CreateInvitation(
+				ctx, invitation, auditEvent("invitation_created", now),
+			))
+			stateHash := identity.HashSecret([]byte("oauth-state-" + uuid.NewString()))
+			transaction := identity.AuthorizationTransaction{
+				ID: uuid.New(), Purpose: identity.AuthorizationInvitation,
+				StateHash: stateHash[:], InvitationID: &invitation.ID,
+				InvitationTokenHash: tokenHash[:],
+				ExpiresAt:           now.Add(10 * time.Minute), CreatedAt: now,
+			}
+			require.NoError(t, repository.CreateAuthorizationTransaction(ctx, transaction))
+			userID := uuid.New()
+			t.Cleanup(func() {
+				cleanupCtx := context.Background()
+				_, cleanupErr := db.Pool.Exec(cleanupCtx,
+					`DELETE FROM authorization_transactions WHERE id=$1`, transaction.ID)
+				require.NoError(t, cleanupErr)
+				_, cleanupErr = db.Pool.Exec(cleanupCtx,
+					`DELETE FROM identity_audit_events WHERE invitation_id=$1 OR subject_user_id=$2`,
+					invitation.ID, userID)
+				require.NoError(t, cleanupErr)
+				_, cleanupErr = db.Pool.Exec(cleanupCtx,
+					`DELETE FROM external_identities WHERE user_id=$1`, userID)
+				require.NoError(t, cleanupErr)
+				_, cleanupErr = db.Pool.Exec(cleanupCtx,
+					`DELETE FROM invitations WHERE id=$1`, invitation.ID)
+				require.NoError(t, cleanupErr)
+				_, cleanupErr = db.Pool.Exec(cleanupCtx, `DELETE FROM users WHERE id=$1`, userID)
+				require.NoError(t, cleanupErr)
+			})
+
+			consumed, err := repository.ConsumeAuthorizationState(ctx, stateHash[:], now.Add(time.Second))
+			require.NoError(t, err)
+			require.Equal(t, tokenHash[:], consumed.InvitationTokenHash)
+			if testCase.rotate {
+				rotatedHash := identity.HashSecret([]byte("rotated-token-" + uuid.NewString()))
+				_, err = repository.RotateInvitation(
+					ctx, invitation.ID, primarySeedID, rotatedHash[:],
+					now.Add(identity.InvitationLifetime),
+				)
+				require.NoError(t, err)
+			}
+
+			_, err = repository.AcceptInvitation(ctx, identity.AcceptInvitationCommand{
+				InvitationID: invitation.ID, InvitationTokenHash: consumed.InvitationTokenHash,
+				Principal: identity.Principal{Key: key, Name: "Invitee", Active: true},
+				Credential: identity.OAuthCredential{
+					AccessTokenCiphertext:  []byte("sealed-access"),
+					RefreshTokenCiphertext: []byte("sealed-refresh"),
+					AccessTokenExpiresAt:   now.Add(time.Hour),
+					RefreshTokenExpiresAt:  now.Add(24 * time.Hour),
+					EncryptionKeyID:        "test",
+				},
+				UserID: userID, UserName: "Invitee",
+				Audit: auditEvent("invitation_accepted", now.Add(2*time.Second)),
+				Now:   now.Add(2 * time.Second),
+			})
+			if testCase.valid {
+				require.NoError(t, err)
+				var platformRole string
+				require.NoError(t, db.Pool.QueryRow(ctx,
+					`SELECT platform_role FROM users WHERE id=$1`, userID).Scan(&platformRole))
+				require.Equal(t, "MEMBER", platformRole)
+				return
+			}
+			require.ErrorIs(t, err, identity.ErrInvitationInvalid)
+			var userCount int
+			require.NoError(t, db.Pool.QueryRow(ctx,
+				`SELECT count(*) FROM users WHERE id=$1`, userID).Scan(&userCount))
+			require.Zero(t, userCount)
 		})
 	}
 }

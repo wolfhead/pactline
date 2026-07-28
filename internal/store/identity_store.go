@@ -29,10 +29,12 @@ func NewIdentityStore(db *DB) *IdentityStore {
 func (s *IdentityStore) CreateAuthorizationTransaction(ctx context.Context, transaction identity.AuthorizationTransaction) error {
 	_, err := s.db.Pool.Exec(ctx, `
 		INSERT INTO authorization_transactions
-			(id, purpose, state_hash, invitation_id, expires_at, consumed_at, created_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+			(id, purpose, state_hash, invitation_id, invitation_token_hash,
+			 expires_at, consumed_at, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
 		transaction.ID, transaction.Purpose, transaction.StateHash, transaction.InvitationID,
-		transaction.ExpiresAt, transaction.ConsumedAt, transaction.CreatedAt)
+		transaction.InvitationTokenHash, transaction.ExpiresAt, transaction.ConsumedAt,
+		transaction.CreatedAt)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return identity.ErrAuthorizationInvalid
@@ -50,7 +52,8 @@ func (s *IdentityStore) ConsumeAuthorizationState(ctx context.Context, stateHash
 	defer tx.Rollback(ctx) //nolint:errcheck
 
 	transaction, err := scanAuthorization(tx.QueryRow(ctx, `
-		SELECT id, purpose, state_hash, invitation_id, expires_at, consumed_at, created_at
+		SELECT id, purpose, state_hash, invitation_id, invitation_token_hash,
+		       expires_at, consumed_at, created_at
 		FROM authorization_transactions
 		WHERE state_hash=$1
 		FOR UPDATE`, stateHash))
@@ -251,7 +254,10 @@ func (s *IdentityStore) AcceptInvitation(ctx context.Context, command identity.A
 		       created_by_user_id, expires_at, accepted_by_user_id, accepted_at, revoked_at, created_at, updated_at
 		FROM invitations WHERE `+lookup+` FOR UPDATE`, lookupValue))
 	if errors.Is(err, pgx.ErrNoRows) ||
-		err == nil && !identity.InvitationMatches(invitation, command.Principal.Key, command.Now) {
+		err == nil && (!identity.InvitationMatches(invitation, command.Principal.Key, command.Now) ||
+			command.InvitationID != uuid.Nil &&
+				(len(command.InvitationTokenHash) == 0 ||
+					subtle.ConstantTimeCompare(invitation.TokenHash, command.InvitationTokenHash) != 1)) {
 		return domain.User{}, identity.ErrInvitationInvalid
 	}
 	if err != nil {
@@ -1092,7 +1098,8 @@ func lockSession(ctx context.Context, tx pgx.Tx, sessionID uuid.UUID) error {
 func scanAuthorization(row pgx.Row) (identity.AuthorizationTransaction, error) {
 	var transaction identity.AuthorizationTransaction
 	err := row.Scan(&transaction.ID, &transaction.Purpose, &transaction.StateHash,
-		&transaction.InvitationID, &transaction.ExpiresAt, &transaction.ConsumedAt, &transaction.CreatedAt)
+		&transaction.InvitationID, &transaction.InvitationTokenHash,
+		&transaction.ExpiresAt, &transaction.ConsumedAt, &transaction.CreatedAt)
 	return transaction, err
 }
 

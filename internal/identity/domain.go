@@ -100,13 +100,14 @@ const (
 )
 
 type AuthorizationTransaction struct {
-	ID           uuid.UUID
-	Purpose      AuthorizationPurpose
-	StateHash    []byte
-	InvitationID *uuid.UUID
-	ExpiresAt    time.Time
-	ConsumedAt   *time.Time
-	CreatedAt    time.Time
+	ID                  uuid.UUID
+	Purpose             AuthorizationPurpose
+	StateHash           []byte
+	InvitationID        *uuid.UUID
+	InvitationTokenHash []byte
+	ExpiresAt           time.Time
+	ConsumedAt          *time.Time
+	CreatedAt           time.Time
 }
 
 type Session struct {
@@ -189,17 +190,18 @@ type VerificationResult struct {
 }
 
 type AcceptInvitationCommand struct {
-	InvitationID  uuid.UUID
-	TokenHash     []byte
-	Principal     Principal
-	Credential    OAuthCredential
-	UserID        uuid.UUID
-	UserName      string
-	UserEmail     *string
-	UserAvatarURL *string
-	Session       Session
-	Audit         AuditEvent
-	Now           time.Time
+	InvitationID        uuid.UUID
+	TokenHash           []byte
+	InvitationTokenHash []byte
+	Principal           Principal
+	Credential          OAuthCredential
+	UserID              uuid.UUID
+	UserName            string
+	UserEmail           *string
+	UserAvatarURL       *string
+	Session             Session
+	Audit               AuditEvent
+	Now                 time.Time
 }
 
 type BootstrapAdminCommand struct {

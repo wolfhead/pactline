@@ -96,6 +96,7 @@ func (c *Client) StartAuthorization(_ context.Context, request identity.Authoriz
 	query.Set("state", request.State)
 	query.Set("scope", strings.Join([]string{
 		"auth:user.id:read",
+		"contact:contact.base:readonly",
 		"contact:user.base:readonly",
 		"contact:user.email:readonly",
 		"contact:user:search",

@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -141,6 +142,100 @@ func migrationsBeforeIdentity(t *testing.T) fstest.MapFS {
 		out["migrations/"+name] = &fstest.MapFile{Data: body}
 	}
 	return out
+}
+
+func migrationsBeforeInvitationAuthorizationVersion(t *testing.T) fstest.MapFS {
+	t.Helper()
+	out := fstest.MapFS{}
+	for _, name := range embeddedMigrationNames(t) {
+		if name >= "0010_" {
+			continue
+		}
+		body, err := fs.ReadFile(bountyboard.MigrationFS, "migrations/"+name)
+		require.NoError(t, err)
+		out["migrations/"+name] = &fstest.MapFile{Data: body}
+	}
+	return out
+}
+
+func TestInvitationAuthorizationVersionMigration(t *testing.T) {
+	ctx := context.Background()
+	dsn := createThrowawayDatabase(t, testDSN(t))
+	db, err := store.Connect(ctx, dsn)
+	require.NoError(t, err)
+	defer db.Close()
+
+	require.NoError(t, db.Migrate(ctx, migrationsBeforeInvitationAuthorizationVersion(t)))
+	invitationID, loginID, legacyInvitationID := uuid.New(), uuid.New(), uuid.New()
+	_, err = db.Pool.Exec(ctx, `
+		INSERT INTO invitations
+			(id, provider, tenant_id, target_subject_id, target_snapshot, token_hash,
+			 status, created_by_user_id, expires_at, created_at, updated_at)
+		VALUES ($1,'lark','tenant','subject','{}',$2,'pending',$3,now()+interval '1 hour',now(),now())`,
+		invitationID, []byte("invitation-token-hash"), primarySeedID)
+	require.NoError(t, err)
+	_, err = db.Pool.Exec(ctx, `
+		INSERT INTO authorization_transactions
+			(id,purpose,state_hash,invitation_id,expires_at,created_at)
+		VALUES
+			($1,'login',$2,NULL,now()+interval '10 minutes',now()),
+			($3,'invitation',$4,$5,now()+interval '10 minutes',now())`,
+		loginID, []byte("login-state-hash"), legacyInvitationID,
+		[]byte("legacy-invitation-state-hash"), invitationID)
+	require.NoError(t, err)
+
+	require.NoError(t, db.Migrate(ctx, bountyboard.MigrationFS))
+	var loginTokenHash []byte
+	require.NoError(t, db.Pool.QueryRow(ctx, `
+		SELECT invitation_token_hash
+		FROM authorization_transactions
+		WHERE id=$1`, loginID).Scan(&loginTokenHash))
+	require.Nil(t, loginTokenHash)
+	var legacyInvitationCount int
+	require.NoError(t, db.Pool.QueryRow(ctx, `
+		SELECT count(*) FROM authorization_transactions WHERE id=$1`,
+		legacyInvitationID).Scan(&legacyInvitationCount))
+	require.Zero(t, legacyInvitationCount)
+
+	var constraintDefinition string
+	require.NoError(t, db.Pool.QueryRow(ctx, `
+		SELECT pg_get_constraintdef(oid)
+		FROM pg_constraint
+		WHERE conrelid='authorization_transactions'::regclass
+		  AND conname='authorization_transactions_invitation_shape_check'`).
+		Scan(&constraintDefinition))
+	require.Contains(t, constraintDefinition, "invitation_token_hash IS NOT NULL")
+	require.Contains(t, constraintDefinition, "invitation_token_hash IS NULL")
+
+	assertShapeViolation := func(query string, arguments ...any) {
+		t.Helper()
+		_, insertErr := db.Pool.Exec(ctx, query, arguments...)
+		var postgresError *pgconn.PgError
+		require.ErrorAs(t, insertErr, &postgresError)
+		require.Equal(t, "23514", postgresError.Code)
+		require.Equal(t,
+			"authorization_transactions_invitation_shape_check",
+			postgresError.ConstraintName)
+	}
+	assertShapeViolation(`
+		INSERT INTO authorization_transactions
+			(id,purpose,state_hash,invitation_id,invitation_token_hash,expires_at)
+		VALUES ($1,'login',$2,NULL,$3,now()+interval '10 minutes')`,
+		uuid.New(), []byte("invalid-login-state"), []byte("unexpected-token-hash"))
+	assertShapeViolation(`
+		INSERT INTO authorization_transactions
+			(id,purpose,state_hash,invitation_id,invitation_token_hash,expires_at)
+		VALUES ($1,'invitation',$2,$3,NULL,now()+interval '10 minutes')`,
+		uuid.New(), []byte("invalid-invitation-state"), invitationID)
+
+	validInvitationAuthorizationID := uuid.New()
+	_, err = db.Pool.Exec(ctx, `
+		INSERT INTO authorization_transactions
+			(id,purpose,state_hash,invitation_id,invitation_token_hash,expires_at)
+		VALUES ($1,'invitation',$2,$3,$4,now()+interval '10 minutes')`,
+		validInvitationAuthorizationID, []byte("valid-invitation-state"),
+		invitationID, []byte("invitation-token-hash"))
+	require.NoError(t, err)
 }
 
 func TestIdentityMigrationConsolidatesSeedAttribution(t *testing.T) {

@@ -316,7 +316,9 @@ func (s *Service) AcceptInvitationToken(ctx context.Context, token string) (Auth
 	if err != nil {
 		return AuthorizationStart{}, ErrInvitationInvalid
 	}
-	return s.StartAuthorization(ctx, AuthorizationInvitation, &invitation.ID)
+	return s.startAuthorization(
+		ctx, AuthorizationInvitation, &invitation.ID, invitation.TokenHash,
+	)
 }
 
 func (s *Service) deliverInvitation(ctx context.Context, invitation Invitation, rawToken string) (InvitationDelivery, error) {
@@ -462,11 +464,20 @@ func (s *Service) RecordImpersonationWriteRejected(
 }
 
 func (s *Service) StartAuthorization(ctx context.Context, purpose AuthorizationPurpose, invitationID *uuid.UUID) (AuthorizationStart, error) {
+	return s.startAuthorization(ctx, purpose, invitationID, nil)
+}
+
+func (s *Service) startAuthorization(
+	ctx context.Context,
+	purpose AuthorizationPurpose,
+	invitationID *uuid.UUID,
+	invitationTokenHash []byte,
+) (AuthorizationStart, error) {
 	if s.identity == nil || s.authenticator == nil {
 		return AuthorizationStart{}, ErrLoginDenied
 	}
-	if purpose == AuthorizationLogin && invitationID != nil ||
-		purpose == AuthorizationInvitation && invitationID == nil {
+	if purpose == AuthorizationLogin && (invitationID != nil || len(invitationTokenHash) != 0) ||
+		purpose == AuthorizationInvitation && (invitationID == nil || len(invitationTokenHash) == 0) {
 		return AuthorizationStart{}, ErrAuthorizationInvalid
 	}
 	state, err := s.secrets.NewSecret()
@@ -477,7 +488,8 @@ func (s *Service) StartAuthorization(ctx context.Context, purpose AuthorizationP
 	now := s.clock.Now()
 	transaction := AuthorizationTransaction{
 		ID: uuid.New(), Purpose: purpose, StateHash: stateHash[:], InvitationID: invitationID,
-		ExpiresAt: now.Add(10 * time.Minute), CreatedAt: now,
+		InvitationTokenHash: append([]byte(nil), invitationTokenHash...),
+		ExpiresAt:           now.Add(10 * time.Minute), CreatedAt: now,
 	}
 	if err := s.identity.CreateAuthorizationTransaction(ctx, transaction); err != nil {
 		return AuthorizationStart{}, fmt.Errorf("persist authorization state: %w", err)
@@ -524,7 +536,7 @@ func (s *Service) CompleteAuthorization(ctx context.Context, state, code, reques
 	}
 	switch transaction.Purpose {
 	case AuthorizationInvitation:
-		if transaction.InvitationID == nil {
+		if transaction.InvitationID == nil || len(transaction.InvitationTokenHash) == 0 {
 			s.recordAuthenticationRejection(ctx, "invitation_state", requestID)
 			return SessionTokens{}, ErrLoginDenied
 		}
@@ -532,8 +544,9 @@ func (s *Service) CompleteAuthorization(ctx context.Context, state, code, reques
 		session.UserID = userID
 		audit.EventType = "invitation_accepted"
 		_, err = s.identity.AcceptInvitation(ctx, AcceptInvitationCommand{
-			InvitationID: *transaction.InvitationID,
-			Principal:    authenticated.Principal, Credential: authenticated.Credential,
+			InvitationID:        *transaction.InvitationID,
+			InvitationTokenHash: transaction.InvitationTokenHash,
+			Principal:           authenticated.Principal, Credential: authenticated.Credential,
 			UserID: userID, UserName: authenticated.Principal.Name,
 			UserEmail: authenticated.Principal.Email, UserAvatarURL: authenticated.Principal.AvatarURL,
 			Session: session, Audit: audit, Now: now,

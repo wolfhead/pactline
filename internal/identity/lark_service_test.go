@@ -2,6 +2,7 @@ package identity
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"sync"
 	"sync/atomic"
@@ -147,6 +148,73 @@ func TestInvitationCreationDeliveryRotationAndAcceptanceState(t *testing.T) {
 	require.Contains(t, start.URL, "oauth-state")
 }
 
+func TestInvitationOAuthAcceptanceRequiresValidatedTokenVersion(t *testing.T) {
+	now := time.Date(2026, 7, 28, 12, 30, 0, 0, time.UTC)
+
+	for _, testCase := range []struct {
+		name   string
+		rotate bool
+	}{
+		{name: "unchanged token succeeds"},
+		{name: "rotation after state consumption fails", rotate: true},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			rawToken := "invitation-token"
+			tokenHash := HashSecret([]byte(rawToken))
+			invitation := Invitation{
+				ID: uuid.New(),
+				Target: PrincipalKey{
+					Provider: "lark", TenantID: "tenant", SubjectID: "ou_member",
+				},
+				TokenHash: tokenHash[:], Status: InvitationPending,
+				ExpiresAt: now.Add(InvitationLifetime), CreatedAt: now, UpdatedAt: now,
+			}
+			repository := &larkServiceRepository{
+				invitations: map[uuid.UUID]Invitation{invitation.ID: invitation},
+			}
+			authenticator := &larkAuthenticator{principal: AuthenticatedPrincipal{
+				Principal: Principal{Key: invitation.Target, Name: "Member", Active: true},
+			}}
+			if testCase.rotate {
+				authenticator.onExchange = func() {
+					rotated := repository.invitations[invitation.ID]
+					rotatedHash := HashSecret([]byte("rotated-token"))
+					rotated.TokenHash = rotatedHash[:]
+					repository.invitations[invitation.ID] = rotated
+				}
+			}
+			service, err := NewService(
+				repository, larkUsers{}, []byte("01234567890123456789012345678901"),
+				fixedLarkClock{now},
+				&sequenceSecrets{values: []string{"oauth-state", "session-secret", "csrf-secret"}},
+			)
+			require.NoError(t, err)
+			require.NoError(t, service.ConfigureLark(LarkServiceConfig{
+				Repository: repository, Authenticator: authenticator, Verifier: larkVerifier{},
+				TenantID: "tenant", RedirectURI: "https://app.test/callback",
+				BootstrapAdminEmail: "admin@example.test",
+			}))
+
+			_, err = service.AcceptInvitationToken(context.Background(), rawToken)
+			require.NoError(t, err)
+			require.Equal(t, tokenHash[:], repository.authorization.InvitationTokenHash)
+			_, err = service.CompleteAuthorization(
+				context.Background(), "oauth-state", "code", "request-id",
+			)
+			require.NotNil(t, repository.authorization.ConsumedAt)
+			if testCase.rotate {
+				require.ErrorIs(t, err, ErrLoginDenied)
+				require.Nil(t, repository.acceptedInvitation)
+				require.Equal(t, "login_rejected", repository.lastAudit.EventType)
+				return
+			}
+			require.NoError(t, err)
+			require.NotNil(t, repository.acceptedInvitation)
+			require.Equal(t, tokenHash[:], repository.acceptedInvitation.InvitationTokenHash)
+		})
+	}
+}
+
 func TestUserLifecycleAndImpersonationUseRealAdminActor(t *testing.T) {
 	now := time.Date(2026, 7, 28, 13, 0, 0, 0, time.UTC)
 	admin := domain.User{ID: uuid.New(), Active: true, PlatformRole: domain.PlatformRoleAdmin}
@@ -271,6 +339,7 @@ type larkServiceRepository struct {
 	lastAudit            AuditEvent
 	providerFailures     int
 	providerFailureAudit AuditEvent
+	acceptedInvitation   *AcceptInvitationCommand
 	refreshMu            sync.Mutex
 }
 
@@ -340,8 +409,21 @@ func (r *larkServiceRepository) DeactivateUser(
 	r.deactivated, r.lifecycleActor = userID, actorID
 	return nil
 }
-func (r *larkServiceRepository) AcceptInvitation(context.Context, AcceptInvitationCommand) (domain.User, error) {
-	return domain.User{}, ErrInvitationInvalid
+func (r *larkServiceRepository) AcceptInvitation(
+	_ context.Context,
+	command AcceptInvitationCommand,
+) (domain.User, error) {
+	invitation, ok := r.invitations[command.InvitationID]
+	if !ok || !InvitationMatches(invitation, command.Principal.Key, command.Now) ||
+		len(command.InvitationTokenHash) == 0 ||
+		subtle.ConstantTimeCompare(invitation.TokenHash, command.InvitationTokenHash) != 1 {
+		return domain.User{}, ErrInvitationInvalid
+	}
+	r.acceptedInvitation = &command
+	return domain.User{
+		ID: command.UserID, Name: command.UserName, Email: command.UserEmail,
+		PlatformRole: domain.PlatformRoleMember, Active: true,
+	}, nil
 }
 func (r *larkServiceRepository) CreateInvitation(_ context.Context, invitation Invitation, _ AuditEvent) error {
 	if r.invitations == nil {
@@ -441,6 +523,7 @@ type larkAuthenticator struct {
 	principal           AuthenticatedPrincipal
 	exchanges           int
 	exchangeErr         error
+	onExchange          func()
 	refreshErr          error
 	refreshedCredential OAuthCredential
 	refreshCalls        atomic.Int64
@@ -453,6 +536,9 @@ func (a *larkAuthenticator) ExchangeAuthorizationCode(context.Context, string) (
 	a.exchanges++
 	if a.exchangeErr != nil {
 		return AuthenticatedPrincipal{}, a.exchangeErr
+	}
+	if a.onExchange != nil {
+		a.onExchange()
 	}
 	return a.principal, nil
 }

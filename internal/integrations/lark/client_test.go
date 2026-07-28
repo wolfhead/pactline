@@ -60,6 +60,7 @@ func TestAuthorizationAndOAuthTransport(t *testing.T) {
 	require.Equal(t, "state value", authorizationURL.Query().Get("state"))
 	require.ElementsMatch(t, []string{
 		"auth:user.id:read",
+		"contact:contact.base:readonly",
 		"contact:user.base:readonly",
 		"contact:user.email:readonly",
 		"contact:user:search",
