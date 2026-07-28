@@ -79,8 +79,12 @@ func (h *adminIdentityHandler) listInvitations(w http.ResponseWriter, r *http.Re
 		return
 	}
 	response := make([]invitationResponse, len(invitations))
-	for index, invitation := range invitations {
-		response[index] = invitationView(invitation, nil)
+	for index, result := range invitations {
+		var delivery *identity.InvitationDelivery
+		if result.Delivery.ID != uuid.Nil {
+			delivery = &result.Delivery
+		}
+		response[index] = invitationView(result.Invitation, delivery)
 	}
 	WriteJSON(w, http.StatusOK, response)
 }
@@ -235,11 +239,15 @@ func (h *adminIdentityHandler) startImpersonation(w http.ResponseWriter, r *http
 		return
 	}
 	if err := h.service.StartImpersonation(r.Context(), current, request.UserID, requestID(r)); err != nil {
-		if errors.Is(err, identity.ErrImpersonationActive) {
+		switch {
+		case errors.Is(err, identity.ErrImpersonationActive):
 			WriteJSON(w, http.StatusConflict, ErrorBody{Error: "impersonation already active"})
-			return
+		case errors.Is(err, identity.ErrImpersonationDenied):
+			WriteJSON(w, http.StatusForbidden, ErrorBody{Error: "impersonation denied"})
+		default:
+			slog.Error("start impersonation failed", "actor_user_id", current.Actor.ID, "error_category", "persistence")
+			WriteJSON(w, http.StatusInternalServerError, ErrorBody{Error: "failed to start impersonation"})
 		}
-		WriteJSON(w, http.StatusForbidden, ErrorBody{Error: "impersonation denied"})
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

@@ -42,6 +42,7 @@ type IdentityRepository interface {
 	AcceptInvitation(ctx context.Context, command AcceptInvitationCommand) (domain.User, error)
 	CreateInvitation(ctx context.Context, invitation Invitation, audit AuditEvent) error
 	ListInvitations(ctx context.Context) ([]Invitation, error)
+	ListLatestInvitationDeliveries(ctx context.Context) (map[uuid.UUID]InvitationDelivery, error)
 	ExpireInvitations(ctx context.Context, now time.Time) (int64, error)
 	GetInvitation(ctx context.Context, id uuid.UUID) (Invitation, error)
 	GetInvitationByTokenHash(ctx context.Context, tokenHash []byte, now time.Time) (Invitation, error)
@@ -154,11 +155,11 @@ func (s *Service) SearchDirectory(ctx context.Context, actor domain.User, query 
 	if s.directory == nil {
 		return nil, ErrProviderContract
 	}
-	external, err := s.identity.GetExternalIdentityForUser(ctx, actor.ID)
+	credential, err := s.credentialForUser(ctx, actor.ID)
 	if err != nil {
 		return nil, fmt.Errorf("load administrator credential: %w", err)
 	}
-	principals, err := s.directory.SearchPrincipals(ctx, external.EncryptedCredential, query, 20)
+	principals, err := s.directory.SearchPrincipals(ctx, credential, query, 20)
 	if err != nil {
 		return nil, err
 	}
@@ -168,14 +169,29 @@ func (s *Service) SearchDirectory(ctx context.Context, actor domain.User, query 
 	return principals, nil
 }
 
-func (s *Service) ListInvitations(ctx context.Context, actor domain.User) ([]Invitation, error) {
+func (s *Service) ListInvitations(ctx context.Context, actor domain.User) ([]InvitationResult, error) {
 	if actor.PlatformRole != domain.PlatformRoleAdmin || !actor.Active {
 		return nil, ErrAdminRequired
 	}
 	if _, err := s.identity.ExpireInvitations(ctx, s.clock.Now()); err != nil {
 		return nil, err
 	}
-	return s.identity.ListInvitations(ctx)
+	invitations, err := s.identity.ListInvitations(ctx)
+	if err != nil {
+		return nil, err
+	}
+	deliveries, err := s.identity.ListLatestInvitationDeliveries(ctx)
+	if err != nil {
+		return nil, err
+	}
+	results := make([]InvitationResult, len(invitations))
+	for index, invitation := range invitations {
+		results[index].Invitation = invitation
+		if delivery, ok := deliveries[invitation.ID]; ok {
+			results[index].Delivery = delivery
+		}
+	}
+	return results, nil
 }
 
 func (s *Service) CreateInvitation(ctx context.Context, actor domain.User, subjectID, requestID string) (InvitationResult, error) {
@@ -185,11 +201,11 @@ func (s *Service) CreateInvitation(ctx context.Context, actor domain.User, subje
 	if s.directory == nil || s.notifier == nil || strings.TrimSpace(subjectID) == "" {
 		return InvitationResult{}, domain.ErrInvalidInput
 	}
-	external, err := s.identity.GetExternalIdentityForUser(ctx, actor.ID)
+	credential, err := s.credentialForUser(ctx, actor.ID)
 	if err != nil {
 		return InvitationResult{}, fmt.Errorf("load administrator credential: %w", err)
 	}
-	principal, err := s.directory.GetPrincipal(ctx, external.EncryptedCredential, strings.TrimSpace(subjectID))
+	principal, err := s.directory.GetPrincipal(ctx, credential, strings.TrimSpace(subjectID))
 	if err != nil {
 		return InvitationResult{}, err
 	}
@@ -328,6 +344,24 @@ func (s *Service) invitationURL(rawToken string) string {
 	return s.appBaseURL + "/invite#" + rawToken
 }
 
+func (s *Service) credentialForUser(ctx context.Context, userID uuid.UUID) (OAuthCredential, error) {
+	external, err := s.identity.GetExternalIdentityForUser(ctx, userID)
+	if err != nil {
+		return OAuthCredential{}, err
+	}
+	credential := external.EncryptedCredential
+	if s.clock.Now().Before(credential.AccessTokenExpiresAt) {
+		return credential, nil
+	}
+	if !s.clock.Now().Before(credential.RefreshTokenExpiresAt) {
+		return OAuthCredential{}, ErrSessionInvalid
+	}
+	return s.identity.RefreshCredentialLocked(ctx, external.ID, func(current OAuthCredential) (OAuthCredential, error) {
+		refreshed, refreshErr := s.authenticator.RefreshCredential(ctx, current)
+		return refreshed.Credential, refreshErr
+	})
+}
+
 func (s *Service) ListAdminUsers(ctx context.Context, actor domain.User) ([]domain.User, error) {
 	if actor.PlatformRole != domain.PlatformRoleAdmin || !actor.Active {
 		return nil, ErrAdminRequired
@@ -448,19 +482,23 @@ func (s *Service) StartAuthorization(ctx context.Context, purpose AuthorizationP
 
 func (s *Service) CompleteAuthorization(ctx context.Context, state, code, requestID string) (SessionTokens, error) {
 	if s.identity == nil || s.authenticator == nil || state == "" || code == "" {
+		s.recordAuthenticationRejection(ctx, "authorization_input", requestID)
 		return SessionTokens{}, ErrAuthorizationInvalid
 	}
 	stateHash := HashSecret([]byte(state))
 	transaction, err := s.identity.ConsumeAuthorizationState(ctx, stateHash[:], s.clock.Now())
 	if err != nil {
+		s.recordAuthenticationRejection(ctx, "authorization_state", requestID)
 		return SessionTokens{}, ErrAuthorizationInvalid
 	}
 	authenticated, err := s.authenticator.ExchangeAuthorizationCode(ctx, code)
 	if err != nil {
+		s.recordAuthenticationRejection(ctx, "provider_exchange", requestID)
 		return SessionTokens{}, ErrLoginDenied
 	}
 	if authenticated.Principal.Key.Provider != "lark" ||
 		authenticated.Principal.Key.TenantID != s.tenantID || !authenticated.Principal.Active {
+		s.recordAuthenticationRejection(ctx, "principal_mismatch", requestID)
 		return SessionTokens{}, ErrLoginDenied
 	}
 	tokens, session, err := s.newSession(uuid.Nil)
@@ -478,6 +516,7 @@ func (s *Service) CompleteAuthorization(ctx context.Context, state, code, reques
 	switch transaction.Purpose {
 	case AuthorizationInvitation:
 		if transaction.InvitationID == nil {
+			s.recordAuthenticationRejection(ctx, "invitation_state", requestID)
 			return SessionTokens{}, ErrLoginDenied
 		}
 		userID := uuid.New()
@@ -491,11 +530,13 @@ func (s *Service) CompleteAuthorization(ctx context.Context, state, code, reques
 			Session: session, Audit: audit, Now: now,
 		})
 		if err != nil {
+			s.recordAuthenticationRejection(ctx, "invitation_acceptance", requestID)
 			return SessionTokens{}, ErrLoginDenied
 		}
 		return tokens, nil
 	case AuthorizationLogin:
 	default:
+		s.recordAuthenticationRejection(ctx, "authorization_purpose", requestID)
 		return SessionTokens{}, ErrLoginDenied
 	}
 
@@ -508,6 +549,7 @@ func (s *Service) CompleteAuthorization(ctx context.Context, state, code, reques
 			Session: session, Audit: audit, Now: now,
 		})
 		if err != nil {
+			s.recordAuthenticationRejection(ctx, "bound_login_denied", requestID)
 			return SessionTokens{}, ErrLoginDenied
 		}
 		return tokens, nil
@@ -518,6 +560,7 @@ func (s *Service) CompleteAuthorization(ctx context.Context, state, code, reques
 	emailMatches := authenticated.Principal.Email != nil && authenticated.Principal.EmailVerified &&
 		strings.EqualFold(strings.TrimSpace(*authenticated.Principal.Email), s.bootstrapEmail)
 	if !emailMatches {
+		s.recordAuthenticationRejection(ctx, "unbound_principal", requestID)
 		return SessionTokens{}, ErrLoginDenied
 	}
 	primarySeed := uuid.MustParse("00000000-0000-0000-0000-000000000001")
@@ -527,9 +570,27 @@ func (s *Service) CompleteAuthorization(ctx context.Context, state, code, reques
 		Principal: authenticated.Principal, Credential: authenticated.Credential,
 		Session: session, Audit: audit, Now: now,
 	}); err != nil {
+		s.recordAuthenticationRejection(ctx, "bootstrap_denied", requestID)
 		return SessionTokens{}, ErrLoginDenied
 	}
 	return tokens, nil
+}
+
+func (s *Service) recordAuthenticationRejection(ctx context.Context, category, requestID string) {
+	if s.identity == nil {
+		return
+	}
+	metadata, _ := json.Marshal(map[string]string{"category": category})
+	audit := AuditEvent{
+		ID: uuid.New(), EventType: "login_rejected", Metadata: metadata, OccurredAt: s.clock.Now(),
+	}
+	if requestID != "" {
+		audit.RequestID = &requestID
+	}
+	if err := s.identity.AppendAudit(ctx, audit); err != nil {
+		slog.Error("record authentication rejection failed",
+			"error_category", "audit_persistence", "request_id", requestID)
+	}
 }
 
 func (s *Service) findLoginUser(ctx context.Context, key PrincipalKey) (ExternalIdentity, domain.User, error) {
@@ -647,12 +708,32 @@ func (s *Service) revalidate(ctx context.Context, bundle *SessionBundle, now tim
 			return refreshed.Credential, refreshErr
 		})
 		if err != nil {
+			category, categorized := ProviderCategoryFromError(err)
+			if errors.Is(err, ErrProviderTransient) ||
+				categorized && (category == ProviderRateLimited || category == ProviderUnavailable) {
+				if category == "" {
+					category = ProviderUnavailable
+				}
+				return s.applyProviderTransient(ctx, bundle, category, now)
+			}
+			if categorized && IsExplicitInvalid(category) {
+				return s.deactivateInvalidPrincipal(ctx, bundle.User.ID, category)
+			}
 			return ErrSessionInvalid
 		}
 	}
 	result, err := s.verifier.VerifyPrincipal(ctx, credential, external.Key)
 	if err != nil {
-		result = VerificationResult{State: VerificationTransient, Category: ProviderUnavailable}
+		category, categorized := ProviderCategoryFromError(err)
+		if errors.Is(err, ErrProviderTransient) ||
+			categorized && (category == ProviderRateLimited || category == ProviderUnavailable) {
+			if category == "" {
+				category = ProviderUnavailable
+			}
+			result = VerificationResult{State: VerificationTransient, Category: category}
+		} else {
+			return ErrProviderContract
+		}
 	}
 	switch result.State {
 	case VerificationValid:
@@ -666,30 +747,47 @@ func (s *Service) revalidate(ctx context.Context, bundle *SessionBundle, now tim
 		if !IsExplicitInvalid(result.Category) {
 			return ErrProviderContract
 		}
-		if err := s.identity.DeactivateUser(ctx, bundle.User.ID, bundle.User.ID, string(result.Category)); err != nil {
-			return fmt.Errorf("deactivate invalid provider principal: %w", err)
-		}
-		return ErrUserInactive
+		return s.deactivateInvalidPrincipal(ctx, bundle.User.ID, result.Category)
 	case VerificationTransient:
-		audit := AuditEvent{
-			ID: uuid.New(), EventType: "provider_verification_failed", SubjectUserID: &bundle.User.ID,
-			SessionID: &bundle.Session.ID, Metadata: json.RawMessage(fmt.Sprintf(`{"category":%q}`, result.Category)),
-			OccurredAt: now,
-		}
-		if err := s.identity.RecordProviderFailure(ctx, bundle.Session.ID, now, audit); err != nil {
-			return fmt.Errorf("record provider failure: %w", err)
-		}
-		if bundle.Session.ProviderFailureSince == nil {
-			bundle.Session.ProviderFailureSince = &now
-			return nil
-		}
-		if WithinProviderGrace(bundle.Session.ProviderFailureSince, now) {
-			return nil
-		}
-		return ErrProviderTransient
+		return s.applyProviderTransient(ctx, bundle, result.Category, now)
 	default:
 		return ErrProviderContract
 	}
+}
+
+func (s *Service) deactivateInvalidPrincipal(
+	ctx context.Context,
+	userID uuid.UUID,
+	category ProviderErrorCategory,
+) error {
+	if err := s.identity.DeactivateUser(ctx, userID, userID, string(category)); err != nil {
+		return fmt.Errorf("deactivate invalid provider principal: %w", err)
+	}
+	return ErrUserInactive
+}
+
+func (s *Service) applyProviderTransient(
+	ctx context.Context,
+	bundle *SessionBundle,
+	category ProviderErrorCategory,
+	now time.Time,
+) error {
+	audit := AuditEvent{
+		ID: uuid.New(), EventType: "provider_verification_failed", SubjectUserID: &bundle.User.ID,
+		SessionID: &bundle.Session.ID, Metadata: json.RawMessage(fmt.Sprintf(`{"category":%q}`, category)),
+		OccurredAt: now,
+	}
+	if err := s.identity.RecordProviderFailure(ctx, bundle.Session.ID, now, audit); err != nil {
+		return fmt.Errorf("record provider failure: %w", err)
+	}
+	if bundle.Session.ProviderFailureSince == nil {
+		bundle.Session.ProviderFailureSince = &now
+		return nil
+	}
+	if WithinProviderGrace(bundle.Session.ProviderFailureSince, now) {
+		return nil
+	}
+	return ErrProviderTransient
 }
 
 func (s *Service) VerifyCSRF(session Session, token string) bool {

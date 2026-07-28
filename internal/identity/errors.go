@@ -1,6 +1,8 @@
 package identity
 
-import "errors"
+import (
+	"errors"
+)
 
 var (
 	ErrAuthorizationInvalid  = errors.New("authorization transaction is invalid")
@@ -19,3 +21,16 @@ var (
 	ErrLoginDenied           = errors.New("login denied")
 	ErrAdminRequired         = errors.New("administrator access required")
 )
+
+type CategorizedProviderError interface {
+	error
+	ProviderCategory() ProviderErrorCategory
+}
+
+func ProviderCategoryFromError(err error) (ProviderErrorCategory, bool) {
+	var categorized CategorizedProviderError
+	if !errors.As(err, &categorized) {
+		return "", false
+	}
+	return categorized.ProviderCategory(), true
+}

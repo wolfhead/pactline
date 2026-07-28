@@ -88,6 +88,7 @@ func TestSearchPaginationAndDirectMessage(t *testing.T) {
 		case "/open-apis/im/v1/messages":
 			require.Equal(t, "open_id", r.URL.Query().Get("receive_id_type"))
 			require.Equal(t, "Bearer tenant-secret", r.Header.Get("Authorization"))
+			w.Header().Set("X-Tt-Logid", "message-log-id")
 			_, _ = w.Write([]byte(`{"code":0,"data":{"message_id":"om_1"}}`))
 		default:
 			http.NotFound(w, r)
@@ -107,6 +108,19 @@ func TestSearchPaginationAndDirectMessage(t *testing.T) {
 		"https://app.example.test/invite#secret")
 	require.NoError(t, err)
 	require.Equal(t, "om_1", receipt.ProviderReference)
+	require.Equal(t, "message-log-id", receipt.RequestID)
+}
+
+func TestSearchRejectsMalformedSuccessEntry(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"code":0,"data":{"users":[{"open_id":"","name":"Ada"}]}}`))
+	}))
+	defer server.Close()
+	client := newTestClient(t, server.URL)
+	_, err := client.SearchPrincipals(context.Background(), sealTestCredential(t, client), "ad", 20)
+	var providerErr *ProviderError
+	require.ErrorAs(t, err, &providerErr)
+	require.Equal(t, identity.ProviderContract, providerErr.Category)
 }
 
 func TestProviderClassificationsAndRedaction(t *testing.T) {
@@ -207,4 +221,16 @@ func sealTestCredential(t *testing.T, client *Client) identity.OAuthCredential {
 func TestProviderErrorSupportsErrorsIs(t *testing.T) {
 	err := &ProviderError{Category: identity.ProviderRateLimited}
 	require.True(t, errors.Is(err, identity.ErrProviderTransient))
+}
+
+func TestRefreshClassifiesRevokedCredential(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"code":20064,"msg":"revoked"}`))
+	}))
+	defer server.Close()
+	client := newTestClient(t, server.URL)
+	_, err := client.RefreshCredential(context.Background(), sealTestCredential(t, client))
+	category, ok := identity.ProviderCategoryFromError(err)
+	require.True(t, ok)
+	require.Equal(t, identity.ProviderAuthorizationRevoked, category)
 }

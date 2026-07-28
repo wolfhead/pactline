@@ -96,6 +96,10 @@ func (c *Client) ExchangeAuthorizationCode(ctx context.Context, code string) (id
 	if err != nil {
 		return identity.AuthenticatedPrincipal{}, err
 	}
+	if tokens.Code != 0 {
+		return identity.AuthenticatedPrincipal{}, providerError(
+			"exchange_authorization_code", classifyOAuthTokenCode(tokens.Code), "", fmt.Errorf("provider code %d", tokens.Code))
+	}
 	if err := validateTokens(tokens); err != nil {
 		return identity.AuthenticatedPrincipal{}, providerError("exchange_authorization_code", identity.ProviderContract, "", err)
 	}
@@ -122,6 +126,10 @@ func (c *Client) RefreshCredential(ctx context.Context, credential identity.OAut
 	}, &tokens)
 	if err != nil {
 		return identity.RefreshedCredential{}, err
+	}
+	if tokens.Code != 0 {
+		return identity.RefreshedCredential{}, providerError(
+			"refresh_credential", classifyOAuthTokenCode(tokens.Code), "", fmt.Errorf("provider code %d", tokens.Code))
 	}
 	if err := validateTokens(tokens); err != nil {
 		return identity.RefreshedCredential{}, providerError("refresh_credential", identity.ProviderContract, "", err)
@@ -192,11 +200,12 @@ func (c *Client) SearchPrincipals(ctx context.Context, credential identity.OAuth
 		}
 		for _, user := range users {
 			principal, err := c.normalizeUser(user)
-			if err == nil {
-				output = append(output, principal)
-				if len(output) == limit {
-					break
-				}
+			if err != nil {
+				return nil, providerError("search_principals", identity.ProviderContract, response.Error.LogID, err)
+			}
+			output = append(output, principal)
+			if len(output) == limit {
+				break
 			}
 		}
 		if !response.Data.HasMore || response.Data.PageToken == "" {
@@ -239,15 +248,17 @@ func (c *Client) SendInvitation(ctx context.Context, recipient identity.Principa
 	}
 	content, _ := json.Marshal(map[string]string{"text": invitationURL})
 	var response providerEnvelope[messageData]
-	err = c.postJSON(ctx, "send_invitation", "/open-apis/im/v1/messages?receive_id_type=open_id", tenantToken,
+	requestID, err := c.doJSON(ctx, "send_invitation", http.MethodPost,
+		"/open-apis/im/v1/messages?receive_id_type=open_id", tenantToken,
 		map[string]string{"receive_id": recipient.SubjectID, "msg_type": "text", "content": string(content)}, &response)
 	if err != nil {
 		return identity.DeliveryReceipt{}, err
 	}
 	if response.Code != 0 || response.Data.MessageID == "" {
-		return identity.DeliveryReceipt{}, providerError("send_invitation", classifyProviderCode(response.Code), response.Error.LogID, fmt.Errorf("provider code %d", response.Code))
+		return identity.DeliveryReceipt{}, providerError("send_invitation", classifyProviderCode(response.Code),
+			firstNonEmpty(requestID, response.Error.LogID), fmt.Errorf("provider code %d", response.Code))
 	}
-	return identity.DeliveryReceipt{ProviderReference: response.Data.MessageID, RequestID: response.Error.LogID}, nil
+	return identity.DeliveryReceipt{ProviderReference: response.Data.MessageID, RequestID: requestID}, nil
 }
 
 func (c *Client) tenantAccessToken(ctx context.Context) (string, error) {
@@ -410,6 +421,21 @@ func invalidUserInfoCategory(code int) identity.ProviderErrorCategory {
 
 func classifyProviderCode(code int) identity.ProviderErrorCategory {
 	switch code {
+	case 20005, 99991663, 99991668, 99991677:
+		return identity.ProviderUnauthorized
+	case 99991400:
+		return identity.ProviderRateLimited
+	default:
+		return identity.ProviderContract
+	}
+}
+
+func classifyOAuthTokenCode(code int) identity.ProviderErrorCategory {
+	switch code {
+	case 20026, 20037:
+		return identity.ProviderCredentialExpired
+	case 20064, 20073:
+		return identity.ProviderAuthorizationRevoked
 	case 20005, 99991663, 99991668, 99991677:
 		return identity.ProviderUnauthorized
 	case 99991400:

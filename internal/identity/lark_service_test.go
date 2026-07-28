@@ -62,6 +62,7 @@ func TestLarkBootstrapRejectsUnverifiedEmailGenerically(t *testing.T) {
 	_, err = service.CompleteAuthorization(context.Background(), "state", "secret-code", "")
 	require.ErrorIs(t, err, ErrLoginDenied)
 	require.Nil(t, repository.bootstrap)
+	require.Equal(t, "login_rejected", repository.lastAudit.EventType)
 	require.NotContains(t, err.Error(), "admin@example.test")
 	require.NotContains(t, err.Error(), "secret-code")
 }
@@ -70,7 +71,13 @@ func TestInvitationCreationDeliveryRotationAndAcceptanceState(t *testing.T) {
 	now := time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)
 	adminID := uuid.New()
 	repository := &larkServiceRepository{
-		external:    ExternalIdentity{UserID: adminID, EncryptedCredential: OAuthCredential{EncryptionKeyID: "sealed"}},
+		external: ExternalIdentity{
+			UserID: adminID,
+			EncryptedCredential: OAuthCredential{
+				EncryptionKeyID: "sealed", AccessTokenExpiresAt: now.Add(time.Hour),
+				RefreshTokenExpiresAt: now.Add(24 * time.Hour),
+			},
+		},
 		invitations: map[uuid.UUID]Invitation{},
 	}
 	principal := Principal{
@@ -96,6 +103,10 @@ func TestInvitationCreationDeliveryRotationAndAcceptanceState(t *testing.T) {
 	require.Equal(t, "https://app.test/invite#first-token", notifier.links[0])
 	require.False(t, VerifySecret([]byte(notifier.links[0]), created.Invitation.TokenHash))
 	require.True(t, VerifySecret([]byte("first-token"), created.Invitation.TokenHash))
+	listed, err := service.ListInvitations(context.Background(), admin)
+	require.NoError(t, err)
+	require.Len(t, listed, 1)
+	require.Equal(t, DeliveryDelivered, listed[0].Delivery.Status)
 
 	resent, err := service.ResendInvitation(context.Background(), admin, created.Invitation.ID)
 	require.NoError(t, err)
@@ -141,6 +152,33 @@ func TestUserLifecycleAndImpersonationUseRealAdminActor(t *testing.T) {
 	require.True(t, repository.impersonationEnded)
 }
 
+func TestCredentialRefreshTransientUsesProviderGrace(t *testing.T) {
+	now := time.Date(2026, 7, 28, 14, 0, 0, 0, time.UTC)
+	user := domain.User{ID: uuid.New(), Active: true, PlatformRole: domain.PlatformRoleMember}
+	repository := &larkServiceRepository{
+		external: ExternalIdentity{
+			ID: uuid.New(), UserID: user.ID,
+			Key: PrincipalKey{Provider: "lark", TenantID: "tenant", SubjectID: "ou_member"},
+			EncryptedCredential: OAuthCredential{
+				AccessTokenExpiresAt: now.Add(-time.Minute), RefreshTokenExpiresAt: now.Add(time.Hour),
+			},
+		},
+	}
+	service, err := NewService(repository, lifecycleUsers{users: map[uuid.UUID]domain.User{user.ID: user}},
+		[]byte("01234567890123456789012345678901"), fixedLarkClock{now}, &sequenceSecrets{})
+	require.NoError(t, err)
+	service.authenticator = &larkAuthenticator{refreshErr: ErrProviderTransient}
+	service.verifier = larkVerifier{}
+	bundle := SessionBundle{User: user, Session: Session{ID: uuid.New(), UserID: user.ID}}
+
+	require.NoError(t, service.revalidate(context.Background(), &bundle, now))
+	require.Equal(t, 1, repository.providerFailures)
+
+	failureSince := now.Add(-ProviderTransientGrace - time.Second)
+	bundle.Session.ProviderFailureSince = &failureSince
+	require.ErrorIs(t, service.revalidate(context.Background(), &bundle, now), ErrProviderTransient)
+}
+
 type larkServiceRepository struct {
 	authorization      *AuthorizationTransaction
 	bootstrap          *BootstrapAdminCommand
@@ -152,6 +190,7 @@ type larkServiceRepository struct {
 	impersonation      *Impersonation
 	impersonationEnded bool
 	lastAudit          AuditEvent
+	providerFailures   int
 }
 
 func (r *larkServiceRepository) CreateAuthorizationTransaction(_ context.Context, transaction AuthorizationTransaction) error {
@@ -184,13 +223,18 @@ func (r *larkServiceRepository) GetExternalIdentityForUser(context.Context, uuid
 	}
 	return r.external, nil
 }
-func (r *larkServiceRepository) RefreshCredentialLocked(context.Context, uuid.UUID, func(OAuthCredential) (OAuthCredential, error)) (OAuthCredential, error) {
-	return OAuthCredential{}, errors.New("unexpected refresh")
+func (r *larkServiceRepository) RefreshCredentialLocked(
+	_ context.Context,
+	_ uuid.UUID,
+	refresh func(OAuthCredential) (OAuthCredential, error),
+) (OAuthCredential, error) {
+	return refresh(r.external.EncryptedCredential)
 }
 func (r *larkServiceRepository) RecordProviderVerification(context.Context, uuid.UUID, time.Time) error {
 	return nil
 }
 func (r *larkServiceRepository) RecordProviderFailure(context.Context, uuid.UUID, time.Time, AuditEvent) error {
+	r.providerFailures++
 	return nil
 }
 func (r *larkServiceRepository) DeactivateUser(_ context.Context, userID, actorID uuid.UUID, _ string) error {
@@ -218,6 +262,13 @@ func (r *larkServiceRepository) ListInvitations(context.Context) ([]Invitation, 
 		invitations = append(invitations, invitation)
 	}
 	return invitations, nil
+}
+func (r *larkServiceRepository) ListLatestInvitationDeliveries(context.Context) (map[uuid.UUID]InvitationDelivery, error) {
+	deliveries := make(map[uuid.UUID]InvitationDelivery)
+	for _, delivery := range r.deliveries {
+		deliveries[delivery.InvitationID] = delivery
+	}
+	return deliveries, nil
 }
 func (r *larkServiceRepository) ExpireInvitations(_ context.Context, now time.Time) (int64, error) {
 	var count int64
@@ -288,8 +339,9 @@ func (r *larkServiceRepository) LogoutSession(context.Context, uuid.UUID, time.T
 }
 
 type larkAuthenticator struct {
-	principal AuthenticatedPrincipal
-	exchanges int
+	principal  AuthenticatedPrincipal
+	exchanges  int
+	refreshErr error
 }
 
 func (a *larkAuthenticator) StartAuthorization(_ context.Context, request AuthorizationRequest) (AuthorizationStart, error) {
@@ -300,6 +352,9 @@ func (a *larkAuthenticator) ExchangeAuthorizationCode(context.Context, string) (
 	return a.principal, nil
 }
 func (a *larkAuthenticator) RefreshCredential(context.Context, OAuthCredential) (RefreshedCredential, error) {
+	if a.refreshErr != nil {
+		return RefreshedCredential{}, a.refreshErr
+	}
 	return RefreshedCredential{}, errors.New("unexpected refresh")
 }
 

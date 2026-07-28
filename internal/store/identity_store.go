@@ -114,6 +114,33 @@ func (s *IdentityStore) ListInvitations(ctx context.Context) ([]identity.Invitat
 	return out, nil
 }
 
+func (s *IdentityStore) ListLatestInvitationDeliveries(ctx context.Context) (map[uuid.UUID]identity.InvitationDelivery, error) {
+	rows, err := s.db.Pool.Query(ctx, `
+		SELECT DISTINCT ON (invitation_id)
+		       id, invitation_id, channel, status, provider_reference, error_category, attempted_at
+		FROM invitation_deliveries
+		ORDER BY invitation_id, attempted_at DESC, id DESC`)
+	if err != nil {
+		return nil, fmt.Errorf("list latest invitation deliveries: %w", err)
+	}
+	defer rows.Close()
+	deliveries := make(map[uuid.UUID]identity.InvitationDelivery)
+	for rows.Next() {
+		var delivery identity.InvitationDelivery
+		if err := rows.Scan(
+			&delivery.ID, &delivery.InvitationID, &delivery.Channel, &delivery.Status,
+			&delivery.ProviderReference, &delivery.ErrorCategory, &delivery.AttemptedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan latest invitation delivery: %w", err)
+		}
+		deliveries[delivery.InvitationID] = delivery
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate latest invitation deliveries: %w", err)
+	}
+	return deliveries, nil
+}
+
 func (s *IdentityStore) GetInvitation(ctx context.Context, id uuid.UUID) (identity.Invitation, error) {
 	invitation, err := scanInvitation(s.db.Pool.QueryRow(ctx, `
 		SELECT id, provider, tenant_id, target_subject_id, target_snapshot, token_hash, status,
@@ -683,9 +710,26 @@ func (s *IdentityStore) TouchSession(ctx context.Context, id uuid.UUID, now, idl
 }
 
 func (s *IdentityStore) RecordProviderVerification(ctx context.Context, sessionID uuid.UUID, verifiedAt time.Time) error {
-	return s.lockSessionUpdate(ctx, sessionID, `
-		UPDATE sessions SET last_provider_verified_at=$2, provider_failure_since=NULL WHERE id=$1`,
-		verifiedAt)
+	return s.inTransaction(ctx, "record provider verification", func(tx pgx.Tx) error {
+		var userID uuid.UUID
+		if err := tx.QueryRow(ctx, `
+			SELECT user_id FROM sessions WHERE id=$1 FOR UPDATE`, sessionID).Scan(&userID); errors.Is(err, pgx.ErrNoRows) {
+			return identity.ErrSessionInvalid
+		} else if err != nil {
+			return fmt.Errorf("lock verified session: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE sessions SET last_provider_verified_at=$2, provider_failure_since=NULL WHERE id=$1`,
+			sessionID, verifiedAt); err != nil {
+			return fmt.Errorf("update verified session: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE external_identities SET last_verified_at=$2,updated_at=$2 WHERE user_id=$1`,
+			userID, verifiedAt); err != nil {
+			return fmt.Errorf("update verified external identity: %w", err)
+		}
+		return nil
+	})
 }
 
 func (s *IdentityStore) RecordProviderFailure(ctx context.Context, sessionID uuid.UUID, failedAt time.Time, audit identity.AuditEvent) error {
@@ -744,7 +788,9 @@ func (s *IdentityStore) DeactivateUser(ctx context.Context, userID, actorID uuid
 		}
 		return insertAudit(ctx, tx, identity.AuditEvent{
 			ID: uuid.New(), EventType: "user_deactivated", ActorUserID: &actorID,
-			SubjectUserID: &userID, Metadata: json.RawMessage(`{}`), OccurredAt: now,
+			SubjectUserID: &userID,
+			Metadata:      json.RawMessage(fmt.Sprintf(`{"reason":%q}`, reason)),
+			OccurredAt:    now,
 		})
 	})
 }

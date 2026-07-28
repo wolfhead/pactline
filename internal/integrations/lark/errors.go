@@ -25,6 +25,10 @@ func (e *ProviderError) Unwrap() error {
 	return e.Cause
 }
 
+func (e *ProviderError) ProviderCategory() identity.ProviderErrorCategory {
+	return e.Category
+}
+
 func (e *ProviderError) Is(target error) bool {
 	return target == identity.ErrProviderTransient &&
 		(e.Category == identity.ProviderRateLimited || e.Category == identity.ProviderUnavailable)

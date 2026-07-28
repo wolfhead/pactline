@@ -440,11 +440,11 @@ func TestImpersonationDeliveryAndAuditAreAppendOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, current)
 
-	for _, status := range []identity.DeliveryStatus{identity.DeliveryFailed, identity.DeliveryDelivered} {
+	for index, status := range []identity.DeliveryStatus{identity.DeliveryFailed, identity.DeliveryDelivered} {
 		category := identity.ProviderUnavailable
 		delivery := identity.InvitationDelivery{
 			ID: uuid.New(), InvitationID: invitationID, Channel: identity.DeliveryProviderDM,
-			Status: status, ErrorCategory: &category, AttemptedAt: now,
+			Status: status, ErrorCategory: &category, AttemptedAt: now.Add(time.Duration(index) * time.Second),
 		}
 		require.NoError(t, repository.RecordDelivery(ctx, delivery))
 	}
@@ -459,4 +459,7 @@ func TestImpersonationDeliveryAndAuditAreAppendOnly(t *testing.T) {
 		`SELECT count(*) FROM identity_audit_events WHERE session_id=$1 OR invitation_id=$2`, sessionID, invitationID).Scan(&audits))
 	require.Equal(t, 2, deliveries)
 	require.GreaterOrEqual(t, audits, 3)
+	latest, err := repository.ListLatestInvitationDeliveries(ctx)
+	require.NoError(t, err)
+	require.Equal(t, identity.DeliveryDelivered, latest[invitationID].Status)
 }
