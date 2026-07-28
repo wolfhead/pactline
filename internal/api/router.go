@@ -30,6 +30,7 @@ type AuthSurface struct {
 	Sessions      *identity.Service
 	Tokens        *access.Service
 	AccessAudit   accessAuditWriter
+	Idempotency   idempotencyRepository
 	Development   developmentAuthenticator
 	LarkEnabled   bool
 	AppBaseURL    *url.URL
@@ -104,15 +105,17 @@ func NewRouter(
 	v1Session := identityMiddleware{
 		sessions: options.Auth.Sessions, appBaseURL: options.Auth.AppBaseURL, cookies: cookies,
 	}.wrap(v1)
-	v1Protected := bearerAuthentication{
+	resolver, _ := v1.(routeResolver)
+	v1Bearer := idempotencyMiddleware{
+		store: options.Auth.Idempotency, routes: resolver,
+	}.wrap(v1)
+	v1Audited := apiAccessAudit{
+		store: options.Auth.AccessAudit, routes: resolver,
+	}.wrap(bearerAuthentication{
 		tokens:  options.Auth.Tokens,
 		owners:  options.Auth.Sessions,
 		limiter: newTokenBucketLimiter(),
-	}.wrap(v1, v1Session)
-	resolver, _ := v1.(routeResolver)
-	v1Audited := apiAccessAudit{
-		store: options.Auth.AccessAudit, routes: resolver,
-	}.wrap(v1Protected)
+	}.wrap(v1Bearer, v1Session))
 	root.Handle("/api/v1", v1Audited)
 	root.Handle("/api/v1/", v1Audited)
 	root.Handle("/", middleware.wrap(protected))

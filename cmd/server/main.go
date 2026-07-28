@@ -68,6 +68,7 @@ func main() {
 		store.NewAccessStore(db), identity.SystemClock{}, access.CryptoSecretGenerator{},
 	)
 	accessAuditStore := store.NewAccessAuditStore(db)
+	idempotencyStore := store.NewIdempotencyStore(db)
 	maintenanceContext, stopMaintenance := context.WithCancel(context.Background())
 	defer stopMaintenance()
 	go (application.Maintenance{Store: accessAuditStore}).Run(maintenanceContext)
@@ -123,6 +124,7 @@ func main() {
 		Auth: api.AuthSurface{
 			Sessions: identityService, Tokens: tokenService,
 			AccessAudit: accessAuditStore,
+			Idempotency: idempotencyStore,
 			Development: developmentAuth, AppBaseURL: cfg.AppBaseURL,
 			LarkEnabled:   cfg.AuthProvider == AuthProviderLark,
 			SecureCookies: cfg.AppEnv != EnvironmentDevelopment && cfg.AppEnv != EnvironmentTest,
