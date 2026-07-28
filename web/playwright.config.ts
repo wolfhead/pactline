@@ -27,7 +27,7 @@ export default defineConfig({
   reporter: [['list']],
   timeout: 30_000,
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: process.env.E2E_WEB_URL ?? 'http://localhost:5173',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     // The sandboxed dev environment sets HTTP_PROXY/ALL_PROXY env vars that
@@ -85,6 +85,9 @@ export default defineConfig({
     {
       command: 'npm run dev',
       cwd: __dirname,
+      env: {
+        VITE_AUTH_PROVIDER: 'development',
+      },
       url: 'http://localhost:5173/',
       reuseExistingServer: true,
       timeout: 30_000,

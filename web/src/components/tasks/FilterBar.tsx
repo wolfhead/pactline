@@ -84,7 +84,7 @@ interface FilterBarProps {
  * (`aria-pressed`/accent background) only when it's actually narrowing the
  * list. */
 export default function FilterBar({ filters, onChange, labels, onLabelsChanged, onRequestCreate }: FilterBarProps) {
-  const { users } = useIdentity()
+  const { users, isReadOnly } = useIdentity()
   const tier = useBreakpoint()
 
   function toggleStatus(s: TaskStatus) {
@@ -108,7 +108,7 @@ export default function FilterBar({ filters, onChange, labels, onLabelsChanged, 
   const selectedLabel = labelActive ? labels.find((l) => l.ID === filters.labelId) : undefined
 
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-2">
+    <div data-read-only-allowed="true" className="mt-2 flex flex-wrap items-center gap-2">
       <input
         value={filters.search}
         onChange={(e) => onChange({ ...filters, search: e.target.value })}
@@ -201,9 +201,11 @@ export default function FilterBar({ filters, onChange, labels, onLabelsChanged, 
               </li>
             ))}
           </ul>
-          <div className="mt-2 border-t border-border pt-2">
-            <LabelManager labels={labels} onChanged={onLabelsChanged} />
-          </div>
+          {!isReadOnly && (
+            <div className="mt-2 border-t border-border pt-2">
+              <LabelManager labels={labels} onChanged={onLabelsChanged} />
+            </div>
+          )}
         </PopoverContent>
       </Popover>
 
@@ -232,7 +234,7 @@ export default function FilterBar({ filters, onChange, labels, onLabelsChanged, 
        * bar's 新建 tab already jumps focus into — and it wraps onto a fourth
        * filter row of its own, ~52px of pure duplication on the tier with
        * the least vertical room. Every other tier keeps it. */}
-      {tier !== 'phone' && (
+      {tier !== 'phone' && !isReadOnly && (
         <button
           type="button"
           onClick={onRequestCreate}

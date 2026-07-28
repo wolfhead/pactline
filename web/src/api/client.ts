@@ -1,18 +1,3 @@
-/**
- * Phase 1 has no authentication. The current identity is carried in an
- * X-User-Id header set by the user switcher. Both disappear when Feishu OAuth
- * lands in Phase 6.
- */
-let currentUserId = ''
-
-export function setCurrentUserId(id: string): void {
-  currentUserId = id
-}
-
-export function getCurrentUserId(): string {
-  return currentUserId
-}
-
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -23,31 +8,37 @@ export class ApiError extends Error {
   }
 }
 
+function cookieValue(name: string): string | null {
+  const prefix = `${encodeURIComponent(name)}=`
+  for (const part of document.cookie.split(';')) {
+    const value = part.trim()
+    if (value.startsWith(prefix)) return decodeURIComponent(value.slice(prefix.length))
+  }
+  return null
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const headers: Record<string, string> = {}
+  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  if (method !== 'GET' && method !== 'HEAD') {
+    const csrfToken = cookieValue('bb_csrf')
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken
+  }
+
   const res = await fetch(path, {
     method,
-    headers: {
-      'Content-Type': 'application/json',
-      'X-User-Id': currentUserId,
-    },
+    credentials: 'same-origin',
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   })
-
   const text = await res.text()
 
-  // The body is not guaranteed to be JSON: the Vite dev proxy returns an
-  // HTML error page when the Go backend is unreachable, and some upstream
-  // failures (502s from a reverse proxy, etc.) do the same. A raw
-  // JSON.parse() would throw a SyntaxError that escapes as-is, bypassing
-  // ApiError entirely and confusing callers that check `instanceof ApiError`
-  // or read `.status`. Guard the parse so both a failed response and a
-  // successful-but-unparseable one always surface as an ApiError.
   let parsed: unknown = null
   if (text) {
     try {
       parsed = JSON.parse(text)
-    } catch (err) {
-      console.error('response body is not valid JSON', err)
+    } catch (error) {
+      console.error('response body is not valid JSON', { path, status: res.status, error })
       const snippet = text.length > 200 ? `${text.slice(0, 200)}…` : text
       throw new ApiError(`${res.status} ${res.statusText}: ${snippet}`, res.status)
     }
@@ -55,8 +46,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
   if (!res.ok) {
     const errorField = parsed && typeof parsed === 'object' ? (parsed as { error?: unknown }).error : undefined
-    const message = typeof errorField === 'string' ? errorField : res.statusText
-    throw new ApiError(message, res.status)
+    throw new ApiError(typeof errorField === 'string' ? errorField : res.statusText, res.status)
   }
   return parsed as T
 }

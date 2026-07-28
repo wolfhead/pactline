@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Plus } from 'lucide-react'
 import { createTask } from '../../api/tasks'
+import { useIdentity } from '../../identity'
 import type { Task } from '../../task-types'
 
 export interface InlineCreateHandle {
@@ -22,6 +23,7 @@ const InlineCreate = forwardRef<InlineCreateHandle, InlineCreateProps>(function 
   { onCreated },
   ref,
 ) {
+  const { isReadOnly } = useIdentity()
   const [title, setTitle] = useState('')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
@@ -97,7 +99,7 @@ const InlineCreate = forwardRef<InlineCreateHandle, InlineCreateProps>(function 
         onKeyDown={handleKeyDown}
         placeholder="输入标题，回车创建任务…"
         aria-label="新建任务"
-        disabled={pending}
+        disabled={pending || isReadOnly}
       />
       {error && <span className="shrink-0 text-xs text-danger">{error}</span>}
     </form>

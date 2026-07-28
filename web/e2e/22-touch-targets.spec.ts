@@ -169,7 +169,7 @@ test('every covered control clears 44px on a phone', async ({ page, uniqueTitle,
   // The 我的 sheet is where the phone's theme/identity switchers now live —
   // off the standing header, but still real controls a finger has to hit.
   await page.getByRole('button', { name: '我的' }).click()
-  await expect(page.getByLabel('当前身份')).toBeVisible()
+  await expect(page.getByRole('button', { name: '退出登录' })).toBeVisible()
   await page.waitForTimeout(600) // the sheet's slide-in transforms the box
   await expectAllFloored(page, 'phone 390 我的 sheet')
   await page.keyboard.press('Escape')

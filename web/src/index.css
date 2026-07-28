@@ -18,6 +18,27 @@
   }
 }
 
+/* Impersonation is intentionally read-only. The API remains authoritative;
+ * this visual guard removes accidental write affordances from the product
+ * surface while navigation and account controls stay available outside it. */
+[data-read-only="true"] button,
+[data-read-only="true"] input,
+[data-read-only="true"] textarea,
+[data-read-only="true"] select,
+[data-read-only="true"] [contenteditable="true"],
+[data-read-only="true"] [draggable="true"],
+[data-read-only="true"] [role="combobox"],
+[data-read-only="true"] [data-write-control="true"] {
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+[data-read-only="true"] [data-read-only-allowed="true"],
+[data-read-only="true"] [data-read-only-allowed="true"] * {
+  pointer-events: auto;
+  opacity: 1;
+}
+
 /* The 44x44 touch floor (WCAG 2.5.5), as ONE blanket rule rather than a floor
  * hand-placed per control. styles.css carried exactly this rule; deleting it
  * left six sites floored and everything else short — measured on a real

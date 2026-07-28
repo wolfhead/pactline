@@ -346,6 +346,7 @@ export default function TaskDetail({
           <button
             type="button"
             aria-label="关闭"
+            data-read-only-allowed="true"
             onClick={onClose}
             className="flex size-7 items-center justify-center rounded-md text-fg-muted hover:bg-surface-subtle hover:text-fg"
           >

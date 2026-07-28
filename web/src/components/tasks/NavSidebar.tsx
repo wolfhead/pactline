@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { cn } from '@/lib/utils'
+import { useIdentity } from '@/identity'
 
 const ITEMS = [
   { to: '/tasks', label: '列表', end: true },
@@ -15,9 +16,17 @@ const ITEMS = [
  * drawer close itself the instant a link is picked, since a drawer that
  * stays open after navigating reads as broken. */
 export default function NavSidebar({ onNavigate }: { onNavigate?: () => void }) {
+  const { actor, impersonation } = useIdentity()
+  const items = actor?.platform_role === 'ADMIN' && !impersonation
+    ? [
+        ...ITEMS,
+        { to: '/admin/users', label: '用户', end: false },
+        { to: '/admin/invitations', label: '邀请', end: false },
+      ]
+    : ITEMS
   return (
     <nav aria-label="主导航" className="flex flex-col gap-1 p-3">
-      {ITEMS.map((item) => (
+      {items.map((item) => (
         <NavLink
           key={item.to}
           to={item.to}

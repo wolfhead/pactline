@@ -64,6 +64,7 @@ export default function ProjectListPage() {
         <div className="flex items-center gap-2">
           <button
             type="button"
+            data-read-only-allowed="true"
             onClick={() => setShowArchived((value) => !value)}
             className="rounded-md border border-border-strong px-3 py-2 text-sm"
           >

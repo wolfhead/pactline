@@ -1,4 +1,4 @@
-import { BACKEND_URL } from './config'
+import { BACKEND_URL, WEB_URL } from './config'
 
 /**
  * Thin Node-side REST client for the task-management API (internal/api/
@@ -80,9 +80,17 @@ export class ApiRequestError extends Error {
 }
 
 async function call<T>(userId: string, method: string, path: string, body?: unknown): Promise<T> {
+  void userId
+  const session = await developmentSession()
+  const headers: Record<string, string> = {
+    Cookie: session.cookie,
+    Origin: WEB_URL,
+    'X-CSRF-Token': session.csrf,
+  }
+  if (body !== undefined) headers['Content-Type'] = 'application/json'
   const res = await fetch(`${BACKEND_URL}${path}`, {
     method,
-    headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   })
   const text = await res.text()
@@ -93,6 +101,39 @@ async function call<T>(userId: string, method: string, path: string, body?: unkn
     throw new ApiRequestError(message, res.status)
   }
   return parsed as T
+}
+
+export interface DevelopmentSession {
+  cookie: string
+  session: string
+  csrf: string
+}
+
+let sessionPromise: Promise<DevelopmentSession> | null = null
+
+export function developmentSession(): Promise<DevelopmentSession> {
+  if (sessionPromise) return sessionPromise
+  sessionPromise = fetch(`${BACKEND_URL}/api/auth/dev/session`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: '00000000-0000-0000-0000-000000000001' }),
+  }).then(async (response) => {
+    if (!response.ok) throw new ApiRequestError(await response.text(), response.status)
+    const setCookies = response.headers.getSetCookie()
+    const sessionCookie = setCookies.find((value) => value.startsWith('bb_session='))
+    const csrfCookie = setCookies.find((value) => value.startsWith('bb_csrf='))
+    if (!sessionCookie || !csrfCookie) throw new Error('development session cookies are missing')
+    const csrf = csrfCookie.split(';', 1)[0].slice('bb_csrf='.length)
+    return {
+      cookie: `${sessionCookie.split(';', 1)[0]}; ${csrfCookie.split(';', 1)[0]}`,
+      session: sessionCookie.split(';', 1)[0].slice('bb_session='.length),
+      csrf,
+    }
+  }).catch((error) => {
+    sessionPromise = null
+    throw error
+  })
+  return sessionPromise
 }
 
 export interface CreateTaskInput {

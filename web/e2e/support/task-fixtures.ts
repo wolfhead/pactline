@@ -1,7 +1,7 @@
 import { test as base, expect } from '@playwright/test'
 import { Pool } from 'pg'
 import * as tasksApi from './tasks-api'
-import { DATABASE_URL } from './config'
+import { DATABASE_URL, WEB_URL } from './config'
 
 /**
  * Fixtures for the task-management e2e specs (10+).
@@ -28,6 +28,15 @@ interface TestFixtures {
 }
 
 export const test = base.extend<TestFixtures, WorkerFixtures>({
+  page: async ({ page }, use) => {
+    const session = await tasksApi.developmentSession()
+    await page.context().addCookies([
+      { name: 'bb_session', value: session.session, url: WEB_URL, httpOnly: true, sameSite: 'Lax' },
+      { name: 'bb_csrf', value: session.csrf, url: WEB_URL, sameSite: 'Lax' },
+    ])
+    await use(page)
+  },
+
   // Worker-scoped: one pg connection pool per test worker process, closed
   // once when the worker shuts down rather than reconnected per test.
   taskDbPool: [

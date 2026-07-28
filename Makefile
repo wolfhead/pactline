@@ -18,7 +18,7 @@ web-install:
 	cd web && npm install
 
 web-dev:
-	cd web && npm run dev
+	cd web && VITE_AUTH_PROVIDER=development npm run dev
 
 web-test:
 	cd web && npm test

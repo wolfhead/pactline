@@ -10,8 +10,8 @@ export default defineConfig({
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
   server: {
-    port: 5173,
-    proxy: { '/api': 'http://localhost:8080' },
+    port: Number(process.env.VITE_PORT ?? 5173),
+    proxy: { '/api': process.env.VITE_API_TARGET ?? 'http://localhost:8080' },
   },
   test: {
     environment: 'jsdom',
