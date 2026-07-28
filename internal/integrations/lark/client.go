@@ -29,6 +29,7 @@ type Config struct {
 	TenantKey        string
 	BaseURL          string
 	AuthorizationURL string
+	RedirectURI      string
 	Cipher           *identity.CredentialCipher
 	EncryptionKeyID  string
 	HTTPClient       *http.Client
@@ -37,6 +38,7 @@ type Config struct {
 type Client struct {
 	appID, appSecret, tenantKey string
 	baseURL, authorizationURL   string
+	redirectURI                 string
 	cipher                      *identity.CredentialCipher
 	encryptionKeyID             string
 	httpClient                  *http.Client
@@ -49,6 +51,9 @@ func NewClient(config Config) (*Client, error) {
 	}
 	if config.Cipher == nil || config.EncryptionKeyID == "" {
 		return nil, errors.New("lark credential cipher and encryption key id are required")
+	}
+	if config.RedirectURI == "" {
+		return nil, errors.New("Lark redirect URI is required")
 	}
 	if config.BaseURL == "" {
 		config.BaseURL = defaultBaseURL
@@ -69,39 +74,54 @@ func NewClient(config Config) (*Client, error) {
 	return &Client{
 		appID: config.AppID, appSecret: config.AppSecret, tenantKey: config.TenantKey,
 		baseURL: strings.TrimRight(config.BaseURL, "/"), authorizationURL: config.AuthorizationURL,
-		cipher: config.Cipher, encryptionKeyID: config.EncryptionKeyID, httpClient: config.HTTPClient,
+		redirectURI: config.RedirectURI,
+		cipher:      config.Cipher, encryptionKeyID: config.EncryptionKeyID, httpClient: config.HTTPClient,
 		now: func() time.Time { return time.Now().UTC() },
 	}, nil
 }
 
 func (c *Client) StartAuthorization(_ context.Context, request identity.AuthorizationRequest) (identity.AuthorizationStart, error) {
+	if request.RedirectURI != c.redirectURI {
+		return identity.AuthorizationStart{}, providerError(
+			"authorization_url", identity.ProviderContract, "", errors.New("redirect URI does not match Lark client configuration"))
+	}
 	value, err := url.Parse(c.authorizationURL)
 	if err != nil {
 		return identity.AuthorizationStart{}, providerError("authorization_url", identity.ProviderContract, "", err)
 	}
 	query := value.Query()
-	query.Set("app_id", c.appID)
-	query.Set("redirect_uri", request.RedirectURI)
+	query.Set("client_id", c.appID)
+	query.Set("response_type", "code")
+	query.Set("redirect_uri", c.redirectURI)
 	query.Set("state", request.State)
-	query.Set("scope", "offline_access contact:user:search")
+	query.Set("scope", strings.Join([]string{
+		"auth:user.id:read",
+		"contact:user.base:readonly",
+		"contact:user.email:readonly",
+		"contact:user:search",
+		"offline_access",
+	}, " "))
 	value.RawQuery = query.Encode()
 	return identity.AuthorizationStart{URL: value.String()}, nil
 }
 
 func (c *Client) ExchangeAuthorizationCode(ctx context.Context, code string) (identity.AuthenticatedPrincipal, error) {
 	var tokens tokenResponse
-	err := c.postJSON(ctx, "exchange_authorization_code", "/open-apis/authen/v2/oauth/token", "", map[string]string{
-		"grant_type": "authorization_code", "client_id": c.appID, "client_secret": c.appSecret, "code": code,
-	}, &tokens)
+	requestID, err := c.doJSON(ctx, "exchange_authorization_code", http.MethodPost,
+		"/open-apis/authen/v2/oauth/token", "", map[string]string{
+			"grant_type": "authorization_code", "client_id": c.appID, "client_secret": c.appSecret,
+			"code": code, "redirect_uri": c.redirectURI,
+		}, &tokens)
 	if err != nil {
 		return identity.AuthenticatedPrincipal{}, err
 	}
 	if tokens.Code != 0 {
 		return identity.AuthenticatedPrincipal{}, providerError(
-			"exchange_authorization_code", classifyOAuthTokenCode(tokens.Code), "", fmt.Errorf("provider code %d", tokens.Code))
+			"exchange_authorization_code", classifyOAuthTokenCode(tokens.Code), requestID, fmt.Errorf("provider code %d", tokens.Code))
 	}
 	if err := validateTokens(tokens); err != nil {
-		return identity.AuthenticatedPrincipal{}, providerError("exchange_authorization_code", identity.ProviderContract, "", err)
+		return identity.AuthenticatedPrincipal{}, providerError(
+			"exchange_authorization_code", identity.ProviderContract, requestID, err)
 	}
 	principal, err := c.getUserInfo(ctx, tokens.AccessToken)
 	if err != nil {
@@ -120,19 +140,21 @@ func (c *Client) RefreshCredential(ctx context.Context, credential identity.OAut
 		return identity.RefreshedCredential{}, providerError("decrypt_refresh_credential", identity.ProviderContract, "", err)
 	}
 	var tokens tokenResponse
-	err = c.postJSON(ctx, "refresh_credential", "/open-apis/authen/v2/oauth/token", "", map[string]string{
-		"grant_type": "refresh_token", "client_id": c.appID, "client_secret": c.appSecret,
-		"refresh_token": string(refreshToken),
-	}, &tokens)
+	requestID, err := c.doJSON(ctx, "refresh_credential", http.MethodPost,
+		"/open-apis/authen/v2/oauth/token", "", map[string]string{
+			"grant_type": "refresh_token", "client_id": c.appID, "client_secret": c.appSecret,
+			"refresh_token": string(refreshToken),
+		}, &tokens)
 	if err != nil {
 		return identity.RefreshedCredential{}, err
 	}
 	if tokens.Code != 0 {
 		return identity.RefreshedCredential{}, providerError(
-			"refresh_credential", classifyOAuthTokenCode(tokens.Code), "", fmt.Errorf("provider code %d", tokens.Code))
+			"refresh_credential", classifyOAuthTokenCode(tokens.Code), requestID, fmt.Errorf("provider code %d", tokens.Code))
 	}
 	if err := validateTokens(tokens); err != nil {
-		return identity.RefreshedCredential{}, providerError("refresh_credential", identity.ProviderContract, "", err)
+		return identity.RefreshedCredential{}, providerError(
+			"refresh_credential", identity.ProviderContract, requestID, err)
 	}
 	sealed, err := c.sealTokens(tokens)
 	if err != nil {
@@ -184,15 +206,22 @@ func (c *Client) SearchPrincipals(ctx context.Context, credential identity.OAuth
 	pageToken := ""
 	for len(output) < limit {
 		var response providerEnvelope[searchData]
-		body := map[string]any{"query": query, "page_size": min(20, limit-len(output))}
+		parameters := url.Values{}
+		parameters.Set("query", query)
+		parameters.Set("page_size", fmt.Sprintf("%d", min(20, limit-len(output))))
 		if pageToken != "" {
-			body["page_token"] = pageToken
+			parameters.Set("page_token", pageToken)
 		}
-		if err := c.postJSON(ctx, "search_principals", "/open-apis/search/v1/user", string(accessToken), body, &response); err != nil {
+		path := "/open-apis/search/v1/user?" + parameters.Encode()
+		requestID, err := c.doJSON(
+			ctx, "search_principals", http.MethodGet, path, string(accessToken), nil, &response,
+		)
+		if err != nil {
 			return nil, err
 		}
 		if response.Code != 0 {
-			return nil, providerError("search_principals", classifyProviderCode(response.Code), response.Error.LogID, fmt.Errorf("provider code %d", response.Code))
+			return nil, providerError("search_principals", classifyProviderCode(response.Code),
+				firstNonEmpty(requestID, response.Error.LogID), fmt.Errorf("provider code %d", response.Code))
 		}
 		users := response.Data.Users
 		if len(users) == 0 {
@@ -201,7 +230,8 @@ func (c *Client) SearchPrincipals(ctx context.Context, credential identity.OAuth
 		for _, user := range users {
 			principal, err := c.normalizeUser(user)
 			if err != nil {
-				return nil, providerError("search_principals", identity.ProviderContract, response.Error.LogID, err)
+				return nil, providerError("search_principals", identity.ProviderContract,
+					firstNonEmpty(requestID, response.Error.LogID), err)
 			}
 			output = append(output, principal)
 			if len(output) == limit {
@@ -225,15 +255,20 @@ func (c *Client) GetPrincipal(ctx context.Context, credential identity.OAuthCred
 	var response providerEnvelope[struct {
 		User userInfo `json:"user"`
 	}]
-	if err := c.getJSON(ctx, "get_principal", path, string(accessToken), &response); err != nil {
+	requestID, err := c.doJSON(
+		ctx, "get_principal", http.MethodGet, path, string(accessToken), nil, &response,
+	)
+	if err != nil {
 		return identity.Principal{}, err
 	}
 	if response.Code != 0 {
-		return identity.Principal{}, providerError("get_principal", classifyProviderCode(response.Code), response.Error.LogID, fmt.Errorf("provider code %d", response.Code))
+		return identity.Principal{}, providerError("get_principal", classifyProviderCode(response.Code),
+			firstNonEmpty(requestID, response.Error.LogID), fmt.Errorf("provider code %d", response.Code))
 	}
 	principal, err := c.normalizeUser(response.Data.User)
 	if err != nil || principal.Key.SubjectID != subjectID {
-		return identity.Principal{}, providerError("get_principal", identity.ProviderContract, response.Error.LogID, errors.New("malformed principal"))
+		return identity.Principal{}, providerError("get_principal", identity.ProviderContract,
+			firstNonEmpty(requestID, response.Error.LogID), errors.New("malformed principal"))
 	}
 	return principal, nil
 }
@@ -263,13 +298,15 @@ func (c *Client) SendInvitation(ctx context.Context, recipient identity.Principa
 
 func (c *Client) tenantAccessToken(ctx context.Context) (string, error) {
 	var response tenantTokenResponse
-	err := c.postJSON(ctx, "tenant_access_token", "/open-apis/auth/v3/tenant_access_token/internal", "",
+	requestID, err := c.doJSON(ctx, "tenant_access_token", http.MethodPost,
+		"/open-apis/auth/v3/tenant_access_token/internal", "",
 		map[string]string{"app_id": c.appID, "app_secret": c.appSecret}, &response)
 	if err != nil {
 		return "", err
 	}
 	if response.Code != 0 || response.TenantAccessToken == "" {
-		return "", providerError("tenant_access_token", classifyProviderCode(response.Code), "", fmt.Errorf("provider code %d", response.Code))
+		return "", providerError("tenant_access_token", classifyProviderCode(response.Code),
+			requestID, fmt.Errorf("provider code %d", response.Code))
 	}
 	return response.TenantAccessToken, nil
 }
@@ -312,11 +349,18 @@ func (c *Client) normalizeUser(user userInfo) (identity.Principal, error) {
 	if user.Email != "" {
 		email = &user.Email
 	}
-	if user.AvatarURL != "" {
-		avatar = &user.AvatarURL
+	avatarURL := firstNonEmpty(
+		user.Avatar.Avatar240,
+		user.Avatar.AvatarOrigin,
+		user.AvatarURL,
+		user.Avatar.Avatar640,
+		user.Avatar.Avatar72,
+	)
+	if avatarURL != "" {
+		avatar = &avatarURL
 	}
 	profile, _ := json.Marshal(map[string]any{
-		"name": user.Name, "email": user.Email, "avatar_url": user.AvatarURL,
+		"name": user.Name, "email": user.Email, "avatar_url": avatarURL,
 	})
 	return identity.Principal{
 		Key:  identity.PrincipalKey{Provider: "lark", TenantID: c.tenantKey, SubjectID: user.OpenID},
@@ -341,16 +385,6 @@ func (c *Client) sealTokens(tokens tokenResponse) (identity.OAuthCredential, err
 		RefreshTokenExpiresAt: now.Add(time.Duration(tokens.RefreshTokenExpiresIn) * time.Second),
 		EncryptionKeyID:       c.encryptionKeyID,
 	}, nil
-}
-
-func (c *Client) postJSON(ctx context.Context, operation, path, token string, input, output any) error {
-	_, err := c.doJSON(ctx, operation, http.MethodPost, path, token, input, output)
-	return err
-}
-
-func (c *Client) getJSON(ctx context.Context, operation, path, token string, output any) error {
-	_, err := c.doJSON(ctx, operation, http.MethodGet, path, token, nil, output)
-	return err
 }
 
 func (c *Client) doJSON(ctx context.Context, operation, method, path, token string, input, output any) (string, error) {

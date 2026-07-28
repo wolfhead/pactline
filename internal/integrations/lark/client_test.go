@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -28,6 +29,7 @@ func TestAuthorizationAndOAuthTransport(t *testing.T) {
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 			if body["grant_type"] == "authorization_code" {
 				require.Equal(t, "code-secret", body["code"])
+				require.Equal(t, "https://app.example.test/api/auth/lark/callback", body["redirect_uri"])
 				_, _ = w.Write([]byte(`{"code":0,"access_token":"access-secret","expires_in":7200,"refresh_token":"refresh-secret","refresh_token_expires_in":604800}`))
 			} else {
 				require.Equal(t, "refresh_token", body["grant_type"])
@@ -51,9 +53,23 @@ func TestAuthorizationAndOAuthTransport(t *testing.T) {
 	authorizationURL, err := url.Parse(start.URL)
 	require.NoError(t, err)
 	require.Equal(t, "accounts.example.test", authorizationURL.Host)
-	require.Equal(t, "cli_test", authorizationURL.Query().Get("app_id"))
+	require.Empty(t, authorizationURL.Query().Get("app_id"))
+	require.Equal(t, "cli_test", authorizationURL.Query().Get("client_id"))
+	require.Equal(t, "code", authorizationURL.Query().Get("response_type"))
+	require.Equal(t, "https://app.example.test/api/auth/lark/callback", authorizationURL.Query().Get("redirect_uri"))
 	require.Equal(t, "state value", authorizationURL.Query().Get("state"))
-	require.Contains(t, authorizationURL.Query().Get("scope"), "offline_access")
+	require.ElementsMatch(t, []string{
+		"auth:user.id:read",
+		"contact:user.base:readonly",
+		"contact:user.email:readonly",
+		"contact:user:search",
+		"offline_access",
+	}, strings.Fields(authorizationURL.Query().Get("scope")))
+	_, err = client.StartAuthorization(context.Background(), identity.AuthorizationRequest{
+		State: "state", RedirectURI: "https://attacker.example.test/callback",
+	})
+	require.Error(t, err)
+	require.Equal(t, identity.ProviderContract, providerCategory(t, err))
 
 	authenticated, err := client.ExchangeAuthorizationCode(context.Background(), "code-secret")
 	require.NoError(t, err)
@@ -77,10 +93,21 @@ func TestSearchPaginationAndDirectMessage(t *testing.T) {
 		switch r.URL.Path {
 		case "/open-apis/search/v1/user":
 			searchCalls++
+			w.Header().Set("X-Tt-Logid", "search-log-id")
+			require.Equal(t, http.MethodGet, r.Method)
 			require.Equal(t, "Bearer access-secret", r.Header.Get("Authorization"))
+			require.Equal(t, "Ada Lovelace & Co", r.URL.Query().Get("query"))
+			require.Contains(t, r.URL.RawQuery, "query=Ada+Lovelace+%26+Co")
+			body, err := io.ReadAll(r.Body)
+			require.NoError(t, err)
+			require.Empty(t, body)
 			if searchCalls == 1 {
-				_, _ = w.Write([]byte(`{"code":0,"data":{"users":[{"open_id":"ou_1","name":"Ada"}],"has_more":true,"page_token":"next"}}`))
+				require.Equal(t, "20", r.URL.Query().Get("page_size"))
+				require.Empty(t, r.URL.Query().Get("page_token"))
+				_, _ = w.Write([]byte(`{"code":0,"data":{"users":[{"open_id":"ou_1","name":"Ada","avatar":{"avatar_240":"https://avatar.test/240","avatar_origin":"https://avatar.test/origin"}}],"has_more":true,"page_token":"next"}}`))
 			} else {
+				require.Equal(t, "19", r.URL.Query().Get("page_size"))
+				require.Equal(t, "next", r.URL.Query().Get("page_token"))
 				_, _ = w.Write([]byte(`{"code":0,"data":{"users":[{"open_id":"ou_2","name":"Alan"}],"has_more":false}}`))
 			}
 		case "/open-apis/auth/v3/tenant_access_token/internal":
@@ -98,10 +125,11 @@ func TestSearchPaginationAndDirectMessage(t *testing.T) {
 	client := newTestClient(t, server.URL)
 	credential := sealTestCredential(t, client)
 
-	results, err := client.SearchPrincipals(context.Background(), credential, "ad", 20)
+	results, err := client.SearchPrincipals(context.Background(), credential, "Ada Lovelace & Co", 20)
 	require.NoError(t, err)
 	require.Len(t, results, 2)
 	require.Equal(t, 2, searchCalls)
+	require.Equal(t, "https://avatar.test/240", *results[0].AvatarURL)
 
 	receipt, err := client.SendInvitation(context.Background(),
 		identity.PrincipalKey{Provider: "lark", TenantID: "tenant", SubjectID: "ou_2"},
@@ -121,6 +149,21 @@ func TestSearchRejectsMalformedSuccessEntry(t *testing.T) {
 	var providerErr *ProviderError
 	require.ErrorAs(t, err, &providerErr)
 	require.Equal(t, identity.ProviderContract, providerErr.Category)
+	require.Equal(t, "", providerErr.RequestID)
+}
+
+func TestSearchPropagatesProviderRequestID(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Tt-Logid", "search-log-id")
+		_, _ = w.Write([]byte(`{"code":99991400,"msg":"rate limited"}`))
+	}))
+	defer server.Close()
+	client := newTestClient(t, server.URL)
+	_, err := client.SearchPrincipals(
+		context.Background(), sealTestCredential(t, client), "Ada", 20,
+	)
+	require.Equal(t, identity.ProviderRateLimited, providerCategory(t, err))
+	require.Equal(t, "search-log-id", identity.ProviderRequestIDFromError(err))
 }
 
 func TestProviderClassificationsAndRedaction(t *testing.T) {
@@ -202,7 +245,8 @@ func newTestClient(t *testing.T, baseURL string) *Client {
 	client, err := NewClient(Config{
 		AppID: "cli_test", AppSecret: "app-secret", TenantKey: "tenant",
 		BaseURL: baseURL, AuthorizationURL: "https://accounts.example.test/open-apis/authen/v1/authorize",
-		Cipher: cipher, EncryptionKeyID: "test", HTTPClient: &http.Client{Timeout: time.Second},
+		RedirectURI: "https://app.example.test/api/auth/lark/callback",
+		Cipher:      cipher, EncryptionKeyID: "test", HTTPClient: &http.Client{Timeout: time.Second},
 	})
 	require.NoError(t, err)
 	return client
@@ -225,6 +269,7 @@ func TestProviderErrorSupportsErrorsIs(t *testing.T) {
 
 func TestRefreshClassifiesRevokedCredential(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Tt-Logid", "refresh-log-id")
 		_, _ = w.Write([]byte(`{"code":20064,"msg":"revoked"}`))
 	}))
 	defer server.Close()
@@ -233,4 +278,12 @@ func TestRefreshClassifiesRevokedCredential(t *testing.T) {
 	category, ok := identity.ProviderCategoryFromError(err)
 	require.True(t, ok)
 	require.Equal(t, identity.ProviderAuthorizationRevoked, category)
+	require.Equal(t, "refresh-log-id", identity.ProviderRequestIDFromError(err))
+}
+
+func providerCategory(t *testing.T, err error) identity.ProviderErrorCategory {
+	t.Helper()
+	category, ok := identity.ProviderCategoryFromError(err)
+	require.True(t, ok)
+	return category
 }

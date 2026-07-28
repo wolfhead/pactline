@@ -74,6 +74,7 @@ func main() {
 		larkClient, clientErr := lark.NewClient(lark.Config{
 			AppID: cfg.LarkAppID, AppSecret: cfg.LarkAppSecret, TenantKey: cfg.LarkTenantKey,
 			Cipher: cipher, EncryptionKeyID: cfg.TokenEncryptionKeyID,
+			RedirectURI: cfg.LarkRedirectURI.String(),
 		})
 		if clientErr != nil {
 			slog.Error("configure Lark client", "error", clientErr)

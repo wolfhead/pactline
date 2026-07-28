@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -65,6 +66,68 @@ func TestAuthorizationStateIsHashedExpiredAndOneTime(t *testing.T) {
 	require.NoError(t, repository.CreateAuthorizationTransaction(ctx, expired))
 	_, err = repository.ConsumeAuthorizationState(ctx, expiredHash[:], now)
 	require.ErrorIs(t, err, identity.ErrAuthorizationInvalid)
+}
+
+func TestInvitationAuthorizationStateIsInvalidatedByResendLinkRotationAndRevoke(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	repository := store.NewIdentityStore(db)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	for _, action := range []string{"resend_or_link_rotation", "revoke"} {
+		t.Run(action, func(t *testing.T) {
+			tokenHash := identity.HashSecret([]byte("invitation-token-" + uuid.NewString()))
+			invitation := identity.Invitation{
+				ID: uuid.New(),
+				Target: identity.PrincipalKey{
+					Provider: "lark", TenantID: "tenant-" + uuid.NewString(),
+					SubjectID: "subject-" + uuid.NewString(),
+				},
+				TargetSnapshot:  json.RawMessage(`{"name":"Invitee"}`),
+				TokenHash:       tokenHash[:],
+				Status:          identity.InvitationPending,
+				CreatedByUserID: primarySeedID,
+				ExpiresAt:       now.Add(identity.InvitationLifetime),
+				CreatedAt:       now,
+				UpdatedAt:       now,
+			}
+			require.NoError(t, repository.CreateInvitation(ctx, invitation, auditEvent("invitation_created", now)))
+			stateHash := identity.HashSecret([]byte("oauth-state-" + uuid.NewString()))
+			transaction := identity.AuthorizationTransaction{
+				ID: uuid.New(), Purpose: identity.AuthorizationInvitation,
+				StateHash: stateHash[:], InvitationID: &invitation.ID,
+				ExpiresAt: now.Add(10 * time.Minute), CreatedAt: now,
+			}
+			require.NoError(t, repository.CreateAuthorizationTransaction(ctx, transaction))
+			t.Cleanup(func() {
+				cleanupCtx := context.Background()
+				_, cleanupErr := db.Pool.Exec(cleanupCtx,
+					`DELETE FROM authorization_transactions WHERE id=$1`, transaction.ID)
+				require.NoError(t, cleanupErr)
+				_, cleanupErr = db.Pool.Exec(cleanupCtx,
+					`DELETE FROM identity_audit_events WHERE invitation_id=$1`, invitation.ID)
+				require.NoError(t, cleanupErr)
+				_, cleanupErr = db.Pool.Exec(cleanupCtx,
+					`DELETE FROM invitations WHERE id=$1`, invitation.ID)
+				require.NoError(t, cleanupErr)
+			})
+
+			switch action {
+			case "resend_or_link_rotation":
+				rotatedHash := identity.HashSecret([]byte("rotated-token-" + uuid.NewString()))
+				_, err := repository.RotateInvitation(
+					ctx, invitation.ID, primarySeedID, rotatedHash[:], now.Add(identity.InvitationLifetime))
+				require.NoError(t, err)
+			case "revoke":
+				audit := auditEvent("invitation_revoked", now)
+				audit.InvitationID = &invitation.ID
+				require.NoError(t, repository.RevokeInvitation(ctx, invitation.ID, now, audit))
+			}
+
+			_, err := repository.ConsumeAuthorizationState(ctx, stateHash[:], now.Add(time.Second))
+			require.ErrorIs(t, err, identity.ErrAuthorizationInvalid)
+		})
+	}
 }
 
 func TestInvitationAcceptanceIsAtomicAndCredentialStaysSealed(t *testing.T) {
@@ -158,6 +221,86 @@ func TestInvitationAcceptanceIsAtomicAndCredentialStaysSealed(t *testing.T) {
 	require.NotEqual(t, rawToken, storedHash)
 }
 
+func TestCredentialRefreshLockedReusesConcurrentRotation(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	repository := store.NewIdentityStore(db)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	userID, externalID := uuid.New(), uuid.New()
+	_, err := db.Pool.Exec(ctx, `
+		INSERT INTO users (id,name,email,platform_role,active)
+		VALUES ($1,'Refresh User',$2,'MEMBER',true)`,
+		userID, userID.String()+"@example.test")
+	require.NoError(t, err)
+	expired := identity.OAuthCredential{
+		AccessTokenCiphertext: []byte("expired-access"), RefreshTokenCiphertext: []byte("refresh"),
+		AccessTokenExpiresAt: now.Add(-time.Minute), RefreshTokenExpiresAt: now.Add(time.Hour),
+		EncryptionKeyID: "test",
+	}
+	external := identity.ExternalIdentity{
+		ID: externalID, UserID: userID,
+		Key: identity.PrincipalKey{
+			Provider: "lark", TenantID: "tenant-" + uuid.NewString(), SubjectID: "subject",
+		},
+		ProviderProfile: json.RawMessage(`{"name":"Refresh User"}`),
+		CreatedAt:       now, UpdatedAt: now,
+	}
+	audit := auditEvent("identity_bound", now)
+	audit.SubjectUserID = &userID
+	require.NoError(t, repository.BindExternalIdentity(ctx, external, expired, audit))
+	t.Cleanup(func() {
+		cleanupCtx := context.Background()
+		_, cleanupErr := db.Pool.Exec(cleanupCtx,
+			`DELETE FROM identity_audit_events WHERE subject_user_id=$1`, userID)
+		require.NoError(t, cleanupErr)
+		_, cleanupErr = db.Pool.Exec(cleanupCtx,
+			`DELETE FROM external_identities WHERE id=$1`, externalID)
+		require.NoError(t, cleanupErr)
+		_, cleanupErr = db.Pool.Exec(cleanupCtx, `DELETE FROM users WHERE id=$1`, userID)
+		require.NoError(t, cleanupErr)
+	})
+
+	fresh := identity.OAuthCredential{
+		AccessTokenCiphertext: []byte("fresh-access"), RefreshTokenCiphertext: []byte("fresh-refresh"),
+		AccessTokenExpiresAt: now.Add(time.Hour), RefreshTokenExpiresAt: now.Add(24 * time.Hour),
+		EncryptionKeyID: "test",
+	}
+	var providerRefreshes atomic.Int64
+	start := make(chan struct{})
+	results := make(chan identity.OAuthCredential, 2)
+	errorsChannel := make(chan error, 2)
+	var group sync.WaitGroup
+	for range 2 {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			<-start
+			credential, refreshErr := repository.RefreshCredentialLocked(
+				ctx, externalID, func(current identity.OAuthCredential) (identity.OAuthCredential, error) {
+					if now.Before(current.AccessTokenExpiresAt) {
+						return current, nil
+					}
+					providerRefreshes.Add(1)
+					return fresh, nil
+				})
+			results <- credential
+			errorsChannel <- refreshErr
+		}()
+	}
+	close(start)
+	group.Wait()
+	close(results)
+	close(errorsChannel)
+	for refreshErr := range errorsChannel {
+		require.NoError(t, refreshErr)
+	}
+	for credential := range results {
+		require.Equal(t, fresh.AccessTokenCiphertext, credential.AccessTokenCiphertext)
+		require.Equal(t, fresh.RefreshTokenCiphertext, credential.RefreshTokenCiphertext)
+	}
+	require.EqualValues(t, 1, providerRefreshes.Load())
+}
+
 func TestSessionRollingProviderFailureRevocationAndDeactivation(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
@@ -216,7 +359,7 @@ func TestSessionRollingProviderFailureRevocationAndDeactivation(t *testing.T) {
 		`SELECT provider_failure_since FROM sessions WHERE id=$1`, session.ID).Scan(&failureSince))
 	require.Nil(t, failureSince)
 
-	require.NoError(t, repository.DeactivateUser(ctx, userID, primarySeedID, "provider_invalid"))
+	require.NoError(t, repository.DeactivateUser(ctx, userID, primarySeedID, "provider_invalid", "provider-request-id"))
 	var active bool
 	var revokedAt *time.Time
 	require.NoError(t, db.Pool.QueryRow(ctx, `
@@ -224,6 +367,14 @@ func TestSessionRollingProviderFailureRevocationAndDeactivation(t *testing.T) {
 		WHERE u.id=$1 AND s.id=$2`, userID, session.ID).Scan(&active, &revokedAt))
 	require.False(t, active)
 	require.NotNil(t, revokedAt)
+	var deactivationMetadata []byte
+	require.NoError(t, db.Pool.QueryRow(ctx, `
+		SELECT metadata FROM identity_audit_events
+		WHERE event_type='user_deactivated' AND subject_user_id=$1
+		ORDER BY occurred_at DESC,id DESC LIMIT 1`, userID).Scan(&deactivationMetadata))
+	require.JSONEq(t,
+		`{"reason":"provider_invalid","provider_request_id":"provider-request-id"}`,
+		string(deactivationMetadata))
 	_, err = repository.ResolveSession(ctx, session.ID, sessionSecret[:], now.Add(9*time.Minute))
 	require.ErrorIs(t, err, identity.ErrUserInactive)
 }

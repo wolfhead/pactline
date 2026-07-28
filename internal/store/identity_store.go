@@ -184,6 +184,9 @@ func (s *IdentityStore) RevokeInvitation(ctx context.Context, id uuid.UUID, now 
 		if tag.RowsAffected() != 1 {
 			return identity.ErrInvitationInvalid
 		}
+		if err := invalidateInvitationAuthorizations(ctx, tx, id, now); err != nil {
+			return err
+		}
 		return nil
 	})
 }
@@ -210,6 +213,9 @@ func (s *IdentityStore) RotateInvitation(ctx context.Context, id, actorID uuid.U
 		invitation.TokenHash = append([]byte(nil), tokenHash...)
 		invitation.ExpiresAt = expiresAt
 		invitation.UpdatedAt = now
+		if err := invalidateInvitationAuthorizations(ctx, tx, id, now); err != nil {
+			return err
+		}
 		updated = invitation
 		return nil
 	})
@@ -771,7 +777,11 @@ func (s *IdentityStore) RevokeAllSessions(ctx context.Context, userID uuid.UUID,
 	})
 }
 
-func (s *IdentityStore) DeactivateUser(ctx context.Context, userID, actorID uuid.UUID, reason string) error {
+func (s *IdentityStore) DeactivateUser(
+	ctx context.Context,
+	userID, actorID uuid.UUID,
+	reason, providerRequestID string,
+) error {
 	now := time.Now().UTC()
 	return s.inTransaction(ctx, "deactivate user", func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `UPDATE users SET active=false, updated_at=$2 WHERE id=$1`, userID, now)
@@ -786,10 +796,18 @@ func (s *IdentityStore) DeactivateUser(ctx context.Context, userID, actorID uuid
 			WHERE user_id=$1 AND revoked_at IS NULL`, userID, now, reason); err != nil {
 			return fmt.Errorf("revoke deactivated user sessions: %w", err)
 		}
+		metadata := map[string]string{"reason": reason}
+		if providerRequestID != "" {
+			metadata["provider_request_id"] = providerRequestID
+		}
+		encodedMetadata, err := json.Marshal(metadata)
+		if err != nil {
+			return fmt.Errorf("encode deactivation audit metadata: %w", err)
+		}
 		return insertAudit(ctx, tx, identity.AuditEvent{
 			ID: uuid.New(), EventType: "user_deactivated", ActorUserID: &actorID,
 			SubjectUserID: &userID,
-			Metadata:      json.RawMessage(fmt.Sprintf(`{"reason":%q}`, reason)),
+			Metadata:      encodedMetadata,
 			OccurredAt:    now,
 		})
 	})
@@ -1046,6 +1064,17 @@ func insertAudit(ctx context.Context, execer auditExecer, audit identity.AuditEv
 		audit.SessionID, audit.RequestID, jsonOrEmpty(audit.Metadata), audit.OccurredAt)
 	if err != nil {
 		return fmt.Errorf("insert identity audit: %w", err)
+	}
+	return nil
+}
+
+func invalidateInvitationAuthorizations(ctx context.Context, tx pgx.Tx, invitationID uuid.UUID, now time.Time) error {
+	if _, err := tx.Exec(ctx, `
+		UPDATE authorization_transactions
+		SET consumed_at=$2
+		WHERE invitation_id=$1 AND consumed_at IS NULL`,
+		invitationID, now); err != nil {
+		return fmt.Errorf("invalidate invitation authorization transactions: %w", err)
 	}
 	return nil
 }

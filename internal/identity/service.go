@@ -38,7 +38,7 @@ type IdentityRepository interface {
 	RefreshCredentialLocked(ctx context.Context, externalIdentityID uuid.UUID, refresh func(OAuthCredential) (OAuthCredential, error)) (OAuthCredential, error)
 	RecordProviderVerification(ctx context.Context, sessionID uuid.UUID, verifiedAt time.Time) error
 	RecordProviderFailure(ctx context.Context, sessionID uuid.UUID, failedAt time.Time, audit AuditEvent) error
-	DeactivateUser(ctx context.Context, userID, actorID uuid.UUID, reason string) error
+	DeactivateUser(ctx context.Context, userID, actorID uuid.UUID, reason, providerRequestID string) error
 	AcceptInvitation(ctx context.Context, command AcceptInvitationCommand) (domain.User, error)
 	CreateInvitation(ctx context.Context, invitation Invitation, audit AuditEvent) error
 	ListInvitations(ctx context.Context) ([]Invitation, error)
@@ -328,7 +328,13 @@ func (s *Service) deliverInvitation(ctx context.Context, invitation Invitation, 
 	if err != nil {
 		delivery.Status = DeliveryFailed
 		category := ProviderUnavailable
+		if providerCategory, ok := ProviderCategoryFromError(err); ok {
+			category = providerCategory
+		}
 		delivery.ErrorCategory = &category
+		slog.Warn("invitation provider delivery failed",
+			"invitation_id", invitation.ID, "error_category", category,
+			"provider_request_id", ProviderRequestIDFromError(err))
 	} else {
 		delivery.ProviderReference = &receipt.ProviderReference
 	}
@@ -357,6 +363,9 @@ func (s *Service) credentialForUser(ctx context.Context, userID uuid.UUID) (OAut
 		return OAuthCredential{}, ErrSessionInvalid
 	}
 	return s.identity.RefreshCredentialLocked(ctx, external.ID, func(current OAuthCredential) (OAuthCredential, error) {
+		if s.clock.Now().Before(current.AccessTokenExpiresAt) {
+			return current, nil
+		}
 		refreshed, refreshErr := s.authenticator.RefreshCredential(ctx, current)
 		return refreshed.Credential, refreshErr
 	})
@@ -389,7 +398,7 @@ func (s *Service) SetUserActive(ctx context.Context, actor domain.User, userID u
 	if active {
 		return s.identity.ReactivateUser(ctx, target.ID, actor.ID)
 	}
-	return s.identity.DeactivateUser(ctx, target.ID, actor.ID, "administrator_deactivated")
+	return s.identity.DeactivateUser(ctx, target.ID, actor.ID, "administrator_deactivated", "")
 }
 
 func (s *Service) StartImpersonation(ctx context.Context, current RequestIdentity, subjectID uuid.UUID, requestID string) error {
@@ -493,7 +502,7 @@ func (s *Service) CompleteAuthorization(ctx context.Context, state, code, reques
 	}
 	authenticated, err := s.authenticator.ExchangeAuthorizationCode(ctx, code)
 	if err != nil {
-		s.recordAuthenticationRejection(ctx, "provider_exchange", requestID)
+		s.recordAuthenticationRejection(ctx, "provider_exchange", requestID, ProviderRequestIDFromError(err))
 		return SessionTokens{}, ErrLoginDenied
 	}
 	if authenticated.Principal.Key.Provider != "lark" ||
@@ -576,11 +585,19 @@ func (s *Service) CompleteAuthorization(ctx context.Context, state, code, reques
 	return tokens, nil
 }
 
-func (s *Service) recordAuthenticationRejection(ctx context.Context, category, requestID string) {
+func (s *Service) recordAuthenticationRejection(
+	ctx context.Context,
+	category, requestID string,
+	providerRequestIDs ...string,
+) {
 	if s.identity == nil {
 		return
 	}
-	metadata, _ := json.Marshal(map[string]string{"category": category})
+	metadataValues := map[string]string{"category": category}
+	if len(providerRequestIDs) > 0 && providerRequestIDs[0] != "" {
+		metadataValues["provider_request_id"] = providerRequestIDs[0]
+	}
+	metadata, _ := json.Marshal(metadataValues)
 	audit := AuditEvent{
 		ID: uuid.New(), EventType: "login_rejected", Metadata: metadata, OccurredAt: s.clock.Now(),
 	}
@@ -704,20 +721,24 @@ func (s *Service) revalidate(ctx context.Context, bundle *SessionBundle, now tim
 			return ErrSessionInvalid
 		}
 		credential, err = s.identity.RefreshCredentialLocked(ctx, external.ID, func(current OAuthCredential) (OAuthCredential, error) {
+			if now.Before(current.AccessTokenExpiresAt) {
+				return current, nil
+			}
 			refreshed, refreshErr := s.authenticator.RefreshCredential(ctx, current)
 			return refreshed.Credential, refreshErr
 		})
 		if err != nil {
 			category, categorized := ProviderCategoryFromError(err)
+			providerRequestID := ProviderRequestIDFromError(err)
 			if errors.Is(err, ErrProviderTransient) ||
 				categorized && (category == ProviderRateLimited || category == ProviderUnavailable) {
 				if category == "" {
 					category = ProviderUnavailable
 				}
-				return s.applyProviderTransient(ctx, bundle, category, now)
+				return s.applyProviderTransient(ctx, bundle, category, providerRequestID, now)
 			}
 			if categorized && IsExplicitInvalid(category) {
-				return s.deactivateInvalidPrincipal(ctx, bundle.User.ID, category)
+				return s.deactivateInvalidPrincipal(ctx, bundle.User.ID, category, providerRequestID)
 			}
 			return ErrSessionInvalid
 		}
@@ -725,12 +746,15 @@ func (s *Service) revalidate(ctx context.Context, bundle *SessionBundle, now tim
 	result, err := s.verifier.VerifyPrincipal(ctx, credential, external.Key)
 	if err != nil {
 		category, categorized := ProviderCategoryFromError(err)
+		providerRequestID := ProviderRequestIDFromError(err)
 		if errors.Is(err, ErrProviderTransient) ||
 			categorized && (category == ProviderRateLimited || category == ProviderUnavailable) {
 			if category == "" {
 				category = ProviderUnavailable
 			}
-			result = VerificationResult{State: VerificationTransient, Category: category}
+			result = VerificationResult{
+				State: VerificationTransient, Category: category, RequestID: providerRequestID,
+			}
 		} else {
 			return ErrProviderContract
 		}
@@ -747,9 +771,9 @@ func (s *Service) revalidate(ctx context.Context, bundle *SessionBundle, now tim
 		if !IsExplicitInvalid(result.Category) {
 			return ErrProviderContract
 		}
-		return s.deactivateInvalidPrincipal(ctx, bundle.User.ID, result.Category)
+		return s.deactivateInvalidPrincipal(ctx, bundle.User.ID, result.Category, result.RequestID)
 	case VerificationTransient:
-		return s.applyProviderTransient(ctx, bundle, result.Category, now)
+		return s.applyProviderTransient(ctx, bundle, result.Category, result.RequestID, now)
 	default:
 		return ErrProviderContract
 	}
@@ -759,8 +783,11 @@ func (s *Service) deactivateInvalidPrincipal(
 	ctx context.Context,
 	userID uuid.UUID,
 	category ProviderErrorCategory,
+	providerRequestID string,
 ) error {
-	if err := s.identity.DeactivateUser(ctx, userID, userID, string(category)); err != nil {
+	if err := s.identity.DeactivateUser(
+		ctx, userID, userID, string(category), providerRequestID,
+	); err != nil {
 		return fmt.Errorf("deactivate invalid provider principal: %w", err)
 	}
 	return ErrUserInactive
@@ -770,11 +797,17 @@ func (s *Service) applyProviderTransient(
 	ctx context.Context,
 	bundle *SessionBundle,
 	category ProviderErrorCategory,
+	providerRequestID string,
 	now time.Time,
 ) error {
+	metadataValues := map[string]string{"category": string(category)}
+	if providerRequestID != "" {
+		metadataValues["provider_request_id"] = providerRequestID
+	}
+	metadata, _ := json.Marshal(metadataValues)
 	audit := AuditEvent{
 		ID: uuid.New(), EventType: "provider_verification_failed", SubjectUserID: &bundle.User.ID,
-		SessionID: &bundle.Session.ID, Metadata: json.RawMessage(fmt.Sprintf(`{"category":%q}`, category)),
+		SessionID: &bundle.Session.ID, Metadata: metadata,
 		OccurredAt: now,
 	}
 	if err := s.identity.RecordProviderFailure(ctx, bundle.Session.ID, now, audit); err != nil {

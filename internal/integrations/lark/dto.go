@@ -19,11 +19,17 @@ type providerEnvelope[T any] struct {
 }
 
 type userInfo struct {
-	OpenID       string `json:"open_id"`
-	TenantKey    string `json:"tenant_key"`
-	Name         string `json:"name"`
-	Email        string `json:"email"`
-	AvatarURL    string `json:"avatar_url"`
+	OpenID    string `json:"open_id"`
+	TenantKey string `json:"tenant_key"`
+	Name      string `json:"name"`
+	Email     string `json:"email"`
+	AvatarURL string `json:"avatar_url"`
+	Avatar    struct {
+		Avatar240    string `json:"avatar_240"`
+		AvatarOrigin string `json:"avatar_origin"`
+		Avatar72     string `json:"avatar_72"`
+		Avatar640    string `json:"avatar_640"`
+	} `json:"avatar"`
 	EmployeeType string `json:"employee_type"`
 	Status       struct {
 		IsActivated bool `json:"is_activated"`

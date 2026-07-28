@@ -54,7 +54,9 @@ func (h *adminIdentityHandler) searchDirectory(w http.ResponseWriter, r *http.Re
 			WriteJSON(w, http.StatusBadRequest, ErrorBody{Error: "query must contain at least 2 characters"})
 			return
 		}
-		slog.Warn("Lark directory search failed", "actor_user_id", current.Actor.ID, "error_category", "directory")
+		slog.Warn("Lark directory search failed",
+			"actor_user_id", current.Actor.ID, "error_category", "directory",
+			"provider_request_id", identity.ProviderRequestIDFromError(err))
 		WriteJSON(w, http.StatusBadGateway, ErrorBody{Error: "directory search unavailable"})
 		return
 	}

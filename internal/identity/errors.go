@@ -34,3 +34,16 @@ func ProviderCategoryFromError(err error) (ProviderErrorCategory, bool) {
 	}
 	return categorized.ProviderCategory(), true
 }
+
+type ProviderRequestIdentifiedError interface {
+	error
+	ProviderRequestID() string
+}
+
+func ProviderRequestIDFromError(err error) string {
+	var identified ProviderRequestIdentifiedError
+	if !errors.As(err, &identified) {
+		return ""
+	}
+	return identified.ProviderRequestID()
+}
