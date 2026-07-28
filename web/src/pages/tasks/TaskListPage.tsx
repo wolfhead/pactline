@@ -280,7 +280,11 @@ export default function TaskListPage() {
           />
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        {/* data-task-list marks the one element that actually scrolls the
+            rows. Opening a task must not disturb its scrollTop — the list
+            never unmounts — and e2e/21 reads that offset off this attribute
+            rather than guessing which div in the tree owns the overflow. */}
+        <div data-task-list className="min-h-0 flex-1 overflow-y-auto">
           {loading && <p className="p-3 text-sm text-fg-muted">正在加载任务…</p>}
           {!loading && error && (
             <p className="p-3 text-sm text-danger">

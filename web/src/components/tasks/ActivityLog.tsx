@@ -53,7 +53,9 @@ export default function ActivityLog({ task }: ActivityLogProps) {
   }, [users, task.creator, task.assignee])
 
   return (
-    <section className="flex flex-col gap-3">
+    // Named landmark, same reasoning as CommentSection: the block is
+    // addressable by name instead of by climbing out of its own heading.
+    <section role="region" aria-label="历史记录" className="flex flex-col gap-3">
       <h3 className="text-sm font-medium text-fg">历史记录</h3>
       {error && <p className="text-sm text-danger">{error}</p>}
       {activity.length === 0 && !error && <p className="text-sm text-fg-muted">还没有记录。</p>}

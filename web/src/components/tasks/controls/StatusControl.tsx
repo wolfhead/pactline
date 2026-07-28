@@ -32,7 +32,12 @@ export default function StatusControl({
         aria-label={ariaLabel}
         className={CONTROL_TRIGGER_CLASS}
       >
-        <span className={cn('size-2.5 shrink-0 rounded-full border-[1.6px]', DOT[value])} aria-hidden="true" />
+        {/* No dot of its own here. Radix renders the *selected item's* own
+            children into SelectValue, dot included — a second one on the
+            trigger showed up as "○ ○ 待办" on every status control in the
+            app, on every tier and in both themes (found in Task 14's
+            screenshot pass; no test could see it, since both spans are
+            aria-hidden and the accessible name never changed). */}
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

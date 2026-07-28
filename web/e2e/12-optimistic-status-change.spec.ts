@@ -5,17 +5,26 @@ import { USERS } from './support/config'
 /**
  * Scenario: optimistic status change. The store validates status against a
  * fixed enum (internal/store/task_store.go) and the UI only ever offers
- * valid enum values through a <select>, so there is no way to make the real
- * backend refuse a status PATCH through genuine user interaction — route
- * interception is the documented fallback for that half of this test (see
- * the task brief).
+ * valid enum values, so there is no way to make the real backend refuse a
+ * status PATCH through genuine user interaction — route interception is the
+ * documented fallback for that half of this test (see the task brief).
  *
- * Status is a quiet display (a colour mark + label) until interacted with
- * (see QuietSelect) — click it to reveal the real <select>. Choosing an
- * option commits it and collapses the <select> straight back to the quiet
- * display, the same way a native <select> closing its own dropdown would,
- * so the optimistic update and its later revert are both observed on the
- * quiet display's text, not on a <select> that's only briefly on screen.
+ * Rewritten for the new controls (Task 14). Status is now a permanently
+ * visible Radix Select — no reveal-on-click QuietSelect, and no native
+ * <select>, so `selectOption()` does not apply: the control is opened as a
+ * `combobox` and committed by clicking an `option`. Everything this test
+ * exists to prove is unchanged, and both halves of it are still asserted on
+ * the control's own text:
+ *
+ *   1. while the PATCH is held open by page.route, the control must
+ *      ALREADY read the new status — not "eventually, after a round trip
+ *      fast enough that we never actually watched for the gap";
+ *   2. when the server refuses with 422, it must snap back and the pane
+ *      must say both the server's reason and 已恢复原状态.
+ *
+ * `exact: true` on the name: at xl the detail column sits beside the list,
+ * whose rows label their own controls 任务 #<n> 状态 — a substring match
+ * would find those too.
  */
 test('status change is optimistic: the UI updates before the server responds, and reverts with a reason if the server refuses', async ({
   page,
@@ -30,8 +39,8 @@ test('status change is optimistic: the UI updates before the server responds, an
   await page.goto(`/tasks/${task.number}`)
   await switchIdentity(page, USERS.engineerC.id)
 
-  const statusField = page.getByLabel('状态', { exact: true })
-  await expect(statusField).toHaveText('待办')
+  const statusField = page.getByRole('combobox', { name: '状态', exact: true })
+  await expect(statusField).toHaveText(/待办/)
 
   // Hold the PATCH response open so the test can prove the display updates
   // BEFORE the server ever answers — not merely "eventually, after a round
@@ -53,11 +62,11 @@ test('status change is optimistic: the UI updates before the server responds, an
     (res) => res.url().endsWith(`/api/tasks/${task.number}`) && res.request().method() === 'PATCH',
   )
   await statusField.click()
-  await page.getByLabel('状态', { exact: true }).selectOption('in_progress')
-  // The PATCH is still pending (held) right now, yet the quiet display —
-  // the <select> already collapsed back to it the instant a choice was
-  // made — already reflects the new status.
-  await expect(page.getByLabel('状态', { exact: true })).toHaveText('进行中')
+  await page.getByRole('option', { name: '进行中', exact: true }).click()
+  // The PATCH is still pending (held) right now, yet the control — the
+  // dropdown closed the instant a choice was made — already reflects the
+  // new status.
+  await expect(page.getByRole('combobox', { name: '状态', exact: true })).toHaveText(/进行中/)
   await expect(page.getByText(/已恢复原状态/)).toHaveCount(0)
 
   releaseHold()
@@ -72,7 +81,7 @@ test('status change is optimistic: the UI updates before the server responds, an
   // Reload to confirm the optimistic value is what the server actually
   // persisted, not just a client-side illusion.
   await page.reload()
-  await expect(page.getByLabel('状态', { exact: true })).toHaveText('进行中')
+  await expect(page.getByRole('combobox', { name: '状态', exact: true })).toHaveText(/进行中/)
 
   // Now make the server refuse the next change outright, held the same way
   // so the optimistic bump is observed before the revert.
@@ -93,14 +102,14 @@ test('status change is optimistic: the UI updates before the server responds, an
     })
   })
 
-  await page.getByLabel('状态', { exact: true }).click()
-  await page.getByLabel('状态', { exact: true }).selectOption('done')
-  await expect(page.getByLabel('状态', { exact: true })).toHaveText('已完成')
+  await page.getByRole('combobox', { name: '状态', exact: true }).click()
+  await page.getByRole('option', { name: '已完成', exact: true }).click()
+  await expect(page.getByRole('combobox', { name: '状态', exact: true })).toHaveText(/已完成/)
 
   releaseFail()
 
   // Reverts once the server's refusal comes back, with the reason shown.
-  await expect(page.getByLabel('状态', { exact: true })).toHaveText('进行中')
+  await expect(page.getByRole('combobox', { name: '状态', exact: true })).toHaveText(/进行中/)
   await expect(page.getByText(/forced e2e failure/)).toBeVisible()
   await expect(page.getByText(/已恢复原状态/)).toBeVisible()
 })

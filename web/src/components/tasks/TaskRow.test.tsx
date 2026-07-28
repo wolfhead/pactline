@@ -98,7 +98,12 @@ describe('TaskRow', () => {
       </MemoryRouter>,
     )
     const title = screen.getByRole('link', { name: LONG.title })
-    const due = screen.getByText('2026-07-30')
-    expect(title.parentElement).toBe(due.parentElement)
+    // The title sits directly on the row's own flex line, beside the
+    // fixed-width control columns — it is not wrapped in a block of its
+    // own the way the phone row's first line wraps it. Asserting that
+    // rather than "shares a parent with the due date": the due date is now
+    // column-wrapped like every other control, and which controls happen
+    // to be nested one div deeper is not what "single line" means.
+    expect(title.parentElement).toBe(screen.getByRole('listitem'))
   })
 })

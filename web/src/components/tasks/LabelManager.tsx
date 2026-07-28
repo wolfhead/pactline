@@ -57,7 +57,15 @@ export default function LabelManager({ labels, onChanged }: LabelManagerProps) {
 
   return (
     <details className="text-sm">
-      <summary className="cursor-pointer text-fg-muted hover:text-fg">管理标签</summary>
+      {/* min-h-11 / py-2.5, dropping back to sm:min-h-8 / sm:py-1 for mouse
+          widths: the old stylesheet carried a coarse-pointer 44px floor for
+          this disclosure and its deletion left the summary a ~20px line —
+          the smallest tap target in the phone layout. Height rather than
+          `flex items-center`, because `display:flex` on a <summary> drops
+          the native disclosure marker. */}
+      <summary className="min-h-11 cursor-pointer py-2.5 text-fg-muted hover:text-fg sm:min-h-8 sm:py-1">
+        管理标签
+      </summary>
       <ul className="my-2 flex list-none flex-col gap-1 pl-0">
         {labels.map((l) => (
           <li key={l.ID} className="flex items-center justify-between gap-2">

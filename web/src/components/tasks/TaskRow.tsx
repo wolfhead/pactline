@@ -157,12 +157,14 @@ export default function TaskRow({ task, selected, tier, users, error, onPatch, o
       <div className="w-28 shrink-0">{statusControl}</div>
       <div className="w-24 shrink-0">{priorityControl}</div>
       <div className="w-28 shrink-0">{assigneeControl}</div>
-      {/* Not width-wrapped like the three controls above: a due date is
-          near-fixed-width regardless of value ("YYYY-MM-DD" or 无截止), so
-          this stays a direct sibling of the title in one flat flex row
-          instead of nesting through a column wrapper — see the desktop
-          single-line test in TaskRow.test.tsx. */}
-      {dueDateControl}
+      {/* Width-wrapped exactly like the three controls above. It used to be
+          left bare on the theory that a due date is "near-fixed-width
+          regardless of value" — it is not: 无截止 measures ~36px narrower
+          than 2026-08-15, so every row carrying a real date dragged status,
+          priority and assignee ~36px left of the rows that don't, and the
+          five control columns read as ragged down the whole list (found in
+          Task 14's screenshot pass, at every tier and in both themes). */}
+      <div className="w-24 shrink-0">{dueDateControl}</div>
       {actionsMenu}
       {error && (
         <p role="alert" className="ml-2 shrink-0 text-xs text-danger">

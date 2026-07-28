@@ -27,7 +27,9 @@ test('activity log reads as legible prose and updates live after a status change
   await page.goto(`/tasks/${task.number}`)
   await switchIdentity(page, USERS.leadB.id)
 
-  const activitySection = page.getByRole('heading', { name: '历史记录', level: 3 }).locator('xpath=..')
+  // ActivityLog carries role="region" + aria-label="历史记录", so the block
+  // is addressed by name rather than by climbing out of its own heading.
+  const activitySection = page.getByRole('region', { name: '历史记录' })
   await expect(
     activitySection.getByText(`${USERS.leadB.name} 创建了任务，初始状态为「待定」`, { exact: true }),
   ).toBeVisible()
@@ -36,15 +38,14 @@ test('activity log reads as legible prose and updates live after a status change
   const isPatch = (res: import('@playwright/test').Response) =>
     res.url().endsWith(`/api/tasks/${task.number}`) && res.request().method() === 'PATCH'
 
-  // Status and assignee are quiet displays until interacted with (see
-  // QuietSelect) — click to reveal the real <select> before driving it;
-  // choosing an option collapses it straight back to the quiet display, so
-  // the assertion afterwards is on that display's text, not on a <select>
-  // that's only briefly on screen.
+  // Status and assignee are permanently visible Radix Selects (Task 14) —
+  // not native <select>s, so `selectOption()` does not apply: open the
+  // combobox, click the option. `exact: true` on the name because at xl the
+  // list column beside the detail names its own controls 任务 #<n> 状态.
   const statusPatch = page.waitForResponse(isPatch)
-  await page.getByLabel('状态', { exact: true }).click()
-  await page.getByLabel('状态', { exact: true }).selectOption('in_progress')
-  await expect(page.getByLabel('状态', { exact: true })).toHaveText('进行中')
+  await page.getByRole('combobox', { name: '状态', exact: true }).click()
+  await page.getByRole('option', { name: '进行中', exact: true }).click()
+  await expect(page.getByRole('combobox', { name: '状态', exact: true })).toHaveText(/进行中/)
   await statusPatch
 
   // No reload: the new entry must appear purely from the activity fetch
@@ -54,9 +55,9 @@ test('activity log reads as legible prose and updates live after a status change
   ).toBeVisible()
 
   const assigneePatch = page.waitForResponse(isPatch)
-  await page.getByLabel('负责人', { exact: true }).click()
-  await page.getByLabel('负责人', { exact: true }).selectOption(USERS.engineerD.id)
-  await expect(page.getByLabel('负责人', { exact: true })).toHaveText(USERS.engineerD.name)
+  await page.getByRole('combobox', { name: '负责人', exact: true }).click()
+  await page.getByRole('option', { name: USERS.engineerD.name, exact: true }).click()
+  await expect(page.getByRole('combobox', { name: '负责人', exact: true })).toHaveText(USERS.engineerD.name)
   await assigneePatch
 
   await expect(

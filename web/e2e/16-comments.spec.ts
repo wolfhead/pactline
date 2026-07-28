@@ -17,8 +17,10 @@ test('comments: add, edit and delete as the author', async ({ page, uniqueTitle,
   // submit button) and "删除" collide with controls elsewhere on the page
   // (the label manager also has a "删除" button, just hidden inside a
   // collapsed <details> — still present in the DOM and still a strict-mode
-  // match).
-  const commentSection = page.getByRole('heading', { name: '评论', level: 3 }).locator('xpath=..')
+  // match). CommentSection carries role="region" + aria-label="评论", so the
+  // block is addressed by name rather than by climbing out of its heading
+  // with an xpath that any added wrapper would break.
+  const commentSection = page.getByRole('region', { name: '评论' })
 
   await expect(commentSection.getByText('还没有评论。')).toBeVisible()
 
@@ -43,7 +45,7 @@ test('comments: add, edit and delete as the author', async ({ page, uniqueTitle,
   await editPatch
 
   await page.reload()
-  const commentSectionAfterReload = page.getByRole('heading', { name: '评论', level: 3 }).locator('xpath=..')
+  const commentSectionAfterReload = page.getByRole('region', { name: '评论' })
   await expect(commentSectionAfterReload.getByText('First comment, edited', { exact: true })).toBeVisible()
 
   // Delete.

@@ -77,7 +77,11 @@ export default function CommentSection({ taskNumber }: CommentSectionProps) {
   }
 
   return (
-    <section className="flex flex-col gap-3">
+    // role/aria-label rather than relying on the <h3> below: a landmark
+    // with a stable name is what lets a caller (and the e2e suite) scope to
+    // "the comments block" without walking the DOM upwards from a heading,
+    // which breaks the moment this section grows a wrapper.
+    <section role="region" aria-label="评论" className="flex flex-col gap-3">
       <h3 className="text-sm font-medium text-fg">评论</h3>
       {comments.length === 0 && <p className="text-sm text-fg-muted">还没有评论。</p>}
       <ul className="flex flex-col gap-3">
