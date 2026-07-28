@@ -3,11 +3,11 @@ import { useEffect, useState } from 'react'
 /**
  * Theme preference. "system" follows the OS; the other two override it.
  *
- * The choice is written to the document root as data-theme, which styles.css
- * uses to beat its own prefers-color-scheme rule. Under "system" the attribute
- * is removed entirely rather than resolved to a value here, so the media query
- * keeps handling it — that way the OS switching while the app is open is picked
- * up with no listener of ours.
+ * The choice is written to the document root as data-theme, which index.css's
+ * `dark` custom variant and its color-scheme overrides both key off. Under
+ * "system" the attribute is removed entirely rather than resolved to a value
+ * here, so prefers-color-scheme keeps handling it — that way the OS switching
+ * while the app is open is picked up with no listener of ours.
  */
 export type ThemePreference = 'system' | 'light' | 'dark'
 
@@ -88,12 +88,20 @@ export function ThemeToggle() {
   const [preference, setPreference] = useTheme()
 
   return (
-    <label className="switcher">
+    <label className="flex min-w-0 items-center gap-2 text-xs whitespace-nowrap text-fg-muted">
       主题
+      {/* A real, native <select> rather than the shadcn/Radix one. Two
+       * reasons, both concrete: theme-bridge.test.tsx drives this control
+       * with fireEvent.change, which only a real <select> answers to; and
+       * this control lives in the header, which on a phone is exactly where
+       * the OS's own picker sheet beats a re-implemented listbox. The
+       * classes below deliberately mirror ui/select.tsx's SelectTrigger so
+       * the two read as the same control. */}
       <select
         value={preference}
         aria-label="主题"
         onChange={(e) => setPreference(e.target.value as ThemePreference)}
+        className="min-h-11 min-w-0 flex-1 rounded-md border border-border-strong bg-surface px-2 py-1.5 text-sm text-fg shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/50 pointer-coarse:min-h-11 sm:min-h-8 sm:flex-none"
       >
         {ORDER.map((p) => (
           <option key={p} value={p}>

@@ -266,7 +266,10 @@ export default function TaskListPage() {
     <div className="flex h-full min-h-0">
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="shrink-0 border-b border-border px-3 py-2">
-          <h2 className="text-sm font-semibold text-fg">任务列表</h2>
+          {/* mb-2 is stated here because nothing else supplies it: this
+              wrapper declares no gap, and preflight zeroes heading margins.
+              Without it the heading sits flush on top of the capture row. */}
+          <h2 className="mb-2 text-sm font-semibold text-fg">任务列表</h2>
           <InlineCreate ref={createRef} onCreated={handleCreated} />
           <FilterBar
             filters={filters}
@@ -277,16 +280,12 @@ export default function TaskListPage() {
           />
         </div>
 
-        {/* border-0/bg-transparent/p-0 on the two recovery buttons below:
-            they sit mid-sentence and must read as links, but styles.css's
-            legacy `button` rule would otherwise dress them as full boxed
-            buttons inside the paragraph. Drop with styles.css in Task 13. */}
         <div className="min-h-0 flex-1 overflow-y-auto">
           {loading && <p className="p-3 text-sm text-fg-muted">正在加载任务…</p>}
           {!loading && error && (
             <p className="p-3 text-sm text-danger">
               加载失败：{error}{' '}
-              <button type="button" className="border-0 bg-transparent p-0 text-accent underline" onClick={() => setReloadToken((t) => t + 1)}>
+              <button type="button" className="text-accent underline" onClick={() => setReloadToken((t) => t + 1)}>
                 重试
               </button>
             </p>
@@ -294,7 +293,7 @@ export default function TaskListPage() {
           {!loading && !error && tasks.length === 0 && hasActiveFilters && (
             <p className="p-3 text-sm text-fg-muted">
               没有符合筛选条件的任务 —{' '}
-              <button type="button" className="border-0 bg-transparent p-0 text-accent underline" onClick={() => setFilters(DEFAULT_FILTERS)}>
+              <button type="button" className="text-accent underline" onClick={() => setFilters(DEFAULT_FILTERS)}>
                 清除筛选条件
               </button>
             </p>
@@ -360,11 +359,10 @@ export default function TaskListPage() {
       >
         <SheetContent
           // outline-none: Radix moves focus to this panel when it opens
-          // (tabindex="-1", never reached by Tab), and styles.css's legacy
-          // :focus-visible rule painted a 2px accent outline right around
-          // the whole sheet — a purple frame no user asked for, which read
-          // as decoration rather than a focus cue. Suppressing it here
-          // matches shadcn's own dialog content.
+          // (tabindex="-1", never reached by Tab). A focus ring drawn around
+          // the whole sheet reads as decoration, not as a focus cue, so it
+          // is suppressed here exactly as shadcn's own dialog content does.
+          // Every control inside the sheet keeps its own ring.
           className="w-full overflow-y-auto p-0 outline-none sm:max-w-md"
           showCloseButton={false}
           aria-describedby={undefined}

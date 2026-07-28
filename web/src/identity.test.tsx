@@ -129,7 +129,7 @@ describe('IdentityProvider', () => {
     })
 
     expect(screen.queryByTestId('children')).not.toBeInTheDocument()
-    expect(document.querySelector('.error')).not.toBeNull()
-    expect(document.querySelector('.error')?.textContent).toMatch(/加载用户列表失败/)
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent(/加载用户列表失败/)
   })
 })

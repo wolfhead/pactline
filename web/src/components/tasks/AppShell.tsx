@@ -75,15 +75,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
       {showBottomTabs && (
         <nav
           aria-label="底部导航"
-          // gap-0: styles.css's legacy `nav { gap: var(--sp-5) }` (24px) is
-          // in an earlier @layer than Tailwind's utilities, so it loses on
-          // any property this class list actually sets — but grid-cols-4
-          // has no gap utility of its own, leaving that 24px unshadowed and
-          // squeezing four columns into far less than a quarter width each.
-          // pb-[env(...)]: the iOS home-indicator safe area sits right
-          // under this bar; without it the last row of tab labels is
-          // clipped on notched phones.
-          className="grid shrink-0 grid-cols-4 gap-0 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)]"
+          // The safe-area bottom padding is not decoration: the iOS
+          // home-indicator area sits right under this bar, and without it
+          // the last row of tab labels is clipped on notched phones.
+          // (Spelling the utility out in prose here would make Tailwind's
+          // source scanner emit a broken rule for it.)
+          className="grid shrink-0 grid-cols-4 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)]"
         >
           {BOTTOM_TABS.map((tab) => (
             <NavLink

@@ -1,25 +1,22 @@
-/* Tailwind is imported layer by layer, deliberately WITHOUT preflight, for as
- * long as the hand-written styles.css still dresses the pages being migrated.
- * Preflight's resets would fight it and leave every not-yet-rewritten page
- * looking broken mid-migration. The final cleanup task swaps this block for a
- * plain `@import "tailwindcss";` once styles.css is gone. */
-@layer legacy, theme, base, components, utilities;
-@import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/utilities.css" layer(utilities);
+/* The hand-written styles.css is gone, so Tailwind is imported whole —
+ * preflight included. Preflight is what now supplies the resets its bare
+ * element rules used to fight over: margin/padding 0 everywhere, borderless
+ * transparent form controls, unstyled lists, `a { color: inherit }`. */
+@import "tailwindcss";
 @import "tw-animate-css";
-/* styles.css used to be imported unlayered from main.tsx. An unlayered rule
- * beats every layered one no matter how specific, so its bare `h2 {}` and
- * `button {}` element rules silently outranked every Tailwind utility on the
- * rewritten components: TaskList's `text-xs font-medium text-fg-muted` group
- * headings rendered at --fs-xl/600 with a 40px margin, and TaskDetail's
- * `size-7` icon-only close button got `padding: var(--sp-2) var(--sp-4)`,
- * which squeezed the ✕ svg inside it to width 0 — an empty bordered box with
- * no visible way to close the detail (caught in Task 9's screenshots, not by
- * any test). Importing it into the lowest layer restores the precedence the
- * comment below always assumed: legacy pages keep their element-level dress,
- * and a utility class on a rewritten component wins. Task 13 deletes this
- * import along with the file. */
-@import "./styles.css" layer(legacy);
+
+/* The one thing preflight deliberately does NOT restore. styles.css declared
+ * `button { cursor: pointer }`; Tailwind v4 dropped that from preflight on
+ * purpose (it follows the UA default instead), so without this every button
+ * in the product — every status pill, every close ✕, every filter chip —
+ * would silently go back to an arrow cursor. Excluding :disabled keeps
+ * disabled buttons reading as disabled. */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+}
 
 /* The repo picks the theme with a data-theme attribute on <html>, and under
  * "system" it REMOVES the attribute so prefers-color-scheme keeps handling it
@@ -41,15 +38,12 @@
  * the whole reason there is no duplicated dark block below.
  *
  * The override rules deliberately do NOT use :where([data-theme=...]) (zero
- * specificity). web/src/styles.css — imported after this file in main.tsx,
- * only removed by a later cleanup task — declares its own unconditional
- * `:root { color-scheme: light dark; }`. At equal specificity the later
- * source wins, which silently made explicit light/dark choices fall back to
- * following the OS instead of pinning a scheme (verified with Playwright:
- * toggling the in-app theme select to "dark" left every light-dark() token
- * resolved to its light value). Plain `:root[data-theme="dark"]` has higher
- * specificity than styles.css's bare `:root`, so it wins regardless of
- * import order — robust now and after styles.css is deleted. */
+ * specificity). They previously had to outrank styles.css's own unconditional
+ * `:root { color-scheme: light dark; }`, which at equal specificity won on
+ * source order and silently made explicit light/dark choices fall back to
+ * following the OS. That stylesheet is gone, but the plain (non-:where)
+ * selectors stay: zero-specificity overrides would be just as fragile the
+ * next time anything declares color-scheme on :root. */
 :root { color-scheme: light dark; }
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }

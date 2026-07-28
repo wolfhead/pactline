@@ -54,12 +54,7 @@ export default function BoardColumn({ status, tasks, tier, users, rowErrors, onD
       onDragLeave={isPhone ? undefined : () => setDragOver(false)}
       onDrop={isPhone ? undefined : handleDrop}
     >
-      {/* m-0: styles.css's legacy `h2 { margin: 0 0 var(--sp-5) }` still
-          wins over any Tailwind utility that doesn't touch margin, and a
-          20px gap under every column heading pushed the first card away
-          from its own heading — the same class of bug TaskList's grouped
-          heading already works around. Drop with styles.css in Task 13. */}
-      <h2 id={headingId} className="m-0 shrink-0 px-1 text-xs font-medium text-fg-muted">
+      <h2 id={headingId} className="shrink-0 px-1 text-xs font-medium text-fg-muted">
         {STATUS_LABELS[status]} <span className="text-fg-subtle">{tasks.length}</span>
       </h2>
       <div className="flex min-h-24 flex-1 flex-col gap-2 overflow-y-auto">

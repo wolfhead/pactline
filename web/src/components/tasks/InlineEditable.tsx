@@ -1,4 +1,18 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { cn } from '@/lib/utils'
+
+/**
+ * The "reads as text until you touch it" dress that used to live in
+ * styles.css as `.inline-editable`: no visible boundary at rest, a hairline
+ * on hover to say it is editable, and the accent border plus an opaque
+ * surface once focused. The negative inline margin cancels the horizontal
+ * padding so the text still lines up with the prose around it.
+ *
+ * Callers append their own classes and, via cn()'s tailwind-merge, reliably
+ * override any of these — LabelManager, for one, drops the border entirely.
+ */
+const FIELD_CLASS =
+  'block w-full -mx-2 rounded-sm border border-transparent bg-transparent px-2 py-1 outline-none hover:border-border focus:border-accent focus:bg-surface placeholder:text-fg-subtle'
 
 interface InlineEditableProps {
   value: string
@@ -74,15 +88,15 @@ export default function InlineEditable({
 
   if (multiline) {
     // Rows track the actual line count instead of a fixed 4, so a short
-    // (or empty) description reads as a short paragraph — no large empty
-    // block underneath it, and (paired with `resize: none` on
-    // .task-description-input in styles.css) no resize handle either. A
-    // floor of 2 keeps an empty field from collapsing to a single sliver
-    // that's awkward to click into.
+    // (or empty) description reads as a short paragraph rather than a form
+    // field with a large empty block underneath it. A floor of 2 keeps an
+    // empty field from collapsing to a single sliver that's awkward to
+    // click into. `resize-none` finishes the job: a drag handle in the
+    // corner would advertise a form control the height already manages.
     const rows = Math.max(2, draft.split('\n').length)
     return (
       <textarea
-        className={`inline-editable ${className ?? ''}`}
+        className={cn(FIELD_CLASS, 'resize-none leading-relaxed', className)}
         value={draft}
         placeholder={placeholder}
         aria-label={ariaLabel}
@@ -96,7 +110,7 @@ export default function InlineEditable({
 
   return (
     <input
-      className={`inline-editable ${className ?? ''}`}
+      className={cn(FIELD_CLASS, className)}
       value={draft}
       placeholder={placeholder}
       aria-label={ariaLabel}

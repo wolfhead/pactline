@@ -101,9 +101,14 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
   return (
     <IdentityContext.Provider value={{ me, users, switchTo }}>
       {loadError ? (
-        <p className="error">{loadError}</p>
+        // role="alert": this replaces the entire app, so it must announce
+        // itself, and it is the only handle a test has on this branch now
+        // that there is no .error class to query for.
+        <p role="alert" className="p-4 text-sm text-danger">
+          {loadError}
+        </p>
       ) : users.length === 0 ? (
-        <p className="hint">正在加载用户…</p>
+        <p className="p-4 text-sm text-fg-muted">正在加载用户…</p>
       ) : (
         children
       )}
@@ -119,9 +124,15 @@ export function useIdentity(): IdentityValue {
 export function UserSwitcher() {
   const { me, users, switchTo } = useIdentity()
   return (
-    <label className="switcher">
+    <label className="flex min-w-0 items-center gap-2 text-xs whitespace-nowrap text-fg-muted">
       当前身份
-      <select value={me?.id ?? ''} onChange={(e) => switchTo(e.target.value)}>
+      {/* Native <select>, matching ThemeToggle beside it — see the note
+       * there for why this is not the shadcn one. */}
+      <select
+        value={me?.id ?? ''}
+        onChange={(e) => switchTo(e.target.value)}
+        className="min-h-11 min-w-0 flex-1 rounded-md border border-border-strong bg-surface px-2 py-1.5 text-sm text-fg shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/50 pointer-coarse:min-h-11 sm:min-h-8 sm:flex-none"
+      >
         {users.map((u) => (
           <option key={u.id} value={u.id}>
             {u.name}（{u.roles.join(', ')}）

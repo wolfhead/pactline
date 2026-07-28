@@ -86,7 +86,7 @@ export default function TaskBoardPage() {
         加载失败：{error}{' '}
         <button
           type="button"
-          className="border-0 bg-transparent p-0 text-accent underline"
+          className="text-accent underline"
           onClick={() => setReloadToken((t) => t + 1)}
         >
           重试
