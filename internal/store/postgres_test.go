@@ -156,15 +156,32 @@ func TestIdentityMigrationConsolidatesSeedAttribution(t *testing.T) {
 	for i := range ids {
 		ids[i] = uuid.MustParse(fmt.Sprintf("00000000-0000-0000-0000-%012d", i+1))
 	}
-	bountyID := uuid.New()
-	secondBountyID := uuid.New()
+	bountyIDs := make([]uuid.UUID, 6)
+	for i := range bountyIDs {
+		bountyIDs[i] = uuid.New()
+	}
+	creditID := func(sequence int) uuid.UUID {
+		return uuid.MustParse(fmt.Sprintf("10000000-0000-0000-0000-%012d", sequence))
+	}
+	keptSeedCreditIDs := []uuid.UUID{
+		creditID(2),  // CONFIRMED beats PENDING.
+		creditID(4),  // Earlier confirmed_at wins.
+		creditID(6),  // PENDING beats any other status.
+		creditID(8),  // Non-NULL confirmed_at wins.
+		creditID(10), // Earlier created_at wins.
+		creditID(11), // Lower UUID wins the final tie.
+	}
 	calibrationID := uuid.New()
 	projectID := uuid.New()
 	milestoneID := uuid.New()
 	taskID := uuid.New()
+	commentID := uuid.New()
+	taskActivityID := uuid.New()
 	criterionID := uuid.New()
+	acceptanceCheckID := uuid.New()
+	projectActivityID := uuid.New()
 	unrelatedUserID := uuid.New()
-	unrelatedCreditID := uuid.MustParse("10000000-0000-0000-0000-000000000005")
+	unrelatedCreditID := creditID(13)
 
 	tx, err := db.Pool.Begin(ctx)
 	require.NoError(t, err)
@@ -178,28 +195,42 @@ func TestIdentityMigrationConsolidatesSeedAttribution(t *testing.T) {
 	_, err = tx.Exec(ctx, `
 		INSERT INTO bounties
 			(id, type, title, directed_to, sponsor_id, claimed_by)
-		VALUES
-			($1, 'TASK', 'Credit status priority', $3, $4, $5),
-			($2, 'TASK', 'Credit timestamp priority', $3, $4, $5)
-	`, bountyID, secondBountyID, ids[1], ids[2], ids[3])
+		SELECT id, 'TASK', 'Credit priority fixture', $2, $3, $4
+		FROM unnest($1::uuid[]) AS id
+	`, bountyIDs, ids[1], ids[2], ids[3])
 	require.NoError(t, err)
 	_, err = tx.Exec(ctx, `
 		INSERT INTO credits
 			(id, bounty_id, user_id, role, nominated_by, status, confirmed_at, created_at)
 		VALUES
-			('10000000-0000-0000-0000-000000000001', $1, $3, 'IMPLEMENTER', $5, 'PENDING', NULL, '2026-01-01T00:00:00Z'),
-			('10000000-0000-0000-0000-000000000002', $1, $4, 'IMPLEMENTER', $5, 'CONFIRMED', '2026-02-01T00:00:00Z', '2026-02-01T00:00:00Z'),
-			('10000000-0000-0000-0000-000000000003', $2, $3, 'REVIEWER', $5, 'CONFIRMED', '2026-03-01T00:00:00Z', '2026-01-01T00:00:00Z'),
-			('10000000-0000-0000-0000-000000000004', $2, $4, 'REVIEWER', $5, 'CONFIRMED', '2026-02-01T00:00:00Z', '2026-04-01T00:00:00Z'),
-			($6, $1, $7, 'IMPLEMENTER', $5, 'PENDING', NULL, '2026-05-01T00:00:00Z')
-	`, bountyID, secondBountyID, ids[1], ids[2], ids[5], unrelatedCreditID, unrelatedUserID)
+			('10000000-0000-0000-0000-000000000001', $1, $7, 'IMPLEMENTER', $9, 'PENDING', NULL, '2026-01-01T00:00:00Z'),
+			('10000000-0000-0000-0000-000000000002', $1, $8, 'IMPLEMENTER', $9, 'CONFIRMED', '2026-02-01T00:00:00Z', '2026-02-01T00:00:00Z'),
+
+			('10000000-0000-0000-0000-000000000003', $2, $7, 'REVIEWER', $9, 'CONFIRMED', '2026-03-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+			('10000000-0000-0000-0000-000000000004', $2, $8, 'REVIEWER', $9, 'CONFIRMED', '2026-02-01T00:00:00Z', '2026-04-01T00:00:00Z'),
+
+			('10000000-0000-0000-0000-000000000005', $3, $7, 'SUPPORT', $9, 'DECLINED', NULL, '2026-01-01T00:00:00Z'),
+			('10000000-0000-0000-0000-000000000006', $3, $8, 'SUPPORT', $9, 'PENDING', NULL, '2026-02-01T00:00:00Z'),
+
+			('10000000-0000-0000-0000-000000000007', $4, $7, 'APPROVER', $9, 'CONFIRMED', NULL, '2026-01-01T00:00:00Z'),
+			('10000000-0000-0000-0000-000000000008', $4, $8, 'APPROVER', $9, 'CONFIRMED', '2026-04-01T00:00:00Z', '2026-04-01T00:00:00Z'),
+
+			('10000000-0000-0000-0000-000000000009', $5, $7, 'OBSERVER', $9, 'PENDING', NULL, '2026-02-01T00:00:00Z'),
+			('10000000-0000-0000-0000-000000000010', $5, $8, 'OBSERVER', $9, 'PENDING', NULL, '2026-01-01T00:00:00Z'),
+
+			('10000000-0000-0000-0000-000000000011', $6, $7, 'AUTHOR', $9, 'PENDING', NULL, '2026-01-01T00:00:00Z'),
+			('10000000-0000-0000-0000-000000000012', $6, $8, 'AUTHOR', $9, 'PENDING', NULL, '2026-01-01T00:00:00Z'),
+
+			($10, $1, $11, 'IMPLEMENTER', $9, 'PENDING', NULL, '2026-05-01T00:00:00Z')
+	`, bountyIDs[0], bountyIDs[1], bountyIDs[2], bountyIDs[3], bountyIDs[4], bountyIDs[5],
+		ids[1], ids[2], ids[5], unrelatedCreditID, unrelatedUserID)
 	require.NoError(t, err)
 	_, err = tx.Exec(ctx, `
 		INSERT INTO calibrations
 			(id, bounty_id, quarter, original_value, calibrated_value,
 			 calibrated_score, created_by, original_score)
 		VALUES ($1, $2, '2026-Q1', 'L1', 'L2', 2, $3, 1)
-	`, calibrationID, bountyID, ids[1])
+	`, calibrationID, bountyIDs[0], ids[1])
 	require.NoError(t, err)
 	_, err = tx.Exec(ctx, `
 		INSERT INTO projects
@@ -221,13 +252,13 @@ func TestIdentityMigrationConsolidatesSeedAttribution(t *testing.T) {
 	require.NoError(t, err)
 	_, err = tx.Exec(ctx, `
 		INSERT INTO task_comments (id, task_id, author_id, body)
-		VALUES (gen_random_uuid(), $1, $2, 'Historical comment')
-	`, taskID, ids[5])
+		VALUES ($1, $2, $3, 'Historical comment')
+	`, commentID, taskID, ids[5])
 	require.NoError(t, err)
 	_, err = tx.Exec(ctx, `
 		INSERT INTO task_activity (id, task_id, actor_id, field)
-		VALUES (gen_random_uuid(), $1, $2, 'created')
-	`, taskID, ids[1])
+		VALUES ($1, $2, $3, 'created')
+	`, taskActivityID, taskID, ids[1])
 	require.NoError(t, err)
 	_, err = tx.Exec(ctx, `
 		INSERT INTO acceptance_criteria
@@ -239,14 +270,14 @@ func TestIdentityMigrationConsolidatesSeedAttribution(t *testing.T) {
 		INSERT INTO acceptance_checks
 			(id, criterion_id, criterion_revision, outcome, evidence,
 			 checker_type, checked_by_user_id)
-		VALUES (gen_random_uuid(), $1, 1, 'passed', 'Test result', 'user', $2)
-	`, criterionID, ids[2])
+		VALUES ($1, $2, 1, 'passed', 'Test result', 'user', $3)
+	`, acceptanceCheckID, criterionID, ids[2])
 	require.NoError(t, err)
 	_, err = tx.Exec(ctx, `
 		INSERT INTO project_activity
 			(id, project_id, milestone_id, actor_id, action)
-		VALUES (gen_random_uuid(), $1, $2, $3, 'created')
-	`, projectID, milestoneID, ids[3])
+		VALUES ($1, $2, $3, $4, 'created')
+	`, projectActivityID, projectID, milestoneID, ids[3])
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
 
@@ -259,56 +290,76 @@ func TestIdentityMigrationConsolidatesSeedAttribution(t *testing.T) {
 	`, ids[1:]).Scan(&activeSecondary))
 	require.Zero(t, activeSecondary)
 
-	var incorrectlyAttributed int
-	require.NoError(t, db.Pool.QueryRow(ctx, `
-		SELECT count(*) FROM (
-			SELECT directed_to AS user_id FROM bounties WHERE directed_to IS NOT NULL
-			UNION ALL SELECT sponsor_id FROM bounties
-			UNION ALL SELECT claimed_by FROM bounties WHERE claimed_by IS NOT NULL
-			UNION ALL SELECT user_id FROM credits
-			UNION ALL SELECT nominated_by FROM credits WHERE nominated_by IS NOT NULL
-			UNION ALL SELECT created_by FROM calibrations
-			UNION ALL SELECT assignee_id FROM tasks WHERE assignee_id IS NOT NULL
-			UNION ALL SELECT creator_id FROM tasks
-			UNION ALL SELECT author_id FROM task_comments
-			UNION ALL SELECT actor_id FROM task_activity
-			UNION ALL SELECT owner_id FROM projects
-			UNION ALL SELECT creator_id FROM projects
-			UNION ALL SELECT checked_by_user_id FROM acceptance_checks WHERE checked_by_user_id IS NOT NULL
-			UNION ALL SELECT actor_id FROM project_activity
-		) attributed
-		WHERE user_id = ANY($1)
-	`, ids[1:]).Scan(&incorrectlyAttributed))
-	require.Zero(t, incorrectlyAttributed)
+	retainedCreditIDs := append(append([]uuid.UUID{}, keptSeedCreditIDs...), unrelatedCreditID)
+	referenceChecks := []struct {
+		name     string
+		query    string
+		args     []any
+		wantRows int
+	}{
+		{"bounties.directed_to", `SELECT directed_to FROM bounties WHERE id = ANY($1)`, []any{bountyIDs}, len(bountyIDs)},
+		{"bounties.sponsor_id", `SELECT sponsor_id FROM bounties WHERE id = ANY($1)`, []any{bountyIDs}, len(bountyIDs)},
+		{"bounties.claimed_by", `SELECT claimed_by FROM bounties WHERE id = ANY($1)`, []any{bountyIDs}, len(bountyIDs)},
+		{"credits.user_id", `SELECT user_id FROM credits WHERE id = ANY($1) AND id <> $2`, []any{retainedCreditIDs, unrelatedCreditID}, len(keptSeedCreditIDs)},
+		{"credits.nominated_by", `SELECT nominated_by FROM credits WHERE id = ANY($1)`, []any{retainedCreditIDs}, len(retainedCreditIDs)},
+		{"calibrations.created_by", `SELECT created_by FROM calibrations WHERE id = $1`, []any{calibrationID}, 1},
+		{"tasks.assignee_id", `SELECT assignee_id FROM tasks WHERE id = $1`, []any{taskID}, 1},
+		{"tasks.creator_id", `SELECT creator_id FROM tasks WHERE id = $1`, []any{taskID}, 1},
+		{"task_comments.author_id", `SELECT author_id FROM task_comments WHERE id = $1`, []any{commentID}, 1},
+		{"task_activity.actor_id", `SELECT actor_id FROM task_activity WHERE id = $1`, []any{taskActivityID}, 1},
+		{"projects.owner_id", `SELECT owner_id FROM projects WHERE id = $1`, []any{projectID}, 1},
+		{"projects.creator_id", `SELECT creator_id FROM projects WHERE id = $1`, []any{projectID}, 1},
+		{"acceptance_checks.checked_by_user_id", `SELECT checked_by_user_id FROM acceptance_checks WHERE id = $1`, []any{acceptanceCheckID}, 1},
+		{"project_activity.actor_id", `SELECT actor_id FROM project_activity WHERE id = $1`, []any{projectActivityID}, 1},
+	}
+	for _, check := range referenceChecks {
+		rows, queryErr := db.Pool.Query(ctx, check.query, check.args...)
+		require.NoError(t, queryErr, check.name)
+		rowCount := 0
+		for rows.Next() {
+			var got uuid.UUID
+			require.NoError(t, rows.Scan(&got), check.name)
+			require.Equal(t, ids[0], got, check.name)
+			rowCount++
+		}
+		require.NoError(t, rows.Err(), check.name)
+		rows.Close()
+		require.Equal(t, check.wantRows, rowCount, check.name)
+	}
 
 	rows, err := db.Pool.Query(ctx, `
-		SELECT bounty_id, role, id
+		SELECT bounty_id, id
 		FROM credits
 		WHERE user_id = $1
-		ORDER BY bounty_id, role
+		ORDER BY bounty_id
 	`, ids[0])
 	require.NoError(t, err)
 	defer rows.Close()
 	kept := map[uuid.UUID]uuid.UUID{}
 	for rows.Next() {
 		var gotBountyID uuid.UUID
-		var role string
 		var creditID uuid.UUID
-		require.NoError(t, rows.Scan(&gotBountyID, &role, &creditID))
+		require.NoError(t, rows.Scan(&gotBountyID, &creditID))
 		kept[gotBountyID] = creditID
 	}
 	require.NoError(t, rows.Err())
 	require.Equal(t, map[uuid.UUID]uuid.UUID{
-		bountyID:       uuid.MustParse("10000000-0000-0000-0000-000000000002"),
-		secondBountyID: uuid.MustParse("10000000-0000-0000-0000-000000000004"),
+		bountyIDs[0]: creditID(2),
+		bountyIDs[1]: creditID(4),
+		bountyIDs[2]: creditID(6),
+		bountyIDs[3]: creditID(8),
+		bountyIDs[4]: creditID(10),
+		bountyIDs[5]: creditID(11),
 	}, kept)
 
-	var unrelatedCreditUserID uuid.UUID
+	var unrelatedCreditUserID, unrelatedCreditNominatorID uuid.UUID
 	require.NoError(t, db.Pool.QueryRow(ctx,
-		`SELECT user_id FROM credits WHERE id = $1`, unrelatedCreditID,
-	).Scan(&unrelatedCreditUserID))
+		`SELECT user_id, nominated_by FROM credits WHERE id = $1`, unrelatedCreditID,
+	).Scan(&unrelatedCreditUserID, &unrelatedCreditNominatorID))
 	require.Equal(t, unrelatedUserID, unrelatedCreditUserID,
 		"a credit that does not collide with the consolidated seed user must survive")
+	require.Equal(t, ids[0], unrelatedCreditNominatorID,
+		"the unrelated credit's seed nominator must still be consolidated")
 
 	var userCount, adminCount int
 	require.NoError(t, db.Pool.QueryRow(ctx, `SELECT count(*) FROM users`).Scan(&userCount))
