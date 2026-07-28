@@ -8,8 +8,28 @@ const SEED_PM = '00000000-0000-0000-0000-000000000001'
 const OTHER_USER = '00000000-0000-0000-0000-000000000002'
 
 const USERS: User[] = [
-  { id: SEED_PM, name: 'Alice', email: 'alice@example.com', roles: ['SPONSOR'], active: true },
-  { id: OTHER_USER, name: 'Bob', email: 'bob@example.com', roles: ['ENGINEER'], active: true },
+  {
+    id: SEED_PM,
+    name: 'Alice',
+    email: 'alice@example.com',
+    avatar_url: null,
+    platform_role: 'MEMBER',
+    roles: ['SPONSOR'],
+    active: true,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: OTHER_USER,
+    name: 'Bob',
+    email: 'bob@example.com',
+    avatar_url: null,
+    platform_role: 'MEMBER',
+    roles: ['ENGINEER'],
+    active: true,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  },
 ]
 
 let observedIdAfterSwitch = ''

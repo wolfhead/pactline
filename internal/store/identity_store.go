@@ -334,14 +334,14 @@ func (s *IdentityStore) ResolveSession(ctx context.Context, id uuid.UUID, secret
 		subtle.ConstantTimeCompare(secretHash, bundle.Session.SecretHash) != 1 {
 		return identity.SessionBundle{}, identity.ErrSessionInvalid
 	}
+	if !bundle.User.Active {
+		return identity.SessionBundle{}, identity.ErrUserInactive
+	}
 	if bundle.Session.RevokedAt != nil {
 		return identity.SessionBundle{}, identity.ErrSessionRevoked
 	}
 	if !now.Before(bundle.Session.IdleExpiresAt) || !now.Before(bundle.Session.AbsoluteExpiresAt) {
 		return identity.SessionBundle{}, identity.ErrSessionExpired
-	}
-	if !bundle.User.Active {
-		return identity.SessionBundle{}, identity.ErrUserInactive
 	}
 	impersonation, subject, err := s.currentImpersonation(ctx, bundle.Session.ID)
 	if err != nil {
@@ -467,8 +467,19 @@ func (s *IdentityStore) ReactivateUser(ctx context.Context, userID, actorID uuid
 
 func (s *IdentityStore) StartImpersonation(ctx context.Context, impersonation identity.Impersonation, audit identity.AuditEvent) error {
 	return s.inTransaction(ctx, "start impersonation", func(tx pgx.Tx) error {
-		if err := lockSession(ctx, tx, impersonation.SessionID); err != nil {
-			return err
+		var sessionUserID uuid.UUID
+		if err := tx.QueryRow(ctx, `
+			SELECT user_id FROM sessions WHERE id=$1 FOR UPDATE`,
+			impersonation.SessionID).Scan(&sessionUserID); errors.Is(err, pgx.ErrNoRows) {
+			return identity.ErrSessionInvalid
+		} else if err != nil {
+			return fmt.Errorf("lock impersonation session: %w", err)
+		}
+		if sessionUserID != impersonation.ActorUserID {
+			return identity.ErrImpersonationDenied
+		}
+		if impersonation.ActorUserID == impersonation.SubjectUserID {
+			return identity.ErrImpersonationDenied
 		}
 		var actorRole, subjectRole domain.PlatformRole
 		var actorActive, subjectActive bool

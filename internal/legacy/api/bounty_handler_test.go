@@ -7,14 +7,18 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"bountyboard"
 	"bountyboard/internal/api"
 	userdomain "bountyboard/internal/domain"
+	"bountyboard/internal/identity"
+	"bountyboard/internal/integrations/devauth"
 	legacyapi "bountyboard/internal/legacy/api"
 	"bountyboard/internal/legacy/domain"
 	legacystore "bountyboard/internal/legacy/store"
@@ -51,6 +55,20 @@ func newTestServer(t *testing.T) http.Handler {
 	require.NoError(t, err)
 	require.NoError(t, db.Migrate(context.Background(), bountyboard.MigrationFS))
 	t.Cleanup(db.Close)
+	sessionCutoff := time.Now().UTC()
+	t.Cleanup(func() {
+		ctx := context.Background()
+		_, cleanupErr := db.Pool.Exec(ctx, `
+			DELETE FROM identity_audit_events
+			WHERE session_id IN (SELECT id FROM sessions WHERE created_at >= $1)`, sessionCutoff)
+		require.NoError(t, cleanupErr)
+		_, cleanupErr = db.Pool.Exec(ctx, `
+			DELETE FROM impersonations
+			WHERE session_id IN (SELECT id FROM sessions WHERE created_at >= $1)`, sessionCutoff)
+		require.NoError(t, cleanupErr)
+		_, cleanupErr = db.Pool.Exec(ctx, `DELETE FROM sessions WHERE created_at >= $1`, sessionCutoff)
+		require.NoError(t, cleanupErr)
+	})
 	enableLegacySeedIdentities(t, db)
 
 	users := store.NewUserStore(db)
@@ -58,12 +76,23 @@ func newTestServer(t *testing.T) http.Handler {
 		users, legacystore.NewBountyStore(db), legacystore.NewCreditStore(db),
 		legacystore.NewCalibrationStore(db), legacystore.NewAnchorStore(db),
 	)
-	return api.NewRouter(users, legacyHandler)
+	identityService, err := identity.NewService(
+		store.NewIdentityStore(db), users, []byte("legacy-api-tests-session-secret!!"),
+		identity.SystemClock{}, identity.CryptoSecretGenerator{},
+	)
+	require.NoError(t, err)
+	baseURL, err := url.Parse("http://app.test")
+	require.NoError(t, err)
+	return api.NewRouter(users, legacyHandler, api.RouterOptions{
+		Auth: api.AuthSurface{
+			Sessions: identityService, Development: devauth.New(users, identityService), AppBaseURL: baseURL,
+		},
+	})
 }
 
-// The legacy HTTP suite needs the historical capability-role fixtures while
-// it remains behind X-User-Id. Keep that test-only compatibility local and
-// restore the identity migration's inactive state after every test.
+// The legacy HTTP suite needs the historical capability-role fixtures.
+// Development sessions authenticate them only inside tests; restore the
+// identity migration's inactive state after every test.
 func enableLegacySeedIdentities(t *testing.T, db *store.DB) {
 	t.Helper()
 	ctx := context.Background()
@@ -113,15 +142,56 @@ func TestMain(m *testing.M) {
 
 func do(t *testing.T, h http.Handler, method, path, userID string, body any) *httptest.ResponseRecorder {
 	t.Helper()
+	var cookies []*http.Cookie
+	csrfToken := ""
+	if userID != "" {
+		cookies, csrfToken = loginForTest(t, h, userID)
+	}
+	return doWithSession(t, h, method, path, cookies, csrfToken, body)
+}
+
+func loginForTest(t *testing.T, h http.Handler, userID string) ([]*http.Cookie, string) {
+	t.Helper()
+	loginBody, err := json.Marshal(map[string]string{"user_id": userID})
+	require.NoError(t, err)
+	loginRequest := httptest.NewRequest(http.MethodPost, "/api/auth/dev/session", bytes.NewReader(loginBody))
+	loginRequest.Header.Set("Content-Type", "application/json")
+	loginResponse := httptest.NewRecorder()
+	h.ServeHTTP(loginResponse, loginRequest)
+	require.Equal(t, http.StatusNoContent, loginResponse.Code, loginResponse.Body.String())
+	cookies := loginResponse.Result().Cookies()
+	csrfToken := ""
+	for _, cookie := range cookies {
+		if cookie.Name == "bb_csrf" {
+			csrfToken = cookie.Value
+		}
+	}
+	return cookies, csrfToken
+}
+
+func doWithSession(
+	t *testing.T,
+	h http.Handler,
+	method, path string,
+	cookies []*http.Cookie,
+	csrfToken string,
+	body any,
+) *httptest.ResponseRecorder {
+	t.Helper()
 	var buf bytes.Buffer
 	if body != nil {
 		require.NoError(t, json.NewEncoder(&buf).Encode(body))
 	}
 	req := httptest.NewRequest(method, path, &buf)
-	if userID != "" {
-		req.Header.Set("X-User-Id", userID)
+	for _, cookie := range cookies {
+		req.AddCookie(cookie)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if method != http.MethodGet && method != http.MethodHead && method != http.MethodOptions && len(cookies) > 0 {
+		req.Header.Set("Origin", "http://app.test")
+		req.Header.Set("Sec-Fetch-Site", "same-origin")
+		req.Header.Set("X-CSRF-Token", csrfToken)
+	}
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	return rec
@@ -333,13 +403,19 @@ func TestCreateBountyAllowsSteward(t *testing.T) {
 
 func TestMalformedIdentityIsUnauthorized(t *testing.T) {
 	h := newTestServer(t)
-	rec := do(t, h, http.MethodGet, "/api/legacy/bounties", "not-a-uuid", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/legacy/bounties", nil)
+	req.Header.Set("X-User-Id", "not-a-uuid")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
 func TestUnknownIdentityIsUnauthorized(t *testing.T) {
 	h := newTestServer(t)
-	rec := do(t, h, http.MethodGet, "/api/legacy/bounties", "99999999-9999-9999-9999-999999999999", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/legacy/bounties", nil)
+	req.Header.Set("X-User-Id", "99999999-9999-9999-9999-999999999999")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 

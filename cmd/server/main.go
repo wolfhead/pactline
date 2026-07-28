@@ -10,6 +10,8 @@ import (
 	"bountyboard"
 	"bountyboard/internal/api"
 	"bountyboard/internal/application"
+	"bountyboard/internal/identity"
+	"bountyboard/internal/integrations/devauth"
 	legacyapi "bountyboard/internal/legacy/api"
 	legacystore "bountyboard/internal/legacy/store"
 	"bountyboard/internal/logging"
@@ -53,6 +55,18 @@ func main() {
 	projectService := &application.ProjectService{
 		Projects: projects, Milestones: milestones, Acceptance: acceptance, Tasks: tasks,
 	}
+	identityStore := store.NewIdentityStore(db)
+	identityService, err := identity.NewService(
+		identityStore, users, cfg.SessionSecret, identity.SystemClock{}, identity.CryptoSecretGenerator{},
+	)
+	if err != nil {
+		slog.Error("configure application sessions", "error", err)
+		os.Exit(1)
+	}
+	var developmentAuth *devauth.Provider
+	if cfg.AuthProvider == AuthProviderDevelopment {
+		developmentAuth = devauth.New(users, identityService)
+	}
 
 	// The bounty/credit/scoring mechanism moved to internal/legacy — see
 	// internal/legacy/README.md. Its router is mounted under /api/legacy/ by
@@ -66,10 +80,16 @@ func main() {
 		legacystore.NewAnchorStore(db),
 	)
 
-	handler := api.NewRouter(users, legacyHandler, api.TaskSurface{
-		Tasks: tasks, Comments: comments, Labels: labels,
-		Projects: projects, Milestones: milestones, Acceptance: acceptance,
-		ProjectService: projectService,
+	taskSurface := &api.TaskSurface{
+		Tasks: tasks, Comments: comments, Labels: labels, Projects: projects,
+		Milestones: milestones, Acceptance: acceptance, ProjectService: projectService,
+	}
+	handler := api.NewRouter(users, legacyHandler, api.RouterOptions{
+		Auth: api.AuthSurface{
+			Sessions: identityService, Development: developmentAuth, AppBaseURL: cfg.AppBaseURL,
+			SecureCookies: cfg.AppEnv != EnvironmentDevelopment && cfg.AppEnv != EnvironmentTest,
+		},
+		Tasks: taskSurface,
 	})
 
 	addr := os.Getenv("ADDR")

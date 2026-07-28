@@ -225,7 +225,7 @@ func TestSessionRollingProviderFailureRevocationAndDeactivation(t *testing.T) {
 	require.False(t, active)
 	require.NotNil(t, revokedAt)
 	_, err = repository.ResolveSession(ctx, session.ID, sessionSecret[:], now.Add(9*time.Minute))
-	require.ErrorIs(t, err, identity.ErrSessionRevoked)
+	require.ErrorIs(t, err, identity.ErrUserInactive)
 }
 
 func TestImpersonationDeliveryAndAuditAreAppendOnly(t *testing.T) {
@@ -284,6 +284,13 @@ func TestImpersonationDeliveryAndAuditAreAppendOnly(t *testing.T) {
 		ID: uuid.New(), SessionID: sessionID, ActorUserID: primarySeedID,
 		SubjectUserID: memberID, StartedAt: now,
 	}
+	wrongActor := impersonation
+	wrongActor.ID = uuid.New()
+	wrongActor.ActorUserID = memberID
+	wrongActor.SubjectUserID = primarySeedID
+	err = repository.StartImpersonation(ctx, wrongActor, auditEvent("impersonation_started", now))
+	require.ErrorIs(t, err, identity.ErrImpersonationDenied)
+
 	startAudit := auditEvent("impersonation_started", now)
 	startAudit.SessionID, startAudit.ActorUserID, startAudit.SubjectUserID = &sessionID, &primarySeedID, &memberID
 	require.NoError(t, repository.StartImpersonation(ctx, impersonation, startAudit))

@@ -71,7 +71,13 @@ export default defineConfig({
     {
       command: 'go run ./cmd/server',
       cwd: repoRoot,
-      env: { DATABASE_URL: DSN },
+      env: {
+        DATABASE_URL: DSN,
+        APP_ENV: 'development',
+        AUTH_PROVIDER: 'development',
+        APP_BASE_URL: 'http://localhost:5173',
+        SESSION_SECRET: 'playwright-development-session-secret',
+      },
       url: 'http://localhost:8080/api/users',
       reuseExistingServer: true,
       timeout: 30_000,

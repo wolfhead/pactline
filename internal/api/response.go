@@ -52,6 +52,14 @@ func userResponses(users []domain.User) []userResponse {
 	return out
 }
 
+func userResponseFromDomain(user domain.User) userResponse {
+	return userResponse{
+		ID: user.ID, Name: user.Name, Email: user.Email, AvatarURL: user.AvatarURL,
+		PlatformRole: user.PlatformRole, Roles: user.Roles, Active: user.Active,
+		CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt,
+	}
+}
+
 // WriteJSON writes v as the JSON body with the given status.
 func WriteJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

@@ -9,13 +9,18 @@ const STORAGE_KEY = 'bountyboard.currentUserId'
 // the retired bounty/credit mechanism, so it stays here rather than in the
 // (now-deleted) legacy types module.
 export type UserRole = 'SPONSOR' | 'ENGINEER' | 'TECH_LEAD' | 'STEWARD'
+export type PlatformRole = 'ADMIN' | 'MEMBER'
 
 export interface User {
   id: string
   name: string
-  email: string
+  email: string | null
+  avatar_url: string | null
+  platform_role: PlatformRole
   roles: UserRole[]
   active: boolean
+  created_at: string
+  updated_at: string
 }
 
 interface IdentityValue {

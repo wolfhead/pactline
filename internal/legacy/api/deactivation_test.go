@@ -18,12 +18,13 @@ import (
 // left has no standing to ask the system anything, not just to change it.
 func TestDeactivatedUserRefusedByAPI(t *testing.T) {
 	h := newTestServer(t)
+	cookies, csrf := loginForTest(t, h, engCID)
 	deactivateUser(t, engCID)
 
-	rec := do(t, h, http.MethodGet, "/api/legacy/bounties", engCID, nil)
+	rec := doWithSession(t, h, http.MethodGet, "/api/legacy/bounties", cookies, csrf, nil)
 	require.Equal(t, http.StatusForbidden, rec.Code, "a deactivated user must be refused even a read")
 
-	rec = do(t, h, http.MethodPost, "/api/legacy/bounties", engCID, map[string]any{
+	rec = doWithSession(t, h, http.MethodPost, "/api/legacy/bounties", cookies, csrf, map[string]any{
 		"type": "DELIVERY", "title": "deactivated user tries to open a bounty",
 	})
 	require.Equal(t, http.StatusForbidden, rec.Code, "a deactivated user must be refused a write")

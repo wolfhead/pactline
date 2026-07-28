@@ -2,8 +2,10 @@ package api
 
 import (
 	"net/http"
+	"net/url"
 
 	"bountyboard/internal/application"
+	"bountyboard/internal/identity"
 	"bountyboard/internal/store"
 )
 
@@ -23,6 +25,18 @@ type TaskSurface struct {
 	ProjectService *application.ProjectService
 }
 
+type AuthSurface struct {
+	Sessions      *identity.Service
+	Development   developmentAuthenticator
+	AppBaseURL    *url.URL
+	SecureCookies bool
+}
+
+type RouterOptions struct {
+	Auth  AuthSurface
+	Tasks *TaskSurface
+}
+
 // NewRouter builds the top-level API handler: user listing, every mechanism
 // endpoint mounted under /api/legacy/ (see legacyMux, and
 // internal/legacy/README.md for why the mechanism lives there instead of at
@@ -34,21 +48,35 @@ type TaskSurface struct {
 func NewRouter(
 	users *store.UserStore,
 	legacyMux http.Handler,
-	taskSurface ...TaskSurface,
+	options RouterOptions,
 ) http.Handler {
-	mux := http.NewServeMux()
+	protected := http.NewServeMux()
 
 	uh := &userHandler{users: users}
-	mux.HandleFunc("GET /api/users", uh.list)
+	protected.HandleFunc("GET /api/users", uh.list)
 
-	if len(taskSurface) > 0 {
-		ts := taskSurface[0]
-		mountTaskRoutes(mux, ts)
+	if options.Tasks != nil {
+		mountTaskRoutes(protected, *options.Tasks)
 	}
 
-	mux.Handle("/api/legacy/", legacyMux)
+	protected.Handle("/api/legacy/", legacyMux)
 
-	return withIdentity(users, mux)
+	cookies := cookieSettings{secure: options.Auth.SecureCookies}
+	auth := &authHandler{
+		sessions: options.Auth.Sessions, development: options.Auth.Development, cookies: cookies,
+	}
+	protected.HandleFunc("GET /api/me", auth.me)
+	protected.HandleFunc("POST /api/auth/logout", auth.logout)
+
+	root := http.NewServeMux()
+	if options.Auth.Development != nil {
+		root.HandleFunc("POST /api/auth/dev/session", auth.developmentSession)
+	}
+	middleware := identityMiddleware{
+		sessions: options.Auth.Sessions, appBaseURL: options.Auth.AppBaseURL, cookies: cookies,
+	}
+	root.Handle("/", middleware.wrap(protected))
+	return root
 }
 
 // mountTaskRoutes registers the task/comment/activity/label endpoints on

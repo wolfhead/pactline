@@ -37,7 +37,7 @@ export const PRIORITY_LABELS: Record<TaskPriority, string> = {
 export interface UserRef {
   id: string
   name: string
-  email: string
+  email: string | null
 }
 
 // See the file-level comment: this is domain.Label's real, untagged wire

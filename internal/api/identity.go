@@ -5,69 +5,131 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"bountyboard/internal/domain"
-	"bountyboard/internal/store"
+	"bountyboard/internal/identity"
 
 	"github.com/google/uuid"
 )
 
-type ctxKey int
+const (
+	sessionCookieName = "bb_session"
+	csrfCookieName    = "bb_csrf"
+)
 
-const userKey ctxKey = iota
+type identityMiddleware struct {
+	sessions   *identity.Service
+	appBaseURL *url.URL
+	cookies    cookieSettings
+}
 
-// withIdentity resolves the X-User-Id header into a domain.User.
-//
-// Phase 1 has no authentication on purpose: the frontend ships a user switcher
-// so the whole loop can be exercised locally. This middleware and the switcher
-// are both removed when Feishu OAuth lands in Phase 6.
-func withIdentity(users *store.UserStore, next http.Handler) http.Handler {
+func (m identityMiddleware) wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		raw := r.Header.Get("X-User-Id")
-		if raw == "" {
-			slog.Warn("request without identity", "path", r.URL.Path)
-			WriteJSON(w, http.StatusUnauthorized, ErrorBody{Error: "X-User-Id header is required"})
+		cookie, err := r.Cookie(sessionCookieName)
+		if err != nil {
+			slog.Warn("request without application session", "method", r.Method, "path", r.URL.Path)
+			WriteJSON(w, http.StatusUnauthorized, ErrorBody{Error: "authentication required"})
 			return
 		}
-		id, err := uuid.Parse(raw)
+		requestIdentity, session, err := m.sessions.Authenticate(r.Context(), cookie.Value)
 		if err != nil {
-			slog.Warn("malformed identity header", "path", r.URL.Path, "value", raw)
-			WriteJSON(w, http.StatusUnauthorized, ErrorBody{Error: "X-User-Id is not a UUID"})
+			m.cookies.clear(w)
+			status := http.StatusUnauthorized
+			message := "invalid or expired session"
+			if errors.Is(err, identity.ErrUserInactive) {
+				status = http.StatusForbidden
+				message = "user is inactive"
+			}
+			slog.Warn("application session rejected",
+				"method", r.Method, "path", r.URL.Path, "status", status, "error_category", sessionErrorCategory(err))
+			WriteJSON(w, status, ErrorBody{Error: message})
 			return
 		}
-		u, err := users.GetByID(r.Context(), id)
-		if err != nil {
-			if errors.Is(err, domain.ErrNotFound) {
-				slog.Warn("unknown identity", "path", r.URL.Path, "user_id", id, "error", err)
-				WriteJSON(w, http.StatusUnauthorized, ErrorBody{Error: "unknown user"})
+		if requestIdentity.IsImpersonating() && !identity.RequestAllowedDuringImpersonation(r.Method, r.URL.Path) {
+			slog.Warn("impersonated state change rejected",
+				"method", r.Method, "path", r.URL.Path,
+				"actor_user_id", requestIdentity.Actor.ID, "subject_user_id", requestIdentity.Subject.ID,
+				"session_id", requestIdentity.SessionID)
+			WriteJSON(w, http.StatusForbidden, ErrorBody{Error: "impersonation is read-only"})
+			return
+		}
+		if methodRequiresCSRF(r.Method) {
+			if !sameOriginRequest(r, m.appBaseURL) || !m.sessions.VerifyCSRF(session, r.Header.Get("X-CSRF-Token")) {
+				slog.Warn("csrf validation rejected",
+					"method", r.Method, "path", r.URL.Path, "session_id", requestIdentity.SessionID)
+				WriteJSON(w, http.StatusForbidden, ErrorBody{Error: "CSRF validation failed"})
 				return
 			}
-			slog.Error("identity resolution failed", "path", r.URL.Path, "user_id", id, "error", err)
-			WriteJSON(w, http.StatusInternalServerError, ErrorBody{Error: "identity resolution failed"})
-			return
 		}
-		// Decision: "active" governs who may ACT — every endpoint reachable
-		// through this middleware, read or write — and who appears in
-		// pickers (UserStore.ListActive, backing GET /api/users). It never
-		// governs who is REMEMBERED: credit names are resolved from
-		// UserStore.ListAll regardless of active (see feed_handler.decorate),
-		// so a person who has left still keeps their name on the work they
-		// are credited on. Gating here, in the one place identity is
-		// resolved, closes every mutating endpoint to a deactivated user
-		// without each handler re-checking the flag — and closes reads too,
-		// since a deactivated user has left and has no standing to ask the
-		// system anything, not just to change it.
-		if !u.Active {
-			slog.Warn("deactivated identity denied", "path", r.URL.Path, "user_id", id)
-			WriteJSON(w, http.StatusForbidden, ErrorBody{Error: "user is deactivated"})
-			return
-		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey, u)))
+		ctx := identity.WithRequestIdentity(r.Context(), requestIdentity)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-// CurrentUser returns the caller resolved by withIdentity.
+func IdentityFromContext(ctx context.Context) (identity.RequestIdentity, bool) {
+	return identity.FromContext(ctx)
+}
+
+func SubjectUserID(ctx context.Context) (uuid.UUID, bool) {
+	return identity.SubjectUserID(ctx)
+}
+
+func ActorUserID(ctx context.Context) (uuid.UUID, bool) {
+	return identity.ActorUserID(ctx)
+}
+
+// CurrentUser is the effective subject. Existing task and legacy handlers
+// intentionally continue to consume only the internal subject UUID.
 func CurrentUser(r *http.Request) domain.User {
-	u, _ := r.Context().Value(userKey).(domain.User)
-	return u
+	requestIdentity, _ := identity.FromContext(r.Context())
+	return requestIdentity.Subject
+}
+
+func CurrentActor(r *http.Request) domain.User {
+	requestIdentity, _ := identity.FromContext(r.Context())
+	return requestIdentity.Actor
+}
+
+func methodRequiresCSRF(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return false
+	default:
+		return true
+	}
+}
+
+func sameOriginRequest(r *http.Request, appBaseURL *url.URL) bool {
+	if appBaseURL == nil {
+		return false
+	}
+	fetchSite := strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site")))
+	if fetchSite != "" && fetchSite != "same-origin" {
+		return false
+	}
+	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	if origin == "" {
+		return false
+	}
+	value, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(value.Scheme, appBaseURL.Scheme) &&
+		strings.EqualFold(value.Host, appBaseURL.Host)
+}
+
+func sessionErrorCategory(err error) string {
+	switch {
+	case errors.Is(err, identity.ErrUserInactive):
+		return "user_inactive"
+	case errors.Is(err, identity.ErrSessionExpired):
+		return "session_expired"
+	case errors.Is(err, identity.ErrSessionRevoked):
+		return "session_revoked"
+	default:
+		return "session_invalid"
+	}
 }
