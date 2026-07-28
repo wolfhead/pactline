@@ -38,6 +38,7 @@ type IdentityRepository interface {
 	GetExternalIdentityForUser(ctx context.Context, userID uuid.UUID) (ExternalIdentity, error)
 	RefreshCredentialLocked(ctx context.Context, externalIdentityID uuid.UUID, refresh func(OAuthCredential) (OAuthCredential, error)) (OAuthCredential, error)
 	RecordProviderVerification(ctx context.Context, sessionID uuid.UUID, verifiedAt time.Time) error
+	RecordTokenProviderVerification(ctx context.Context, userID uuid.UUID, verifiedAt time.Time) error
 	RecordProviderFailure(ctx context.Context, sessionID uuid.UUID, failedAt time.Time, audit AuditEvent) error
 	DeactivateUser(ctx context.Context, userID, actorID uuid.UUID, reason, providerRequestID string) error
 	AcceptInvitation(ctx context.Context, command AcceptInvitationCommand) (domain.User, error)
@@ -733,49 +734,9 @@ func (s *Service) revalidate(ctx context.Context, bundle *SessionBundle, now tim
 	if err != nil {
 		return ErrSessionInvalid
 	}
-	credential := external.EncryptedCredential
-	if !now.Before(credential.AccessTokenExpiresAt) {
-		if !now.Before(credential.RefreshTokenExpiresAt) {
-			return ErrSessionInvalid
-		}
-		credential, err = s.identity.RefreshCredentialLocked(ctx, external.ID, func(current OAuthCredential) (OAuthCredential, error) {
-			if now.Before(current.AccessTokenExpiresAt) {
-				return current, nil
-			}
-			refreshed, refreshErr := s.authenticator.RefreshCredential(ctx, current)
-			return refreshed.Credential, refreshErr
-		})
-		if err != nil {
-			category, categorized := ProviderCategoryFromError(err)
-			providerRequestID := ProviderRequestIDFromError(err)
-			if errors.Is(err, ErrProviderTransient) ||
-				categorized && (category == ProviderRateLimited || category == ProviderUnavailable) {
-				if category == "" {
-					category = ProviderUnavailable
-				}
-				return s.applyProviderTransient(ctx, bundle, category, providerRequestID, now)
-			}
-			if categorized && IsExplicitInvalid(category) {
-				return s.deactivateInvalidPrincipal(ctx, bundle.User.ID, category, providerRequestID)
-			}
-			return ErrSessionInvalid
-		}
-	}
-	result, err := s.verifier.VerifyPrincipal(ctx, credential, external.Key)
+	result, err := s.verifyExternalPrincipal(ctx, external, now)
 	if err != nil {
-		category, categorized := ProviderCategoryFromError(err)
-		providerRequestID := ProviderRequestIDFromError(err)
-		if errors.Is(err, ErrProviderTransient) ||
-			categorized && (category == ProviderRateLimited || category == ProviderUnavailable) {
-			if category == "" {
-				category = ProviderUnavailable
-			}
-			result = VerificationResult{
-				State: VerificationTransient, Category: category, RequestID: providerRequestID,
-			}
-		} else {
-			return ErrProviderContract
-		}
+		return err
 	}
 	switch result.State {
 	case VerificationValid:
@@ -795,6 +756,104 @@ func (s *Service) revalidate(ctx context.Context, bundle *SessionBundle, now tim
 	default:
 		return ErrProviderContract
 	}
+}
+
+func (s *Service) VerifyTokenOwner(ctx context.Context, user domain.User) error {
+	if !user.Active {
+		return ErrUserInactive
+	}
+	if s.identity == nil || s.verifier == nil {
+		return nil
+	}
+	now := s.clock.Now()
+	external, err := s.identity.GetExternalIdentityForUser(ctx, user.ID)
+	if err != nil {
+		return ErrSessionInvalid
+	}
+	if !ProviderVerificationDue(external.LastVerifiedAt, now) {
+		return nil
+	}
+	result, err := s.verifyExternalPrincipal(ctx, external, now)
+	if err != nil {
+		return err
+	}
+	switch result.State {
+	case VerificationValid:
+		if err := s.identity.RecordTokenProviderVerification(ctx, user.ID, now); err != nil {
+			return fmt.Errorf("record token-owner provider verification: %w", err)
+		}
+		return nil
+	case VerificationInvalid:
+		if !IsExplicitInvalid(result.Category) {
+			return ErrProviderContract
+		}
+		return s.deactivateInvalidPrincipal(ctx, user.ID, result.Category, result.RequestID)
+	case VerificationTransient:
+		if external.LastVerifiedAt != nil &&
+			!now.After(external.LastVerifiedAt.Add(ProviderTransientGrace)) {
+			return nil
+		}
+		return ErrProviderTransient
+	default:
+		return ErrProviderContract
+	}
+}
+
+func (s *Service) verifyExternalPrincipal(
+	ctx context.Context,
+	external ExternalIdentity,
+	now time.Time,
+) (VerificationResult, error) {
+	credential := external.EncryptedCredential
+	var err error
+	if !now.Before(credential.AccessTokenExpiresAt) {
+		if !now.Before(credential.RefreshTokenExpiresAt) {
+			return VerificationResult{}, ErrSessionInvalid
+		}
+		credential, err = s.identity.RefreshCredentialLocked(ctx, external.ID, func(current OAuthCredential) (OAuthCredential, error) {
+			if now.Before(current.AccessTokenExpiresAt) {
+				return current, nil
+			}
+			refreshed, refreshErr := s.authenticator.RefreshCredential(ctx, current)
+			return refreshed.Credential, refreshErr
+		})
+		if err != nil {
+			category, categorized := ProviderCategoryFromError(err)
+			providerRequestID := ProviderRequestIDFromError(err)
+			if errors.Is(err, ErrProviderTransient) ||
+				categorized && (category == ProviderRateLimited || category == ProviderUnavailable) {
+				if category == "" {
+					category = ProviderUnavailable
+				}
+				return VerificationResult{
+					State: VerificationTransient, Category: category, RequestID: providerRequestID,
+				}, nil
+			}
+			if categorized && IsExplicitInvalid(category) {
+				return VerificationResult{
+					State: VerificationInvalid, Category: category, RequestID: providerRequestID,
+				}, nil
+			}
+			return VerificationResult{}, ErrSessionInvalid
+		}
+	}
+	result, err := s.verifier.VerifyPrincipal(ctx, credential, external.Key)
+	if err != nil {
+		category, categorized := ProviderCategoryFromError(err)
+		providerRequestID := ProviderRequestIDFromError(err)
+		if errors.Is(err, ErrProviderTransient) ||
+			categorized && (category == ProviderRateLimited || category == ProviderUnavailable) {
+			if category == "" {
+				category = ProviderUnavailable
+			}
+			result = VerificationResult{
+				State: VerificationTransient, Category: category, RequestID: providerRequestID,
+			}
+		} else {
+			return VerificationResult{}, ErrProviderContract
+		}
+	}
+	return result, nil
 }
 
 func (s *Service) deactivateInvalidPrincipal(

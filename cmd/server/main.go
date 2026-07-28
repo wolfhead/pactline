@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"bountyboard"
+	"bountyboard/internal/access"
 	"bountyboard/internal/api"
 	"bountyboard/internal/application"
 	"bountyboard/internal/identity"
@@ -63,6 +64,9 @@ func main() {
 		slog.Error("configure application sessions", "error", err)
 		os.Exit(1)
 	}
+	tokenService := access.NewService(
+		store.NewAccessStore(db), identity.SystemClock{}, access.CryptoSecretGenerator{},
+	)
 	if cfg.AuthProvider == AuthProviderLark {
 		cipher, cipherErr := identity.NewCredentialCipher(map[string][]byte{
 			cfg.TokenEncryptionKeyID: cfg.TokenEncryptionKey,
@@ -113,7 +117,8 @@ func main() {
 	}
 	handler := api.NewRouter(users, legacyHandler, api.RouterOptions{
 		Auth: api.AuthSurface{
-			Sessions: identityService, Development: developmentAuth, AppBaseURL: cfg.AppBaseURL,
+			Sessions: identityService, Tokens: tokenService,
+			Development: developmentAuth, AppBaseURL: cfg.AppBaseURL,
 			LarkEnabled:   cfg.AuthProvider == AuthProviderLark,
 			SecureCookies: cfg.AppEnv != EnvironmentDevelopment && cfg.AppEnv != EnvironmentTest,
 		},

@@ -326,6 +326,75 @@ func TestConcurrentRevalidationRefreshesOnceAndVerifiesReturnedCredential(t *tes
 	require.Equal(t, uuid.Nil, repository.deactivated)
 }
 
+func TestTokenOwnerRevalidationUsesVerificationWindowAndTransientGrace(t *testing.T) {
+	now := time.Date(2026, 7, 28, 16, 0, 0, 0, time.UTC)
+	user := domain.User{ID: uuid.New(), Active: true, PlatformRole: domain.PlatformRoleMember}
+	credential := OAuthCredential{
+		AccessTokenExpiresAt:  now.Add(time.Hour),
+		RefreshTokenExpiresAt: now.Add(24 * time.Hour),
+	}
+
+	t.Run("recent verification avoids provider call", func(t *testing.T) {
+		recent := now.Add(-10 * time.Minute)
+		repository := &larkServiceRepository{external: ExternalIdentity{
+			ID: uuid.New(), UserID: user.ID, LastVerifiedAt: &recent,
+			EncryptedCredential: credential,
+		}}
+		verifier := &resultVerifier{result: VerificationResult{State: VerificationValid}}
+		service, err := NewService(repository, lifecycleUsers{}, []byte("01234567890123456789012345678901"),
+			fixedLarkClock{now}, &sequenceSecrets{})
+		require.NoError(t, err)
+		service.identity, service.verifier = repository, verifier
+
+		require.NoError(t, service.VerifyTokenOwner(context.Background(), user))
+		require.Zero(t, verifier.calls.Load())
+		require.Zero(t, repository.tokenVerifications)
+	})
+
+	t.Run("due verification is persisted", func(t *testing.T) {
+		stale := now.Add(-20 * time.Minute)
+		repository := &larkServiceRepository{external: ExternalIdentity{
+			ID: uuid.New(), UserID: user.ID, LastVerifiedAt: &stale,
+			EncryptedCredential: credential,
+		}}
+		verifier := &resultVerifier{result: VerificationResult{State: VerificationValid}}
+		service, err := NewService(repository, lifecycleUsers{}, []byte("01234567890123456789012345678901"),
+			fixedLarkClock{now}, &sequenceSecrets{})
+		require.NoError(t, err)
+		service.identity, service.verifier = repository, verifier
+
+		require.NoError(t, service.VerifyTokenOwner(context.Background(), user))
+		require.EqualValues(t, 1, verifier.calls.Load())
+		require.Equal(t, 1, repository.tokenVerifications)
+	})
+
+	for _, test := range []struct {
+		name         string
+		lastVerified time.Time
+		want         error
+	}{
+		{name: "transient inside grace", lastVerified: now.Add(-30 * time.Minute)},
+		{name: "transient outside grace", lastVerified: now.Add(-2 * time.Hour), want: ErrProviderTransient},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			repository := &larkServiceRepository{external: ExternalIdentity{
+				ID: uuid.New(), UserID: user.ID, LastVerifiedAt: &test.lastVerified,
+				EncryptedCredential: credential,
+			}}
+			verifier := &resultVerifier{result: VerificationResult{
+				State: VerificationTransient, Category: ProviderUnavailable,
+			}}
+			service, err := NewService(repository, lifecycleUsers{}, []byte("01234567890123456789012345678901"),
+				fixedLarkClock{now}, &sequenceSecrets{})
+			require.NoError(t, err)
+			service.identity, service.verifier = repository, verifier
+
+			err = service.VerifyTokenOwner(context.Background(), user)
+			require.ErrorIs(t, err, test.want)
+		})
+	}
+}
+
 type larkServiceRepository struct {
 	authorization        *AuthorizationTransaction
 	bootstrap            *BootstrapAdminCommand
@@ -338,6 +407,7 @@ type larkServiceRepository struct {
 	impersonationEnded   bool
 	lastAudit            AuditEvent
 	providerFailures     int
+	tokenVerifications   int
 	providerFailureAudit AuditEvent
 	acceptedInvitation   *AcceptInvitationCommand
 	refreshMu            sync.Mutex
@@ -389,6 +459,10 @@ func (r *larkServiceRepository) RefreshCredentialLocked(
 	return updated, err
 }
 func (r *larkServiceRepository) RecordProviderVerification(context.Context, uuid.UUID, time.Time) error {
+	return nil
+}
+func (r *larkServiceRepository) RecordTokenProviderVerification(context.Context, uuid.UUID, time.Time) error {
+	r.tokenVerifications++
 	return nil
 }
 func (r *larkServiceRepository) RecordProviderFailure(
@@ -562,6 +636,17 @@ func (larkVerifier) VerifyPrincipal(context.Context, OAuthCredential, PrincipalK
 type freshCredentialVerifier struct {
 	now   time.Time
 	calls atomic.Int64
+}
+
+type resultVerifier struct {
+	result VerificationResult
+	err    error
+	calls  atomic.Int64
+}
+
+func (v *resultVerifier) VerifyPrincipal(context.Context, OAuthCredential, PrincipalKey) (VerificationResult, error) {
+	v.calls.Add(1)
+	return v.result, v.err
 }
 
 type testCategorizedProviderError struct {

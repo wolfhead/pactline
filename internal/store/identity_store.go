@@ -744,6 +744,24 @@ func (s *IdentityStore) RecordProviderVerification(ctx context.Context, sessionI
 	})
 }
 
+func (s *IdentityStore) RecordTokenProviderVerification(
+	ctx context.Context,
+	userID uuid.UUID,
+	verifiedAt time.Time,
+) error {
+	tag, err := s.db.Pool.Exec(ctx, `
+		UPDATE external_identities
+		SET last_verified_at=$2, updated_at=$2
+		WHERE user_id=$1`, userID, verifiedAt)
+	if err != nil {
+		return fmt.Errorf("update token-owner external identity verification: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return identity.ErrCredentialNotFound
+	}
+	return nil
+}
+
 func (s *IdentityStore) RecordProviderFailure(ctx context.Context, sessionID uuid.UUID, failedAt time.Time, audit identity.AuditEvent) error {
 	return s.inTransaction(ctx, "record provider failure", func(tx pgx.Tx) error {
 		if err := lockSession(ctx, tx, sessionID); err != nil {

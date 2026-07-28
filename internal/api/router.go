@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/url"
 
+	"bountyboard/internal/access"
 	"bountyboard/internal/application"
 	"bountyboard/internal/identity"
 	"bountyboard/internal/store"
@@ -27,6 +28,7 @@ type TaskSurface struct {
 
 type AuthSurface struct {
 	Sessions      *identity.Service
+	Tokens        *access.Service
 	Development   developmentAuthenticator
 	LarkEnabled   bool
 	AppBaseURL    *url.URL
@@ -36,6 +38,7 @@ type AuthSurface struct {
 type RouterOptions struct {
 	Auth  AuthSurface
 	Tasks *TaskSurface
+	V1    http.Handler
 }
 
 // NewRouter builds the top-level API handler: user listing, every mechanism
@@ -93,8 +96,21 @@ func NewRouter(
 		sessions: options.Auth.Sessions, appBaseURL: options.Auth.AppBaseURL, cookies: cookies,
 		routes: protected,
 	}
+	v1 := options.V1
+	if v1 == nil {
+		v1 = http.NotFoundHandler()
+	}
+	v1Session := identityMiddleware{
+		sessions: options.Auth.Sessions, appBaseURL: options.Auth.AppBaseURL, cookies: cookies,
+	}.wrap(v1)
+	v1Protected := bearerAuthentication{
+		tokens: options.Auth.Tokens,
+		owners: options.Auth.Sessions,
+	}.wrap(v1, v1Session)
+	root.Handle("/api/v1", v1Protected)
+	root.Handle("/api/v1/", v1Protected)
 	root.Handle("/", middleware.wrap(protected))
-	return RequestIDMiddleware(root)
+	return RequestIDMiddleware(isolateBearerFromInternal(root))
 }
 
 // mountTaskRoutes registers the task/comment/activity/label endpoints on
