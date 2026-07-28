@@ -33,7 +33,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="grid min-h-dvh place-items-center bg-surface p-5 text-fg">
+    <main className="grid min-h-dvh place-items-center bg-canvas p-5 text-fg">
       <section className="w-full max-w-sm rounded-xl border border-border bg-surface-raised p-6 shadow-sm">
         <h1 className="text-xl font-semibold">登录任务面板</h1>
         <p className="mt-2 text-sm text-fg-muted">使用公司 Lark 账号继续。</p>

@@ -123,9 +123,8 @@ For the accepted task UI rewrite:
   keyboard shortcuts. `Escape` behavior supplied by accessible Radix overlays
   remains valid.
 - The task list is the primary task surface; bulk-selection UI is out of scope.
-- Preserve theme behavior exactly: `system | light | dark`, storage key
-  `bountyboard.theme.v2`, `data-theme`, and light as the default. Do not write a
-  default preference to storage as if the user selected it.
+- Preserve the fixed light Glacier Blue + Teal visual identity. The product
+  intentionally has no runtime theme preference or light/dark toggle.
 - Preserve identity bootstrap ordering: protected pages must wait for
   `/api/me`; requests use same-origin cookies and never synthesize a user ID.
 

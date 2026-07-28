@@ -81,7 +81,7 @@ export default function ProjectListPage() {
       </header>
 
       {creating && (
-        <form onSubmit={handleCreate} className="grid gap-3 rounded-lg border border-border bg-surface-raised p-4 md:grid-cols-2">
+        <form onSubmit={handleCreate} className="grid gap-3 rounded-lg border border-border bg-surface-raised p-4 shadow-sm md:grid-cols-2">
           <label className="flex flex-col gap-1 text-sm">
             项目名称
             <input name="name" required className="rounded-md border border-border-strong bg-surface px-3 py-2" />
@@ -123,7 +123,7 @@ export default function ProjectListPage() {
               <Link
                 key={project.id}
                 to={`/projects/${project.number}`}
-                className="rounded-lg border border-border bg-surface-raised p-4 hover:border-border-strong"
+                className="rounded-lg border border-border bg-surface-raised p-4 shadow-[0_1px_3px_rgb(23_43_61/0.05)] transition hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-md"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>

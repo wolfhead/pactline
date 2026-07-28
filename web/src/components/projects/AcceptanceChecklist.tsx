@@ -82,10 +82,10 @@ export default function AcceptanceChecklist({
   }
 
   return (
-    <section aria-label={title} className="rounded-lg border border-border bg-surface-raised p-4">
+    <section aria-label={title} className="rounded-lg border border-secondary/20 bg-secondary-subtle/60 p-4">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="font-semibold">{title}</h2>
-        <button type="button" onClick={() => setAdding((value) => !value)} className="text-sm font-medium text-accent">
+        <h2 className="font-semibold text-secondary">{title}</h2>
+        <button type="button" onClick={() => setAdding((value) => !value)} className="text-sm font-medium text-secondary">
           添加验收项
         </button>
       </div>

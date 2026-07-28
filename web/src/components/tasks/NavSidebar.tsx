@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils'
 import { useIdentity } from '@/identity'
 
 const ITEMS = [
-  { to: '/tasks', label: '列表', end: true },
+  { to: '/tasks', label: '列表', end: false },
   { to: '/projects', label: '项目', end: false },
 ] as const
 
@@ -39,8 +39,8 @@ export default function NavSidebar({ onNavigate }: { onNavigate?: () => void }) 
               // itself comes from index.css's `nav a` coarse-pointer rule.
               'flex items-center rounded-md px-3 py-2 text-sm font-medium',
               isActive
-                ? 'bg-accent-subtle text-accent'
-                : 'text-fg-muted hover:bg-surface-subtle hover:text-fg',
+                ? 'bg-accent text-accent-fg shadow-sm'
+                : 'text-fg-muted hover:bg-surface/70 hover:text-fg',
             )
           }
         >

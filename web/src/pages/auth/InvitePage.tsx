@@ -25,7 +25,7 @@ export default function InvitePage() {
   }, [])
 
   return (
-    <main className="grid min-h-dvh place-items-center bg-surface p-5 text-fg">
+    <main className="grid min-h-dvh place-items-center bg-canvas p-5 text-fg">
       <section className="w-full max-w-sm rounded-xl border border-border bg-surface-raised p-6 text-center">
         <h1 className="text-lg font-semibold">加入任务面板</h1>
         {error ? (

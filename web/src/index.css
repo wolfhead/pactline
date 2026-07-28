@@ -99,80 +99,41 @@
   }
 }
 
-/* The repo picks the theme with a data-theme attribute on <html>, and under
- * "system" it REMOVES the attribute so prefers-color-scheme keeps handling it
- * with no listener of ours (see web/src/theme.tsx). shadcn's own convention is
- * a .dark class, which would require theme.tsx to grow a matchMedia listener.
- * Teaching the variant about the existing scheme is cheaper and keeps
- * theme.tsx untouched. */
-@custom-variant dark {
-  &:where([data-theme="dark"], [data-theme="dark"] *) { @slot; }
-  @media (prefers-color-scheme: dark) {
-    &:where(:not([data-theme="light"], [data-theme="light"] *)) { @slot; }
-  }
-}
-
-/* color-scheme is what makes light-dark() resolve, and it lines up exactly
- * with the three preference states theme.tsx already produces: no attribute
- * means "follow the OS", so the root keeps both schemes and the browser
- * picks; an explicit choice pins one. Writing each token once this way is
- * the whole reason there is no duplicated dark block below.
- *
- * The override rules deliberately do NOT use :where([data-theme=...]) (zero
- * specificity). They previously had to outrank styles.css's own unconditional
- * `:root { color-scheme: light dark; }`, which at equal specificity won on
- * source order and silently made explicit light/dark choices fall back to
- * following the OS. That stylesheet is gone, but the plain (non-:where)
- * selectors stay: zero-specificity overrides would be just as fragile the
- * next time anything declares color-scheme on :root. */
-:root { color-scheme: light dark; }
-:root[data-theme="light"] { color-scheme: light; }
-:root[data-theme="dark"] { color-scheme: dark; }
+/* The product intentionally uses one light visual identity. Keeping the
+ * browser's native controls pinned to light prevents an OS dark preference
+ * from producing dark date/select controls inside the fixed-light app. */
+:root { color-scheme: light; }
 
 @theme {
-  --color-surface: light-dark(#ffffff, #161618);
-  --color-surface-subtle: light-dark(#fafafa, #1c1c1f);
-  --color-surface-raised: light-dark(#f4f4f2, #212124);
-  /* --color-border is a hairline row/section divider, not a UI-component
-   * boundary, so WCAG 1.4.11's 3:1 non-text bar does not apply to it (see
-   * the exemption note on scratch-contrast.mjs / task-3-report.md). It is
-   * carried over unchanged from styles.css's --border. --color-border-strong
-   * IS used for real control boundaries (inputs, buttons) and is measured
-   * and adjusted below to clear 3:1 for real. */
-  --color-border: light-dark(#e6e6e2, #2a2a2e);
-  --color-border-strong: light-dark(#888888, #75757a);
-  --color-fg: light-dark(#17171a, #e4e4e7);
-  --color-fg-muted: light-dark(#56565c, #a1a1aa);
-  /* fg-subtle is the weakest text tier (numbers, dates) and is NEVER drawn on
-   * --color-accent-subtle (the selected-row background) — selected rows use
-   * fg-muted for weakened text instead. That's what frees fg-subtle to sit
-   * visibly lighter than fg-muted while still clearing 4.5:1 on surface,
-   * surface-subtle and surface-raised; see task-3-report.md for the ratios
-   * and hex values on both sides of this tier split. */
-  --color-fg-subtle: light-dark(#6e6e72, #888890);
-  --color-accent: light-dark(#4f46e5, #818cf8);
-  --color-accent-fg: light-dark(#ffffff, #17171a);
-  --color-accent-subtle: light-dark(#eef2ff, #26264a);
-  --color-danger: light-dark(#c62828, #f87171);
-  --color-danger-subtle: light-dark(#fdecec, #3a1f1f);
+  /* Glacier blue owns structure; teal is a restrained secondary accent.
+   * Raised surfaces remain white so hierarchy comes from the canvas and
+   * sidebar instead of wrapping every control in a coloured box. */
+  --color-canvas: #f3f7fb;
+  --color-sidebar: #eaf2f9;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #eef4f8;
+  --color-surface-raised: #ffffff;
+  --color-border: #d8e3ec;
+  --color-border-strong: #718196;
+  --color-fg: #172b3d;
+  --color-fg-muted: #4f6274;
+  --color-fg-subtle: #687a8b;
+  --color-accent: #2563eb;
+  --color-accent-fg: #ffffff;
+  --color-accent-subtle: #e6efff;
+  --color-secondary: #0f766e;
+  --color-secondary-subtle: #e2f4f1;
+  --color-danger: #b4232c;
+  --color-danger-subtle: #fcebec;
 
-  /* Light status colours are carried over from styles.css, where they were
-   * already measured against every surface a dot can sit on. The dot is a
-   * redundant cue — the label text is always present — so the 3:1 non-text
-   * bar applies, not 4.5:1. The dark half is a separate palette, lightened
-   * to clear the same bar on a dark surface; Step 3 measures both.
-   * in-progress's light value is darkened slightly from styles.css's
-   * #d97706 — the new --color-surface-raised/--color-accent-subtle surfaces
-   * didn't exist when that value was measured and it fell just under 3:1
-   * against them (2.85-2.89:1); see task-3-report.md. */
-  --color-status-todo: light-dark(#3b6fd6, #6a9ee8);
-  --color-status-in-progress: light-dark(#cd7106, #e0a33e);
-  --color-status-in-review: light-dark(#a15c00, #d9a441);
-  --color-status-done: light-dark(#1f8a3c, #4ea866);
-  --color-status-cancelled: light-dark(#c62828, #f87171);
+  --color-status-todo: #2563eb;
+  --color-status-in-progress: #b45309;
+  --color-status-in-review: #8a5a05;
+  --color-status-done: #0f766e;
+  --color-status-cancelled: #b4232c;
 
-  --color-priority-low: light-dark(#56565c, #a1a1aa);
-  --color-priority-medium: light-dark(#56565c, #a1a1aa);
-  --color-priority-high: light-dark(#d02424, #f87171);
-  --color-priority-urgent: light-dark(#b91c1c, #fca5a5);
+  --color-priority-low: #687a8b;
+  --color-priority-medium: #4f6274;
+  --color-priority-high: #c2410c;
+  --color-priority-urgent: #b4232c;
 }

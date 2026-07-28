@@ -110,7 +110,10 @@ export default function TaskRow({ task, selected, tier, users, error, onPatch, o
         role="listitem"
         aria-current={selected ? 'true' : undefined}
         data-task-number={task.number}
-        className={cn('flex flex-col gap-1.5 border-b border-border px-3 py-2.5', selected && 'bg-accent-subtle')}
+        className={cn(
+          'flex flex-col gap-1.5 border-b border-border px-3 py-2.5',
+          selected && 'bg-accent-subtle shadow-[inset_3px_0_0_var(--color-accent)]',
+        )}
       >
         <div className="flex items-start justify-between gap-2">
           <Link
@@ -144,7 +147,10 @@ export default function TaskRow({ task, selected, tier, users, error, onPatch, o
       role="listitem"
       aria-current={selected ? 'true' : undefined}
       data-task-number={task.number}
-      className={cn('flex h-10 items-center gap-2 border-b border-border px-3', selected && 'bg-accent-subtle')}
+      className={cn(
+        'flex h-10 items-center gap-2 border-b border-border px-3',
+        selected && 'bg-accent-subtle shadow-[inset_3px_0_0_var(--color-accent)]',
+      )}
     >
       <span className="w-12 shrink-0 font-mono text-xs text-fg-muted">#{task.number}</span>
       <Link

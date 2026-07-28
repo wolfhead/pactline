@@ -79,15 +79,13 @@ test('the phone header carries no switchers and the filter bar no create button'
   await page.goto('/tasks')
   await expect(page.getByRole('navigation', { name: '底部导航' })).toBeVisible()
 
-  // Both are reachable, neither is standing chrome: the switchers sit behind
-  // 我的, and 新建任务 would be a third route to the capture row directly
-  // above it.
+  // Account controls remain reachable behind 我的, and 新建任务 would be a
+  // third route to the capture row directly above it.
   await expect(page.getByRole('button', { name: '退出登录' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: '新建任务' })).toHaveCount(0)
 
   await page.getByRole('button', { name: '我的' }).click()
   await expect(page.getByRole('button', { name: '退出登录' })).toBeVisible()
-  await expect(page.getByLabel('主题')).toBeVisible()
 
   // …and they are standing chrome again the moment there is room for them.
   await page.keyboard.press('Escape')

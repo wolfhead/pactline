@@ -276,7 +276,7 @@ export default function TaskListPage() {
   return (
     <div className="flex h-full min-h-0">
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="shrink-0 border-b border-border px-3 py-2">
+        <div className="shrink-0 border-b border-border bg-surface px-3 py-2">
           {/* mb-2 is stated here because nothing else supplies it: this
               wrapper declares no gap, and preflight zeroes heading margins.
               Without it the heading sits flush on top of the capture row. */}
@@ -295,7 +295,7 @@ export default function TaskListPage() {
             rows. Opening a task must not disturb its scrollTop — the list
             never unmounts — and e2e/21 reads that offset off this attribute
             rather than guessing which div in the tree owns the overflow. */}
-        <div data-task-list className="min-h-0 flex-1 overflow-y-auto">
+        <div data-task-list className="min-h-0 flex-1 overflow-y-auto bg-surface">
           {loading && <p className="p-3 text-sm text-fg-muted">正在加载任务…</p>}
           {!loading && error && (
             <p className="p-3 text-sm text-danger">
@@ -353,7 +353,7 @@ export default function TaskListPage() {
       {tier === 'xl' && selected !== null && (
         <aside
           aria-label="任务详情"
-          className="w-[clamp(28rem,36vw,36rem)] shrink-0 overflow-y-auto border-l border-border"
+          className="w-[clamp(28rem,36vw,36rem)] shrink-0 overflow-y-auto border-l border-border bg-surface shadow-[-8px_0_24px_rgb(23_43_61/0.04)]"
         >
           {detailPane}
         </aside>

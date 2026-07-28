@@ -8,9 +8,9 @@ function setWidth(px: number) {
   window.dispatchEvent(new Event('resize'))
 }
 
-function renderShell() {
+function renderShell(path = '/tasks') {
   return render(
-    <MemoryRouter initialEntries={['/tasks']}>
+    <MemoryRouter initialEntries={[path]}>
       <AppShell><p>内容</p></AppShell>
     </MemoryRouter>,
   )
@@ -35,6 +35,12 @@ describe('AppShell', () => {
     expect(screen.queryByRole('button', { name: '打开导航' })).not.toBeInTheDocument()
   })
 
+  it('keeps the task navigation active while a task detail is open', () => {
+    setWidth(1280)
+    renderShell('/tasks/678')
+    expect(screen.getByRole('link', { name: '列表' })).toHaveAttribute('aria-current', 'page')
+  })
+
   it('collapses navigation into a drawer below lg', () => {
     setWidth(900)
     renderShell()
@@ -49,23 +55,18 @@ describe('AppShell', () => {
     expect(screen.queryByRole('button', { name: '打开导航' })).not.toBeInTheDocument()
   })
 
-  it('keeps theme and account controls in the header above a phone', () => {
+  it('keeps account controls in the header above a phone', () => {
     setWidth(900)
     renderShell()
-    expect(screen.getByLabelText('主题')).toBeVisible()
     expect(screen.getByRole('button', { name: '退出登录' })).toBeVisible()
   })
 
-  it('moves theme and account controls off the phone header and behind the 我的 tab', () => {
+  it('moves account controls off the phone header and behind the 我的 tab', () => {
     setWidth(390)
     renderShell()
-    // Not standing chrome: two full-width selects in the header cost ~90px
-    // above the first task on the tier with the least room.
-    expect(screen.queryByLabelText('主题')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '退出登录' })).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '我的' }))
-    expect(screen.getByLabelText('主题')).toBeVisible()
     expect(screen.getByRole('button', { name: '退出登录' })).toBeVisible()
   })
 

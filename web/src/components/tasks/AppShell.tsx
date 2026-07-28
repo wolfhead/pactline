@@ -2,14 +2,13 @@ import { useState, type ReactNode } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { FolderKanban, LayoutList, LogOut, Menu, Plus, User } from 'lucide-react'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
-import { ThemeToggle } from '@/theme'
 import { useIdentity } from '@/identity'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { cn } from '@/lib/utils'
 import NavSidebar from './NavSidebar'
 
 const BOTTOM_TABS = [
-  { to: '/tasks', label: '列表', icon: LayoutList, end: true },
+  { to: '/tasks', label: '列表', icon: LayoutList, end: false },
   { to: '/projects', label: '项目', icon: FolderKanban, end: false },
 ] as const
 
@@ -29,31 +28,28 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const showAdminLinks = actor?.platform_role === 'ADMIN' && !impersonation
 
   const accountControls = (
-    <>
-      <ThemeToggle />
-      <div className="flex min-w-0 items-center gap-2">
-        {subject?.avatar_url ? (
-          <img src={subject.avatar_url} alt="" className="size-7 shrink-0 rounded-full object-cover" />
-        ) : (
-          <span className="grid size-7 shrink-0 place-items-center rounded-full bg-accent-subtle text-xs font-medium text-accent">
-            {subject?.name.slice(0, 1).toUpperCase()}
-          </span>
-        )}
-        <span className="max-w-32 truncate text-sm">{subject?.name}</span>
-        <button
-          type="button"
-          aria-label="退出登录"
-          onClick={() => void logout()}
-          className="rounded-md p-1.5 text-fg-muted hover:bg-surface-subtle hover:text-fg"
-        >
-          <LogOut className="size-4" aria-hidden="true" />
-        </button>
-      </div>
-    </>
+    <div className="flex min-w-0 items-center gap-2">
+      {subject?.avatar_url ? (
+        <img src={subject.avatar_url} alt="" className="size-7 shrink-0 rounded-full object-cover" />
+      ) : (
+        <span className="grid size-7 shrink-0 place-items-center rounded-full bg-accent-subtle text-xs font-medium text-accent">
+          {subject?.name.slice(0, 1).toUpperCase()}
+        </span>
+      )}
+      <span className="max-w-32 truncate text-sm">{subject?.name}</span>
+      <button
+        type="button"
+        aria-label="退出登录"
+        onClick={() => void logout()}
+        className="rounded-md p-1.5 text-fg-muted hover:bg-surface-subtle hover:text-fg"
+      >
+        <LogOut className="size-4" aria-hidden="true" />
+      </button>
+    </div>
   )
 
   return (
-    <div className="flex h-dvh flex-col bg-surface text-fg">
+    <div className="flex h-dvh flex-col bg-canvas text-fg">
       {impersonation && (
         <div role="status" className="flex shrink-0 items-center justify-center gap-3 bg-accent-subtle px-3 py-2 text-sm text-accent">
           <span>管理员 {actor?.name} 正以 {subject?.name} 身份只读查看</span>
@@ -67,13 +63,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </div>
       )}
       <header
-        // One row on every tier now. The phone header used to stack the two
-        // switchers onto a full-width row of their own below the title,
-        // which cost ~90px of a 844px screen before a single task was
-        // visible; they live behind the 我的 tab instead (see below), so
-        // there is nothing left to stack and the 390px mid-word wrap that
-        // forced the stacking cannot happen either.
-        className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2 sm:px-4"
+        // One row on every tier. Phone account controls live behind the 我的
+        // tab, so the header cannot grow a second row above the first task.
+        className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-surface/95 px-3 py-2 shadow-[0_1px_3px_rgb(23_43_61/0.04)] sm:px-4"
       >
         <div className="flex items-center gap-2">
           {showDrawer && (
@@ -92,14 +84,15 @@ export default function AppShell({ children }: { children: ReactNode }) {
               </SheetContent>
             </Sheet>
           )}
-          <span className="text-sm font-semibold">任务面板</span>
+          <span aria-hidden="true" className="size-2 rounded-full bg-secondary" />
+          <span className="text-sm font-semibold tracking-tight">任务面板</span>
         </div>
         {!showBottomTabs && <div className="flex items-center gap-3">{accountControls}</div>}
       </header>
 
       <div className="flex min-h-0 flex-1">
         {showPermanentNav && (
-          <div className="w-44 shrink-0 overflow-y-auto border-r border-border">
+          <div className="w-44 shrink-0 overflow-y-auto border-r border-border bg-sidebar">
             <NavSidebar />
           </div>
         )}
@@ -145,13 +138,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
               新建
             </Link>
           )}
-          {/* 我的 is where the two switchers went. Permanently parked in the
-           * phone header they cost ~90px — two full-width 44px selects and a
-           * gap — above every task, on the one tier that has the least room
-           * and the least reason to change theme or identity mid-scroll.
-           * A sheet is the right trade: still one tap away, zero standing
-           * cost. (A dedicated "my tasks" list stays out of scope — see
-           * NavSidebar's tags-view note.) */}
+          {/* Account controls stay behind 我的 on phones so they consume no
+           * standing vertical space above the task list. */}
           <Sheet open={meOpen} onOpenChange={setMeOpen}>
             <button
               type="button"
