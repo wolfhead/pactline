@@ -16,12 +16,13 @@ type PrincipalKey struct {
 }
 
 type Principal struct {
-	Key       PrincipalKey
-	Name      string
-	Email     *string
-	AvatarURL *string
-	Active    bool
-	Profile   json.RawMessage
+	Key           PrincipalKey
+	Name          string
+	Email         *string
+	EmailVerified bool
+	AvatarURL     *string
+	Active        bool
+	Profile       json.RawMessage
 }
 
 type OAuthCredential struct {
