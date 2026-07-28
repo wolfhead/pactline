@@ -6,8 +6,11 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"bountyboard/internal/domain"
+
+	"github.com/google/uuid"
 )
 
 // ErrorBody is the JSON envelope every error response uses. Exported (along
@@ -17,6 +20,36 @@ import (
 // infrastructure instead of duplicating it.
 type ErrorBody struct {
 	Error string `json:"error"`
+}
+
+type userResponse struct {
+	ID           uuid.UUID           `json:"id"`
+	Name         string              `json:"name"`
+	Email        *string             `json:"email"`
+	AvatarURL    *string             `json:"avatar_url"`
+	PlatformRole domain.PlatformRole `json:"platform_role"`
+	Roles        []domain.UserRole   `json:"roles"`
+	Active       bool                `json:"active"`
+	CreatedAt    time.Time           `json:"created_at"`
+	UpdatedAt    time.Time           `json:"updated_at"`
+}
+
+func userResponses(users []domain.User) []userResponse {
+	out := make([]userResponse, len(users))
+	for i, user := range users {
+		out[i] = userResponse{
+			ID:           user.ID,
+			Name:         user.Name,
+			Email:        user.Email,
+			AvatarURL:    user.AvatarURL,
+			PlatformRole: user.PlatformRole,
+			Roles:        user.Roles,
+			Active:       user.Active,
+			CreatedAt:    user.CreatedAt,
+			UpdatedAt:    user.UpdatedAt,
+		}
+	}
+	return out
 }
 
 // WriteJSON writes v as the JSON body with the given status.

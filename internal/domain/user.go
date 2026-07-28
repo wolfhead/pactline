@@ -1,7 +1,11 @@
 // Package domain holds entities and business rules. It performs no IO.
 package domain
 
-import "github.com/google/uuid"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // UserRole is a capability flag carried by a user. A user may hold several.
 type UserRole string
@@ -13,13 +17,26 @@ const (
 	UserRoleSteward  UserRole = "STEWARD"
 )
 
+// PlatformRole controls application-wide access independently from legacy
+// capability roles.
+type PlatformRole string
+
+const (
+	PlatformRoleAdmin  PlatformRole = "ADMIN"
+	PlatformRoleMember PlatformRole = "MEMBER"
+)
+
 // User is a member of the team.
 type User struct {
-	ID     uuid.UUID  `json:"id"`
-	Name   string     `json:"name"`
-	Email  string     `json:"email"`
-	Roles  []UserRole `json:"roles"`
-	Active bool       `json:"active"`
+	ID           uuid.UUID
+	Name         string
+	Email        *string
+	AvatarURL    *string
+	PlatformRole PlatformRole
+	Roles        []UserRole
+	Active       bool
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 // HasRole reports whether the user carries the given role.
@@ -39,5 +56,5 @@ func (u User) HasRole(r UserRole) bool {
 type UserRef struct {
 	ID    uuid.UUID `json:"id"`
 	Name  string    `json:"name"`
-	Email string    `json:"email"`
+	Email *string   `json:"email"`
 }

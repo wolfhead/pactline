@@ -50,6 +50,7 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 	require.NoError(t, err)
 	require.NoError(t, db.Migrate(context.Background(), bountyboard.MigrationFS))
 	t.Cleanup(db.Close)
+	enableLegacySeedIdentities(t, db)
 
 	users := store.NewUserStore(db)
 	tasks := store.NewTaskStore(db)
@@ -71,6 +72,41 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 		ProjectService: projectService,
 	})
 	return h, db
+}
+
+// The HTTP suite still exercises the approved pre-OAuth X-User-Id surface
+// with all six historical role fixtures. The identity migration intentionally
+// deactivates five of them, so expose them only for each test and restore the
+// migrated state afterward.
+func enableLegacySeedIdentities(t *testing.T, db *store.DB) {
+	t.Helper()
+	ctx := context.Background()
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE users
+		SET active = true, updated_at = now()
+		WHERE id IN (
+			'00000000-0000-0000-0000-000000000002',
+			'00000000-0000-0000-0000-000000000003',
+			'00000000-0000-0000-0000-000000000004',
+			'00000000-0000-0000-0000-000000000005',
+			'00000000-0000-0000-0000-000000000006'
+		)
+	`)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, cleanupErr := db.Pool.Exec(context.Background(), `
+			UPDATE users
+			SET active = false, updated_at = now()
+			WHERE id IN (
+				'00000000-0000-0000-0000-000000000002',
+				'00000000-0000-0000-0000-000000000003',
+				'00000000-0000-0000-0000-000000000004',
+				'00000000-0000-0000-0000-000000000005',
+				'00000000-0000-0000-0000-000000000006'
+			)
+		`)
+		require.NoError(t, cleanupErr)
+	})
 }
 
 func TestMain(m *testing.M) {

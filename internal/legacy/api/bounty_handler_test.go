@@ -51,6 +51,7 @@ func newTestServer(t *testing.T) http.Handler {
 	require.NoError(t, err)
 	require.NoError(t, db.Migrate(context.Background(), bountyboard.MigrationFS))
 	t.Cleanup(db.Close)
+	enableLegacySeedIdentities(t, db)
 
 	users := store.NewUserStore(db)
 	legacyHandler := legacyapi.NewRouter(
@@ -58,6 +59,40 @@ func newTestServer(t *testing.T) http.Handler {
 		legacystore.NewCalibrationStore(db), legacystore.NewAnchorStore(db),
 	)
 	return api.NewRouter(users, legacyHandler)
+}
+
+// The legacy HTTP suite needs the historical capability-role fixtures while
+// it remains behind X-User-Id. Keep that test-only compatibility local and
+// restore the identity migration's inactive state after every test.
+func enableLegacySeedIdentities(t *testing.T, db *store.DB) {
+	t.Helper()
+	ctx := context.Background()
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE users
+		SET active = true, updated_at = now()
+		WHERE id IN (
+			'00000000-0000-0000-0000-000000000002',
+			'00000000-0000-0000-0000-000000000003',
+			'00000000-0000-0000-0000-000000000004',
+			'00000000-0000-0000-0000-000000000005',
+			'00000000-0000-0000-0000-000000000006'
+		)
+	`)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, cleanupErr := db.Pool.Exec(context.Background(), `
+			UPDATE users
+			SET active = false, updated_at = now()
+			WHERE id IN (
+				'00000000-0000-0000-0000-000000000002',
+				'00000000-0000-0000-0000-000000000003',
+				'00000000-0000-0000-0000-000000000004',
+				'00000000-0000-0000-0000-000000000005',
+				'00000000-0000-0000-0000-000000000006'
+			)
+		`)
+		require.NoError(t, cleanupErr)
+	})
 }
 
 // TestMain makes a partial run of this package impossible to mistake for a

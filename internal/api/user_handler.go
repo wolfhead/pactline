@@ -14,5 +14,5 @@ func (h *userHandler) list(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, r, err)
 		return
 	}
-	WriteJSON(w, http.StatusOK, out)
+	WriteJSON(w, http.StatusOK, userResponses(out))
 }

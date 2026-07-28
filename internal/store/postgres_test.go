@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/fstest"
 
 	"bountyboard"
 	"bountyboard/internal/store"
@@ -126,6 +127,220 @@ func embeddedMigrationNames(t *testing.T) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+func migrationsBeforeIdentity(t *testing.T) fstest.MapFS {
+	t.Helper()
+	out := fstest.MapFS{}
+	for _, name := range embeddedMigrationNames(t) {
+		if name >= "0009_" {
+			continue
+		}
+		body, err := fs.ReadFile(bountyboard.MigrationFS, "migrations/"+name)
+		require.NoError(t, err)
+		out["migrations/"+name] = &fstest.MapFile{Data: body}
+	}
+	return out
+}
+
+func TestIdentityMigrationConsolidatesSeedAttribution(t *testing.T) {
+	ctx := context.Background()
+	dsn := createThrowawayDatabase(t, testDSN(t))
+	db, err := store.Connect(ctx, dsn)
+	require.NoError(t, err)
+	defer db.Close()
+
+	require.NoError(t, db.Migrate(ctx, migrationsBeforeIdentity(t)))
+
+	ids := make([]uuid.UUID, 6)
+	for i := range ids {
+		ids[i] = uuid.MustParse(fmt.Sprintf("00000000-0000-0000-0000-%012d", i+1))
+	}
+	bountyID := uuid.New()
+	secondBountyID := uuid.New()
+	calibrationID := uuid.New()
+	projectID := uuid.New()
+	milestoneID := uuid.New()
+	taskID := uuid.New()
+	criterionID := uuid.New()
+	unrelatedUserID := uuid.New()
+	unrelatedCreditID := uuid.MustParse("10000000-0000-0000-0000-000000000005")
+
+	tx, err := db.Pool.Begin(ctx)
+	require.NoError(t, err)
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op after commit
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO users (id, name, email)
+		VALUES ($1, 'Unrelated real user', 'unrelated@example.com')
+	`, unrelatedUserID)
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, `
+		INSERT INTO bounties
+			(id, type, title, directed_to, sponsor_id, claimed_by)
+		VALUES
+			($1, 'TASK', 'Credit status priority', $3, $4, $5),
+			($2, 'TASK', 'Credit timestamp priority', $3, $4, $5)
+	`, bountyID, secondBountyID, ids[1], ids[2], ids[3])
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, `
+		INSERT INTO credits
+			(id, bounty_id, user_id, role, nominated_by, status, confirmed_at, created_at)
+		VALUES
+			('10000000-0000-0000-0000-000000000001', $1, $3, 'IMPLEMENTER', $5, 'PENDING', NULL, '2026-01-01T00:00:00Z'),
+			('10000000-0000-0000-0000-000000000002', $1, $4, 'IMPLEMENTER', $5, 'CONFIRMED', '2026-02-01T00:00:00Z', '2026-02-01T00:00:00Z'),
+			('10000000-0000-0000-0000-000000000003', $2, $3, 'REVIEWER', $5, 'CONFIRMED', '2026-03-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+			('10000000-0000-0000-0000-000000000004', $2, $4, 'REVIEWER', $5, 'CONFIRMED', '2026-02-01T00:00:00Z', '2026-04-01T00:00:00Z'),
+			($6, $1, $7, 'IMPLEMENTER', $5, 'PENDING', NULL, '2026-05-01T00:00:00Z')
+	`, bountyID, secondBountyID, ids[1], ids[2], ids[5], unrelatedCreditID, unrelatedUserID)
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, `
+		INSERT INTO calibrations
+			(id, bounty_id, quarter, original_value, calibrated_value,
+			 calibrated_score, created_by, original_score)
+		VALUES ($1, $2, '2026-Q1', 'L1', 'L2', 2, $3, 1)
+	`, calibrationID, bountyID, ids[1])
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, `
+		INSERT INTO projects
+			(id, name, outcome, owner_id, creator_id)
+		VALUES ($1, 'Identity project', 'Consolidated attribution', $2, $3)
+	`, projectID, ids[1], ids[2])
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, `
+		INSERT INTO milestones
+			(id, project_id, name, outcome, position)
+		VALUES ($1, $2, 'Identity milestone', 'Migration complete', 0)
+	`, milestoneID, projectID)
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, `
+		INSERT INTO tasks
+			(id, title, assignee_id, creator_id, project_id, milestone_id)
+		VALUES ($1, 'Identity task', $2, $3, $4, $5)
+	`, taskID, ids[3], ids[5], projectID, milestoneID)
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, `
+		INSERT INTO task_comments (id, task_id, author_id, body)
+		VALUES (gen_random_uuid(), $1, $2, 'Historical comment')
+	`, taskID, ids[5])
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, `
+		INSERT INTO task_activity (id, task_id, actor_id, field)
+		VALUES (gen_random_uuid(), $1, $2, 'created')
+	`, taskID, ids[1])
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, `
+		INSERT INTO acceptance_criteria
+			(id, task_id, criterion, verification_instructions, position)
+		VALUES ($1, $2, 'Migration passes', 'Run the test', 0)
+	`, criterionID, taskID)
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, `
+		INSERT INTO acceptance_checks
+			(id, criterion_id, criterion_revision, outcome, evidence,
+			 checker_type, checked_by_user_id)
+		VALUES (gen_random_uuid(), $1, 1, 'passed', 'Test result', 'user', $2)
+	`, criterionID, ids[2])
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, `
+		INSERT INTO project_activity
+			(id, project_id, milestone_id, actor_id, action)
+		VALUES (gen_random_uuid(), $1, $2, $3, 'created')
+	`, projectID, milestoneID, ids[3])
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+
+	require.NoError(t, db.Migrate(ctx, bountyboard.MigrationFS))
+
+	var activeSecondary int
+	require.NoError(t, db.Pool.QueryRow(ctx, `
+		SELECT count(*) FROM users
+		WHERE id = ANY($1) AND active
+	`, ids[1:]).Scan(&activeSecondary))
+	require.Zero(t, activeSecondary)
+
+	var incorrectlyAttributed int
+	require.NoError(t, db.Pool.QueryRow(ctx, `
+		SELECT count(*) FROM (
+			SELECT directed_to AS user_id FROM bounties WHERE directed_to IS NOT NULL
+			UNION ALL SELECT sponsor_id FROM bounties
+			UNION ALL SELECT claimed_by FROM bounties WHERE claimed_by IS NOT NULL
+			UNION ALL SELECT user_id FROM credits
+			UNION ALL SELECT nominated_by FROM credits WHERE nominated_by IS NOT NULL
+			UNION ALL SELECT created_by FROM calibrations
+			UNION ALL SELECT assignee_id FROM tasks WHERE assignee_id IS NOT NULL
+			UNION ALL SELECT creator_id FROM tasks
+			UNION ALL SELECT author_id FROM task_comments
+			UNION ALL SELECT actor_id FROM task_activity
+			UNION ALL SELECT owner_id FROM projects
+			UNION ALL SELECT creator_id FROM projects
+			UNION ALL SELECT checked_by_user_id FROM acceptance_checks WHERE checked_by_user_id IS NOT NULL
+			UNION ALL SELECT actor_id FROM project_activity
+		) attributed
+		WHERE user_id = ANY($1)
+	`, ids[1:]).Scan(&incorrectlyAttributed))
+	require.Zero(t, incorrectlyAttributed)
+
+	rows, err := db.Pool.Query(ctx, `
+		SELECT bounty_id, role, id
+		FROM credits
+		WHERE user_id = $1
+		ORDER BY bounty_id, role
+	`, ids[0])
+	require.NoError(t, err)
+	defer rows.Close()
+	kept := map[uuid.UUID]uuid.UUID{}
+	for rows.Next() {
+		var gotBountyID uuid.UUID
+		var role string
+		var creditID uuid.UUID
+		require.NoError(t, rows.Scan(&gotBountyID, &role, &creditID))
+		kept[gotBountyID] = creditID
+	}
+	require.NoError(t, rows.Err())
+	require.Equal(t, map[uuid.UUID]uuid.UUID{
+		bountyID:       uuid.MustParse("10000000-0000-0000-0000-000000000002"),
+		secondBountyID: uuid.MustParse("10000000-0000-0000-0000-000000000004"),
+	}, kept)
+
+	var unrelatedCreditUserID uuid.UUID
+	require.NoError(t, db.Pool.QueryRow(ctx,
+		`SELECT user_id FROM credits WHERE id = $1`, unrelatedCreditID,
+	).Scan(&unrelatedCreditUserID))
+	require.Equal(t, unrelatedUserID, unrelatedCreditUserID,
+		"a credit that does not collide with the consolidated seed user must survive")
+
+	var userCount, adminCount int
+	require.NoError(t, db.Pool.QueryRow(ctx, `SELECT count(*) FROM users`).Scan(&userCount))
+	require.Equal(t, 7, userCount, "the migration must not hard-delete users")
+	require.NoError(t, db.Pool.QueryRow(ctx,
+		`SELECT count(*) FROM users WHERE platform_role = 'ADMIN'`,
+	).Scan(&adminCount))
+	require.Zero(t, adminCount, "administrator assignment belongs to bootstrap, not migration")
+}
+
+func TestIdentityMigrationCreatesAccessSchema(t *testing.T) {
+	db, err := store.Connect(context.Background(), testDSN(t))
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, db.Migrate(context.Background(), bountyboard.MigrationFS))
+
+	expectedTables := []string{
+		"external_identities",
+		"oauth_credentials",
+		"invitations",
+		"invitation_deliveries",
+		"sessions",
+		"authorization_transactions",
+		"impersonations",
+		"identity_audit_events",
+	}
+	for _, table := range expectedTables {
+		var exists bool
+		require.NoError(t, db.Pool.QueryRow(context.Background(),
+			`SELECT to_regclass('public.' || $1) IS NOT NULL`, table).Scan(&exists))
+		require.Truef(t, exists, "%s should exist", table)
+	}
 }
 
 // TestMigrateConcurrentCallsAreSerializedByAdvisoryLock exercises the

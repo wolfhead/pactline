@@ -3,12 +3,14 @@ package store_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"bountyboard"
 	"bountyboard/internal/domain"
 	"bountyboard/internal/store"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,31 +23,17 @@ func newTestDB(t *testing.T) *store.DB {
 	return db
 }
 
-// TestListActiveReturnsSeededUsers pins both the `WHERE active` clause and the
-// `ORDER BY name` clause of ListActive/ListAll, neither of which a bare
-// Len(..., 6) check (with all six seeds active) can exercise: every seed
-// starts active, so deleting the WHERE clause entirely would still return 6,
-// and dropping ORDER BY would still return the right rows in a different
-// order. 研发 E is deactivated for the duration of this test (and reactivated
-// in cleanup, since every other test in this shared-database suite assumes
-// all six seeded users are active) so ListActive must exclude it while
-// ListAll still names it — and the expected order below is asserted
-// exactly, not just its length.
+// TestListActiveReturnsSeededUsers pins both seed consolidation and the
+// difference between active identity choices and historical user references.
 func TestListActiveReturnsSeededUsers(t *testing.T) {
 	db := newTestDB(t)
 	us := store.NewUserStore(db)
 	ctx := context.Background()
 
-	deactivated := uuid.MustParse("00000000-0000-0000-0000-000000000005") // 研发 E
-	require.NoError(t, us.SetActive(ctx, deactivated, false))
-	t.Cleanup(func() {
-		require.NoError(t, us.SetActive(context.Background(), deactivated, true))
-	})
-
 	active, err := us.ListActive(ctx)
 	require.NoError(t, err)
-	require.Equal(t, []string{"Steward F", "产品 A", "技术 Leader B", "研发 C", "研发 D"}, userNames(active),
-		"ListActive must exclude the deactivated user and keep ORDER BY name")
+	require.Equal(t, []string{"产品 A"}, userNames(active),
+		"only the primary seed remains active after identity consolidation")
 
 	all, err := us.ListAll(ctx)
 	require.NoError(t, err)
@@ -70,6 +58,7 @@ func TestGetByIDReturnsRoles(t *testing.T) {
 	require.Equal(t, "技术 Leader B", u.Name)
 	require.True(t, u.HasRole(domain.UserRoleTechLead))
 	require.False(t, u.HasRole(domain.UserRoleEngineer))
+	require.False(t, u.Active)
 }
 
 // TestUserGetByIDMissingReturnsNotFound pins the ErrNotFound path: it is
@@ -80,4 +69,55 @@ func TestUserGetByIDMissingReturnsNotFound(t *testing.T) {
 	db := newTestDB(t)
 	_, err := store.NewUserStore(db).GetByID(context.Background(), uuid.New())
 	require.ErrorIs(t, err, domain.ErrNotFound)
+}
+
+func TestUserStoreRoundTripsIdentityProfile(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	id := uuid.New()
+	avatarURL := "https://example.com/avatar.png"
+
+	_, err := db.Pool.Exec(ctx, `
+		INSERT INTO users (id, name, email, avatar_url, platform_role, roles, active)
+		VALUES ($1, $2, NULL, $3, 'MEMBER', $4, true)
+	`, id, "Nullable Email User", avatarURL, []string{"ENGINEER"})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, cleanupErr := db.Pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, id)
+		require.NoError(t, cleanupErr)
+	})
+
+	u, err := store.NewUserStore(db).GetByID(ctx, id)
+	require.NoError(t, err)
+	require.Equal(t, id, u.ID)
+	require.Equal(t, "Nullable Email User", u.Name)
+	require.Nil(t, u.Email)
+	require.NotNil(t, u.AvatarURL)
+	require.Equal(t, avatarURL, *u.AvatarURL)
+	require.Equal(t, domain.PlatformRoleMember, u.PlatformRole)
+	require.Equal(t, []domain.UserRole{domain.UserRoleEngineer}, u.Roles)
+	require.True(t, u.Active)
+	require.False(t, u.CreatedAt.IsZero())
+	require.WithinDuration(t, time.Now(), u.UpdatedAt, time.Minute)
+}
+
+func TestUsersPermitOneAdminOnly(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	primaryID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	secondaryID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+
+	_, err := db.Pool.Exec(ctx, `UPDATE users SET platform_role = 'ADMIN' WHERE id = $1`, primaryID)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, cleanupErr := db.Pool.Exec(context.Background(),
+			`UPDATE users SET platform_role = 'MEMBER' WHERE id = $1`, primaryID)
+		require.NoError(t, cleanupErr)
+	})
+
+	_, err = db.Pool.Exec(ctx, `UPDATE users SET platform_role = 'ADMIN' WHERE id = $1`, secondaryID)
+	require.Error(t, err)
+	var pgErr *pgconn.PgError
+	require.ErrorAs(t, err, &pgErr)
+	require.Equal(t, "23505", pgErr.Code)
 }

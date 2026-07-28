@@ -18,7 +18,7 @@ type UserStore struct{ db *DB }
 // NewUserStore wires a UserStore to the pool.
 func NewUserStore(db *DB) *UserStore { return &UserStore{db: db} }
 
-const userColumns = `id, name, email, roles, active`
+const userColumns = `id, name, email, avatar_url, platform_role, roles, active, created_at, updated_at`
 
 // ListActive returns every active user ordered by name.
 func (s *UserStore) ListActive(ctx context.Context) ([]domain.User, error) {
@@ -89,7 +89,8 @@ func (s *UserStore) ListAll(ctx context.Context) ([]domain.User, error) {
 // this yet in Phase 1; it exists so tests can exercise deactivation, and so a
 // future admin endpoint has somewhere to call into.
 func (s *UserStore) SetActive(ctx context.Context, id uuid.UUID, active bool) error {
-	tag, err := s.db.Pool.Exec(ctx, `UPDATE users SET active=$2 WHERE id=$1`, id, active)
+	tag, err := s.db.Pool.Exec(ctx,
+		`UPDATE users SET active=$2, updated_at=now() WHERE id=$1`, id, active)
 	if err != nil {
 		return fmt.Errorf("set user active: %w", err)
 	}
@@ -105,7 +106,17 @@ type scanner interface{ Scan(dest ...any) error }
 func scanUser(s scanner) (domain.User, error) {
 	var u domain.User
 	var roles []string
-	if err := s.Scan(&u.ID, &u.Name, &u.Email, &roles, &u.Active); err != nil {
+	if err := s.Scan(
+		&u.ID,
+		&u.Name,
+		&u.Email,
+		&u.AvatarURL,
+		&u.PlatformRole,
+		&roles,
+		&u.Active,
+		&u.CreatedAt,
+		&u.UpdatedAt,
+	); err != nil {
 		return domain.User{}, fmt.Errorf("scan user: %w", err)
 	}
 	u.Roles = make([]domain.UserRole, len(roles))

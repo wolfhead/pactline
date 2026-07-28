@@ -100,7 +100,7 @@ func scanTaskWithRelations(s scanner) (TaskWithRelations, error) {
 		return TaskWithRelations{}, fmt.Errorf("scan task: %w", err)
 	}
 	if assigneeID != nil {
-		twr.Assignee = &domain.UserRef{ID: *assigneeID, Name: derefStr(assigneeName), Email: derefStr(assigneeEmail)}
+		twr.Assignee = &domain.UserRef{ID: *assigneeID, Name: derefStr(assigneeName), Email: assigneeEmail}
 	}
 	if projectID != nil {
 		twr.Project = &ProjectRef{ID: *projectID, Number: *projectNumber, Name: derefStr(projectName)}
