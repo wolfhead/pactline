@@ -128,6 +128,21 @@ func (s *IdentityStore) GetInvitation(ctx context.Context, id uuid.UUID) (identi
 	return invitation, nil
 }
 
+func (s *IdentityStore) GetInvitationByTokenHash(ctx context.Context, tokenHash []byte, now time.Time) (identity.Invitation, error) {
+	invitation, err := scanInvitation(s.db.Pool.QueryRow(ctx, `
+		SELECT id, provider, tenant_id, target_subject_id, target_snapshot, token_hash, status,
+		       created_by_user_id, expires_at, accepted_by_user_id, accepted_at, revoked_at, created_at, updated_at
+		FROM invitations WHERE token_hash=$1`, tokenHash))
+	if errors.Is(err, pgx.ErrNoRows) || err == nil &&
+		(invitation.Status != identity.InvitationPending || !now.Before(invitation.ExpiresAt)) {
+		return identity.Invitation{}, identity.ErrInvitationInvalid
+	}
+	if err != nil {
+		return identity.Invitation{}, fmt.Errorf("get invitation by token: %w", err)
+	}
+	return invitation, nil
+}
+
 func (s *IdentityStore) RevokeInvitation(ctx context.Context, id uuid.UUID, now time.Time, audit identity.AuditEvent) error {
 	return s.changeInvitation(ctx, "revoke invitation", id, audit, func(tx pgx.Tx, invitation identity.Invitation) error {
 		if invitation.Status != identity.InvitationPending || !now.Before(invitation.ExpiresAt) {

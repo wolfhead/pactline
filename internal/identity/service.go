@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -39,6 +40,14 @@ type IdentityRepository interface {
 	RecordProviderFailure(ctx context.Context, sessionID uuid.UUID, failedAt time.Time, audit AuditEvent) error
 	DeactivateUser(ctx context.Context, userID, actorID uuid.UUID, reason string) error
 	AcceptInvitation(ctx context.Context, command AcceptInvitationCommand) (domain.User, error)
+	CreateInvitation(ctx context.Context, invitation Invitation, audit AuditEvent) error
+	ListInvitations(ctx context.Context) ([]Invitation, error)
+	ExpireInvitations(ctx context.Context, now time.Time) (int64, error)
+	GetInvitation(ctx context.Context, id uuid.UUID) (Invitation, error)
+	GetInvitationByTokenHash(ctx context.Context, tokenHash []byte, now time.Time) (Invitation, error)
+	RotateInvitation(ctx context.Context, id, actorID uuid.UUID, tokenHash []byte, expiresAt time.Time) (Invitation, error)
+	RevokeInvitation(ctx context.Context, id uuid.UUID, now time.Time, audit AuditEvent) error
+	RecordDelivery(ctx context.Context, delivery InvitationDelivery) error
 }
 
 type LarkServiceConfig struct {
@@ -48,6 +57,9 @@ type LarkServiceConfig struct {
 	TenantID            string
 	RedirectURI         string
 	BootstrapAdminEmail string
+	Directory           DirectoryProvider
+	Notifier            NotificationSender
+	AppBaseURL          string
 }
 
 type SystemClock struct{}
@@ -74,6 +86,9 @@ type Service struct {
 	tenantID       string
 	redirectURI    string
 	bootstrapEmail string
+	directory      DirectoryProvider
+	notifier       NotificationSender
+	appBaseURL     string
 }
 
 func NewService(
@@ -109,7 +124,200 @@ func (s *Service) ConfigureLark(config LarkServiceConfig) error {
 	s.tenantID = config.TenantID
 	s.redirectURI = config.RedirectURI
 	s.bootstrapEmail = strings.TrimSpace(config.BootstrapAdminEmail)
+	s.directory = config.Directory
+	s.notifier = config.Notifier
+	s.appBaseURL = strings.TrimRight(config.AppBaseURL, "/")
 	return nil
+}
+
+type InvitationResult struct {
+	Invitation Invitation
+	Delivery   InvitationDelivery
+}
+
+func (s *Service) SearchDirectory(ctx context.Context, actor domain.User, query string) ([]Principal, error) {
+	query = strings.TrimSpace(query)
+	if actor.PlatformRole != domain.PlatformRoleAdmin || !actor.Active {
+		return nil, ErrAdminRequired
+	}
+	if len([]rune(query)) < 2 {
+		return nil, domain.ErrInvalidInput
+	}
+	if s.directory == nil {
+		return nil, ErrProviderContract
+	}
+	external, err := s.identity.GetExternalIdentityForUser(ctx, actor.ID)
+	if err != nil {
+		return nil, fmt.Errorf("load administrator credential: %w", err)
+	}
+	principals, err := s.directory.SearchPrincipals(ctx, external.EncryptedCredential, query, 20)
+	if err != nil {
+		return nil, err
+	}
+	if len(principals) > 20 {
+		principals = principals[:20]
+	}
+	return principals, nil
+}
+
+func (s *Service) ListInvitations(ctx context.Context, actor domain.User) ([]Invitation, error) {
+	if actor.PlatformRole != domain.PlatformRoleAdmin || !actor.Active {
+		return nil, ErrAdminRequired
+	}
+	if _, err := s.identity.ExpireInvitations(ctx, s.clock.Now()); err != nil {
+		return nil, err
+	}
+	return s.identity.ListInvitations(ctx)
+}
+
+func (s *Service) CreateInvitation(ctx context.Context, actor domain.User, subjectID, requestID string) (InvitationResult, error) {
+	if actor.PlatformRole != domain.PlatformRoleAdmin || !actor.Active {
+		return InvitationResult{}, ErrAdminRequired
+	}
+	if s.directory == nil || s.notifier == nil || strings.TrimSpace(subjectID) == "" {
+		return InvitationResult{}, domain.ErrInvalidInput
+	}
+	external, err := s.identity.GetExternalIdentityForUser(ctx, actor.ID)
+	if err != nil {
+		return InvitationResult{}, fmt.Errorf("load administrator credential: %w", err)
+	}
+	principal, err := s.directory.GetPrincipal(ctx, external.EncryptedCredential, strings.TrimSpace(subjectID))
+	if err != nil {
+		return InvitationResult{}, err
+	}
+	if principal.Key.Provider != "lark" || principal.Key.TenantID != s.tenantID ||
+		principal.Key.SubjectID != strings.TrimSpace(subjectID) || !principal.Active {
+		return InvitationResult{}, ErrInvitationInvalid
+	}
+	if _, _, err := s.findLoginUser(ctx, principal.Key); err == nil {
+		return InvitationResult{}, ErrInvitationConflict
+	} else if !errors.Is(err, domain.ErrNotFound) {
+		return InvitationResult{}, err
+	}
+	rawToken, err := s.secrets.NewSecret()
+	if err != nil {
+		return InvitationResult{}, fmt.Errorf("generate invitation token: %w", err)
+	}
+	tokenHash := HashSecret([]byte(rawToken))
+	now := s.clock.Now()
+	snapshot, _ := json.Marshal(map[string]any{
+		"name": principal.Name, "email": principal.Email, "avatar_url": principal.AvatarURL,
+	})
+	invitation := Invitation{
+		ID: uuid.New(), Target: principal.Key, TargetSnapshot: snapshot, TokenHash: tokenHash[:],
+		Status: InvitationPending, CreatedByUserID: actor.ID, ExpiresAt: InvitationExpiresAt(now),
+		CreatedAt: now, UpdatedAt: now,
+	}
+	audit := AuditEvent{
+		ID: uuid.New(), EventType: "invitation_created", ActorUserID: &actor.ID,
+		InvitationID: &invitation.ID, Metadata: json.RawMessage(`{}`), OccurredAt: now,
+	}
+	if requestID != "" {
+		audit.RequestID = &requestID
+	}
+	if err := s.identity.CreateInvitation(ctx, invitation, audit); err != nil {
+		return InvitationResult{}, err
+	}
+	delivery, err := s.deliverInvitation(ctx, invitation, rawToken)
+	if err != nil {
+		return InvitationResult{}, err
+	}
+	return InvitationResult{Invitation: invitation, Delivery: delivery}, nil
+}
+
+func (s *Service) ResendInvitation(ctx context.Context, actor domain.User, id uuid.UUID) (InvitationResult, error) {
+	if actor.PlatformRole != domain.PlatformRoleAdmin || !actor.Active {
+		return InvitationResult{}, ErrAdminRequired
+	}
+	rawToken, err := s.secrets.NewSecret()
+	if err != nil {
+		return InvitationResult{}, fmt.Errorf("generate invitation token: %w", err)
+	}
+	hash := HashSecret([]byte(rawToken))
+	invitation, err := s.identity.RotateInvitation(ctx, id, actor.ID, hash[:], InvitationExpiresAt(s.clock.Now()))
+	if err != nil {
+		return InvitationResult{}, err
+	}
+	delivery, err := s.deliverInvitation(ctx, invitation, rawToken)
+	if err != nil {
+		return InvitationResult{}, err
+	}
+	return InvitationResult{Invitation: invitation, Delivery: delivery}, nil
+}
+
+func (s *Service) RotateInvitationLink(ctx context.Context, actor domain.User, id uuid.UUID) (string, error) {
+	if actor.PlatformRole != domain.PlatformRoleAdmin || !actor.Active {
+		return "", ErrAdminRequired
+	}
+	rawToken, err := s.secrets.NewSecret()
+	if err != nil {
+		return "", fmt.Errorf("generate invitation token: %w", err)
+	}
+	hash := HashSecret([]byte(rawToken))
+	invitation, err := s.identity.RotateInvitation(ctx, id, actor.ID, hash[:], InvitationExpiresAt(s.clock.Now()))
+	if err != nil {
+		return "", err
+	}
+	delivery := InvitationDelivery{
+		ID: uuid.New(), InvitationID: invitation.ID, Channel: DeliveryCopiedLink,
+		Status: DeliveryDelivered, AttemptedAt: s.clock.Now(),
+	}
+	if err := s.identity.RecordDelivery(ctx, delivery); err != nil {
+		return "", fmt.Errorf("record copied invitation link: %w", err)
+	}
+	return s.invitationURL(rawToken), nil
+}
+
+func (s *Service) RevokeInvitation(ctx context.Context, actor domain.User, id uuid.UUID, requestID string) error {
+	if actor.PlatformRole != domain.PlatformRoleAdmin || !actor.Active {
+		return ErrAdminRequired
+	}
+	now := s.clock.Now()
+	audit := AuditEvent{
+		ID: uuid.New(), EventType: "invitation_revoked", ActorUserID: &actor.ID,
+		InvitationID: &id, Metadata: json.RawMessage(`{}`), OccurredAt: now,
+	}
+	if requestID != "" {
+		audit.RequestID = &requestID
+	}
+	return s.identity.RevokeInvitation(ctx, id, now, audit)
+}
+
+func (s *Service) AcceptInvitationToken(ctx context.Context, token string) (AuthorizationStart, error) {
+	if strings.TrimSpace(token) == "" {
+		return AuthorizationStart{}, ErrInvitationInvalid
+	}
+	hash := HashSecret([]byte(token))
+	invitation, err := s.identity.GetInvitationByTokenHash(ctx, hash[:], s.clock.Now())
+	if err != nil {
+		return AuthorizationStart{}, ErrInvitationInvalid
+	}
+	return s.StartAuthorization(ctx, AuthorizationInvitation, &invitation.ID)
+}
+
+func (s *Service) deliverInvitation(ctx context.Context, invitation Invitation, rawToken string) (InvitationDelivery, error) {
+	delivery := InvitationDelivery{
+		ID: uuid.New(), InvitationID: invitation.ID, Channel: DeliveryProviderDM,
+		Status: DeliveryDelivered, AttemptedAt: s.clock.Now(),
+	}
+	receipt, err := s.notifier.SendInvitation(ctx, invitation.Target, s.invitationURL(rawToken))
+	if err != nil {
+		delivery.Status = DeliveryFailed
+		category := ProviderUnavailable
+		delivery.ErrorCategory = &category
+	} else {
+		delivery.ProviderReference = &receipt.ProviderReference
+	}
+	if recordErr := s.identity.RecordDelivery(ctx, delivery); recordErr != nil {
+		slog.Error("record invitation delivery failed",
+			"invitation_id", invitation.ID, "status", delivery.Status, "error", recordErr)
+		return InvitationDelivery{}, fmt.Errorf("record invitation delivery: %w", recordErr)
+	}
+	return delivery, nil
+}
+
+func (s *Service) invitationURL(rawToken string) string {
+	return s.appBaseURL + "/invite#" + rawToken
 }
 
 func (s *Service) StartAuthorization(ctx context.Context, purpose AuthorizationPurpose, invitationID *uuid.UUID) (AuthorizationStart, error) {

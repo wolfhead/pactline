@@ -81,6 +81,7 @@ func main() {
 		}
 		if configureErr := identityService.ConfigureLark(identity.LarkServiceConfig{
 			Repository: identityStore, Authenticator: larkClient, Verifier: larkClient,
+			Directory: larkClient, Notifier: larkClient, AppBaseURL: cfg.AppBaseURL.String(),
 			TenantID: cfg.LarkTenantKey, RedirectURI: cfg.LarkRedirectURI.String(),
 			BootstrapAdminEmail: cfg.BootstrapAdminEmail,
 		}); configureErr != nil {

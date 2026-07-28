@@ -66,9 +66,56 @@ func TestLarkBootstrapRejectsUnverifiedEmailGenerically(t *testing.T) {
 	require.NotContains(t, err.Error(), "secret-code")
 }
 
+func TestInvitationCreationDeliveryRotationAndAcceptanceState(t *testing.T) {
+	now := time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)
+	adminID := uuid.New()
+	repository := &larkServiceRepository{
+		external:    ExternalIdentity{UserID: adminID, EncryptedCredential: OAuthCredential{EncryptionKeyID: "sealed"}},
+		invitations: map[uuid.UUID]Invitation{},
+	}
+	principal := Principal{
+		Key:  PrincipalKey{Provider: "lark", TenantID: "tenant", SubjectID: "ou_member"},
+		Name: "Member", Active: true,
+	}
+	directory := &larkDirectory{principal: principal}
+	notifier := &larkNotifier{}
+	service, err := NewService(repository, larkUsers{}, []byte("01234567890123456789012345678901"),
+		fixedLarkClock{now}, &sequenceSecrets{values: []string{"first-token", "second-token", "oauth-state"}})
+	require.NoError(t, err)
+	authenticator := &larkAuthenticator{}
+	require.NoError(t, service.ConfigureLark(LarkServiceConfig{
+		Repository: repository, Authenticator: authenticator, Verifier: larkVerifier{},
+		Directory: directory, Notifier: notifier, AppBaseURL: "https://app.test",
+		TenantID: "tenant", RedirectURI: "https://app.test/callback", BootstrapAdminEmail: "admin@example.test",
+	}))
+	admin := domain.User{ID: adminID, Active: true, PlatformRole: domain.PlatformRoleAdmin}
+
+	created, err := service.CreateInvitation(context.Background(), admin, "ou_member", "request")
+	require.NoError(t, err)
+	require.Equal(t, DeliveryDelivered, created.Delivery.Status)
+	require.Equal(t, "https://app.test/invite#first-token", notifier.links[0])
+	require.False(t, VerifySecret([]byte(notifier.links[0]), created.Invitation.TokenHash))
+	require.True(t, VerifySecret([]byte("first-token"), created.Invitation.TokenHash))
+
+	resent, err := service.ResendInvitation(context.Background(), admin, created.Invitation.ID)
+	require.NoError(t, err)
+	require.Equal(t, "https://app.test/invite#second-token", notifier.links[1])
+	require.False(t, VerifySecret([]byte("first-token"), resent.Invitation.TokenHash))
+	require.True(t, VerifySecret([]byte("second-token"), resent.Invitation.TokenHash))
+
+	_, err = service.AcceptInvitationToken(context.Background(), "first-token")
+	require.ErrorIs(t, err, ErrInvitationInvalid)
+	start, err := service.AcceptInvitationToken(context.Background(), "second-token")
+	require.NoError(t, err)
+	require.Contains(t, start.URL, "oauth-state")
+}
+
 type larkServiceRepository struct {
 	authorization *AuthorizationTransaction
 	bootstrap     *BootstrapAdminCommand
+	external      ExternalIdentity
+	invitations   map[uuid.UUID]Invitation
+	deliveries    []InvitationDelivery
 }
 
 func (r *larkServiceRepository) CreateAuthorizationTransaction(_ context.Context, transaction AuthorizationTransaction) error {
@@ -96,7 +143,10 @@ func (r *larkServiceRepository) LoginExternal(context.Context, LoginCommand) (do
 	return domain.User{}, ErrLoginDenied
 }
 func (r *larkServiceRepository) GetExternalIdentityForUser(context.Context, uuid.UUID) (ExternalIdentity, error) {
-	return ExternalIdentity{}, ErrCredentialNotFound
+	if r.external.UserID == uuid.Nil {
+		return ExternalIdentity{}, ErrCredentialNotFound
+	}
+	return r.external, nil
 }
 func (r *larkServiceRepository) RefreshCredentialLocked(context.Context, uuid.UUID, func(OAuthCredential) (OAuthCredential, error)) (OAuthCredential, error) {
 	return OAuthCredential{}, errors.New("unexpected refresh")
@@ -112,6 +162,64 @@ func (r *larkServiceRepository) DeactivateUser(context.Context, uuid.UUID, uuid.
 }
 func (r *larkServiceRepository) AcceptInvitation(context.Context, AcceptInvitationCommand) (domain.User, error) {
 	return domain.User{}, ErrInvitationInvalid
+}
+func (r *larkServiceRepository) CreateInvitation(_ context.Context, invitation Invitation, _ AuditEvent) error {
+	if r.invitations == nil {
+		r.invitations = map[uuid.UUID]Invitation{}
+	}
+	for _, existing := range r.invitations {
+		if existing.Target == invitation.Target && existing.Status == InvitationPending {
+			return ErrInvitationConflict
+		}
+	}
+	r.invitations[invitation.ID] = invitation
+	return nil
+}
+func (r *larkServiceRepository) ListInvitations(context.Context) ([]Invitation, error) {
+	var invitations []Invitation
+	for _, invitation := range r.invitations {
+		invitations = append(invitations, invitation)
+	}
+	return invitations, nil
+}
+func (r *larkServiceRepository) ExpireInvitations(_ context.Context, now time.Time) (int64, error) {
+	var count int64
+	for id, invitation := range r.invitations {
+		if invitation.Status == InvitationPending && !now.Before(invitation.ExpiresAt) {
+			invitation.Status = InvitationExpired
+			r.invitations[id] = invitation
+			count++
+		}
+	}
+	return count, nil
+}
+func (r *larkServiceRepository) GetInvitation(context.Context, uuid.UUID) (Invitation, error) {
+	return Invitation{}, ErrInvitationInvalid
+}
+func (r *larkServiceRepository) GetInvitationByTokenHash(_ context.Context, hash []byte, now time.Time) (Invitation, error) {
+	for _, invitation := range r.invitations {
+		if string(invitation.TokenHash) == string(hash) && invitation.Status == InvitationPending && now.Before(invitation.ExpiresAt) {
+			return invitation, nil
+		}
+	}
+	return Invitation{}, ErrInvitationInvalid
+}
+func (r *larkServiceRepository) RotateInvitation(_ context.Context, id, _ uuid.UUID, hash []byte, expiresAt time.Time) (Invitation, error) {
+	invitation, ok := r.invitations[id]
+	if !ok {
+		return Invitation{}, ErrInvitationInvalid
+	}
+	invitation.TokenHash = append([]byte(nil), hash...)
+	invitation.ExpiresAt = expiresAt
+	r.invitations[id] = invitation
+	return invitation, nil
+}
+func (r *larkServiceRepository) RevokeInvitation(context.Context, uuid.UUID, time.Time, AuditEvent) error {
+	return ErrInvitationInvalid
+}
+func (r *larkServiceRepository) RecordDelivery(_ context.Context, delivery InvitationDelivery) error {
+	r.deliveries = append(r.deliveries, delivery)
+	return nil
 }
 func (r *larkServiceRepository) FindExternalIdentity(context.Context, PrincipalKey) (ExternalIdentity, domain.User, error) {
 	return ExternalIdentity{}, domain.User{}, domain.ErrNotFound
@@ -149,11 +257,28 @@ func (larkVerifier) VerifyPrincipal(context.Context, OAuthCredential, PrincipalK
 	return VerificationResult{State: VerificationValid}, nil
 }
 
+type larkDirectory struct{ principal Principal }
+
+func (d *larkDirectory) SearchPrincipals(context.Context, OAuthCredential, string, int) ([]Principal, error) {
+	return []Principal{d.principal}, nil
+}
+func (d *larkDirectory) GetPrincipal(context.Context, OAuthCredential, string) (Principal, error) {
+	return d.principal, nil
+}
+
+type larkNotifier struct{ links []string }
+
+func (n *larkNotifier) SendInvitation(_ context.Context, _ PrincipalKey, link string) (DeliveryReceipt, error) {
+	n.links = append(n.links, link)
+	return DeliveryReceipt{ProviderReference: "message"}, nil
+}
+
 type larkUsers struct{}
 
 func (larkUsers) GetByID(_ context.Context, id uuid.UUID) (domain.User, error) {
 	return domain.User{ID: id, Active: true}, nil
 }
+func (larkUsers) ListAll(context.Context) ([]domain.User, error) { return nil, nil }
 
 type fixedLarkClock struct{ now time.Time }
 

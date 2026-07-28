@@ -68,6 +68,13 @@ func NewRouter(
 	}
 	protected.HandleFunc("GET /api/me", auth.me)
 	protected.HandleFunc("POST /api/auth/logout", auth.logout)
+	adminIdentity := &adminIdentityHandler{service: options.Auth.Sessions}
+	protected.HandleFunc("GET /api/admin/directory/search", adminIdentity.searchDirectory)
+	protected.HandleFunc("GET /api/admin/invitations", adminIdentity.listInvitations)
+	protected.HandleFunc("POST /api/admin/invitations", adminIdentity.createInvitation)
+	protected.HandleFunc("POST /api/admin/invitations/{id}/resend", adminIdentity.resendInvitation)
+	protected.HandleFunc("POST /api/admin/invitations/{id}/link", adminIdentity.rotateInvitationLink)
+	protected.HandleFunc("DELETE /api/admin/invitations/{id}", adminIdentity.revokeInvitation)
 
 	root := http.NewServeMux()
 	if options.Auth.Development != nil {
@@ -76,6 +83,7 @@ func NewRouter(
 	if options.Auth.LarkEnabled {
 		root.HandleFunc("GET /api/auth/lark/start", auth.larkStart)
 		root.HandleFunc("GET /api/auth/lark/callback", auth.larkCallback)
+		root.HandleFunc("POST /api/invitations/accept", adminIdentity.acceptInvitation)
 	}
 	middleware := identityMiddleware{
 		sessions: options.Auth.Sessions, appBaseURL: options.Auth.AppBaseURL, cookies: cookies,
