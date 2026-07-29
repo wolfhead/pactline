@@ -32,7 +32,7 @@ export default function TaskListPage() {
 
   // An unparseable :number (e.g. /tasks/abc) is treated as "nothing
   // selected" rather than handed to TaskDetail, which would otherwise fetch
-  // /api/tasks/NaN.
+  // /api/v1/tasks/NaN.
   const parsed = number === undefined ? NaN : Number(number)
   const selected = Number.isInteger(parsed) ? parsed : null
 

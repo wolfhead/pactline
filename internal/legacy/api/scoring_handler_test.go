@@ -550,7 +550,7 @@ func TestCalibrationInvalidQuarterFormatIsBadRequest(t *testing.T) {
 
 // TestFeedAndPortfolioOmitScoreButDetailKeepsIt is the required regression
 // for I4: WorkView (the shape backing both GET /api/legacy/works and
-// GET /api/users/{id}/portfolio) must carry no settled score or settled
+// GET /api/legacy/users/{id}/portfolio) must carry no settled score or settled
 // timestamp at all — not even as a null field — while GET /api/legacy/bounties/{id}
 // keeps both, since a score is a fact about that specific work.
 func TestFeedAndPortfolioOmitScoreButDetailKeepsIt(t *testing.T) {

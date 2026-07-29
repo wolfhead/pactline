@@ -13,10 +13,10 @@ describe('api client', () => {
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(apiGet<{ id: string }[]>('/api/users')).resolves.toEqual([{ id: 'u1' }])
+    await expect(apiGet<{ id: string }[]>('/api/admin/users')).resolves.toEqual([{ id: 'u1' }])
 
     const [path, init] = fetchMock.mock.calls[0]
-    expect(path).toBe('/api/users')
+    expect(path).toBe('/api/admin/users')
     expect(init).toMatchObject({ method: 'GET', credentials: 'same-origin' })
     expect(init.headers).not.toHaveProperty('X-User-Id')
   })
@@ -40,9 +40,9 @@ describe('api client', () => {
       )),
     )
 
-    await expect(apiPost('/api/tasks/1', {}))
+    await expect(apiPost('/api/admin/users/1', {}))
       .rejects.toMatchObject({ status: 409, message: 'invalid status transition' })
-    await expect(apiPost('/api/tasks/1', {})).rejects.toBeInstanceOf(ApiError)
+    await expect(apiPost('/api/admin/users/1', {})).rejects.toBeInstanceOf(ApiError)
   })
 
   it('wraps non-JSON responses in ApiError', async () => {
@@ -53,7 +53,7 @@ describe('api client', () => {
       ),
     )
 
-    await expect(apiGet('/api/users')).rejects.toMatchObject({ status: 502 })
-    await expect(apiGet('/api/users')).rejects.not.toBeInstanceOf(SyntaxError)
+    await expect(apiGet('/api/account/tokens')).rejects.toMatchObject({ status: 502 })
+    await expect(apiGet('/api/account/tokens')).rejects.not.toBeInstanceOf(SyntaxError)
   })
 })

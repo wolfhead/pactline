@@ -49,7 +49,7 @@ test('status change is optimistic: the UI updates before the server responds, an
   const held = new Promise<void>((resolve) => {
     releaseHold = resolve
   })
-  await page.route(`**/api/tasks/${task.number}`, async (route) => {
+  await page.route(`**/api/v1/tasks/${task.number}`, async (route) => {
     if (route.request().method() !== 'PATCH') {
       await route.continue()
       return
@@ -59,7 +59,7 @@ test('status change is optimistic: the UI updates before the server responds, an
   })
 
   const patchResponse = page.waitForResponse(
-    (res) => res.url().endsWith(`/api/tasks/${task.number}`) && res.request().method() === 'PATCH',
+    (res) => res.url().endsWith(`/api/v1/tasks/${task.number}`) && res.request().method() === 'PATCH',
   )
   await statusField.click()
   await page.getByRole('option', { name: '进行中', exact: true }).click()
@@ -76,7 +76,7 @@ test('status change is optimistic: the UI updates before the server responds, an
   // continue() on the same route a second time ("Route is already
   // handled!").
   await patchResponse
-  await page.unroute(`**/api/tasks/${task.number}`)
+  await page.unroute(`**/api/v1/tasks/${task.number}`)
 
   // Reload to confirm the optimistic value is what the server actually
   // persisted, not just a client-side illusion.
@@ -89,7 +89,7 @@ test('status change is optimistic: the UI updates before the server responds, an
   const heldFail = new Promise<void>((resolve) => {
     releaseFail = resolve
   })
-  await page.route(`**/api/tasks/${task.number}`, async (route) => {
+  await page.route(`**/api/v1/tasks/${task.number}`, async (route) => {
     if (route.request().method() !== 'PATCH') {
       await route.continue()
       return
@@ -97,8 +97,15 @@ test('status change is optimistic: the UI updates before the server responds, an
     await heldFail
     await route.fulfill({
       status: 422,
-      contentType: 'application/json',
-      body: JSON.stringify({ error: 'forced e2e failure' }),
+      contentType: 'application/problem+json',
+      body: JSON.stringify({
+        type: 'about:blank',
+        title: 'Forced failure',
+        status: 422,
+        detail: 'forced e2e failure',
+        code: 'FORCED_E2E_FAILURE',
+        request_id: 'forced-e2e-request',
+      }),
     })
   })
 

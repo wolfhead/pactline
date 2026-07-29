@@ -101,7 +101,7 @@ func TestAdminUserLifecycleAndReadOnlyImpersonationHTTPPolicy(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, adminReadResponse.Code)
 
 	rejectionRequestID := "impersonation-rejection-" + uuid.NewString()
-	writeRequest := authenticatedHTTPTestRequest(http.MethodPatch, "/api/tasks/123?raw=must-not-be-audited",
+	writeRequest := authenticatedHTTPTestRequest(http.MethodPatch, "/api/v1/tasks/123?raw=must-not-be-audited",
 		[]byte(`{"title":"must-not-be-read"}`), adminCookies, adminCSRF)
 	bodyProbe := &readProbe{}
 	writeRequest.Body = io.NopCloser(bodyProbe)
@@ -113,7 +113,7 @@ func TestAdminUserLifecycleAndReadOnlyImpersonationHTTPPolicy(t *testing.T) {
 	require.NoError(t, db.Pool.QueryRow(ctx, `
 		SELECT metadata FROM identity_audit_events
 		WHERE event_type='impersonation_write_rejected' AND request_id=$1`, rejectionRequestID).Scan(&metadata))
-	require.JSONEq(t, `{"method":"PATCH","route":"/api/tasks/{number}"}`, string(metadata))
+	require.JSONEq(t, `{"method":"PATCH","route":"/api/v1/tasks/{number}"}`, string(metadata))
 	require.NotContains(t, string(metadata), "must-not-be-audited")
 	require.NotContains(t, string(metadata), "must-not-be-read")
 	require.Zero(t, bodyProbe.reads)

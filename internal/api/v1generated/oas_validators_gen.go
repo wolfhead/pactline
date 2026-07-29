@@ -2220,6 +2220,8 @@ func (s ListTasksSort) Validate() error {
 	switch s {
 	case "number":
 		return nil
+	case "created_at":
+		return nil
 	case "updated_at":
 		return nil
 	case "due_date":

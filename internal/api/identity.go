@@ -24,7 +24,7 @@ type identityMiddleware struct {
 	sessions   *identity.Service
 	appBaseURL *url.URL
 	cookies    cookieSettings
-	routes     *http.ServeMux
+	routes     routeResolver
 }
 
 func (m identityMiddleware) wrap(next http.Handler) http.Handler {

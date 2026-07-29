@@ -117,9 +117,8 @@ func (h *feedHandler) portfolio(w http.ResponseWriter, r *http.Request) {
 // Names are resolved against ALL users, not just active ones (ListAll, not
 // ListActive): the archive's whole point is that doing the work leaves a
 // durable trace, and that trace must not go blank the moment someone leaves
-// the team. GET /api/users (the identity switcher and nomination picker)
-// deliberately keeps using ListActive instead — those two call sites want
-// different populations and must not be conflated.
+// the team. Active-user selectors deliberately use ListActive instead; these
+// call sites want different populations and must not be conflated.
 func (h *feedHandler) decorate(ctx context.Context, list []domain.Bounty) ([]WorkView, error) {
 	users, err := h.users.ListAll(ctx)
 	if err != nil {
@@ -160,7 +159,7 @@ func (h *feedHandler) decorate(ctx context.Context, list []domain.Bounty) ([]Wor
 		// particular not here, at the feed view, which is exactly the
 		// comment the ledger said belonged at this call site. decorate()
 		// backs both GET /api/legacy/works (the public feed) and
-		// GET /api/users/{id}/portfolio (one named person's works, each
+		// GET /api/legacy/users/{id}/portfolio (one named person's works, each
 		// carrying a score) — the latter is a per-person total one `reduce`
 		// away, and the former is the one page every visitor sees, which is
 		// precisely the shape a leaderboard would take if this were left in.

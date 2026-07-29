@@ -60,8 +60,8 @@ func (s *UserStore) GetByID(ctx context.Context, id uuid.UUID) (domain.User, err
 // This backs credit-name resolution (feed_handler.decorate): a person who
 // has left the team must still be nameable on the work they are credited
 // on — the archive keeps naming people after they are deactivated. Do NOT
-// use this for the identity switcher or the nomination picker (GET
-// /api/users); those must keep using ListActive.
+// use this for active-user selection; those call sites must keep using
+// ListActive.
 func (s *UserStore) ListAll(ctx context.Context) ([]domain.User, error) {
 	rows, err := s.db.Pool.Query(ctx,
 		`SELECT `+userColumns+` FROM users ORDER BY name`)

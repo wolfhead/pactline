@@ -16,7 +16,6 @@ import (
 
 	"bountyboard"
 	"bountyboard/internal/api"
-	userdomain "bountyboard/internal/domain"
 	"bountyboard/internal/identity"
 	"bountyboard/internal/integrations/devauth"
 	legacyapi "bountyboard/internal/legacy/api"
@@ -83,7 +82,7 @@ func newTestServer(t *testing.T) http.Handler {
 	require.NoError(t, err)
 	baseURL, err := url.Parse("http://app.test")
 	require.NoError(t, err)
-	return api.NewRouter(users, legacyHandler, api.RouterOptions{
+	return api.NewRouter(legacyHandler, api.RouterOptions{
 		Auth: api.AuthSurface{
 			Sessions: identityService, Development: devauth.New(users, identityService), AppBaseURL: baseURL,
 		},
@@ -224,14 +223,8 @@ func cleanupBounty(t *testing.T, id uuid.UUID) {
 	})
 }
 
-// deactivateUser flips a seeded user's active flag off directly through the
-// store (there is no HTTP endpoint for this in Phase 1; see
-// store.UserStore.SetActive), and registers cleanup that flips it back to
-// active.
-//
-// This must reactivate on cleanup: every other test in this shared-database
-// suite assumes all six seeded users are active, and `make test` runs with
-// -p 1 so tests across files and packages interleave against the same rows.
+// deactivateUser temporarily removes a seeded user from active selection and
+// restores the shared fixture after the test.
 func deactivateUser(t *testing.T, id string) {
 	t.Helper()
 	dsn := os.Getenv("DATABASE_URL")
@@ -251,30 +244,6 @@ func deactivateUser(t *testing.T, id string) {
 		defer db.Close()
 		require.NoError(t, store.NewUserStore(db).SetActive(context.Background(), uid, true))
 	})
-}
-
-// TestListUsersReturnsSeeded pins that GET /api/users backs onto ListActive
-// (WHERE active, ORDER BY name), not just "however many rows exist": every
-// seed starts active, so a bare Len(..., 6) would still pass even with the
-// WHERE clause deleted entirely, and ORDER BY dropped would still return the
-// right set in a different order. 研发 E is deactivated for the duration of
-// this test and reactivated in cleanup via the shared deactivateUser helper.
-func TestListUsersReturnsSeeded(t *testing.T) {
-	const engEID = "00000000-0000-0000-0000-000000000005"
-	h := newTestServer(t)
-	deactivateUser(t, engEID)
-
-	rec := do(t, h, http.MethodGet, "/api/users", pmID, nil)
-	require.Equal(t, http.StatusOK, rec.Code)
-
-	var users []userdomain.User
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &users))
-	gotNames := make([]string, len(users))
-	for i, u := range users {
-		gotNames[i] = u.Name
-	}
-	require.Equal(t, []string{"Steward F", "产品 A", "技术 Leader B", "研发 C", "研发 D"}, gotNames,
-		"the deactivated user must be excluded and order must be by name")
 }
 
 func TestMissingIdentityIsUnauthorized(t *testing.T) {

@@ -75,15 +75,15 @@ func TestWriteAllowedDuringImpersonation(t *testing.T) {
 		method, route string
 		want          bool
 	}{
-		{http.MethodGet, "/api/tasks", true},
-		{http.MethodHead, "/api/tasks", true},
-		{http.MethodOptions, "/api/tasks", true},
-		{http.MethodPatch, "/api/tasks/42", false},
+		{http.MethodGet, "/api/v1/tasks", true},
+		{http.MethodHead, "/api/v1/tasks", true},
+		{http.MethodOptions, "/api/v1/tasks", true},
+		{http.MethodPatch, "/api/v1/tasks/42", false},
 		{http.MethodDelete, "/api/admin/impersonation", true},
 		{http.MethodPost, "/api/auth/logout", true},
 		{http.MethodPost, "/api/admin/invitations", false},
 	} {
 		assert.Equal(t, tc.want, WriteAllowed(tc.method, tc.route, true), "%s %s", tc.method, tc.route)
 	}
-	assert.True(t, WriteAllowed(http.MethodPatch, "/api/tasks/42", false))
+	assert.True(t, WriteAllowed(http.MethodPatch, "/api/v1/tasks/42", false))
 }

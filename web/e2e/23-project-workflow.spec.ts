@@ -18,7 +18,7 @@ test('a project moves from planned scope through milestone and evidence-backed c
   await page.getByLabel('预期成果').fill('The complete project workflow is verifiable')
 
   const createProjectResponse = page.waitForResponse(
-    (response) => response.url().endsWith('/api/projects') && response.request().method() === 'POST',
+    (response) => response.url().endsWith('/api/v1/projects') && response.request().method() === 'POST',
   )
   await page.getByRole('button', { name: '创建', exact: true }).click()
   const project = await (await createProjectResponse).json() as { id: string; number: number }

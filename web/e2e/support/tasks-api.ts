@@ -1,12 +1,9 @@
 import { BACKEND_URL, WEB_URL } from './config'
 
 /**
- * Thin Node-side REST client for the task-management API (internal/api/
- * task_handler.go, task_comment_handler.go, task_activity_handler.go,
- * label_handler.go), talking to the Go backend directly on :8080 and
- * bypassing the browser: setup that doesn't need to be driven through the
- * UI goes through here, so each test's actual browser interaction stays
- * focused on the one behaviour under test.
+ * Thin Node-side REST client for the contract-first work API. It talks to the
+ * Go backend directly and bypasses the browser so fixture setup does not hide
+ * the UI behavior each scenario is intended to exercise.
  */
 
 export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancelled'
@@ -19,14 +16,17 @@ export interface UserRef {
 }
 
 export interface Label {
-  ID: string
-  Name: string
-  CreatedAt: string
+  id: string
+  name: string
+  version: number
+  created_at: string
+  updated_at: string
 }
 
 export interface Task {
   id: string
   number: number
+  version: number
   title: string
   description: string
   status: TaskStatus
@@ -79,13 +79,20 @@ export class ApiRequestError extends Error {
   }
 }
 
-async function call<T>(userId: string, method: string, path: string, body?: unknown): Promise<T> {
+async function call<T>(
+  userId: string,
+  method: string,
+  path: string,
+  body?: unknown,
+  extraHeaders: Record<string, string> = {},
+): Promise<T> {
   void userId
   const session = await developmentSession()
   const headers: Record<string, string> = {
     Cookie: session.cookie,
     Origin: WEB_URL,
     'X-CSRF-Token': session.csrf,
+    ...extraHeaders,
   }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   const res = await fetch(`${BACKEND_URL}${path}`, {
@@ -96,8 +103,11 @@ async function call<T>(userId: string, method: string, path: string, body?: unkn
   const text = await res.text()
   const parsed: unknown = text ? JSON.parse(text) : null
   if (!res.ok) {
-    const errorField = parsed && typeof parsed === 'object' ? (parsed as { error?: unknown }).error : undefined
-    const message = typeof errorField === 'string' ? errorField : res.statusText
+    const problem = parsed && typeof parsed === 'object'
+      ? parsed as { error?: unknown; detail?: unknown; title?: unknown }
+      : {}
+    const message = [problem.detail, problem.error, problem.title]
+      .find((value): value is string => typeof value === 'string') ?? res.statusText
     throw new ApiRequestError(message, res.status)
   }
   return parsed as T
@@ -149,11 +159,11 @@ export interface CreateTaskInput {
 }
 
 export function createTask(userId: string, input: CreateTaskInput): Promise<Task> {
-  return call<Task>(userId, 'POST', '/api/tasks', input)
+  return call<Task>(userId, 'POST', '/api/v1/tasks', input)
 }
 
 export function getTask(userId: string, number: number): Promise<Task> {
-  return call<Task>(userId, 'GET', `/api/tasks/${number}`)
+  return call<Task>(userId, 'GET', `/api/v1/tasks/${number}`)
 }
 
 export interface TaskPatchInput {
@@ -168,53 +178,70 @@ export interface TaskPatchInput {
   milestone_id?: string | null
 }
 
-export function updateTask(userId: string, number: number, patch: TaskPatchInput): Promise<Task> {
-  return call<Task>(userId, 'PATCH', `/api/tasks/${number}`, patch)
+export async function updateTask(userId: string, number: number, patch: TaskPatchInput): Promise<Task> {
+  const current = await getTask(userId, number)
+  return call<Task>(userId, 'PATCH', `/api/v1/tasks/${number}`, patch, {
+    'If-Match': `"${current.version}"`,
+  })
 }
 
-export function archiveTask(userId: string, number: number): Promise<Task> {
-  return call<Task>(userId, 'POST', `/api/tasks/${number}/archive`)
+export async function archiveTask(userId: string, number: number): Promise<Task> {
+  const current = await getTask(userId, number)
+  return call<Task>(userId, 'POST', `/api/v1/tasks/${number}/archive`, undefined, {
+    'If-Match': `"${current.version}"`,
+  })
 }
 
-export function restoreTask(userId: string, number: number): Promise<Task> {
-  return call<Task>(userId, 'POST', `/api/tasks/${number}/restore`)
+export async function restoreTask(userId: string, number: number): Promise<Task> {
+  const current = await getTask(userId, number)
+  return call<Task>(userId, 'POST', `/api/v1/tasks/${number}/restore`, undefined, {
+    'If-Match': `"${current.version}"`,
+  })
 }
 
-export function createTaskCriterion(
+export async function createTaskCriterion(
   userId: string,
   number: number,
   criterion: string,
   verificationInstructions: string,
   position = 0,
 ): Promise<AcceptanceCriterion> {
+  const current = await getTask(userId, number)
   return call<AcceptanceCriterion>(
     userId,
     'POST',
-    `/api/tasks/${number}/acceptance-criteria`,
+    `/api/v1/tasks/${number}/criteria`,
     {
       criterion,
       verification_instructions: verificationInstructions,
       position,
     },
+    { 'If-Match': `"${current.version}"` },
   )
 }
 
-export function listComments(userId: string, number: number): Promise<Comment[]> {
-  return call<Comment[]>(userId, 'GET', `/api/tasks/${number}/comments`)
+export async function listComments(userId: string, number: number): Promise<Comment[]> {
+  const response = await call<{ items: Comment[] }>(userId, 'GET', `/api/v1/tasks/${number}/comments`)
+  return response.items
 }
 
-export function createComment(userId: string, number: number, body: string): Promise<Comment> {
-  return call<Comment>(userId, 'POST', `/api/tasks/${number}/comments`, { body })
+export async function createComment(userId: string, number: number, body: string): Promise<Comment> {
+  const current = await getTask(userId, number)
+  return call<Comment>(userId, 'POST', `/api/v1/tasks/${number}/comments`, { body }, {
+    'If-Match': `"${current.version}"`,
+  })
 }
 
-export function listActivity(userId: string, number: number): Promise<Activity[]> {
-  return call<Activity[]>(userId, 'GET', `/api/tasks/${number}/activity`)
+export async function listActivity(userId: string, number: number): Promise<Activity[]> {
+  const response = await call<{ items: Activity[] }>(userId, 'GET', `/api/v1/tasks/${number}/activity`)
+  return response.items
 }
 
-export function listLabels(userId: string): Promise<Label[]> {
-  return call<Label[]>(userId, 'GET', '/api/labels')
+export async function listLabels(userId: string): Promise<Label[]> {
+  const response = await call<{ items: Label[] }>(userId, 'GET', '/api/v1/labels')
+  return response.items
 }
 
 export function createLabel(userId: string, name: string): Promise<Label> {
-  return call<Label>(userId, 'POST', '/api/labels', { name })
+  return call<Label>(userId, 'POST', '/api/v1/labels', { name })
 }

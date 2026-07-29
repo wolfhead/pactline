@@ -97,11 +97,6 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 	accessAuditStore := store.NewAccessAuditStore(db)
 	baseURL, err := url.Parse("http://app.test")
 	require.NoError(t, err)
-	taskSurface := &api.TaskSurface{
-		Tasks: tasks, Comments: comments, Labels: labels,
-		Projects: projects, Milestones: milestones, Acceptance: acceptance,
-		ProjectService: projectService,
-	}
 	v1Handler, err := apiv1.NewServer(&apiv1.Handler{
 		Users: users,
 		Tasks: &application.TaskService{
@@ -111,13 +106,12 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 		Projects: projectService,
 	})
 	require.NoError(t, err)
-	h := api.NewRouter(users, legacyHandler, api.RouterOptions{
+	h := api.NewRouter(legacyHandler, api.RouterOptions{
 		Auth: api.AuthSurface{
 			Sessions: identityService, Tokens: tokenService,
 			AccessAudit: accessAuditStore, Idempotency: store.NewIdempotencyStore(db),
 			Development: devauth.New(users, identityService), AppBaseURL: baseURL,
 		},
-		Tasks:   taskSurface,
 		V1:      v1Handler,
 		OpenAPI: apiv1.OpenAPIHandler(contract.OpenAPIDocument),
 	})
@@ -227,74 +221,6 @@ func decodeJSON(t *testing.T, rec *httptest.ResponseRecorder, dst any) {
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(dst))
 }
 
-// taskResponse mirrors internal/api's unexported taskView, so this package's
-// (black-box, api_test) tests can decode what the HTTP layer actually sent
-// without importing an unexported type.
-type taskResponse struct {
-	ID          uuid.UUID              `json:"id"`
-	Number      int64                  `json:"number"`
-	Title       string                 `json:"title"`
-	Description string                 `json:"description"`
-	Status      string                 `json:"status"`
-	Priority    string                 `json:"priority"`
-	Assignee    *userRefJSON           `json:"assignee"`
-	Creator     userRefJSON            `json:"creator"`
-	DueDate     *string                `json:"due_date"`
-	Project     *taskProjectResponse   `json:"project"`
-	Milestone   *taskMilestoneResponse `json:"milestone"`
-	Labels      []labelJSON            `json:"labels"`
-	CreatedAt   time.Time              `json:"created_at"`
-	UpdatedAt   time.Time              `json:"updated_at"`
-	CompletedAt *time.Time             `json:"completed_at"`
-	ArchivedAt  *time.Time             `json:"archived_at"`
-}
-
-type taskProjectResponse struct {
-	ID     uuid.UUID `json:"id"`
-	Number int64     `json:"number"`
-	Name   string    `json:"name"`
-}
-
-type taskMilestoneResponse struct {
-	ID   uuid.UUID `json:"id"`
-	Name string    `json:"name"`
-}
-
-type userRefJSON struct {
-	ID    uuid.UUID `json:"id"`
-	Name  string    `json:"name"`
-	Email string    `json:"email"`
-}
-
-type labelJSON struct {
-	ID   uuid.UUID `json:"id"`
-	Name string    `json:"name"`
-}
-
-type taskListResponseJSON struct {
-	Items      []taskResponse `json:"items"`
-	NextCursor string         `json:"next_cursor"`
-	HasMore    bool           `json:"has_more"`
-}
-
-type commentResponse struct {
-	ID        uuid.UUID `json:"id"`
-	TaskID    uuid.UUID `json:"task_id"`
-	AuthorID  uuid.UUID `json:"author_id"`
-	Body      string    `json:"body"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-}
-
-type activityResponse struct {
-	ID        uuid.UUID `json:"id"`
-	ActorID   uuid.UUID `json:"actor_id"`
-	Field     string    `json:"field"`
-	OldValue  *string   `json:"old_value"`
-	NewValue  *string   `json:"new_value"`
-	CreatedAt time.Time `json:"created_at"`
-}
-
 func cleanupTaskRow(t *testing.T, db *store.DB, id uuid.UUID) {
 	t.Helper()
 	t.Cleanup(func() {
@@ -312,22 +238,25 @@ func cleanupTaskRow(t *testing.T, db *store.DB, id uuid.UUID) {
 	})
 }
 
-func cleanupLabelRow(t *testing.T, db *store.DB, id uuid.UUID) {
+func cleanupProjectRows(t *testing.T, db *store.DB, projectID uuid.UUID) {
 	t.Helper()
 	t.Cleanup(func() {
-		_, err := db.Pool.Exec(context.Background(), `DELETE FROM labels WHERE id = $1`, id)
-		require.NoError(t, err)
+		ctx := context.Background()
+		statements := []string{
+			`DELETE FROM acceptance_checks WHERE criterion_id IN (
+				SELECT id FROM acceptance_criteria
+				WHERE project_id=$1 OR milestone_id IN (SELECT id FROM milestones WHERE project_id=$1)
+			)`,
+			`DELETE FROM acceptance_criteria
+			 WHERE project_id=$1 OR milestone_id IN (SELECT id FROM milestones WHERE project_id=$1)`,
+			`DELETE FROM project_activity WHERE project_id=$1`,
+			`UPDATE tasks SET project_id=NULL, milestone_id=NULL WHERE project_id=$1`,
+			`DELETE FROM milestones WHERE project_id=$1`,
+			`DELETE FROM projects WHERE id=$1`,
+		}
+		for _, statement := range statements {
+			_, err := db.Pool.Exec(ctx, statement, projectID)
+			require.NoError(t, err)
+		}
 	})
-}
-
-// mustCreateTaskHTTP is a small helper most handler tests use to get a task
-// on the board without repeating the create-and-decode boilerplate.
-func mustCreateTaskHTTP(t *testing.T, h http.Handler, db *store.DB, userID string, body map[string]any) taskResponse {
-	t.Helper()
-	rec := do(t, h, http.MethodPost, "/api/tasks", userID, body)
-	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
-	var out taskResponse
-	decodeJSON(t, rec, &out)
-	cleanupTaskRow(t, db, out.ID)
-	return out
 }

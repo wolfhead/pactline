@@ -32,7 +32,7 @@ test('comments: add, edit and delete as the author', async ({ page, uniqueTitle,
 
   // Edit: the comment body is itself an InlineEditable, for its own author.
   const editPatch = page.waitForResponse(
-    (res) => res.url().includes(`/api/tasks/${task.number}/comments/`) && res.request().method() === 'PATCH',
+    (res) => res.url().includes(`/api/v1/tasks/${task.number}/comments/`) && res.request().method() === 'PATCH',
   )
   const commentField = commentSection.getByLabel('编辑评论')
   await commentField.fill('First comment, edited')

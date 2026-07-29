@@ -13,17 +13,43 @@ surface includes:
 - task-to-project and task-to-milestone association; and
 - audited project and milestone lifecycle transitions;
 - invite-only Lark authentication for one company; and
-- single-Administrator user management with read-only impersonation; and
-- personal API access foundations with scoped tokens, rate limiting,
-  idempotency, request audit, and transactional business provenance.
+- single-Administrator user management with read-only impersonation;
+- contract-first `/api/v1` access for both humans and Agents; and
+- personal scoped tokens, rate limiting, idempotency, optimistic concurrency,
+  request audit, and transactional business provenance.
 
 Project and milestone semantics are defined in
 [`docs/superpowers/specs/2026-07-27-projects-and-milestones-design.md`](docs/superpowers/specs/2026-07-27-projects-and-milestones-design.md).
 The identity model and operating procedure are documented in
 [`docs/operations/lark-identity.md`](docs/operations/lark-identity.md).
-The supported Agent work API will be introduced under `/api/v1` by the next
-implementation phase. The current foundation does not expose the existing
-unversioned task routes to bearer tokens.
+### Work API
+
+`/api/v1` is the only supported HTTP surface for tasks, comments, activity,
+labels, projects, milestones, acceptance criteria, acceptance checks, and
+active-user references. The former unversioned work routes have been removed.
+Authentication and administration remain internal under `/api/auth`,
+`/api/account`, and `/api/admin`; the preserved bounty mechanism remains under
+`/api/legacy`.
+
+The canonical contract is [`api/openapi.yaml`](api/openapi.yaml). It is served
+to authenticated users at `/api/openapi.yaml` and rendered in the application
+at `/api-docs`. Generate the transport after changing the contract and verify
+that generated code is reproducible:
+
+```bash
+make openapi-generate
+make openapi-check
+```
+
+`internal/api/v1generated` is owned by ogen and must not be edited manually.
+Browser sessions use the session cookie and CSRF protection. Agents use
+personal Bearer Tokens with `work:read` or `work:write`; write requests also
+use idempotency keys and the documented ETag preconditions. API errors follow
+RFC 9457 Problem Details.
+
+Breaking `/api/v1` contract changes require explicit user approval. Once
+approved, the repository favors a clean migration over maintaining hidden
+dual routes.
 
 作品制研发任务管理系统。机制设计见 [`docs/mechanism-design.md`](docs/mechanism-design.md),
 系统规格见 [`docs/superpowers/specs/2026-07-26-bounty-board-design.md`](docs/superpowers/specs/2026-07-26-bounty-board-design.md)。

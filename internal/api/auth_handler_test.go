@@ -123,13 +123,13 @@ func TestDevelopmentSessionCookieFlagsAndHashPersistence(t *testing.T) {
 func TestMutationRequiresSessionCSRFAndSameOrigin(t *testing.T) {
 	handler, _ := newTaskTestServer(t)
 	cookies, csrf := developmentLogin(t, handler, userA)
-	request := authenticatedHTTPTestRequest(http.MethodPost, "/api/tasks", []byte(`{"title":"blocked"}`), cookies, csrf)
+	request := authenticatedHTTPTestRequest(http.MethodPost, "/api/v1/tasks", []byte(`{"title":"blocked"}`), cookies, csrf)
 	request.Header.Del("X-CSRF-Token")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	require.Equal(t, http.StatusForbidden, response.Code)
 
-	request = authenticatedHTTPTestRequest(http.MethodPost, "/api/tasks", []byte(`{"title":"blocked"}`), cookies, csrf)
+	request = authenticatedHTTPTestRequest(http.MethodPost, "/api/v1/tasks", []byte(`{"title":"blocked"}`), cookies, csrf)
 	request.Header.Set("Origin", "https://evil.example")
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -249,7 +249,7 @@ func TestLogoutClearsCookiesWhenPersistenceFails(t *testing.T) {
 	require.NoError(t, err)
 	baseURL, err := url.Parse("http://app.test")
 	require.NoError(t, err)
-	handler := api.NewRouter(users, http.NotFoundHandler(), api.RouterOptions{
+	handler := api.NewRouter(http.NotFoundHandler(), api.RouterOptions{
 		Auth: api.AuthSurface{
 			Sessions: service, Development: devauth.New(users, service), AppBaseURL: baseURL,
 		},

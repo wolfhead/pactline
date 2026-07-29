@@ -67,8 +67,8 @@ test('Admin can enter and exit read-only impersonation', async ({ page }) => {
       })
       return
     }
-    if (url.pathname === '/api/users') {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([ADMIN, MEMBER]) })
+    if (url.pathname === '/api/v1/users') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [ADMIN, MEMBER] }) })
       return
     }
     if (url.pathname === '/api/admin/users') {
@@ -85,16 +85,16 @@ test('Admin can enter and exit read-only impersonation', async ({ page }) => {
       await route.fulfill({ status: 204 })
       return
     }
-    if (url.pathname === '/api/tasks') {
+    if (url.pathname === '/api/v1/tasks') {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ items: [], has_more: false }),
+        body: JSON.stringify({ items: [] }),
       })
       return
     }
-    if (url.pathname === '/api/labels') {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    if (url.pathname === '/api/v1/labels' || url.pathname === '/api/v1/projects') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [] }) })
       return
     }
     await route.fulfill({ status: 404, contentType: 'application/json', body: '{"error":"not mocked"}' })

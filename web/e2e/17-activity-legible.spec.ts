@@ -36,7 +36,7 @@ test('activity log reads as legible prose and updates live after a status change
   await expect(activitySection.getByText(/将状态从/)).not.toBeVisible()
 
   const isPatch = (res: import('@playwright/test').Response) =>
-    res.url().endsWith(`/api/tasks/${task.number}`) && res.request().method() === 'PATCH'
+    res.url().endsWith(`/api/v1/tasks/${task.number}`) && res.request().method() === 'PATCH'
 
   // Status and assignee are permanently visible Radix Selects (Task 14) —
   // not native <select>s, so `selectOption()` does not apply: open the

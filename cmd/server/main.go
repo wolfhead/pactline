@@ -118,10 +118,6 @@ func main() {
 		legacystore.NewAnchorStore(db),
 	)
 
-	taskSurface := &api.TaskSurface{
-		Tasks: tasks, Comments: comments, Labels: labels, Projects: projects,
-		Milestones: milestones, Acceptance: acceptance, ProjectService: projectService,
-	}
 	v1Handler, err := apiv1.NewServer(&apiv1.Handler{
 		Users: users,
 		Tasks: &application.TaskService{
@@ -134,7 +130,7 @@ func main() {
 		slog.Error("configure OpenAPI v1 server", "error", err)
 		os.Exit(1)
 	}
-	handler := api.NewRouter(users, legacyHandler, api.RouterOptions{
+	handler := api.NewRouter(legacyHandler, api.RouterOptions{
 		Auth: api.AuthSurface{
 			Sessions: identityService, Tokens: tokenService,
 			AccessAudit: accessAuditStore,
@@ -143,7 +139,6 @@ func main() {
 			LarkEnabled:   cfg.AuthProvider == AuthProviderLark,
 			SecureCookies: cfg.AppEnv != EnvironmentDevelopment && cfg.AppEnv != EnvironmentTest,
 		},
-		Tasks:   taskSurface,
 		V1:      v1Handler,
 		OpenAPI: apiv1.OpenAPIHandler(contract.OpenAPIDocument),
 	})

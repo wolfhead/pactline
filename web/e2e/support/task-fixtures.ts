@@ -127,7 +127,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       },
       createLabel: async (userId, name) => {
         const label = await tasksApi.createLabel(userId, name)
-        trackLabel(label.ID)
+        trackLabel(label.id)
         return label
       },
     })

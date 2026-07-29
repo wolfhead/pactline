@@ -84,7 +84,7 @@ export default defineConfig({
         ADDR: `:${backendPort}`,
         SESSION_SECRET: 'cGxheXdyaWdodC1zZXNzaW9uLXNlY3JldC0zMi1ieXQ=',
       },
-      url: `${BACKEND_URL}/api/users`,
+      url: `${BACKEND_URL}/api/me`,
       reuseExistingServer: true,
       timeout: 30_000,
     },

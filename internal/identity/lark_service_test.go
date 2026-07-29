@@ -239,9 +239,9 @@ func TestUserLifecycleAndImpersonationUseRealAdminActor(t *testing.T) {
 	current.Subject = member
 	current.Impersonation = repository.impersonation
 	require.NoError(t, service.RecordImpersonationWriteRejected(
-		context.Background(), current, "PATCH", "/api/tasks/{number}", "request"))
+		context.Background(), current, "PATCH", "/api/v1/tasks/{number}", "request"))
 	require.Equal(t, "impersonation_write_rejected", repository.lastAudit.EventType)
-	require.JSONEq(t, `{"method":"PATCH","route":"/api/tasks/{number}"}`, string(repository.lastAudit.Metadata))
+	require.JSONEq(t, `{"method":"PATCH","route":"/api/v1/tasks/{number}"}`, string(repository.lastAudit.Metadata))
 	require.NoError(t, service.EndImpersonation(context.Background(), current, "request"))
 	require.True(t, repository.impersonationEnded)
 }

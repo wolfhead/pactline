@@ -80,7 +80,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [number, updated_at, due_date, priority]
+            enum: [number, created_at, updated_at, due_date, priority]
             default: updated_at
         - name: order
           in: query

@@ -1881,6 +1881,7 @@ type ListTasksSort string
 
 const (
 	ListTasksSortNumber    ListTasksSort = "number"
+	ListTasksSortCreatedAt ListTasksSort = "created_at"
 	ListTasksSortUpdatedAt ListTasksSort = "updated_at"
 	ListTasksSortDueDate   ListTasksSort = "due_date"
 	ListTasksSortPriority  ListTasksSort = "priority"
@@ -1890,6 +1891,7 @@ const (
 func (ListTasksSort) AllValues() []ListTasksSort {
 	return []ListTasksSort{
 		ListTasksSortNumber,
+		ListTasksSortCreatedAt,
 		ListTasksSortUpdatedAt,
 		ListTasksSortDueDate,
 		ListTasksSortPriority,
@@ -1900,6 +1902,8 @@ func (ListTasksSort) AllValues() []ListTasksSort {
 func (s ListTasksSort) MarshalText() ([]byte, error) {
 	switch s {
 	case ListTasksSortNumber:
+		return []byte(s), nil
+	case ListTasksSortCreatedAt:
 		return []byte(s), nil
 	case ListTasksSortUpdatedAt:
 		return []byte(s), nil
@@ -1917,6 +1921,9 @@ func (s *ListTasksSort) UnmarshalText(data []byte) error {
 	switch ListTasksSort(data) {
 	case ListTasksSortNumber:
 		*s = ListTasksSortNumber
+		return nil
+	case ListTasksSortCreatedAt:
+		*s = ListTasksSortCreatedAt
 		return nil
 	case ListTasksSortUpdatedAt:
 		*s = ListTasksSortUpdatedAt

@@ -39,7 +39,7 @@ test('title edits in place: Enter commits and survives reload, Escape discards w
   await expect(titleField).toHaveValue(original)
 
   const firstPatch = page.waitForResponse(
-    (res) => res.url().endsWith(`/api/tasks/${task.number}`) && res.request().method() === 'PATCH',
+    (res) => res.url().endsWith(`/api/v1/tasks/${task.number}`) && res.request().method() === 'PATCH',
   )
   await titleField.fill(committed)
   await titleField.press('Enter')
@@ -72,7 +72,7 @@ test('title edits in place: Enter commits and survives reload, Escape discards w
   await expect(statusField).toHaveText(/待办/)
 
   const statusPatch = page.waitForResponse(
-    (res) => res.url().endsWith(`/api/tasks/${task.number}`) && res.request().method() === 'PATCH',
+    (res) => res.url().endsWith(`/api/v1/tasks/${task.number}`) && res.request().method() === 'PATCH',
   )
   await statusField.click()
   await page.getByRole('option', { name: '进行中', exact: true }).click()
