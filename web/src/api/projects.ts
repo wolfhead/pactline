@@ -8,8 +8,7 @@ import {
 import type { AcceptanceCriterion, CreateCriterionBody } from './acceptance'
 import type { Task, UserRef } from '@/task-types'
 
-export type ProjectStatus = 'planned' | 'active' | 'paused' | 'completed' | 'cancelled'
-export type MilestoneStatus = 'open' | 'completed' | 'cancelled'
+export type MilestoneStatus = 'planned' | 'active' | 'completed' | 'cancelled'
 
 export interface Milestone {
   id: string
@@ -18,6 +17,7 @@ export interface Milestone {
   name: string
   outcome: string
   description: string
+  owner_id: string
   status: MilestoneStatus
   target_date: string | null
   position: number
@@ -33,26 +33,18 @@ export interface Project {
   number: number
   version: number
   name: string
-  outcome: string
   description: string
   owner: UserRef
   creator: UserRef
-  status: ProjectStatus
-  target_date: string | null
-  completed_at: string | null
-  cancelled_at: string | null
   archived_at: string | null
   created_at: string
   updated_at: string
   completed_tasks: number
   eligible_tasks: number
-  active_criteria: number
-  satisfied_criteria: number
 }
 
 export interface ProjectDetail {
   project: Project
-  acceptance_criteria: AcceptanceCriterion[]
   milestones: Milestone[]
   tasks: Task[]
   activity: ProjectActivity[]
@@ -74,16 +66,15 @@ export interface ProjectActivity {
 
 export interface CreateProjectBody {
   name: string
-  outcome: string
   description?: string
   owner_id: string
-  target_date?: string | null
 }
 
 export interface CreateMilestoneBody {
   name: string
   outcome: string
   description?: string
+  owner_id: string
   target_date?: string | null
   position: number
 }
@@ -114,16 +105,15 @@ export function updateProject(
   }).then((response) => requireVersioned(response).value)
 }
 
-export function applyProjectLifecycle(
+export function applyProjectArchive(
   number: number,
   version: number,
-  action: string,
-  reason?: string,
+  archived: boolean,
 ): Promise<Project> {
-  return v1Post<Project>(`/api/v1/projects/${number}/${action}`, {
-    ifMatch: etagForVersion(version),
-    body: reason ? { reason } : undefined,
-  }).then((response) => requireVersioned(response).value)
+  return v1Post<Project>(
+    `/api/v1/projects/${number}/${archived ? 'archive' : 'restore'}`,
+    { ifMatch: etagForVersion(version) },
+  ).then((response) => requireVersioned(response).value)
 }
 
 export function createMilestone(
@@ -158,7 +148,7 @@ export function applyMilestoneLifecycle(
   projectVersion: number,
   milestoneID: string,
   milestoneVersion: number,
-  action: string,
+  action: 'activate' | 'complete' | 'cancel' | 'reopen',
   reason?: string,
 ): Promise<Milestone> {
   return v1Post<Milestone>(
@@ -169,16 +159,6 @@ export function applyMilestoneLifecycle(
       body: reason ? { reason } : undefined,
     },
   ).then((response) => requireVersioned(response).value)
-}
-
-export function createProjectCriterion(
-  number: number,
-  projectVersion: number,
-  body: CreateCriterionBody,
-): Promise<AcceptanceCriterion> {
-  return v1Post<AcceptanceCriterion>(`/api/v1/projects/${number}/criteria`, {
-    ifMatch: etagForVersion(projectVersion), body,
-  }).then((response) => requireVersioned(response).value)
 }
 
 export function createMilestoneCriterion(

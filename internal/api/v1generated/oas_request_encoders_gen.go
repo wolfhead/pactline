@@ -10,26 +10,6 @@ import (
 	ht "github.com/ogen-go/ogen/http"
 )
 
-func encodeActivateProjectRequest(
-	req OptLifecycleRequest,
-	r *http.Request,
-) error {
-	const contentType = "application/json"
-	if !req.Set {
-		// Keep request with empty body if value is not set.
-		return nil
-	}
-	e := new(jx.Encoder)
-	{
-		if req.Set {
-			req.Encode(e)
-		}
-	}
-	encoded := e.Bytes()
-	ht.SetBody(r, bytes.NewReader(encoded), contentType)
-	return nil
-}
-
 func encodeCancelMilestoneRequest(
 	req OptLifecycleRequest,
 	r *http.Request,
@@ -50,47 +30,7 @@ func encodeCancelMilestoneRequest(
 	return nil
 }
 
-func encodeCancelProjectRequest(
-	req OptLifecycleRequest,
-	r *http.Request,
-) error {
-	const contentType = "application/json"
-	if !req.Set {
-		// Keep request with empty body if value is not set.
-		return nil
-	}
-	e := new(jx.Encoder)
-	{
-		if req.Set {
-			req.Encode(e)
-		}
-	}
-	encoded := e.Bytes()
-	ht.SetBody(r, bytes.NewReader(encoded), contentType)
-	return nil
-}
-
 func encodeCompleteMilestoneRequest(
-	req OptLifecycleRequest,
-	r *http.Request,
-) error {
-	const contentType = "application/json"
-	if !req.Set {
-		// Keep request with empty body if value is not set.
-		return nil
-	}
-	e := new(jx.Encoder)
-	{
-		if req.Set {
-			req.Encode(e)
-		}
-	}
-	encoded := e.Bytes()
-	ht.SetBody(r, bytes.NewReader(encoded), contentType)
-	return nil
-}
-
-func encodeCompleteProjectRequest(
 	req OptLifecycleRequest,
 	r *http.Request,
 ) error {
@@ -180,20 +120,6 @@ func encodeCreateProjectRequest(
 	return nil
 }
 
-func encodeCreateProjectCriterionRequest(
-	req *CriterionCreate,
-	r *http.Request,
-) error {
-	const contentType = "application/json"
-	e := new(jx.Encoder)
-	{
-		req.Encode(e)
-	}
-	encoded := e.Bytes()
-	ht.SetBody(r, bytes.NewReader(encoded), contentType)
-	return nil
-}
-
 func encodeCreateTaskRequest(
 	req *TaskCreate,
 	r *http.Request,
@@ -256,41 +182,7 @@ func encodeDeleteCriterionRequest(
 	return nil
 }
 
-func encodePauseProjectRequest(
-	req OptLifecycleRequest,
-	r *http.Request,
-) error {
-	const contentType = "application/json"
-	if !req.Set {
-		// Keep request with empty body if value is not set.
-		return nil
-	}
-	e := new(jx.Encoder)
-	{
-		if req.Set {
-			req.Encode(e)
-		}
-	}
-	encoded := e.Bytes()
-	ht.SetBody(r, bytes.NewReader(encoded), contentType)
-	return nil
-}
-
 func encodeReopenMilestoneRequest(
-	req *LifecycleRequest,
-	r *http.Request,
-) error {
-	const contentType = "application/json"
-	e := new(jx.Encoder)
-	{
-		req.Encode(e)
-	}
-	encoded := e.Bytes()
-	ht.SetBody(r, bytes.NewReader(encoded), contentType)
-	return nil
-}
-
-func encodeReopenProjectRequest(
 	req *LifecycleRequest,
 	r *http.Request,
 ) error {

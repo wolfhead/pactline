@@ -32,13 +32,12 @@ func TestListActiveReturnsSeededUsers(t *testing.T) {
 
 	active, err := us.ListActive(ctx)
 	require.NoError(t, err)
-	require.Equal(t, []string{"产品 A"}, userNames(active),
-		"only the primary seed remains active after identity consolidation")
+	require.Len(t, active, 1, "only the primary identity remains active after consolidation")
+	require.Equal(t, userA, active[0].ID)
 
 	all, err := us.ListAll(ctx)
 	require.NoError(t, err)
-	require.Equal(t, []string{"Steward F", "产品 A", "技术 Leader B", "研发 C", "研发 D", "研发 E"}, userNames(all),
-		"ListAll must still name a deactivated user")
+	require.Len(t, all, 6, "ListAll must retain the five deactivated historical users")
 }
 
 func userNames(users []domain.User) []string {
@@ -109,11 +108,14 @@ func TestUsersPermitOneAdminOnly(t *testing.T) {
 	primaryID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	secondaryID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
 
+	var originalRole domain.PlatformRole
+	require.NoError(t, db.Pool.QueryRow(ctx,
+		`SELECT platform_role FROM users WHERE id = $1`, primaryID).Scan(&originalRole))
 	_, err := db.Pool.Exec(ctx, `UPDATE users SET platform_role = 'ADMIN' WHERE id = $1`, primaryID)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		_, cleanupErr := db.Pool.Exec(context.Background(),
-			`UPDATE users SET platform_role = 'MEMBER' WHERE id = $1`, primaryID)
+			`UPDATE users SET platform_role = $2 WHERE id = $1`, primaryID, originalRole)
 		require.NoError(t, cleanupErr)
 	})
 

@@ -70,6 +70,22 @@ paths:
             type: integer
             format: int64
             minimum: 1
+        - name: milestone_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: creator_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: backlog_only
+          in: query
+          description: Return only tasks in a Project backlog.
+          schema:
+            type: boolean
+            default: false
         - name: archived
           in: query
           schema:
@@ -363,16 +379,6 @@ paths:
           $ref: "#/components/responses/Project"
         default:
           $ref: "#/components/responses/Problem"
-  /api/v1/projects/{number}/activate:
-    $ref: "#/components/pathItems/ProjectActivate"
-  /api/v1/projects/{number}/pause:
-    $ref: "#/components/pathItems/ProjectPause"
-  /api/v1/projects/{number}/complete:
-    $ref: "#/components/pathItems/ProjectComplete"
-  /api/v1/projects/{number}/cancel:
-    $ref: "#/components/pathItems/ProjectCancel"
-  /api/v1/projects/{number}/reopen:
-    $ref: "#/components/pathItems/ProjectReopen"
   /api/v1/projects/{number}/archive:
     $ref: "#/components/pathItems/ProjectArchive"
   /api/v1/projects/{number}/restore:
@@ -421,6 +427,8 @@ paths:
           $ref: "#/components/responses/Problem"
   /api/v1/projects/{number}/milestones/{id}/complete:
     $ref: "#/components/pathItems/MilestoneComplete"
+  /api/v1/projects/{number}/milestones/{id}/activate:
+    $ref: "#/components/pathItems/MilestoneActivate"
   /api/v1/projects/{number}/milestones/{id}/cancel:
     $ref: "#/components/pathItems/MilestoneCancel"
   /api/v1/projects/{number}/milestones/{id}/reopen:
@@ -442,37 +450,6 @@ paths:
     post:
       operationId: createTaskCriterion
       summary: Create a task acceptance criterion
-      parameters:
-        - $ref: "#/components/parameters/IfMatch"
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CriterionCreate"
-      responses:
-        "201":
-          $ref: "#/components/responses/CriterionCreated"
-        default:
-          $ref: "#/components/responses/Problem"
-  /api/v1/projects/{number}/criteria:
-    parameters:
-      - $ref: "#/components/parameters/ProjectNumber"
-    get:
-      operationId: listProjectCriteria
-      summary: List project acceptance criteria
-      parameters:
-        - $ref: "#/components/parameters/Cursor"
-        - $ref: "#/components/parameters/Limit"
-      responses:
-        "200":
-          $ref: "#/components/responses/CriterionList"
-        default:
-          $ref: "#/components/responses/Problem"
-    post:
-      operationId: createProjectCriterion
-      summary: Create a project acceptance criterion
       parameters:
         - $ref: "#/components/parameters/IfMatch"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -691,102 +668,6 @@ components:
         type: integer
         minimum: 1
   pathItems:
-    ProjectActivate:
-      parameters:
-        - $ref: "#/components/parameters/ProjectNumber"
-      post:
-        operationId: activateProject
-        summary: Activate a project
-        parameters:
-          - $ref: "#/components/parameters/IfMatch"
-          - $ref: "#/components/parameters/IdempotencyKey"
-        requestBody:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LifecycleRequest"
-        responses:
-          "200":
-            $ref: "#/components/responses/Project"
-          default:
-            $ref: "#/components/responses/Problem"
-    ProjectPause:
-      parameters:
-        - $ref: "#/components/parameters/ProjectNumber"
-      post:
-        operationId: pauseProject
-        summary: Pause a project
-        parameters:
-          - $ref: "#/components/parameters/IfMatch"
-          - $ref: "#/components/parameters/IdempotencyKey"
-        requestBody:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LifecycleRequest"
-        responses:
-          "200":
-            $ref: "#/components/responses/Project"
-          default:
-            $ref: "#/components/responses/Problem"
-    ProjectComplete:
-      parameters:
-        - $ref: "#/components/parameters/ProjectNumber"
-      post:
-        operationId: completeProject
-        summary: Complete a project
-        parameters:
-          - $ref: "#/components/parameters/IfMatch"
-          - $ref: "#/components/parameters/IdempotencyKey"
-        requestBody:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LifecycleRequest"
-        responses:
-          "200":
-            $ref: "#/components/responses/Project"
-          default:
-            $ref: "#/components/responses/Problem"
-    ProjectCancel:
-      parameters:
-        - $ref: "#/components/parameters/ProjectNumber"
-      post:
-        operationId: cancelProject
-        summary: Cancel a project
-        parameters:
-          - $ref: "#/components/parameters/IfMatch"
-          - $ref: "#/components/parameters/IdempotencyKey"
-        requestBody:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LifecycleRequest"
-        responses:
-          "200":
-            $ref: "#/components/responses/Project"
-          default:
-            $ref: "#/components/responses/Problem"
-    ProjectReopen:
-      parameters:
-        - $ref: "#/components/parameters/ProjectNumber"
-      post:
-        operationId: reopenProject
-        summary: Reopen a project
-        parameters:
-          - $ref: "#/components/parameters/IfMatch"
-          - $ref: "#/components/parameters/IdempotencyKey"
-        requestBody:
-          required: true
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LifecycleRequest"
-        responses:
-          "200":
-            $ref: "#/components/responses/Project"
-          default:
-            $ref: "#/components/responses/Problem"
     ProjectArchive:
       parameters:
         - $ref: "#/components/parameters/ProjectNumber"
@@ -831,6 +712,22 @@ components:
             application/json:
               schema:
                 $ref: "#/components/schemas/LifecycleRequest"
+        responses:
+          "200":
+            $ref: "#/components/responses/Milestone"
+          default:
+            $ref: "#/components/responses/Problem"
+    MilestoneActivate:
+      parameters:
+        - $ref: "#/components/parameters/ProjectNumber"
+        - $ref: "#/components/parameters/ResourceID"
+      post:
+        operationId: activateMilestone
+        summary: Activate a planned milestone
+        parameters:
+          - $ref: "#/components/parameters/IfMatch"
+          - $ref: "#/components/parameters/ProjectIfMatch"
+          - $ref: "#/components/parameters/IdempotencyKey"
         responses:
           "200":
             $ref: "#/components/responses/Milestone"
@@ -1383,12 +1280,9 @@ components:
     TaskPriority:
       type: string
       enum: [none, low, medium, high, urgent]
-    ProjectStatus:
-      type: string
-      enum: [planned, active, paused, completed, cancelled]
     MilestoneStatus:
       type: string
-      enum: [open, completed, cancelled]
+      enum: [planned, active, completed, cancelled]
     AcceptanceOutcome:
       type: string
       enum: [passed, failed, unable, waived]
@@ -1405,7 +1299,7 @@ components:
     TaskCreate:
       type: object
       additionalProperties: false
-      required: [title]
+      required: [title, project_number]
       properties:
         title:
           type: string
@@ -1459,11 +1353,9 @@ components:
             type: string
             format: uuid
         project_number:
-          oneOf:
-            - type: integer
-              format: int64
-              minimum: 1
-            - type: "null"
+          type: integer
+          format: int64
+          minimum: 1
         milestone_id:
           $ref: "#/components/schemas/NullableUUID"
     ProjectRef:
@@ -1502,6 +1394,7 @@ components:
         - status
         - priority
         - creator
+        - project
         - labels
         - created_at
         - updated_at
@@ -1686,22 +1579,17 @@ components:
     ProjectCreate:
       type: object
       additionalProperties: false
-      required: [name, outcome, owner_id]
+      required: [name, owner_id]
       properties:
         name:
           type: string
           minLength: 1
           maxLength: 500
-        outcome:
-          type: string
-          minLength: 1
         description:
           type: string
         owner_id:
           type: string
           format: uuid
-        target_date:
-          $ref: "#/components/schemas/NullableDate"
     ProjectPatch:
       type: object
       additionalProperties: false
@@ -1711,16 +1599,11 @@ components:
           type: string
           minLength: 1
           maxLength: 500
-        outcome:
-          type: string
-          minLength: 1
         description:
           type: string
         owner_id:
           type: string
           format: uuid
-        target_date:
-          $ref: "#/components/schemas/NullableDate"
     Project:
       type: object
       additionalProperties: false
@@ -1729,17 +1612,13 @@ components:
         - number
         - version
         - name
-        - outcome
         - description
         - owner
         - creator
-        - status
         - created_at
         - updated_at
         - completed_tasks
         - eligible_tasks
-        - active_criteria
-        - satisfied_criteria
       properties:
         id:
           type: string
@@ -1754,25 +1633,12 @@ components:
           minimum: 1
         name:
           type: string
-        outcome:
-          type: string
         description:
           type: string
         owner:
           $ref: "#/components/schemas/UserRef"
         creator:
           $ref: "#/components/schemas/UserRef"
-        status:
-          $ref: "#/components/schemas/ProjectStatus"
-        target_date:
-          type: string
-          format: date
-        completed_at:
-          type: string
-          format: date-time
-        cancelled_at:
-          type: string
-          format: date-time
         archived_at:
           type: string
           format: date-time
@@ -1786,12 +1652,6 @@ components:
           type: integer
           minimum: 0
         eligible_tasks:
-          type: integer
-          minimum: 0
-        active_criteria:
-          type: integer
-          minimum: 0
-        satisfied_criteria:
           type: integer
           minimum: 0
     ProjectList:
@@ -1808,7 +1668,7 @@ components:
     MilestoneCreate:
       type: object
       additionalProperties: false
-      required: [name, outcome, position]
+      required: [name, outcome, owner_id, position]
       properties:
         name:
           type: string
@@ -1818,6 +1678,9 @@ components:
           minLength: 1
         description:
           type: string
+        owner_id:
+          type: string
+          format: uuid
         target_date:
           $ref: "#/components/schemas/NullableDate"
         position:
@@ -1836,6 +1699,9 @@ components:
           minLength: 1
         description:
           type: string
+        owner_id:
+          type: string
+          format: uuid
         target_date:
           $ref: "#/components/schemas/NullableDate"
         position:
@@ -1851,6 +1717,7 @@ components:
         - name
         - outcome
         - description
+        - owner_id
         - status
         - position
         - created_at
@@ -1872,6 +1739,9 @@ components:
           type: string
         description:
           type: string
+        owner_id:
+          type: string
+          format: uuid
         status:
           $ref: "#/components/schemas/MilestoneStatus"
         target_date:
@@ -1944,9 +1814,6 @@ components:
           type: integer
           format: int64
           minimum: 1
-        project_id:
-          type: string
-          format: uuid
         milestone_id:
           type: string
           format: uuid
@@ -2066,14 +1933,10 @@ components:
     ProjectDetail:
       type: object
       additionalProperties: false
-      required: [project, acceptance_criteria, milestones, tasks, activity]
+      required: [project, milestones, tasks, activity]
       properties:
         project:
           $ref: "#/components/schemas/Project"
-        acceptance_criteria:
-          type: array
-          items:
-            $ref: "#/components/schemas/AcceptanceCriterion"
         milestones:
           type: array
           items:

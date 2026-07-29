@@ -13,20 +13,18 @@ afterEach(() => {
 beforeEach(() => {
   vi.mocked(projectsApi.listProjects).mockResolvedValue([
     {
-      id: 'p1', number: 12, version: 1, name: 'Launch', outcome: 'Released', description: '',
+      id: 'p1', number: 12, version: 1, name: 'Launch', description: '',
       owner: { id: 'u1', name: 'Alex', email: 'a@example.com' },
       creator: { id: 'u1', name: 'Alex', email: 'a@example.com' },
-      status: 'active', target_date: null, completed_at: null, cancelled_at: null,
       archived_at: null, created_at: '', updated_at: '', completed_tasks: 0,
-      eligible_tasks: 0, active_criteria: 1, satisfied_criteria: 0,
+      eligible_tasks: 0,
     },
   ])
   vi.mocked(projectsApi.getProject).mockResolvedValue({
     project: (awaitProject()),
-    acceptance_criteria: [],
     milestones: [{
       id: 'm1', project_id: 'p1', version: 1,
-      name: 'API ready', outcome: 'Ready', description: '', status: 'open',
+      name: 'API ready', outcome: 'Ready', description: '', owner_id: 'u1', status: 'active',
       target_date: null, position: 0, completed_at: null, cancelled_at: null,
       created_at: '', updated_at: '', acceptance_criteria: [],
     }],
@@ -37,12 +35,11 @@ beforeEach(() => {
 
 function awaitProject() {
   return {
-    id: 'p1', number: 12, version: 1, name: 'Launch', outcome: 'Released', description: '',
+    id: 'p1', number: 12, version: 1, name: 'Launch', description: '',
     owner: { id: 'u1', name: 'Alex', email: 'a@example.com' },
     creator: { id: 'u1', name: 'Alex', email: 'a@example.com' },
-    status: 'active' as const, target_date: null, completed_at: null, cancelled_at: null,
     archived_at: null, created_at: '', updated_at: '', completed_tasks: 0,
-    eligible_tasks: 0, active_criteria: 1, satisfied_criteria: 0,
+    eligible_tasks: 0,
   }
 }
 
@@ -52,7 +49,7 @@ describe('ProjectControl', () => {
     const onMilestoneChange = vi.fn()
     const { rerender } = render(
       <ProjectControl
-        project={null}
+        project={{ id: 'p1', number: 12, name: 'Launch' }}
         milestone={null}
         onProjectChange={onProjectChange}
         onMilestoneChange={onMilestoneChange}

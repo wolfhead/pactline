@@ -285,7 +285,6 @@ func (*AcceptanceCheckCreatedHeaders) createAcceptanceCheckRes() {}
 type AcceptanceCriterion struct {
 	ID                       uuid.UUID          `json:"id"`
 	Version                  int64              `json:"version"`
-	ProjectID                OptUUID            `json:"project_id"`
 	MilestoneID              OptUUID            `json:"milestone_id"`
 	TaskID                   OptUUID            `json:"task_id"`
 	Criterion                string             `json:"criterion"`
@@ -305,11 +304,6 @@ func (s *AcceptanceCriterion) GetID() uuid.UUID {
 // GetVersion returns the value of Version.
 func (s *AcceptanceCriterion) GetVersion() int64 {
 	return s.Version
-}
-
-// GetProjectID returns the value of ProjectID.
-func (s *AcceptanceCriterion) GetProjectID() OptUUID {
-	return s.ProjectID
 }
 
 // GetMilestoneID returns the value of MilestoneID.
@@ -365,11 +359,6 @@ func (s *AcceptanceCriterion) SetID(val uuid.UUID) {
 // SetVersion sets the value of Version.
 func (s *AcceptanceCriterion) SetVersion(val int64) {
 	s.Version = val
-}
-
-// SetProjectID sets the value of ProjectID.
-func (s *AcceptanceCriterion) SetProjectID(val OptUUID) {
-	s.ProjectID = val
 }
 
 // SetMilestoneID sets the value of MilestoneID.
@@ -989,7 +978,6 @@ func (s *CriterionCreatedHeaders) SetResponse(val AcceptanceCriterion) {
 }
 
 func (*CriterionCreatedHeaders) createMilestoneCriterionRes() {}
-func (*CriterionCreatedHeaders) createProjectCriterionRes()   {}
 func (*CriterionCreatedHeaders) createTaskCriterionRes()      {}
 
 // CriterionHeaders wraps AcceptanceCriterion with response headers.
@@ -1162,7 +1150,6 @@ func (s *CriterionListHeaders) SetResponse(val CriterionList) {
 }
 
 func (*CriterionListHeaders) listMilestoneCriteriaRes() {}
-func (*CriterionListHeaders) listProjectCriteriaRes()   {}
 func (*CriterionListHeaders) listTaskCriteriaRes()      {}
 
 // Ref: #/components/schemas/CriterionPatch
@@ -1947,6 +1934,7 @@ type Milestone struct {
 	Name               string                `json:"name"`
 	Outcome            string                `json:"outcome"`
 	Description        string                `json:"description"`
+	OwnerID            uuid.UUID             `json:"owner_id"`
 	Status             MilestoneStatus       `json:"status"`
 	TargetDate         OptDate               `json:"target_date"`
 	Position           int                   `json:"position"`
@@ -1985,6 +1973,11 @@ func (s *Milestone) GetOutcome() string {
 // GetDescription returns the value of Description.
 func (s *Milestone) GetDescription() string {
 	return s.Description
+}
+
+// GetOwnerID returns the value of OwnerID.
+func (s *Milestone) GetOwnerID() uuid.UUID {
+	return s.OwnerID
 }
 
 // GetStatus returns the value of Status.
@@ -2057,6 +2050,11 @@ func (s *Milestone) SetDescription(val string) {
 	s.Description = val
 }
 
+// SetOwnerID sets the value of OwnerID.
+func (s *Milestone) SetOwnerID(val uuid.UUID) {
+	s.OwnerID = val
+}
+
 // SetStatus sets the value of Status.
 func (s *Milestone) SetStatus(val MilestoneStatus) {
 	s.Status = val
@@ -2102,6 +2100,7 @@ type MilestoneCreate struct {
 	Name        string     `json:"name"`
 	Outcome     string     `json:"outcome"`
 	Description OptString  `json:"description"`
+	OwnerID     uuid.UUID  `json:"owner_id"`
 	TargetDate  OptNilDate `json:"target_date"`
 	Position    int        `json:"position"`
 }
@@ -2119,6 +2118,11 @@ func (s *MilestoneCreate) GetOutcome() string {
 // GetDescription returns the value of Description.
 func (s *MilestoneCreate) GetDescription() OptString {
 	return s.Description
+}
+
+// GetOwnerID returns the value of OwnerID.
+func (s *MilestoneCreate) GetOwnerID() uuid.UUID {
+	return s.OwnerID
 }
 
 // GetTargetDate returns the value of TargetDate.
@@ -2144,6 +2148,11 @@ func (s *MilestoneCreate) SetOutcome(val string) {
 // SetDescription sets the value of Description.
 func (s *MilestoneCreate) SetDescription(val OptString) {
 	s.Description = val
+}
+
+// SetOwnerID sets the value of OwnerID.
+func (s *MilestoneCreate) SetOwnerID(val uuid.UUID) {
+	s.OwnerID = val
 }
 
 // SetTargetDate sets the value of TargetDate.
@@ -2331,6 +2340,7 @@ func (s *MilestoneHeaders) SetResponse(val Milestone) {
 	s.Response = val
 }
 
+func (*MilestoneHeaders) activateMilestoneRes() {}
 func (*MilestoneHeaders) cancelMilestoneRes()   {}
 func (*MilestoneHeaders) completeMilestoneRes() {}
 func (*MilestoneHeaders) reopenMilestoneRes()   {}
@@ -2341,6 +2351,7 @@ type MilestonePatch struct {
 	Name        OptString  `json:"name"`
 	Outcome     OptString  `json:"outcome"`
 	Description OptString  `json:"description"`
+	OwnerID     OptUUID    `json:"owner_id"`
 	TargetDate  OptNilDate `json:"target_date"`
 	Position    OptInt     `json:"position"`
 }
@@ -2358,6 +2369,11 @@ func (s *MilestonePatch) GetOutcome() OptString {
 // GetDescription returns the value of Description.
 func (s *MilestonePatch) GetDescription() OptString {
 	return s.Description
+}
+
+// GetOwnerID returns the value of OwnerID.
+func (s *MilestonePatch) GetOwnerID() OptUUID {
+	return s.OwnerID
 }
 
 // GetTargetDate returns the value of TargetDate.
@@ -2383,6 +2399,11 @@ func (s *MilestonePatch) SetOutcome(val OptString) {
 // SetDescription sets the value of Description.
 func (s *MilestonePatch) SetDescription(val OptString) {
 	s.Description = val
+}
+
+// SetOwnerID sets the value of OwnerID.
+func (s *MilestonePatch) SetOwnerID(val OptUUID) {
+	s.OwnerID = val
 }
 
 // SetTargetDate sets the value of TargetDate.
@@ -2425,7 +2446,8 @@ func (s *MilestoneRef) SetName(val string) {
 type MilestoneStatus string
 
 const (
-	MilestoneStatusOpen      MilestoneStatus = "open"
+	MilestoneStatusPlanned   MilestoneStatus = "planned"
+	MilestoneStatusActive    MilestoneStatus = "active"
 	MilestoneStatusCompleted MilestoneStatus = "completed"
 	MilestoneStatusCancelled MilestoneStatus = "cancelled"
 )
@@ -2433,7 +2455,8 @@ const (
 // AllValues returns all MilestoneStatus values.
 func (MilestoneStatus) AllValues() []MilestoneStatus {
 	return []MilestoneStatus{
-		MilestoneStatusOpen,
+		MilestoneStatusPlanned,
+		MilestoneStatusActive,
 		MilestoneStatusCompleted,
 		MilestoneStatusCancelled,
 	}
@@ -2442,7 +2465,9 @@ func (MilestoneStatus) AllValues() []MilestoneStatus {
 // MarshalText implements encoding.TextMarshaler.
 func (s MilestoneStatus) MarshalText() ([]byte, error) {
 	switch s {
-	case MilestoneStatusOpen:
+	case MilestoneStatusPlanned:
+		return []byte(s), nil
+	case MilestoneStatusActive:
 		return []byte(s), nil
 	case MilestoneStatusCompleted:
 		return []byte(s), nil
@@ -2456,8 +2481,11 @@ func (s MilestoneStatus) MarshalText() ([]byte, error) {
 // UnmarshalText implements encoding.TextUnmarshaler.
 func (s *MilestoneStatus) UnmarshalText(data []byte) error {
 	switch MilestoneStatus(data) {
-	case MilestoneStatusOpen:
-		*s = MilestoneStatusOpen
+	case MilestoneStatusPlanned:
+		*s = MilestoneStatusPlanned
+		return nil
+	case MilestoneStatusActive:
+		*s = MilestoneStatusActive
 		return nil
 	case MilestoneStatusCompleted:
 		*s = MilestoneStatusCompleted
@@ -3148,69 +3176,6 @@ func (o OptNilDate) Or(d time.Time) time.Time {
 	return d
 }
 
-// NewOptNilInt64 returns new OptNilInt64 with value set to v.
-func NewOptNilInt64(v int64) OptNilInt64 {
-	return OptNilInt64{
-		Value: v,
-		Set:   true,
-	}
-}
-
-// OptNilInt64 is optional nullable int64.
-type OptNilInt64 struct {
-	Value int64
-	Set   bool
-	Null  bool
-}
-
-// IsSet returns true if OptNilInt64 was set.
-func (o OptNilInt64) IsSet() bool { return o.Set }
-
-// Reset unsets value.
-func (o *OptNilInt64) Reset() {
-	var v int64
-	o.Value = v
-	o.Set = false
-	o.Null = false
-}
-
-// SetTo sets value to v.
-func (o *OptNilInt64) SetTo(v int64) {
-	o.Set = true
-	o.Null = false
-	o.Value = v
-}
-
-// IsNull returns true if value is Null.
-func (o OptNilInt64) IsNull() bool { return o.Null }
-
-// SetToNull sets value to null.
-func (o *OptNilInt64) SetToNull() {
-	o.Set = true
-	o.Null = true
-	var v int64
-	o.Value = v
-}
-
-// Get returns value and boolean that denotes whether value was set.
-func (o OptNilInt64) Get() (v int64, ok bool) {
-	if o.Null {
-		return v, false
-	}
-	if !o.Set {
-		return v, false
-	}
-	return o.Value, true
-}
-
-// Or returns value if set, or given parameter if does not.
-func (o OptNilInt64) Or(d int64) int64 {
-	if v, ok := o.Get(); ok {
-		return v
-	}
-	return d
-}
-
 // NewOptNilUUID returns new OptNilUUID with value set to v.
 func NewOptNilUUID(v uuid.UUID) OptNilUUID {
 	return OptNilUUID{
@@ -3314,52 +3279,6 @@ func (o OptProjectActivityAuthenticationMethod) Get() (v ProjectActivityAuthenti
 
 // Or returns value if set, or given parameter if does not.
 func (o OptProjectActivityAuthenticationMethod) Or(d ProjectActivityAuthenticationMethod) ProjectActivityAuthenticationMethod {
-	if v, ok := o.Get(); ok {
-		return v
-	}
-	return d
-}
-
-// NewOptProjectRef returns new OptProjectRef with value set to v.
-func NewOptProjectRef(v ProjectRef) OptProjectRef {
-	return OptProjectRef{
-		Value: v,
-		Set:   true,
-	}
-}
-
-// OptProjectRef is optional ProjectRef.
-type OptProjectRef struct {
-	Value ProjectRef
-	Set   bool
-}
-
-// IsSet returns true if OptProjectRef was set.
-func (o OptProjectRef) IsSet() bool { return o.Set }
-
-// Reset unsets value.
-func (o *OptProjectRef) Reset() {
-	var v ProjectRef
-	o.Value = v
-	o.Set = false
-}
-
-// SetTo sets value to v.
-func (o *OptProjectRef) SetTo(v ProjectRef) {
-	o.Set = true
-	o.Value = v
-}
-
-// Get returns value and boolean that denotes whether value was set.
-func (o OptProjectRef) Get() (v ProjectRef, ok bool) {
-	if !o.Set {
-		return v, false
-	}
-	return o.Value, true
-}
-
-// Or returns value if set, or given parameter if does not.
-func (o OptProjectRef) Or(d ProjectRef) ProjectRef {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -4037,18 +3956,15 @@ func (s *ProblemStatusCodeWithHeaders) SetResponse(val Problem) {
 	s.Response = val
 }
 
-func (*ProblemStatusCodeWithHeaders) activateProjectRes()          {}
+func (*ProblemStatusCodeWithHeaders) activateMilestoneRes()        {}
 func (*ProblemStatusCodeWithHeaders) archiveProjectRes()           {}
 func (*ProblemStatusCodeWithHeaders) archiveTaskRes()              {}
 func (*ProblemStatusCodeWithHeaders) cancelMilestoneRes()          {}
-func (*ProblemStatusCodeWithHeaders) cancelProjectRes()            {}
 func (*ProblemStatusCodeWithHeaders) completeMilestoneRes()        {}
-func (*ProblemStatusCodeWithHeaders) completeProjectRes()          {}
 func (*ProblemStatusCodeWithHeaders) createAcceptanceCheckRes()    {}
 func (*ProblemStatusCodeWithHeaders) createLabelRes()              {}
 func (*ProblemStatusCodeWithHeaders) createMilestoneCriterionRes() {}
 func (*ProblemStatusCodeWithHeaders) createMilestoneRes()          {}
-func (*ProblemStatusCodeWithHeaders) createProjectCriterionRes()   {}
 func (*ProblemStatusCodeWithHeaders) createProjectRes()            {}
 func (*ProblemStatusCodeWithHeaders) createTaskCommentRes()        {}
 func (*ProblemStatusCodeWithHeaders) createTaskCriterionRes()      {}
@@ -4061,16 +3977,13 @@ func (*ProblemStatusCodeWithHeaders) getProjectRes()               {}
 func (*ProblemStatusCodeWithHeaders) getTaskRes()                  {}
 func (*ProblemStatusCodeWithHeaders) listLabelsRes()               {}
 func (*ProblemStatusCodeWithHeaders) listMilestoneCriteriaRes()    {}
-func (*ProblemStatusCodeWithHeaders) listProjectCriteriaRes()      {}
 func (*ProblemStatusCodeWithHeaders) listProjectsRes()             {}
 func (*ProblemStatusCodeWithHeaders) listTaskActivityRes()         {}
 func (*ProblemStatusCodeWithHeaders) listTaskCommentsRes()         {}
 func (*ProblemStatusCodeWithHeaders) listTaskCriteriaRes()         {}
 func (*ProblemStatusCodeWithHeaders) listTasksRes()                {}
 func (*ProblemStatusCodeWithHeaders) listUsersRes()                {}
-func (*ProblemStatusCodeWithHeaders) pauseProjectRes()             {}
 func (*ProblemStatusCodeWithHeaders) reopenMilestoneRes()          {}
-func (*ProblemStatusCodeWithHeaders) reopenProjectRes()            {}
 func (*ProblemStatusCodeWithHeaders) restoreProjectRes()           {}
 func (*ProblemStatusCodeWithHeaders) restoreTaskRes()              {}
 func (*ProblemStatusCodeWithHeaders) updateCriterionRes()          {}
@@ -4082,25 +3995,18 @@ func (*ProblemStatusCodeWithHeaders) updateTaskRes()               {}
 
 // Ref: #/components/schemas/Project
 type Project struct {
-	ID                uuid.UUID     `json:"id"`
-	Number            int64         `json:"number"`
-	Version           int64         `json:"version"`
-	Name              string        `json:"name"`
-	Outcome           string        `json:"outcome"`
-	Description       string        `json:"description"`
-	Owner             UserRef       `json:"owner"`
-	Creator           UserRef       `json:"creator"`
-	Status            ProjectStatus `json:"status"`
-	TargetDate        OptDate       `json:"target_date"`
-	CompletedAt       OptDateTime   `json:"completed_at"`
-	CancelledAt       OptDateTime   `json:"cancelled_at"`
-	ArchivedAt        OptDateTime   `json:"archived_at"`
-	CreatedAt         time.Time     `json:"created_at"`
-	UpdatedAt         time.Time     `json:"updated_at"`
-	CompletedTasks    int           `json:"completed_tasks"`
-	EligibleTasks     int           `json:"eligible_tasks"`
-	ActiveCriteria    int           `json:"active_criteria"`
-	SatisfiedCriteria int           `json:"satisfied_criteria"`
+	ID             uuid.UUID   `json:"id"`
+	Number         int64       `json:"number"`
+	Version        int64       `json:"version"`
+	Name           string      `json:"name"`
+	Description    string      `json:"description"`
+	Owner          UserRef     `json:"owner"`
+	Creator        UserRef     `json:"creator"`
+	ArchivedAt     OptDateTime `json:"archived_at"`
+	CreatedAt      time.Time   `json:"created_at"`
+	UpdatedAt      time.Time   `json:"updated_at"`
+	CompletedTasks int         `json:"completed_tasks"`
+	EligibleTasks  int         `json:"eligible_tasks"`
 }
 
 // GetID returns the value of ID.
@@ -4123,11 +4029,6 @@ func (s *Project) GetName() string {
 	return s.Name
 }
 
-// GetOutcome returns the value of Outcome.
-func (s *Project) GetOutcome() string {
-	return s.Outcome
-}
-
 // GetDescription returns the value of Description.
 func (s *Project) GetDescription() string {
 	return s.Description
@@ -4141,26 +4042,6 @@ func (s *Project) GetOwner() UserRef {
 // GetCreator returns the value of Creator.
 func (s *Project) GetCreator() UserRef {
 	return s.Creator
-}
-
-// GetStatus returns the value of Status.
-func (s *Project) GetStatus() ProjectStatus {
-	return s.Status
-}
-
-// GetTargetDate returns the value of TargetDate.
-func (s *Project) GetTargetDate() OptDate {
-	return s.TargetDate
-}
-
-// GetCompletedAt returns the value of CompletedAt.
-func (s *Project) GetCompletedAt() OptDateTime {
-	return s.CompletedAt
-}
-
-// GetCancelledAt returns the value of CancelledAt.
-func (s *Project) GetCancelledAt() OptDateTime {
-	return s.CancelledAt
 }
 
 // GetArchivedAt returns the value of ArchivedAt.
@@ -4188,16 +4069,6 @@ func (s *Project) GetEligibleTasks() int {
 	return s.EligibleTasks
 }
 
-// GetActiveCriteria returns the value of ActiveCriteria.
-func (s *Project) GetActiveCriteria() int {
-	return s.ActiveCriteria
-}
-
-// GetSatisfiedCriteria returns the value of SatisfiedCriteria.
-func (s *Project) GetSatisfiedCriteria() int {
-	return s.SatisfiedCriteria
-}
-
 // SetID sets the value of ID.
 func (s *Project) SetID(val uuid.UUID) {
 	s.ID = val
@@ -4218,11 +4089,6 @@ func (s *Project) SetName(val string) {
 	s.Name = val
 }
 
-// SetOutcome sets the value of Outcome.
-func (s *Project) SetOutcome(val string) {
-	s.Outcome = val
-}
-
 // SetDescription sets the value of Description.
 func (s *Project) SetDescription(val string) {
 	s.Description = val
@@ -4236,26 +4102,6 @@ func (s *Project) SetOwner(val UserRef) {
 // SetCreator sets the value of Creator.
 func (s *Project) SetCreator(val UserRef) {
 	s.Creator = val
-}
-
-// SetStatus sets the value of Status.
-func (s *Project) SetStatus(val ProjectStatus) {
-	s.Status = val
-}
-
-// SetTargetDate sets the value of TargetDate.
-func (s *Project) SetTargetDate(val OptDate) {
-	s.TargetDate = val
-}
-
-// SetCompletedAt sets the value of CompletedAt.
-func (s *Project) SetCompletedAt(val OptDateTime) {
-	s.CompletedAt = val
-}
-
-// SetCancelledAt sets the value of CancelledAt.
-func (s *Project) SetCancelledAt(val OptDateTime) {
-	s.CancelledAt = val
 }
 
 // SetArchivedAt sets the value of ArchivedAt.
@@ -4281,16 +4127,6 @@ func (s *Project) SetCompletedTasks(val int) {
 // SetEligibleTasks sets the value of EligibleTasks.
 func (s *Project) SetEligibleTasks(val int) {
 	s.EligibleTasks = val
-}
-
-// SetActiveCriteria sets the value of ActiveCriteria.
-func (s *Project) SetActiveCriteria(val int) {
-	s.ActiveCriteria = val
-}
-
-// SetSatisfiedCriteria sets the value of SatisfiedCriteria.
-func (s *Project) SetSatisfiedCriteria(val int) {
-	s.SatisfiedCriteria = val
 }
 
 // Ref: #/components/schemas/ProjectActivity
@@ -4461,21 +4297,14 @@ func (s *ProjectActivityAuthenticationMethod) UnmarshalText(data []byte) error {
 
 // Ref: #/components/schemas/ProjectCreate
 type ProjectCreate struct {
-	Name        string     `json:"name"`
-	Outcome     string     `json:"outcome"`
-	Description OptString  `json:"description"`
-	OwnerID     uuid.UUID  `json:"owner_id"`
-	TargetDate  OptNilDate `json:"target_date"`
+	Name        string    `json:"name"`
+	Description OptString `json:"description"`
+	OwnerID     uuid.UUID `json:"owner_id"`
 }
 
 // GetName returns the value of Name.
 func (s *ProjectCreate) GetName() string {
 	return s.Name
-}
-
-// GetOutcome returns the value of Outcome.
-func (s *ProjectCreate) GetOutcome() string {
-	return s.Outcome
 }
 
 // GetDescription returns the value of Description.
@@ -4488,19 +4317,9 @@ func (s *ProjectCreate) GetOwnerID() uuid.UUID {
 	return s.OwnerID
 }
 
-// GetTargetDate returns the value of TargetDate.
-func (s *ProjectCreate) GetTargetDate() OptNilDate {
-	return s.TargetDate
-}
-
 // SetName sets the value of Name.
 func (s *ProjectCreate) SetName(val string) {
 	s.Name = val
-}
-
-// SetOutcome sets the value of Outcome.
-func (s *ProjectCreate) SetOutcome(val string) {
-	s.Outcome = val
 }
 
 // SetDescription sets the value of Description.
@@ -4511,11 +4330,6 @@ func (s *ProjectCreate) SetDescription(val OptString) {
 // SetOwnerID sets the value of OwnerID.
 func (s *ProjectCreate) SetOwnerID(val uuid.UUID) {
 	s.OwnerID = val
-}
-
-// SetTargetDate sets the value of TargetDate.
-func (s *ProjectCreate) SetTargetDate(val OptNilDate) {
-	s.TargetDate = val
 }
 
 // ProjectCreatedHeaders wraps Project with response headers.
@@ -4614,21 +4428,15 @@ func (*ProjectCreatedHeaders) createProjectRes() {}
 
 // Ref: #/components/schemas/ProjectDetail
 type ProjectDetail struct {
-	Project            Project               `json:"project"`
-	AcceptanceCriteria []AcceptanceCriterion `json:"acceptance_criteria"`
-	Milestones         []Milestone           `json:"milestones"`
-	Tasks              []Task                `json:"tasks"`
-	Activity           []ProjectActivity     `json:"activity"`
+	Project    Project           `json:"project"`
+	Milestones []Milestone       `json:"milestones"`
+	Tasks      []Task            `json:"tasks"`
+	Activity   []ProjectActivity `json:"activity"`
 }
 
 // GetProject returns the value of Project.
 func (s *ProjectDetail) GetProject() Project {
 	return s.Project
-}
-
-// GetAcceptanceCriteria returns the value of AcceptanceCriteria.
-func (s *ProjectDetail) GetAcceptanceCriteria() []AcceptanceCriterion {
-	return s.AcceptanceCriteria
 }
 
 // GetMilestones returns the value of Milestones.
@@ -4649,11 +4457,6 @@ func (s *ProjectDetail) GetActivity() []ProjectActivity {
 // SetProject sets the value of Project.
 func (s *ProjectDetail) SetProject(val Project) {
 	s.Project = val
-}
-
-// SetAcceptanceCriteria sets the value of AcceptanceCriteria.
-func (s *ProjectDetail) SetAcceptanceCriteria(val []AcceptanceCriterion) {
-	s.AcceptanceCriteria = val
 }
 
 // SetMilestones sets the value of Milestones.
@@ -4824,14 +4627,9 @@ func (s *ProjectHeaders) SetResponse(val Project) {
 	s.Response = val
 }
 
-func (*ProjectHeaders) activateProjectRes() {}
-func (*ProjectHeaders) archiveProjectRes()  {}
-func (*ProjectHeaders) cancelProjectRes()   {}
-func (*ProjectHeaders) completeProjectRes() {}
-func (*ProjectHeaders) pauseProjectRes()    {}
-func (*ProjectHeaders) reopenProjectRes()   {}
-func (*ProjectHeaders) restoreProjectRes()  {}
-func (*ProjectHeaders) updateProjectRes()   {}
+func (*ProjectHeaders) archiveProjectRes() {}
+func (*ProjectHeaders) restoreProjectRes() {}
+func (*ProjectHeaders) updateProjectRes()  {}
 
 // Merged schema.
 // Ref: #/components/schemas/ProjectList
@@ -4923,21 +4721,14 @@ func (*ProjectListHeaders) listProjectsRes() {}
 
 // Ref: #/components/schemas/ProjectPatch
 type ProjectPatch struct {
-	Name        OptString  `json:"name"`
-	Outcome     OptString  `json:"outcome"`
-	Description OptString  `json:"description"`
-	OwnerID     OptUUID    `json:"owner_id"`
-	TargetDate  OptNilDate `json:"target_date"`
+	Name        OptString `json:"name"`
+	Description OptString `json:"description"`
+	OwnerID     OptUUID   `json:"owner_id"`
 }
 
 // GetName returns the value of Name.
 func (s *ProjectPatch) GetName() OptString {
 	return s.Name
-}
-
-// GetOutcome returns the value of Outcome.
-func (s *ProjectPatch) GetOutcome() OptString {
-	return s.Outcome
 }
 
 // GetDescription returns the value of Description.
@@ -4950,19 +4741,9 @@ func (s *ProjectPatch) GetOwnerID() OptUUID {
 	return s.OwnerID
 }
 
-// GetTargetDate returns the value of TargetDate.
-func (s *ProjectPatch) GetTargetDate() OptNilDate {
-	return s.TargetDate
-}
-
 // SetName sets the value of Name.
 func (s *ProjectPatch) SetName(val OptString) {
 	s.Name = val
-}
-
-// SetOutcome sets the value of Outcome.
-func (s *ProjectPatch) SetOutcome(val OptString) {
-	s.Outcome = val
 }
 
 // SetDescription sets the value of Description.
@@ -4973,11 +4754,6 @@ func (s *ProjectPatch) SetDescription(val OptString) {
 // SetOwnerID sets the value of OwnerID.
 func (s *ProjectPatch) SetOwnerID(val OptUUID) {
 	s.OwnerID = val
-}
-
-// SetTargetDate sets the value of TargetDate.
-func (s *ProjectPatch) SetTargetDate(val OptNilDate) {
-	s.TargetDate = val
 }
 
 // Ref: #/components/schemas/ProjectRef
@@ -5017,69 +4793,6 @@ func (s *ProjectRef) SetName(val string) {
 	s.Name = val
 }
 
-// Ref: #/components/schemas/ProjectStatus
-type ProjectStatus string
-
-const (
-	ProjectStatusPlanned   ProjectStatus = "planned"
-	ProjectStatusActive    ProjectStatus = "active"
-	ProjectStatusPaused    ProjectStatus = "paused"
-	ProjectStatusCompleted ProjectStatus = "completed"
-	ProjectStatusCancelled ProjectStatus = "cancelled"
-)
-
-// AllValues returns all ProjectStatus values.
-func (ProjectStatus) AllValues() []ProjectStatus {
-	return []ProjectStatus{
-		ProjectStatusPlanned,
-		ProjectStatusActive,
-		ProjectStatusPaused,
-		ProjectStatusCompleted,
-		ProjectStatusCancelled,
-	}
-}
-
-// MarshalText implements encoding.TextMarshaler.
-func (s ProjectStatus) MarshalText() ([]byte, error) {
-	switch s {
-	case ProjectStatusPlanned:
-		return []byte(s), nil
-	case ProjectStatusActive:
-		return []byte(s), nil
-	case ProjectStatusPaused:
-		return []byte(s), nil
-	case ProjectStatusCompleted:
-		return []byte(s), nil
-	case ProjectStatusCancelled:
-		return []byte(s), nil
-	default:
-		return nil, errors.Errorf("invalid value: %q", s)
-	}
-}
-
-// UnmarshalText implements encoding.TextUnmarshaler.
-func (s *ProjectStatus) UnmarshalText(data []byte) error {
-	switch ProjectStatus(data) {
-	case ProjectStatusPlanned:
-		*s = ProjectStatusPlanned
-		return nil
-	case ProjectStatusActive:
-		*s = ProjectStatusActive
-		return nil
-	case ProjectStatusPaused:
-		*s = ProjectStatusPaused
-		return nil
-	case ProjectStatusCompleted:
-		*s = ProjectStatusCompleted
-		return nil
-	case ProjectStatusCancelled:
-		*s = ProjectStatusCancelled
-		return nil
-	default:
-		return errors.Errorf("invalid value: %q", data)
-	}
-}
-
 type SessionCookie struct {
 	APIKey string
 	Roles  []string
@@ -5117,7 +4830,7 @@ type Task struct {
 	Assignee    OptUserRef      `json:"assignee"`
 	Creator     UserRef         `json:"creator"`
 	DueDate     OptDate         `json:"due_date"`
-	Project     OptProjectRef   `json:"project"`
+	Project     ProjectRef      `json:"project"`
 	Milestone   OptMilestoneRef `json:"milestone"`
 	Labels      []Label         `json:"labels"`
 	CreatedAt   time.Time       `json:"created_at"`
@@ -5177,7 +4890,7 @@ func (s *Task) GetDueDate() OptDate {
 }
 
 // GetProject returns the value of Project.
-func (s *Task) GetProject() OptProjectRef {
+func (s *Task) GetProject() ProjectRef {
 	return s.Project
 }
 
@@ -5262,7 +4975,7 @@ func (s *Task) SetDueDate(val OptDate) {
 }
 
 // SetProject sets the value of Project.
-func (s *Task) SetProject(val OptProjectRef) {
+func (s *Task) SetProject(val ProjectRef) {
 	s.Project = val
 }
 
@@ -5537,7 +5250,7 @@ type TaskCreate struct {
 	AssigneeID    OptNilUUID      `json:"assignee_id"`
 	DueDate       OptNilDate      `json:"due_date"`
 	LabelIds      []uuid.UUID     `json:"label_ids"`
-	ProjectNumber OptInt64        `json:"project_number"`
+	ProjectNumber int64           `json:"project_number"`
 	MilestoneID   OptNilUUID      `json:"milestone_id"`
 }
 
@@ -5577,7 +5290,7 @@ func (s *TaskCreate) GetLabelIds() []uuid.UUID {
 }
 
 // GetProjectNumber returns the value of ProjectNumber.
-func (s *TaskCreate) GetProjectNumber() OptInt64 {
+func (s *TaskCreate) GetProjectNumber() int64 {
 	return s.ProjectNumber
 }
 
@@ -5622,7 +5335,7 @@ func (s *TaskCreate) SetLabelIds(val []uuid.UUID) {
 }
 
 // SetProjectNumber sets the value of ProjectNumber.
-func (s *TaskCreate) SetProjectNumber(val OptInt64) {
+func (s *TaskCreate) SetProjectNumber(val int64) {
 	s.ProjectNumber = val
 }
 
@@ -5908,7 +5621,7 @@ type TaskPatch struct {
 	AssigneeID    OptNilUUID      `json:"assignee_id"`
 	DueDate       OptNilDate      `json:"due_date"`
 	LabelIds      []uuid.UUID     `json:"label_ids"`
-	ProjectNumber OptNilInt64     `json:"project_number"`
+	ProjectNumber OptInt64        `json:"project_number"`
 	MilestoneID   OptNilUUID      `json:"milestone_id"`
 }
 
@@ -5948,7 +5661,7 @@ func (s *TaskPatch) GetLabelIds() []uuid.UUID {
 }
 
 // GetProjectNumber returns the value of ProjectNumber.
-func (s *TaskPatch) GetProjectNumber() OptNilInt64 {
+func (s *TaskPatch) GetProjectNumber() OptInt64 {
 	return s.ProjectNumber
 }
 
@@ -5993,7 +5706,7 @@ func (s *TaskPatch) SetLabelIds(val []uuid.UUID) {
 }
 
 // SetProjectNumber sets the value of ProjectNumber.
-func (s *TaskPatch) SetProjectNumber(val OptNilInt64) {
+func (s *TaskPatch) SetProjectNumber(val OptInt64) {
 	s.ProjectNumber = val
 }
 

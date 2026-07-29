@@ -452,11 +452,11 @@ export default function TaskDetail({
           <LabelControl value={task.labels} all={allLabels} onChange={toggleLabels} ariaLabel="标签" />
         </div>
         <ProjectControl
-          project={task.project ?? null}
+          project={task.project}
           milestone={task.milestone ?? null}
           onProjectChange={(project) => {
             patchOptimistic(
-              { project_number: project?.number ?? null },
+              { project_number: project.number },
               { project, milestone: null },
             )
           }}

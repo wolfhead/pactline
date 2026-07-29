@@ -29,7 +29,6 @@ func (a Actor) IsHuman() bool {
 type AcceptanceCriterion struct {
 	ID                       uuid.UUID
 	Version                  int64
-	ProjectID                *uuid.UUID
 	MilestoneID              *uuid.UUID
 	TaskID                   *uuid.UUID
 	Criterion                string
@@ -43,7 +42,7 @@ type AcceptanceCriterion struct {
 
 func (c AcceptanceCriterion) Validate() error {
 	ownerCount := 0
-	for _, ownerID := range []*uuid.UUID{c.ProjectID, c.MilestoneID, c.TaskID} {
+	for _, ownerID := range []*uuid.UUID{c.MilestoneID, c.TaskID} {
 		if ownerID != nil {
 			ownerCount++
 		}

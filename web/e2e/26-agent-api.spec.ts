@@ -27,8 +27,8 @@ interface Milestone {
   status: string
 }
 
-interface ProjectDetail extends VersionedResource {
-  status: string
+interface ProjectDetail {
+  project: VersionedResource
   milestones: Milestone[]
 }
 
@@ -106,7 +106,7 @@ test('a human can provision, inspect, and revoke an Agent that completes version
       idempotencyKey: projectKey,
       data: {
         name: projectName,
-        outcome: 'A human-visible Agent workflow reaches verified completion',
+        description: 'A human-visible Agent workflow is managed in a durable workspace',
         owner_id: adminID,
       },
     })
@@ -120,65 +120,13 @@ test('a human can provision, inspect, and revoke an Agent that completes version
       idempotencyKey: projectKey,
       data: {
         name: projectName,
-        outcome: 'A human-visible Agent workflow reaches verified completion',
+        description: 'A human-visible Agent workflow is managed in a durable workspace',
         owner_id: adminID,
       },
     })
     expect(projectReplay.status()).toBe(201)
     expect(projectReplay.headers()['idempotency-replayed']).toBe('true')
     expect((await projectReplay.json() as VersionedResource).id).toBe(project.id)
-
-    const projectCriterionCreate = await agentRequest(
-      request,
-      'POST',
-      `/api/v1/projects/${project.number}/criteria`,
-      writeToken.token,
-      {
-        ifMatch: projectETag,
-        idempotencyKey: `project-criterion-${runTag}`,
-        data: {
-          criterion: 'The Agent-managed project is complete',
-          verification_instructions: 'Inspect the linked task and API audit evidence',
-          position: 0,
-        },
-      },
-    )
-    expect(projectCriterionCreate.status()).toBe(201)
-    const projectCriterion = await projectCriterionCreate.json() as Criterion
-    requiredHeader(projectCriterionCreate, 'etag')
-
-    const projectCheck = await agentRequest(
-      request,
-      'POST',
-      `/api/v1/criteria/${projectCriterion.id}/checks`,
-      writeToken.token,
-      {
-        ifMatch: `"${projectCriterion.version}"`,
-        idempotencyKey: `project-check-${runTag}`,
-        data: {
-          criterion_revision: projectCriterion.revision,
-          outcome: 'passed',
-          evidence: 'The browser-driven Agent API acceptance reached this step.',
-        },
-      },
-    )
-    expect(projectCheck.status()).toBe(201)
-    const checkedProject = await getProject(request, writeToken.token, project.number)
-    projectETag = checkedProject.etag
-
-    const activateProject = await agentRequest(
-      request,
-      'POST',
-      `/api/v1/projects/${project.number}/activate`,
-      writeToken.token,
-      {
-        ifMatch: projectETag,
-        idempotencyKey: `activate-project-${runTag}`,
-        data: {},
-      },
-    )
-    expect(activateProject.status()).toBe(200)
-    projectETag = requiredHeader(activateProject, 'etag')
 
     const milestoneCreate = await agentRequest(
       request,
@@ -191,6 +139,7 @@ test('a human can provision, inspect, and revoke an Agent that completes version
         data: {
           name: 'Agent API accepted',
           outcome: 'The complete API workflow is verified',
+          owner_id: adminID,
           position: 0,
         },
       },
@@ -237,6 +186,27 @@ test('a human can provision, inspect, and revoke an Agent that completes version
       },
     )
     expect(milestoneCheck.status()).toBe(201)
+
+    projectDetail = await getProject(request, writeToken.token, project.number)
+    projectETag = projectDetail.etag
+    const milestoneBeforeActivation = projectDetail.value.milestones.find(
+      (item) => item.id === milestone.id,
+    )
+    expect(milestoneBeforeActivation).toBeTruthy()
+    const activateMilestone = await agentRequest(
+      request,
+      'POST',
+      `/api/v1/projects/${project.number}/milestones/${milestone.id}/activate`,
+      writeToken.token,
+      {
+        ifMatch: `"${milestoneBeforeActivation!.version}"`,
+        projectIfMatch: projectETag,
+        idempotencyKey: `activate-milestone-${runTag}`,
+        data: {},
+      },
+    )
+    expect(activateMilestone.status()).toBe(200)
+    expect((await activateMilestone.json() as Milestone).status).toBe('active')
 
     const taskCreate = await agentRequest(request, 'POST', '/api/v1/tasks', writeToken.token, {
       idempotencyKey: `task-${runTag}`,
@@ -350,21 +320,6 @@ test('a human can provision, inspect, and revoke an Agent that completes version
     )
     expect(completeMilestone.status()).toBe(200)
     expect((await completeMilestone.json() as Milestone).status).toBe('completed')
-
-    projectDetail = await getProject(request, writeToken.token, project.number)
-    const completeProject = await agentRequest(
-      request,
-      'POST',
-      `/api/v1/projects/${project.number}/complete`,
-      writeToken.token,
-      {
-        ifMatch: projectDetail.etag,
-        idempotencyKey: `complete-project-${runTag}`,
-        data: {},
-      },
-    )
-    expect(completeProject.status()).toBe(200)
-    expect((await completeProject.json() as ProjectDetail).status).toBe('completed')
 
     await test.step('the owner and Administrator can inspect token provenance', async () => {
       await page.goto('/account/api-tokens')
@@ -569,13 +524,15 @@ async function cleanupAgentScenario(
     await pool.query(
       `DELETE FROM acceptance_checks WHERE criterion_id IN (
          SELECT id FROM acceptance_criteria
-         WHERE project_id=$1 OR milestone_id IN (SELECT id FROM milestones WHERE project_id=$1)
+         WHERE milestone_id IN (SELECT id FROM milestones WHERE project_id=$1)
+            OR task_id IN (SELECT id FROM tasks WHERE project_id=$1)
        )`,
       [projectID],
     )
     await pool.query(
       `DELETE FROM acceptance_criteria
-       WHERE project_id=$1 OR milestone_id IN (SELECT id FROM milestones WHERE project_id=$1)`,
+       WHERE milestone_id IN (SELECT id FROM milestones WHERE project_id=$1)
+          OR task_id IN (SELECT id FROM tasks WHERE project_id=$1)`,
       [projectID],
     )
     await pool.query('DELETE FROM project_activity WHERE project_id=$1', [projectID])

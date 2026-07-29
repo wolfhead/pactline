@@ -77,7 +77,13 @@ func (m apiAccessAudit) wrap(next http.Handler) http.Handler {
 			ResponseBytes: recorder.bytes, IdempotencyReplayed: state.idempotencyReplayed,
 			UserAgent: r.UserAgent(), NetworkAddress: networkAddress(r.RemoteAddr),
 		}
-		if err := m.store.RecordAccessAudit(r.Context(), event); err != nil {
+		// The client may disconnect or cancel navigation before the handler
+		// returns. Access audit is the durable record of that completed
+		// attempt, so give its bounded write an independent cancellation
+		// lifetime while preserving request-scoped values.
+		auditCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 2*time.Second)
+		defer cancel()
+		if err := m.store.RecordAccessAudit(auditCtx, event); err != nil {
 			slog.Error("record API access audit failed",
 				"request_id", event.RequestID, "method", event.Method,
 				"route", event.RoutePattern, "status", event.StatusCode, "error", err)

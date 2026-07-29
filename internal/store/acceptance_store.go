@@ -23,18 +23,18 @@ type CriterionWithCurrentCheck struct {
 	CurrentCheck *domain.AcceptanceCheck
 }
 
-const criterionColumns = `ac.id, ac.version, ac.project_id, ac.milestone_id, ac.task_id, ac.criterion,
+const criterionColumns = `ac.id, ac.version, ac.milestone_id, ac.task_id, ac.criterion,
 	ac.verification_instructions, ac.revision, ac.position, ac.archived_at,
 	ac.created_at, ac.updated_at`
 
-const criterionReturnColumns = `id, version, project_id, milestone_id, task_id, criterion,
+const criterionReturnColumns = `id, version, milestone_id, task_id, criterion,
 	verification_instructions, revision, position, archived_at, created_at, updated_at`
 
 func scanCriterion(s scanner) (domain.AcceptanceCriterion, error) {
 	var criterion domain.AcceptanceCriterion
 	err := s.Scan(
 		&criterion.ID, &criterion.Version,
-		&criterion.ProjectID, &criterion.MilestoneID, &criterion.TaskID,
+		&criterion.MilestoneID, &criterion.TaskID,
 		&criterion.Criterion, &criterion.VerificationInstructions,
 		&criterion.Revision, &criterion.Position, &criterion.ArchivedAt,
 		&criterion.CreatedAt, &criterion.UpdatedAt,
@@ -77,10 +77,10 @@ func (s *AcceptanceStore) create(
 	if actor == nil {
 		out, err := scanCriterion(s.db.Pool.QueryRow(ctx, `
 			INSERT INTO acceptance_criteria
-				(id, project_id, milestone_id, task_id, criterion, verification_instructions, revision, position)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+				(id, milestone_id, task_id, criterion, verification_instructions, revision, position)
+			VALUES ($1,$2,$3,$4,$5,$6,$7)
 			RETURNING `+criterionReturnColumns,
-			criterion.ID, criterion.ProjectID, criterion.MilestoneID, criterion.TaskID, criterion.Criterion,
+			criterion.ID, criterion.MilestoneID, criterion.TaskID, criterion.Criterion,
 			criterion.VerificationInstructions, criterion.Revision, criterion.Position))
 		if err != nil {
 			return domain.AcceptanceCriterion{}, mapPgError(err)
@@ -94,16 +94,16 @@ func (s *AcceptanceStore) create(
 	defer tx.Rollback(ctx) //nolint:errcheck
 	out, err := scanCriterion(tx.QueryRow(ctx, `
 		INSERT INTO acceptance_criteria
-			(id, project_id, milestone_id, task_id, criterion, verification_instructions, revision, position)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+			(id, milestone_id, task_id, criterion, verification_instructions, revision, position)
+		VALUES ($1,$2,$3,$4,$5,$6,$7)
 		RETURNING `+criterionReturnColumns,
-		criterion.ID, criterion.ProjectID, criterion.MilestoneID, criterion.TaskID, criterion.Criterion,
+		criterion.ID, criterion.MilestoneID, criterion.TaskID, criterion.Criterion,
 		criterion.VerificationInstructions, criterion.Revision, criterion.Position))
 	if err != nil {
 		return domain.AcceptanceCriterion{}, mapPgError(err)
 	}
 	newValue, _ := json.Marshal(map[string]any{
-		"project_id": out.ProjectID, "milestone_id": out.MilestoneID, "task_id": out.TaskID,
+		"milestone_id": out.MilestoneID, "task_id": out.TaskID,
 		"criterion": out.Criterion, "verification_instructions": out.VerificationInstructions,
 		"revision": out.Revision, "position": out.Position,
 	})
@@ -126,10 +126,6 @@ func (s *AcceptanceStore) Get(ctx context.Context, criterionID uuid.UUID) (domai
 		return domain.AcceptanceCriterion{}, domain.ErrNotFound
 	}
 	return out, err
-}
-
-func (s *AcceptanceStore) ListForProject(ctx context.Context, projectID uuid.UUID) ([]CriterionWithCurrentCheck, error) {
-	return s.list(ctx, `ac.project_id=$1`, projectID)
 }
 
 func (s *AcceptanceStore) ListForMilestone(ctx context.Context, milestoneID uuid.UUID) ([]CriterionWithCurrentCheck, error) {
@@ -174,7 +170,7 @@ func (s *AcceptanceStore) list(ctx context.Context, predicate string, ownerID uu
 		)
 		err := rows.Scan(
 			&item.Criterion.ID, &item.Criterion.Version,
-			&item.Criterion.ProjectID, &item.Criterion.MilestoneID, &item.Criterion.TaskID,
+			&item.Criterion.MilestoneID, &item.Criterion.TaskID,
 			&item.Criterion.Criterion, &item.Criterion.VerificationInstructions,
 			&item.Criterion.Revision, &item.Criterion.Position, &item.Criterion.ArchivedAt,
 			&item.Criterion.CreatedAt, &item.Criterion.UpdatedAt,
@@ -407,22 +403,20 @@ func (s *AcceptanceStore) RemoveCriterionWithOperation(
 	defer tx.Rollback(ctx) //nolint:errcheck
 
 	var (
-		projectID          *uuid.UUID
-		projectStatus      *domain.ProjectStatus
-		taskID             *uuid.UUID
-		checkCount         int
-		isProjectCriterion bool
+		projectID       *uuid.UUID
+		milestoneID     *uuid.UUID
+		milestoneStatus *domain.MilestoneStatus
+		taskID          *uuid.UUID
+		checkCount      int
 	)
 	err = tx.QueryRow(ctx, `
-		SELECT COALESCE(ac.project_id, m.project_id), p.status, ac.task_id,
-			ac.project_id IS NOT NULL,
+		SELECT m.project_id, ac.milestone_id, m.status, ac.task_id,
 			(SELECT count(*) FROM acceptance_checks chk WHERE chk.criterion_id=ac.id)
 		FROM acceptance_criteria ac
 		LEFT JOIN milestones m ON m.id=ac.milestone_id
-		LEFT JOIN projects p ON p.id=COALESCE(ac.project_id, m.project_id)
 		WHERE ac.id=$1 AND ac.archived_at IS NULL
 		FOR UPDATE OF ac`, criterionID).
-		Scan(&projectID, &projectStatus, &taskID, &isProjectCriterion, &checkCount)
+		Scan(&projectID, &milestoneID, &milestoneStatus, &taskID, &checkCount)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.ErrNotFound
 	}
@@ -454,30 +448,28 @@ func (s *AcceptanceStore) RemoveCriterionWithOperation(
 		}
 		return nil
 	}
-	if projectID == nil || projectStatus == nil {
+	if projectID == nil || milestoneID == nil || milestoneStatus == nil {
 		return fmt.Errorf("acceptance criterion owner is invalid")
 	}
-	if (*projectStatus == domain.ProjectStatusActive || *projectStatus == domain.ProjectStatusPaused) &&
-		strings.TrimSpace(reason) == "" {
-		return fmt.Errorf("%w: a reason is required to change active project scope", domain.ErrInvalidInput)
-	}
-	if isProjectCriterion &&
-		(*projectStatus == domain.ProjectStatusActive || *projectStatus == domain.ProjectStatusPaused) {
-		var activeProjectCriteria int
+	if *milestoneStatus == domain.MilestoneStatusActive {
+		if strings.TrimSpace(reason) == "" {
+			return fmt.Errorf("%w: a reason is required to change active Milestone scope", domain.ErrInvalidInput)
+		}
+		var activeMilestoneCriteria int
 		if err := tx.QueryRow(ctx,
 			`SELECT count(*) FROM acceptance_criteria
-			 WHERE project_id=$1 AND archived_at IS NULL`,
-			*projectID,
-		).Scan(&activeProjectCriteria); err != nil {
-			return fmt.Errorf("count active project criteria: %w", err)
+			 WHERE milestone_id=$1 AND archived_at IS NULL`,
+			*milestoneID,
+		).Scan(&activeMilestoneCriteria); err != nil {
+			return fmt.Errorf("count active Milestone criteria: %w", err)
 		}
-		if activeProjectCriteria <= 1 {
-			return fmt.Errorf("%w: an active project requires an acceptance criterion", domain.ErrConflict)
+		if activeMilestoneCriteria <= 1 {
+			return fmt.Errorf("%w: an active Milestone requires an acceptance criterion", domain.ErrConflict)
 		}
 	}
 
 	action := "acceptance_criterion_archived"
-	if *projectStatus == domain.ProjectStatusPlanned && checkCount == 0 {
+	if *milestoneStatus == domain.MilestoneStatusPlanned && checkCount == 0 {
 		action = "acceptance_criterion_removed"
 		_, err = tx.Exec(ctx, `DELETE FROM acceptance_criteria WHERE id=$1`, criterionID)
 	} else {
@@ -500,7 +492,7 @@ func (s *AcceptanceStore) RemoveCriterionWithOperation(
 		return fmt.Errorf("record criterion removal: %w", err)
 	}
 	oldValue, _ := json.Marshal(map[string]any{
-		"project_id": projectID, "check_count": checkCount, "reason": strings.TrimSpace(reason),
+		"milestone_id": milestoneID, "check_count": checkCount, "reason": strings.TrimSpace(reason),
 	})
 	if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
 		OccurredAt: time.Now().UTC(), Actor: actor, EntityType: "acceptance_criterion",

@@ -18,7 +18,7 @@ func TestTaskOperationProvenanceAndBusinessAuditCommitTogether(t *testing.T) {
 	ctx := context.Background()
 	tokenID := createOperationToken(t, db, userA)
 	tasks := store.NewTaskStore(db)
-	task := mustCreateTask(t, tasks, domain.Task{
+	task := mustCreateTask(t, db, tasks, domain.Task{
 		Title: "Operation provenance", CreatorID: userA,
 	}, nil)
 	cleanupTask(t, db, task.Task.ID)
@@ -81,7 +81,7 @@ func TestBusinessAuditInsertFailureRollsBackTaskTransaction(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 	tasks := store.NewTaskStore(db)
-	task := mustCreateTask(t, tasks, domain.Task{
+	task := mustCreateTask(t, db, tasks, domain.Task{
 		Title: "Rollback audit failure", CreatorID: userA,
 	}, nil)
 	cleanupTask(t, db, task.Task.ID)
@@ -117,8 +117,7 @@ func TestProjectOperationProvenanceAndBusinessAuditCommitTogether(t *testing.T) 
 	tokenID := createOperationToken(t, db, userA)
 	projects := store.NewProjectStore(db)
 	project, err := projects.Create(ctx, domain.Project{
-		Name: "Audited project", Outcome: "Project changes are attributable",
-		OwnerID: userA, CreatorID: userA,
+		Name: "Audited project", OwnerID: userA, CreatorID: userA,
 	})
 	require.NoError(t, err)
 	cleanupProject(t, db, project.Project.ID)
@@ -172,15 +171,14 @@ func TestSecondaryWorkMutationsRecordBusinessAudit(t *testing.T) {
 	}
 
 	tasks := store.NewTaskStore(db)
-	task := mustCreateTask(t, tasks, domain.Task{
+	task := mustCreateTask(t, db, tasks, domain.Task{
 		Title: "Secondary audit owners", CreatorID: userA,
 	}, nil)
 	cleanupTask(t, db, task.Task.ID)
 
 	projects := store.NewProjectStore(db)
 	project, err := projects.Create(ctx, domain.Project{
-		Name: "Secondary audit project", Outcome: "Every work mutation is attributable",
-		OwnerID: userA, CreatorID: userA,
+		Name: "Secondary audit project", OwnerID: userA, CreatorID: userA,
 	})
 	require.NoError(t, err)
 	cleanupProject(t, db, project.Project.ID)
@@ -196,7 +194,7 @@ func TestSecondaryWorkMutationsRecordBusinessAudit(t *testing.T) {
 
 	milestone, err := store.NewMilestoneStore(db).CreateWithOperation(ctx, domain.Milestone{
 		ProjectID: project.Project.ID, Name: "Audited milestone",
-		Outcome: "Milestone writes are attributable", Position: 0,
+		Outcome: "Milestone writes are attributable", OwnerID: userA, Position: 0,
 	}, actor)
 	require.NoError(t, err)
 

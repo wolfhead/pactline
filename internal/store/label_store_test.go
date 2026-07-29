@@ -77,7 +77,7 @@ func TestLabelDeleteRemovesTaskAssociationButKeepsTask(t *testing.T) {
 	l, err := ls.Create(ctx, "todelete-"+uuid.NewString())
 	require.NoError(t, err)
 
-	task := mustCreateTask(t, ts, domain.Task{Title: "Labeled", CreatorID: userA}, []uuid.UUID{l.ID})
+	task := mustCreateTask(t, db, ts, domain.Task{Title: "Labeled", CreatorID: userA}, []uuid.UUID{l.ID})
 	cleanupTask(t, db, task.Task.ID)
 	require.Len(t, task.Labels, 1)
 

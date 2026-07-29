@@ -35,7 +35,11 @@ function ProtectedApplication() {
         <Route path="/tasks" element={<TaskListPage />} />
         <Route path="/tasks/:number" element={<TaskListPage />} />
         <Route path="/projects" element={<ProjectListPage />} />
-        <Route path="/projects/:number" element={<ProjectDetailPage />} />
+        <Route path="/projects/:number" element={<Navigate to="overview" replace />} />
+        <Route path="/projects/:number/overview" element={<ProjectDetailPage view="overview" />} />
+        <Route path="/projects/:number/milestones" element={<ProjectDetailPage view="milestones" />} />
+        <Route path="/projects/:number/milestones/:milestoneID" element={<ProjectDetailPage view="milestones" />} />
+        <Route path="/projects/:number/backlog" element={<ProjectDetailPage view="backlog" />} />
         <Route path="/account/api-tokens" element={!impersonation ? <APITokensPage /> : <Navigate to="/" replace />} />
         <Route
           path="/api-docs"

@@ -2778,7 +2778,9 @@ func (s *MilestonePatch) Validate() error {
 
 func (s MilestoneStatus) Validate() error {
 	switch s {
-	case "open":
+	case "planned":
+		return nil
+	case "active":
 		return nil
 	case "completed":
 		return nil
@@ -3206,17 +3208,6 @@ func (s *Project) Validate() error {
 		})
 	}
 	if err := func() error {
-		if err := s.Status.Validate(); err != nil {
-			return err
-		}
-		return nil
-	}(); err != nil {
-		failures = append(failures, validate.FieldError{
-			Name:  "status",
-			Error: err,
-		})
-	}
-	if err := func() error {
 		if err := (validate.Int{
 			MinSet:        true,
 			Min:           0,
@@ -3255,48 +3246,6 @@ func (s *Project) Validate() error {
 	}(); err != nil {
 		failures = append(failures, validate.FieldError{
 			Name:  "eligible_tasks",
-			Error: err,
-		})
-	}
-	if err := func() error {
-		if err := (validate.Int{
-			MinSet:        true,
-			Min:           0,
-			MaxSet:        false,
-			Max:           0,
-			MinExclusive:  false,
-			MaxExclusive:  false,
-			MultipleOfSet: false,
-			MultipleOf:    0,
-			Pattern:       nil,
-		}).Validate(int64(s.ActiveCriteria)); err != nil {
-			return errors.Wrap(err, "int")
-		}
-		return nil
-	}(); err != nil {
-		failures = append(failures, validate.FieldError{
-			Name:  "active_criteria",
-			Error: err,
-		})
-	}
-	if err := func() error {
-		if err := (validate.Int{
-			MinSet:        true,
-			Min:           0,
-			MaxSet:        false,
-			Max:           0,
-			MinExclusive:  false,
-			MaxExclusive:  false,
-			MultipleOfSet: false,
-			MultipleOf:    0,
-			Pattern:       nil,
-		}).Validate(int64(s.SatisfiedCriteria)); err != nil {
-			return errors.Wrap(err, "int")
-		}
-		return nil
-	}(); err != nil {
-		failures = append(failures, validate.FieldError{
-			Name:  "satisfied_criteria",
 			Error: err,
 		})
 	}
@@ -3373,29 +3322,6 @@ func (s *ProjectCreate) Validate() error {
 	}(); err != nil {
 		failures = append(failures, validate.FieldError{
 			Name:  "name",
-			Error: err,
-		})
-	}
-	if err := func() error {
-		if err := (validate.String{
-			MinLength:     1,
-			MinLengthSet:  true,
-			MaxLength:     0,
-			MaxLengthSet:  false,
-			Email:         false,
-			Hostname:      false,
-			Regex:         nil,
-			MinNumeric:    0,
-			MinNumericSet: false,
-			MaxNumeric:    0,
-			MaxNumericSet: false,
-		}).Validate(string(s.Outcome)); err != nil {
-			return errors.Wrap(err, "string")
-		}
-		return nil
-	}(); err != nil {
-		failures = append(failures, validate.FieldError{
-			Name:  "outcome",
 			Error: err,
 		})
 	}
@@ -3556,34 +3482,6 @@ func (s *ProjectDetail) Validate() error {
 	}(); err != nil {
 		failures = append(failures, validate.FieldError{
 			Name:  "project",
-			Error: err,
-		})
-	}
-	if err := func() error {
-		if s.AcceptanceCriteria == nil {
-			return errors.New("nil is invalid value")
-		}
-		var failures []validate.FieldError
-		for i, elem := range s.AcceptanceCriteria {
-			if err := func() error {
-				if err := elem.Validate(); err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				failures = append(failures, validate.FieldError{
-					Name:  fmt.Sprintf("[%d]", i),
-					Error: err,
-				})
-			}
-		}
-		if len(failures) > 0 {
-			return &validate.Error{Fields: failures}
-		}
-		return nil
-	}(); err != nil {
-		failures = append(failures, validate.FieldError{
-			Name:  "acceptance_criteria",
 			Error: err,
 		})
 	}
@@ -4134,36 +4032,6 @@ func (s *ProjectPatch) Validate() error {
 			Error: err,
 		})
 	}
-	if err := func() error {
-		if value, ok := s.Outcome.Get(); ok {
-			if err := func() error {
-				if err := (validate.String{
-					MinLength:     1,
-					MinLengthSet:  true,
-					MaxLength:     0,
-					MaxLengthSet:  false,
-					Email:         false,
-					Hostname:      false,
-					Regex:         nil,
-					MinNumeric:    0,
-					MinNumericSet: false,
-					MaxNumeric:    0,
-					MaxNumericSet: false,
-				}).Validate(string(value)); err != nil {
-					return errors.Wrap(err, "string")
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		}
-		return nil
-	}(); err != nil {
-		failures = append(failures, validate.FieldError{
-			Name:  "outcome",
-			Error: err,
-		})
-	}
 	if len(failures) > 0 {
 		return &validate.Error{Fields: failures}
 	}
@@ -4201,23 +4069,6 @@ func (s *ProjectRef) Validate() error {
 		return &validate.Error{Fields: failures}
 	}
 	return nil
-}
-
-func (s ProjectStatus) Validate() error {
-	switch s {
-	case "planned":
-		return nil
-	case "active":
-		return nil
-	case "paused":
-		return nil
-	case "completed":
-		return nil
-	case "cancelled":
-		return nil
-	default:
-		return errors.Errorf("invalid value: %v", s)
-	}
 }
 
 func (s *Task) Validate() error {
@@ -4320,15 +4171,8 @@ func (s *Task) Validate() error {
 		})
 	}
 	if err := func() error {
-		if value, ok := s.Project.Get(); ok {
-			if err := func() error {
-				if err := value.Validate(); err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
+		if err := s.Project.Validate(); err != nil {
+			return err
 		}
 		return nil
 	}(); err != nil {
@@ -4647,25 +4491,18 @@ func (s *TaskCreate) Validate() error {
 		})
 	}
 	if err := func() error {
-		if value, ok := s.ProjectNumber.Get(); ok {
-			if err := func() error {
-				if err := (validate.Int{
-					MinSet:        true,
-					Min:           1,
-					MaxSet:        false,
-					Max:           0,
-					MinExclusive:  false,
-					MaxExclusive:  false,
-					MultipleOfSet: false,
-					MultipleOf:    0,
-					Pattern:       nil,
-				}).Validate(int64(value)); err != nil {
-					return errors.Wrap(err, "int")
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
+		if err := (validate.Int{
+			MinSet:        true,
+			Min:           1,
+			MaxSet:        false,
+			Max:           0,
+			MinExclusive:  false,
+			MaxExclusive:  false,
+			MultipleOfSet: false,
+			MultipleOf:    0,
+			Pattern:       nil,
+		}).Validate(int64(s.ProjectNumber)); err != nil {
+			return errors.Wrap(err, "int")
 		}
 		return nil
 	}(); err != nil {

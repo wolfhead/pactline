@@ -13,12 +13,12 @@ type UnimplementedHandler struct{}
 
 var _ Handler = UnimplementedHandler{}
 
-// ActivateProject implements activateProject operation.
+// ActivateMilestone implements activateMilestone operation.
 //
-// Activate a project.
+// Activate a planned milestone.
 //
-// POST /api/v1/projects/{number}/activate
-func (UnimplementedHandler) ActivateProject(ctx context.Context, req OptLifecycleRequest, params ActivateProjectParams) (r ActivateProjectRes, _ error) {
+// POST /api/v1/projects/{number}/milestones/{id}/activate
+func (UnimplementedHandler) ActivateMilestone(ctx context.Context, params ActivateMilestoneParams) (r ActivateMilestoneRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -49,30 +49,12 @@ func (UnimplementedHandler) CancelMilestone(ctx context.Context, req OptLifecycl
 	return r, ht.ErrNotImplemented
 }
 
-// CancelProject implements cancelProject operation.
-//
-// Cancel a project.
-//
-// POST /api/v1/projects/{number}/cancel
-func (UnimplementedHandler) CancelProject(ctx context.Context, req OptLifecycleRequest, params CancelProjectParams) (r CancelProjectRes, _ error) {
-	return r, ht.ErrNotImplemented
-}
-
 // CompleteMilestone implements completeMilestone operation.
 //
 // Complete a milestone.
 //
 // POST /api/v1/projects/{number}/milestones/{id}/complete
 func (UnimplementedHandler) CompleteMilestone(ctx context.Context, req OptLifecycleRequest, params CompleteMilestoneParams) (r CompleteMilestoneRes, _ error) {
-	return r, ht.ErrNotImplemented
-}
-
-// CompleteProject implements completeProject operation.
-//
-// Complete a project.
-//
-// POST /api/v1/projects/{number}/complete
-func (UnimplementedHandler) CompleteProject(ctx context.Context, req OptLifecycleRequest, params CompleteProjectParams) (r CompleteProjectRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -118,15 +100,6 @@ func (UnimplementedHandler) CreateMilestoneCriterion(ctx context.Context, req *C
 //
 // POST /api/v1/projects
 func (UnimplementedHandler) CreateProject(ctx context.Context, req *ProjectCreate, params CreateProjectParams) (r CreateProjectRes, _ error) {
-	return r, ht.ErrNotImplemented
-}
-
-// CreateProjectCriterion implements createProjectCriterion operation.
-//
-// Create a project acceptance criterion.
-//
-// POST /api/v1/projects/{number}/criteria
-func (UnimplementedHandler) CreateProjectCriterion(ctx context.Context, req *CriterionCreate, params CreateProjectCriterionParams) (r CreateProjectCriterionRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -229,15 +202,6 @@ func (UnimplementedHandler) ListMilestoneCriteria(ctx context.Context, params Li
 	return r, ht.ErrNotImplemented
 }
 
-// ListProjectCriteria implements listProjectCriteria operation.
-//
-// List project acceptance criteria.
-//
-// GET /api/v1/projects/{number}/criteria
-func (UnimplementedHandler) ListProjectCriteria(ctx context.Context, params ListProjectCriteriaParams) (r ListProjectCriteriaRes, _ error) {
-	return r, ht.ErrNotImplemented
-}
-
 // ListProjects implements listProjects operation.
 //
 // List projects.
@@ -292,30 +256,12 @@ func (UnimplementedHandler) ListUsers(ctx context.Context, params ListUsersParam
 	return r, ht.ErrNotImplemented
 }
 
-// PauseProject implements pauseProject operation.
-//
-// Pause a project.
-//
-// POST /api/v1/projects/{number}/pause
-func (UnimplementedHandler) PauseProject(ctx context.Context, req OptLifecycleRequest, params PauseProjectParams) (r PauseProjectRes, _ error) {
-	return r, ht.ErrNotImplemented
-}
-
 // ReopenMilestone implements reopenMilestone operation.
 //
 // Reopen a milestone.
 //
 // POST /api/v1/projects/{number}/milestones/{id}/reopen
 func (UnimplementedHandler) ReopenMilestone(ctx context.Context, req *LifecycleRequest, params ReopenMilestoneParams) (r ReopenMilestoneRes, _ error) {
-	return r, ht.ErrNotImplemented
-}
-
-// ReopenProject implements reopenProject operation.
-//
-// Reopen a project.
-//
-// POST /api/v1/projects/{number}/reopen
-func (UnimplementedHandler) ReopenProject(ctx context.Context, req *LifecycleRequest, params ReopenProjectParams) (r ReopenProjectRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

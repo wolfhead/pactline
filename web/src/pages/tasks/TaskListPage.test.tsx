@@ -28,7 +28,8 @@ const TASK = {
   id: 'id-142', number: 142, version: 1, title: '修复竞价超时', description: '',
   status: 'todo' as const, priority: 'none' as const, assignee: null,
   creator: { id: 'u1', name: '张沁', email: 'a@x.com' },
-  due_date: null, project: null, milestone: null, labels: [], created_at: '', updated_at: '',
+  due_date: null, project: { id: 'p1', number: 12, name: 'Task Manager' },
+  milestone: null, labels: [], created_at: '', updated_at: '',
   completed_at: null, archived_at: null,
 }
 
@@ -39,6 +40,7 @@ beforeEach(() => {
   vi.mocked(tasksApi.listComments).mockResolvedValue([])
   vi.mocked(tasksApi.listActivity).mockResolvedValue([])
   vi.mocked(projectsApi.listProjects).mockResolvedValue([])
+  vi.mocked(projectsApi.getProject).mockRejectedValue(new Error('Project detail is not needed in this test'))
   vi.mocked(acceptanceApi.listTaskCriteria).mockResolvedValue([])
 })
 

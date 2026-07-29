@@ -7,19 +7,21 @@ surface includes:
 
 - responsive task list with on-demand task detail;
 - a desktop three-column workspace with a half-width task detail pane;
-- first-class projects and ordered milestones;
-- structured, revisioned acceptance criteria shared by projects, milestones,
-  and tasks, with evidence-backed checks and task completion gating;
-- task-to-project and task-to-milestone association; and
-- audited project and milestone lifecycle transitions;
+- long-lived Project workspaces with independent Overview, Milestones, and
+  Backlog views;
+- concurrently active, owned milestones with structured, revisioned
+  acceptance criteria and evidence-backed checks;
+- mandatory task-to-Project and optional task-to-Milestone association;
+- audited Project archiving and Milestone lifecycle transitions;
 - invite-only Lark authentication for one company; and
 - single-Administrator user management with read-only impersonation;
 - contract-first `/api/v1` access for both humans and Agents; and
 - personal scoped tokens, rate limiting, idempotency, optimistic concurrency,
   request audit, and transactional business provenance.
 
-Project and milestone semantics are defined in
-[`docs/superpowers/specs/2026-07-27-projects-and-milestones-design.md`](docs/superpowers/specs/2026-07-27-projects-and-milestones-design.md).
+Current Project and Milestone semantics are defined in
+[`docs/superpowers/specs/2026-07-29-project-first-workspaces-design.md`](docs/superpowers/specs/2026-07-29-project-first-workspaces-design.md).
+It supersedes the original delivery-oriented Project design.
 The identity model and operating procedure are documented in
 [`docs/operations/lark-identity.md`](docs/operations/lark-identity.md).
 ### Work API

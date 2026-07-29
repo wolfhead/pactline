@@ -16,22 +16,32 @@ import (
 	"github.com/ogen-go/ogen/validate"
 )
 
-// ActivateProjectParams is parameters of activateProject operation.
-type ActivateProjectParams struct {
+// ActivateMilestoneParams is parameters of activateMilestone operation.
+type ActivateMilestoneParams struct {
 	// One quoted positive integer resource version, for example `"3"`.
 	IfMatch string
+	// Current project Etag when an operation changes a milestone and its project.
+	XProjectIfMatch string
 	// Required for bearer-authenticated mutations; optional for browser sessions.
 	IdempotencyKey OptString `json:",omitempty,omitzero"`
 	Number         int64
+	ID             uuid.UUID
 }
 
-func unpackActivateProjectParams(packed middleware.Parameters) (params ActivateProjectParams) {
+func unpackActivateMilestoneParams(packed middleware.Parameters) (params ActivateMilestoneParams) {
 	{
 		key := middleware.ParameterKey{
 			Name: "If-Match",
 			In:   "header",
 		}
 		params.IfMatch = packed[key].(string)
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "X-Project-If-Match",
+			In:   "header",
+		}
+		params.XProjectIfMatch = packed[key].(string)
 	}
 	{
 		key := middleware.ParameterKey{
@@ -49,10 +59,17 @@ func unpackActivateProjectParams(packed middleware.Parameters) (params ActivateP
 		}
 		params.Number = packed[key].(int64)
 	}
+	{
+		key := middleware.ParameterKey{
+			Name: "id",
+			In:   "path",
+		}
+		params.ID = packed[key].(uuid.UUID)
+	}
 	return params
 }
 
-func decodeActivateProjectParams(args [1]string, argsEscaped bool, r *http.Request) (params ActivateProjectParams, _ error) {
+func decodeActivateMilestoneParams(args [2]string, argsEscaped bool, r *http.Request) (params ActivateMilestoneParams, _ error) {
 	h := uri.NewHeaderDecoder(r.Header)
 	// Decode header: If-Match.
 	if err := func() error {
@@ -104,6 +121,60 @@ func decodeActivateProjectParams(args [1]string, argsEscaped bool, r *http.Reque
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "If-Match",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	// Decode header: X-Project-If-Match.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "X-Project-If-Match",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToString(val)
+				if err != nil {
+					return err
+				}
+
+				params.XProjectIfMatch = c
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if err := (validate.String{
+					MinLength:     0,
+					MinLengthSet:  false,
+					MaxLength:     0,
+					MaxLengthSet:  false,
+					Email:         false,
+					Hostname:      false,
+					Regex:         regexMap["^\"[1-9][0-9]*\"$"],
+					MinNumeric:    0,
+					MinNumericSet: false,
+					MaxNumeric:    0,
+					MaxNumericSet: false,
+				}).Validate(string(params.XProjectIfMatch)); err != nil {
+					return errors.Wrap(err, "string")
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "X-Project-If-Match",
 			In:   "header",
 			Err:  err,
 		}
@@ -233,6 +304,51 @@ func decodeActivateProjectParams(args [1]string, argsEscaped bool, r *http.Reque
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "number",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	// Decode path: id.
+	if err := func() error {
+		param := args[1]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[1])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "id",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.ID = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "id",
 			In:   "path",
 			Err:  err,
 		}
@@ -1028,230 +1144,6 @@ func decodeCancelMilestoneParams(args [2]string, argsEscaped bool, r *http.Reque
 	return params, nil
 }
 
-// CancelProjectParams is parameters of cancelProject operation.
-type CancelProjectParams struct {
-	// One quoted positive integer resource version, for example `"3"`.
-	IfMatch string
-	// Required for bearer-authenticated mutations; optional for browser sessions.
-	IdempotencyKey OptString `json:",omitempty,omitzero"`
-	Number         int64
-}
-
-func unpackCancelProjectParams(packed middleware.Parameters) (params CancelProjectParams) {
-	{
-		key := middleware.ParameterKey{
-			Name: "If-Match",
-			In:   "header",
-		}
-		params.IfMatch = packed[key].(string)
-	}
-	{
-		key := middleware.ParameterKey{
-			Name: "Idempotency-Key",
-			In:   "header",
-		}
-		if v, ok := packed[key]; ok {
-			params.IdempotencyKey = v.(OptString)
-		}
-	}
-	{
-		key := middleware.ParameterKey{
-			Name: "number",
-			In:   "path",
-		}
-		params.Number = packed[key].(int64)
-	}
-	return params
-}
-
-func decodeCancelProjectParams(args [1]string, argsEscaped bool, r *http.Request) (params CancelProjectParams, _ error) {
-	h := uri.NewHeaderDecoder(r.Header)
-	// Decode header: If-Match.
-	if err := func() error {
-		cfg := uri.HeaderParameterDecodingConfig{
-			Name:    "If-Match",
-			Explode: false,
-		}
-		if err := h.HasParam(cfg); err == nil {
-			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
-				val, err := d.DecodeValue()
-				if err != nil {
-					return err
-				}
-
-				c, err := conv.ToString(val)
-				if err != nil {
-					return err
-				}
-
-				params.IfMatch = c
-				return nil
-			}); err != nil {
-				return err
-			}
-			if err := func() error {
-				if err := (validate.String{
-					MinLength:     0,
-					MinLengthSet:  false,
-					MaxLength:     0,
-					MaxLengthSet:  false,
-					Email:         false,
-					Hostname:      false,
-					Regex:         regexMap["^\"[1-9][0-9]*\"$"],
-					MinNumeric:    0,
-					MinNumericSet: false,
-					MaxNumeric:    0,
-					MaxNumericSet: false,
-				}).Validate(string(params.IfMatch)); err != nil {
-					return errors.Wrap(err, "string")
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		} else {
-			return err
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "If-Match",
-			In:   "header",
-			Err:  err,
-		}
-	}
-	// Decode header: Idempotency-Key.
-	if err := func() error {
-		cfg := uri.HeaderParameterDecodingConfig{
-			Name:    "Idempotency-Key",
-			Explode: false,
-		}
-		if err := h.HasParam(cfg); err == nil {
-			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
-				var paramsDotIdempotencyKeyVal string
-				if err := func() error {
-					val, err := d.DecodeValue()
-					if err != nil {
-						return err
-					}
-
-					c, err := conv.ToString(val)
-					if err != nil {
-						return err
-					}
-
-					paramsDotIdempotencyKeyVal = c
-					return nil
-				}(); err != nil {
-					return err
-				}
-				params.IdempotencyKey.SetTo(paramsDotIdempotencyKeyVal)
-				return nil
-			}); err != nil {
-				return err
-			}
-			if err := func() error {
-				if value, ok := params.IdempotencyKey.Get(); ok {
-					if err := func() error {
-						if err := (validate.String{
-							MinLength:     1,
-							MinLengthSet:  true,
-							MaxLength:     128,
-							MaxLengthSet:  true,
-							Email:         false,
-							Hostname:      false,
-							Regex:         regexMap["^[\\x21-\\x7E]+$"],
-							MinNumeric:    0,
-							MinNumericSet: false,
-							MaxNumeric:    0,
-							MaxNumericSet: false,
-						}).Validate(string(value)); err != nil {
-							return errors.Wrap(err, "string")
-						}
-						return nil
-					}(); err != nil {
-						return err
-					}
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "Idempotency-Key",
-			In:   "header",
-			Err:  err,
-		}
-	}
-	// Decode path: number.
-	if err := func() error {
-		param := args[0]
-		if argsEscaped {
-			unescaped, err := url.PathUnescape(args[0])
-			if err != nil {
-				return errors.Wrap(err, "unescape path")
-			}
-			param = unescaped
-		}
-		if len(param) > 0 {
-			d := uri.NewPathDecoder(uri.PathDecoderConfig{
-				Param:   "number",
-				Value:   param,
-				Style:   uri.PathStyleSimple,
-				Explode: false,
-			})
-
-			if err := func() error {
-				val, err := d.DecodeValue()
-				if err != nil {
-					return err
-				}
-
-				c, err := conv.ToInt64(val)
-				if err != nil {
-					return err
-				}
-
-				params.Number = c
-				return nil
-			}(); err != nil {
-				return err
-			}
-			if err := func() error {
-				if err := (validate.Int{
-					MinSet:        true,
-					Min:           1,
-					MaxSet:        false,
-					Max:           0,
-					MinExclusive:  false,
-					MaxExclusive:  false,
-					MultipleOfSet: false,
-					MultipleOf:    0,
-					Pattern:       nil,
-				}).Validate(int64(params.Number)); err != nil {
-					return errors.Wrap(err, "int")
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		} else {
-			return validate.ErrFieldRequired
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "number",
-			In:   "path",
-			Err:  err,
-		}
-	}
-	return params, nil
-}
-
 // CompleteMilestoneParams is parameters of completeMilestone operation.
 type CompleteMilestoneParams struct {
 	// One quoted positive integer resource version, for example `"3"`.
@@ -1585,230 +1477,6 @@ func decodeCompleteMilestoneParams(args [2]string, argsEscaped bool, r *http.Req
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "id",
-			In:   "path",
-			Err:  err,
-		}
-	}
-	return params, nil
-}
-
-// CompleteProjectParams is parameters of completeProject operation.
-type CompleteProjectParams struct {
-	// One quoted positive integer resource version, for example `"3"`.
-	IfMatch string
-	// Required for bearer-authenticated mutations; optional for browser sessions.
-	IdempotencyKey OptString `json:",omitempty,omitzero"`
-	Number         int64
-}
-
-func unpackCompleteProjectParams(packed middleware.Parameters) (params CompleteProjectParams) {
-	{
-		key := middleware.ParameterKey{
-			Name: "If-Match",
-			In:   "header",
-		}
-		params.IfMatch = packed[key].(string)
-	}
-	{
-		key := middleware.ParameterKey{
-			Name: "Idempotency-Key",
-			In:   "header",
-		}
-		if v, ok := packed[key]; ok {
-			params.IdempotencyKey = v.(OptString)
-		}
-	}
-	{
-		key := middleware.ParameterKey{
-			Name: "number",
-			In:   "path",
-		}
-		params.Number = packed[key].(int64)
-	}
-	return params
-}
-
-func decodeCompleteProjectParams(args [1]string, argsEscaped bool, r *http.Request) (params CompleteProjectParams, _ error) {
-	h := uri.NewHeaderDecoder(r.Header)
-	// Decode header: If-Match.
-	if err := func() error {
-		cfg := uri.HeaderParameterDecodingConfig{
-			Name:    "If-Match",
-			Explode: false,
-		}
-		if err := h.HasParam(cfg); err == nil {
-			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
-				val, err := d.DecodeValue()
-				if err != nil {
-					return err
-				}
-
-				c, err := conv.ToString(val)
-				if err != nil {
-					return err
-				}
-
-				params.IfMatch = c
-				return nil
-			}); err != nil {
-				return err
-			}
-			if err := func() error {
-				if err := (validate.String{
-					MinLength:     0,
-					MinLengthSet:  false,
-					MaxLength:     0,
-					MaxLengthSet:  false,
-					Email:         false,
-					Hostname:      false,
-					Regex:         regexMap["^\"[1-9][0-9]*\"$"],
-					MinNumeric:    0,
-					MinNumericSet: false,
-					MaxNumeric:    0,
-					MaxNumericSet: false,
-				}).Validate(string(params.IfMatch)); err != nil {
-					return errors.Wrap(err, "string")
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		} else {
-			return err
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "If-Match",
-			In:   "header",
-			Err:  err,
-		}
-	}
-	// Decode header: Idempotency-Key.
-	if err := func() error {
-		cfg := uri.HeaderParameterDecodingConfig{
-			Name:    "Idempotency-Key",
-			Explode: false,
-		}
-		if err := h.HasParam(cfg); err == nil {
-			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
-				var paramsDotIdempotencyKeyVal string
-				if err := func() error {
-					val, err := d.DecodeValue()
-					if err != nil {
-						return err
-					}
-
-					c, err := conv.ToString(val)
-					if err != nil {
-						return err
-					}
-
-					paramsDotIdempotencyKeyVal = c
-					return nil
-				}(); err != nil {
-					return err
-				}
-				params.IdempotencyKey.SetTo(paramsDotIdempotencyKeyVal)
-				return nil
-			}); err != nil {
-				return err
-			}
-			if err := func() error {
-				if value, ok := params.IdempotencyKey.Get(); ok {
-					if err := func() error {
-						if err := (validate.String{
-							MinLength:     1,
-							MinLengthSet:  true,
-							MaxLength:     128,
-							MaxLengthSet:  true,
-							Email:         false,
-							Hostname:      false,
-							Regex:         regexMap["^[\\x21-\\x7E]+$"],
-							MinNumeric:    0,
-							MinNumericSet: false,
-							MaxNumeric:    0,
-							MaxNumericSet: false,
-						}).Validate(string(value)); err != nil {
-							return errors.Wrap(err, "string")
-						}
-						return nil
-					}(); err != nil {
-						return err
-					}
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "Idempotency-Key",
-			In:   "header",
-			Err:  err,
-		}
-	}
-	// Decode path: number.
-	if err := func() error {
-		param := args[0]
-		if argsEscaped {
-			unescaped, err := url.PathUnescape(args[0])
-			if err != nil {
-				return errors.Wrap(err, "unescape path")
-			}
-			param = unescaped
-		}
-		if len(param) > 0 {
-			d := uri.NewPathDecoder(uri.PathDecoderConfig{
-				Param:   "number",
-				Value:   param,
-				Style:   uri.PathStyleSimple,
-				Explode: false,
-			})
-
-			if err := func() error {
-				val, err := d.DecodeValue()
-				if err != nil {
-					return err
-				}
-
-				c, err := conv.ToInt64(val)
-				if err != nil {
-					return err
-				}
-
-				params.Number = c
-				return nil
-			}(); err != nil {
-				return err
-			}
-			if err := func() error {
-				if err := (validate.Int{
-					MinSet:        true,
-					Min:           1,
-					MaxSet:        false,
-					Max:           0,
-					MinExclusive:  false,
-					MaxExclusive:  false,
-					MultipleOfSet: false,
-					MultipleOf:    0,
-					Pattern:       nil,
-				}).Validate(int64(params.Number)); err != nil {
-					return errors.Wrap(err, "int")
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		} else {
-			return validate.ErrFieldRequired
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "number",
 			In:   "path",
 			Err:  err,
 		}
@@ -2760,230 +2428,6 @@ func decodeCreateProjectParams(args [0]string, argsEscaped bool, r *http.Request
 		return params, &ogenerrors.DecodeParamError{
 			Name: "Idempotency-Key",
 			In:   "header",
-			Err:  err,
-		}
-	}
-	return params, nil
-}
-
-// CreateProjectCriterionParams is parameters of createProjectCriterion operation.
-type CreateProjectCriterionParams struct {
-	// One quoted positive integer resource version, for example `"3"`.
-	IfMatch string
-	// Required for bearer-authenticated mutations; optional for browser sessions.
-	IdempotencyKey OptString `json:",omitempty,omitzero"`
-	Number         int64
-}
-
-func unpackCreateProjectCriterionParams(packed middleware.Parameters) (params CreateProjectCriterionParams) {
-	{
-		key := middleware.ParameterKey{
-			Name: "If-Match",
-			In:   "header",
-		}
-		params.IfMatch = packed[key].(string)
-	}
-	{
-		key := middleware.ParameterKey{
-			Name: "Idempotency-Key",
-			In:   "header",
-		}
-		if v, ok := packed[key]; ok {
-			params.IdempotencyKey = v.(OptString)
-		}
-	}
-	{
-		key := middleware.ParameterKey{
-			Name: "number",
-			In:   "path",
-		}
-		params.Number = packed[key].(int64)
-	}
-	return params
-}
-
-func decodeCreateProjectCriterionParams(args [1]string, argsEscaped bool, r *http.Request) (params CreateProjectCriterionParams, _ error) {
-	h := uri.NewHeaderDecoder(r.Header)
-	// Decode header: If-Match.
-	if err := func() error {
-		cfg := uri.HeaderParameterDecodingConfig{
-			Name:    "If-Match",
-			Explode: false,
-		}
-		if err := h.HasParam(cfg); err == nil {
-			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
-				val, err := d.DecodeValue()
-				if err != nil {
-					return err
-				}
-
-				c, err := conv.ToString(val)
-				if err != nil {
-					return err
-				}
-
-				params.IfMatch = c
-				return nil
-			}); err != nil {
-				return err
-			}
-			if err := func() error {
-				if err := (validate.String{
-					MinLength:     0,
-					MinLengthSet:  false,
-					MaxLength:     0,
-					MaxLengthSet:  false,
-					Email:         false,
-					Hostname:      false,
-					Regex:         regexMap["^\"[1-9][0-9]*\"$"],
-					MinNumeric:    0,
-					MinNumericSet: false,
-					MaxNumeric:    0,
-					MaxNumericSet: false,
-				}).Validate(string(params.IfMatch)); err != nil {
-					return errors.Wrap(err, "string")
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		} else {
-			return err
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "If-Match",
-			In:   "header",
-			Err:  err,
-		}
-	}
-	// Decode header: Idempotency-Key.
-	if err := func() error {
-		cfg := uri.HeaderParameterDecodingConfig{
-			Name:    "Idempotency-Key",
-			Explode: false,
-		}
-		if err := h.HasParam(cfg); err == nil {
-			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
-				var paramsDotIdempotencyKeyVal string
-				if err := func() error {
-					val, err := d.DecodeValue()
-					if err != nil {
-						return err
-					}
-
-					c, err := conv.ToString(val)
-					if err != nil {
-						return err
-					}
-
-					paramsDotIdempotencyKeyVal = c
-					return nil
-				}(); err != nil {
-					return err
-				}
-				params.IdempotencyKey.SetTo(paramsDotIdempotencyKeyVal)
-				return nil
-			}); err != nil {
-				return err
-			}
-			if err := func() error {
-				if value, ok := params.IdempotencyKey.Get(); ok {
-					if err := func() error {
-						if err := (validate.String{
-							MinLength:     1,
-							MinLengthSet:  true,
-							MaxLength:     128,
-							MaxLengthSet:  true,
-							Email:         false,
-							Hostname:      false,
-							Regex:         regexMap["^[\\x21-\\x7E]+$"],
-							MinNumeric:    0,
-							MinNumericSet: false,
-							MaxNumeric:    0,
-							MaxNumericSet: false,
-						}).Validate(string(value)); err != nil {
-							return errors.Wrap(err, "string")
-						}
-						return nil
-					}(); err != nil {
-						return err
-					}
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "Idempotency-Key",
-			In:   "header",
-			Err:  err,
-		}
-	}
-	// Decode path: number.
-	if err := func() error {
-		param := args[0]
-		if argsEscaped {
-			unescaped, err := url.PathUnescape(args[0])
-			if err != nil {
-				return errors.Wrap(err, "unescape path")
-			}
-			param = unescaped
-		}
-		if len(param) > 0 {
-			d := uri.NewPathDecoder(uri.PathDecoderConfig{
-				Param:   "number",
-				Value:   param,
-				Style:   uri.PathStyleSimple,
-				Explode: false,
-			})
-
-			if err := func() error {
-				val, err := d.DecodeValue()
-				if err != nil {
-					return err
-				}
-
-				c, err := conv.ToInt64(val)
-				if err != nil {
-					return err
-				}
-
-				params.Number = c
-				return nil
-			}(); err != nil {
-				return err
-			}
-			if err := func() error {
-				if err := (validate.Int{
-					MinSet:        true,
-					Min:           1,
-					MaxSet:        false,
-					Max:           0,
-					MinExclusive:  false,
-					MaxExclusive:  false,
-					MultipleOfSet: false,
-					MultipleOf:    0,
-					Pattern:       nil,
-				}).Validate(int64(params.Number)); err != nil {
-					return errors.Wrap(err, "int")
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		} else {
-			return validate.ErrFieldRequired
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "number",
-			In:   "path",
 			Err:  err,
 		}
 	}
@@ -4855,251 +4299,6 @@ func decodeListMilestoneCriteriaParams(args [2]string, argsEscaped bool, r *http
 	return params, nil
 }
 
-// ListProjectCriteriaParams is parameters of listProjectCriteria operation.
-type ListProjectCriteriaParams struct {
-	// Opaque cursor returned by the previous page.
-	Cursor OptString `json:",omitempty,omitzero"`
-	// Page size. Defaults to 50 and is capped at 200.
-	Limit  OptInt `json:",omitempty,omitzero"`
-	Number int64
-}
-
-func unpackListProjectCriteriaParams(packed middleware.Parameters) (params ListProjectCriteriaParams) {
-	{
-		key := middleware.ParameterKey{
-			Name: "cursor",
-			In:   "query",
-		}
-		if v, ok := packed[key]; ok {
-			params.Cursor = v.(OptString)
-		}
-	}
-	{
-		key := middleware.ParameterKey{
-			Name: "limit",
-			In:   "query",
-		}
-		if v, ok := packed[key]; ok {
-			params.Limit = v.(OptInt)
-		}
-	}
-	{
-		key := middleware.ParameterKey{
-			Name: "number",
-			In:   "path",
-		}
-		params.Number = packed[key].(int64)
-	}
-	return params
-}
-
-func decodeListProjectCriteriaParams(args [1]string, argsEscaped bool, r *http.Request) (params ListProjectCriteriaParams, _ error) {
-	q := uri.NewQueryDecoder(r.URL.Query())
-	// Decode query: cursor.
-	if err := func() error {
-		cfg := uri.QueryParameterDecodingConfig{
-			Name:    "cursor",
-			Style:   uri.QueryStyleForm,
-			Explode: true,
-		}
-
-		if err := q.HasParam(cfg); err == nil {
-			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
-				var paramsDotCursorVal string
-				if err := func() error {
-					val, err := d.DecodeValue()
-					if err != nil {
-						return err
-					}
-
-					c, err := conv.ToString(val)
-					if err != nil {
-						return err
-					}
-
-					paramsDotCursorVal = c
-					return nil
-				}(); err != nil {
-					return err
-				}
-				params.Cursor.SetTo(paramsDotCursorVal)
-				return nil
-			}); err != nil {
-				return err
-			}
-			if err := func() error {
-				if value, ok := params.Cursor.Get(); ok {
-					if err := func() error {
-						if err := (validate.String{
-							MinLength:     0,
-							MinLengthSet:  false,
-							MaxLength:     2048,
-							MaxLengthSet:  true,
-							Email:         false,
-							Hostname:      false,
-							Regex:         nil,
-							MinNumeric:    0,
-							MinNumericSet: false,
-							MaxNumeric:    0,
-							MaxNumericSet: false,
-						}).Validate(string(value)); err != nil {
-							return errors.Wrap(err, "string")
-						}
-						return nil
-					}(); err != nil {
-						return err
-					}
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "cursor",
-			In:   "query",
-			Err:  err,
-		}
-	}
-	// Set default value for query: limit.
-	{
-		val := int(50)
-		params.Limit.SetTo(val)
-	}
-	// Decode query: limit.
-	if err := func() error {
-		cfg := uri.QueryParameterDecodingConfig{
-			Name:    "limit",
-			Style:   uri.QueryStyleForm,
-			Explode: true,
-		}
-
-		if err := q.HasParam(cfg); err == nil {
-			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
-				var paramsDotLimitVal int
-				if err := func() error {
-					val, err := d.DecodeValue()
-					if err != nil {
-						return err
-					}
-
-					c, err := conv.ToInt(val)
-					if err != nil {
-						return err
-					}
-
-					paramsDotLimitVal = c
-					return nil
-				}(); err != nil {
-					return err
-				}
-				params.Limit.SetTo(paramsDotLimitVal)
-				return nil
-			}); err != nil {
-				return err
-			}
-			if err := func() error {
-				if value, ok := params.Limit.Get(); ok {
-					if err := func() error {
-						if err := (validate.Int{
-							MinSet:        true,
-							Min:           1,
-							MaxSet:        true,
-							Max:           200,
-							MinExclusive:  false,
-							MaxExclusive:  false,
-							MultipleOfSet: false,
-							MultipleOf:    0,
-							Pattern:       nil,
-						}).Validate(int64(value)); err != nil {
-							return errors.Wrap(err, "int")
-						}
-						return nil
-					}(); err != nil {
-						return err
-					}
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "limit",
-			In:   "query",
-			Err:  err,
-		}
-	}
-	// Decode path: number.
-	if err := func() error {
-		param := args[0]
-		if argsEscaped {
-			unescaped, err := url.PathUnescape(args[0])
-			if err != nil {
-				return errors.Wrap(err, "unescape path")
-			}
-			param = unescaped
-		}
-		if len(param) > 0 {
-			d := uri.NewPathDecoder(uri.PathDecoderConfig{
-				Param:   "number",
-				Value:   param,
-				Style:   uri.PathStyleSimple,
-				Explode: false,
-			})
-
-			if err := func() error {
-				val, err := d.DecodeValue()
-				if err != nil {
-					return err
-				}
-
-				c, err := conv.ToInt64(val)
-				if err != nil {
-					return err
-				}
-
-				params.Number = c
-				return nil
-			}(); err != nil {
-				return err
-			}
-			if err := func() error {
-				if err := (validate.Int{
-					MinSet:        true,
-					Min:           1,
-					MaxSet:        false,
-					Max:           0,
-					MinExclusive:  false,
-					MaxExclusive:  false,
-					MultipleOfSet: false,
-					MultipleOf:    0,
-					Pattern:       nil,
-				}).Validate(int64(params.Number)); err != nil {
-					return errors.Wrap(err, "int")
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		} else {
-			return validate.ErrFieldRequired
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "number",
-			In:   "path",
-			Err:  err,
-		}
-	}
-	return params, nil
-}
-
 // ListProjectsParams is parameters of listProjects operation.
 type ListProjectsParams struct {
 	// Opaque cursor returned by the previous page.
@@ -6090,12 +5289,16 @@ type ListTasksParams struct {
 	Status   []TaskStatus   `json:",omitempty"`
 	Priority []TaskPriority `json:",omitempty"`
 	// User UUID or `none`.
-	Assignee      OptString            `json:",omitempty,omitzero"`
-	Label         []uuid.UUID          `json:",omitempty"`
-	ProjectNumber OptInt64             `json:",omitempty,omitzero"`
-	Archived      OptListTasksArchived `json:",omitempty,omitzero"`
-	Sort          OptListTasksSort     `json:",omitempty,omitzero"`
-	Order         OptListTasksOrder    `json:",omitempty,omitzero"`
+	Assignee      OptString   `json:",omitempty,omitzero"`
+	Label         []uuid.UUID `json:",omitempty"`
+	ProjectNumber OptInt64    `json:",omitempty,omitzero"`
+	MilestoneID   OptUUID     `json:",omitempty,omitzero"`
+	CreatorID     OptUUID     `json:",omitempty,omitzero"`
+	// Return only tasks in a Project backlog.
+	BacklogOnly OptBool              `json:",omitempty,omitzero"`
+	Archived    OptListTasksArchived `json:",omitempty,omitzero"`
+	Sort        OptListTasksSort     `json:",omitempty,omitzero"`
+	Order       OptListTasksOrder    `json:",omitempty,omitzero"`
 }
 
 func unpackListTasksParams(packed middleware.Parameters) (params ListTasksParams) {
@@ -6169,6 +5372,33 @@ func unpackListTasksParams(packed middleware.Parameters) (params ListTasksParams
 		}
 		if v, ok := packed[key]; ok {
 			params.ProjectNumber = v.(OptInt64)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "milestone_id",
+			In:   "query",
+		}
+		if v, ok := packed[key]; ok {
+			params.MilestoneID = v.(OptUUID)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "creator_id",
+			In:   "query",
+		}
+		if v, ok := packed[key]; ok {
+			params.CreatorID = v.(OptUUID)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "backlog_only",
+			In:   "query",
+		}
+		if v, ok := packed[key]; ok {
+			params.BacklogOnly = v.(OptBool)
 		}
 	}
 	{
@@ -6690,6 +5920,134 @@ func decodeListTasksParams(args [0]string, argsEscaped bool, r *http.Request) (p
 			Err:  err,
 		}
 	}
+	// Decode query: milestone_id.
+	if err := func() error {
+		cfg := uri.QueryParameterDecodingConfig{
+			Name:    "milestone_id",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.HasParam(cfg); err == nil {
+			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotMilestoneIDVal uuid.UUID
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToUUID(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotMilestoneIDVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.MilestoneID.SetTo(paramsDotMilestoneIDVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "milestone_id",
+			In:   "query",
+			Err:  err,
+		}
+	}
+	// Decode query: creator_id.
+	if err := func() error {
+		cfg := uri.QueryParameterDecodingConfig{
+			Name:    "creator_id",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.HasParam(cfg); err == nil {
+			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotCreatorIDVal uuid.UUID
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToUUID(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotCreatorIDVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.CreatorID.SetTo(paramsDotCreatorIDVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "creator_id",
+			In:   "query",
+			Err:  err,
+		}
+	}
+	// Set default value for query: backlog_only.
+	{
+		val := bool(false)
+		params.BacklogOnly.SetTo(val)
+	}
+	// Decode query: backlog_only.
+	if err := func() error {
+		cfg := uri.QueryParameterDecodingConfig{
+			Name:    "backlog_only",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.HasParam(cfg); err == nil {
+			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotBacklogOnlyVal bool
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToBool(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotBacklogOnlyVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.BacklogOnly.SetTo(paramsDotBacklogOnlyVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "backlog_only",
+			In:   "query",
+			Err:  err,
+		}
+	}
 	// Set default value for query: archived.
 	{
 		val := ListTasksArchived("exclude")
@@ -7050,230 +6408,6 @@ func decodeListUsersParams(args [0]string, argsEscaped bool, r *http.Request) (p
 	return params, nil
 }
 
-// PauseProjectParams is parameters of pauseProject operation.
-type PauseProjectParams struct {
-	// One quoted positive integer resource version, for example `"3"`.
-	IfMatch string
-	// Required for bearer-authenticated mutations; optional for browser sessions.
-	IdempotencyKey OptString `json:",omitempty,omitzero"`
-	Number         int64
-}
-
-func unpackPauseProjectParams(packed middleware.Parameters) (params PauseProjectParams) {
-	{
-		key := middleware.ParameterKey{
-			Name: "If-Match",
-			In:   "header",
-		}
-		params.IfMatch = packed[key].(string)
-	}
-	{
-		key := middleware.ParameterKey{
-			Name: "Idempotency-Key",
-			In:   "header",
-		}
-		if v, ok := packed[key]; ok {
-			params.IdempotencyKey = v.(OptString)
-		}
-	}
-	{
-		key := middleware.ParameterKey{
-			Name: "number",
-			In:   "path",
-		}
-		params.Number = packed[key].(int64)
-	}
-	return params
-}
-
-func decodePauseProjectParams(args [1]string, argsEscaped bool, r *http.Request) (params PauseProjectParams, _ error) {
-	h := uri.NewHeaderDecoder(r.Header)
-	// Decode header: If-Match.
-	if err := func() error {
-		cfg := uri.HeaderParameterDecodingConfig{
-			Name:    "If-Match",
-			Explode: false,
-		}
-		if err := h.HasParam(cfg); err == nil {
-			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
-				val, err := d.DecodeValue()
-				if err != nil {
-					return err
-				}
-
-				c, err := conv.ToString(val)
-				if err != nil {
-					return err
-				}
-
-				params.IfMatch = c
-				return nil
-			}); err != nil {
-				return err
-			}
-			if err := func() error {
-				if err := (validate.String{
-					MinLength:     0,
-					MinLengthSet:  false,
-					MaxLength:     0,
-					MaxLengthSet:  false,
-					Email:         false,
-					Hostname:      false,
-					Regex:         regexMap["^\"[1-9][0-9]*\"$"],
-					MinNumeric:    0,
-					MinNumericSet: false,
-					MaxNumeric:    0,
-					MaxNumericSet: false,
-				}).Validate(string(params.IfMatch)); err != nil {
-					return errors.Wrap(err, "string")
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		} else {
-			return err
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "If-Match",
-			In:   "header",
-			Err:  err,
-		}
-	}
-	// Decode header: Idempotency-Key.
-	if err := func() error {
-		cfg := uri.HeaderParameterDecodingConfig{
-			Name:    "Idempotency-Key",
-			Explode: false,
-		}
-		if err := h.HasParam(cfg); err == nil {
-			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
-				var paramsDotIdempotencyKeyVal string
-				if err := func() error {
-					val, err := d.DecodeValue()
-					if err != nil {
-						return err
-					}
-
-					c, err := conv.ToString(val)
-					if err != nil {
-						return err
-					}
-
-					paramsDotIdempotencyKeyVal = c
-					return nil
-				}(); err != nil {
-					return err
-				}
-				params.IdempotencyKey.SetTo(paramsDotIdempotencyKeyVal)
-				return nil
-			}); err != nil {
-				return err
-			}
-			if err := func() error {
-				if value, ok := params.IdempotencyKey.Get(); ok {
-					if err := func() error {
-						if err := (validate.String{
-							MinLength:     1,
-							MinLengthSet:  true,
-							MaxLength:     128,
-							MaxLengthSet:  true,
-							Email:         false,
-							Hostname:      false,
-							Regex:         regexMap["^[\\x21-\\x7E]+$"],
-							MinNumeric:    0,
-							MinNumericSet: false,
-							MaxNumeric:    0,
-							MaxNumericSet: false,
-						}).Validate(string(value)); err != nil {
-							return errors.Wrap(err, "string")
-						}
-						return nil
-					}(); err != nil {
-						return err
-					}
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "Idempotency-Key",
-			In:   "header",
-			Err:  err,
-		}
-	}
-	// Decode path: number.
-	if err := func() error {
-		param := args[0]
-		if argsEscaped {
-			unescaped, err := url.PathUnescape(args[0])
-			if err != nil {
-				return errors.Wrap(err, "unescape path")
-			}
-			param = unescaped
-		}
-		if len(param) > 0 {
-			d := uri.NewPathDecoder(uri.PathDecoderConfig{
-				Param:   "number",
-				Value:   param,
-				Style:   uri.PathStyleSimple,
-				Explode: false,
-			})
-
-			if err := func() error {
-				val, err := d.DecodeValue()
-				if err != nil {
-					return err
-				}
-
-				c, err := conv.ToInt64(val)
-				if err != nil {
-					return err
-				}
-
-				params.Number = c
-				return nil
-			}(); err != nil {
-				return err
-			}
-			if err := func() error {
-				if err := (validate.Int{
-					MinSet:        true,
-					Min:           1,
-					MaxSet:        false,
-					Max:           0,
-					MinExclusive:  false,
-					MaxExclusive:  false,
-					MultipleOfSet: false,
-					MultipleOf:    0,
-					Pattern:       nil,
-				}).Validate(int64(params.Number)); err != nil {
-					return errors.Wrap(err, "int")
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		} else {
-			return validate.ErrFieldRequired
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "number",
-			In:   "path",
-			Err:  err,
-		}
-	}
-	return params, nil
-}
-
 // ReopenMilestoneParams is parameters of reopenMilestone operation.
 type ReopenMilestoneParams struct {
 	// One quoted positive integer resource version, for example `"3"`.
@@ -7607,230 +6741,6 @@ func decodeReopenMilestoneParams(args [2]string, argsEscaped bool, r *http.Reque
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "id",
-			In:   "path",
-			Err:  err,
-		}
-	}
-	return params, nil
-}
-
-// ReopenProjectParams is parameters of reopenProject operation.
-type ReopenProjectParams struct {
-	// One quoted positive integer resource version, for example `"3"`.
-	IfMatch string
-	// Required for bearer-authenticated mutations; optional for browser sessions.
-	IdempotencyKey OptString `json:",omitempty,omitzero"`
-	Number         int64
-}
-
-func unpackReopenProjectParams(packed middleware.Parameters) (params ReopenProjectParams) {
-	{
-		key := middleware.ParameterKey{
-			Name: "If-Match",
-			In:   "header",
-		}
-		params.IfMatch = packed[key].(string)
-	}
-	{
-		key := middleware.ParameterKey{
-			Name: "Idempotency-Key",
-			In:   "header",
-		}
-		if v, ok := packed[key]; ok {
-			params.IdempotencyKey = v.(OptString)
-		}
-	}
-	{
-		key := middleware.ParameterKey{
-			Name: "number",
-			In:   "path",
-		}
-		params.Number = packed[key].(int64)
-	}
-	return params
-}
-
-func decodeReopenProjectParams(args [1]string, argsEscaped bool, r *http.Request) (params ReopenProjectParams, _ error) {
-	h := uri.NewHeaderDecoder(r.Header)
-	// Decode header: If-Match.
-	if err := func() error {
-		cfg := uri.HeaderParameterDecodingConfig{
-			Name:    "If-Match",
-			Explode: false,
-		}
-		if err := h.HasParam(cfg); err == nil {
-			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
-				val, err := d.DecodeValue()
-				if err != nil {
-					return err
-				}
-
-				c, err := conv.ToString(val)
-				if err != nil {
-					return err
-				}
-
-				params.IfMatch = c
-				return nil
-			}); err != nil {
-				return err
-			}
-			if err := func() error {
-				if err := (validate.String{
-					MinLength:     0,
-					MinLengthSet:  false,
-					MaxLength:     0,
-					MaxLengthSet:  false,
-					Email:         false,
-					Hostname:      false,
-					Regex:         regexMap["^\"[1-9][0-9]*\"$"],
-					MinNumeric:    0,
-					MinNumericSet: false,
-					MaxNumeric:    0,
-					MaxNumericSet: false,
-				}).Validate(string(params.IfMatch)); err != nil {
-					return errors.Wrap(err, "string")
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		} else {
-			return err
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "If-Match",
-			In:   "header",
-			Err:  err,
-		}
-	}
-	// Decode header: Idempotency-Key.
-	if err := func() error {
-		cfg := uri.HeaderParameterDecodingConfig{
-			Name:    "Idempotency-Key",
-			Explode: false,
-		}
-		if err := h.HasParam(cfg); err == nil {
-			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
-				var paramsDotIdempotencyKeyVal string
-				if err := func() error {
-					val, err := d.DecodeValue()
-					if err != nil {
-						return err
-					}
-
-					c, err := conv.ToString(val)
-					if err != nil {
-						return err
-					}
-
-					paramsDotIdempotencyKeyVal = c
-					return nil
-				}(); err != nil {
-					return err
-				}
-				params.IdempotencyKey.SetTo(paramsDotIdempotencyKeyVal)
-				return nil
-			}); err != nil {
-				return err
-			}
-			if err := func() error {
-				if value, ok := params.IdempotencyKey.Get(); ok {
-					if err := func() error {
-						if err := (validate.String{
-							MinLength:     1,
-							MinLengthSet:  true,
-							MaxLength:     128,
-							MaxLengthSet:  true,
-							Email:         false,
-							Hostname:      false,
-							Regex:         regexMap["^[\\x21-\\x7E]+$"],
-							MinNumeric:    0,
-							MinNumericSet: false,
-							MaxNumeric:    0,
-							MaxNumericSet: false,
-						}).Validate(string(value)); err != nil {
-							return errors.Wrap(err, "string")
-						}
-						return nil
-					}(); err != nil {
-						return err
-					}
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "Idempotency-Key",
-			In:   "header",
-			Err:  err,
-		}
-	}
-	// Decode path: number.
-	if err := func() error {
-		param := args[0]
-		if argsEscaped {
-			unescaped, err := url.PathUnescape(args[0])
-			if err != nil {
-				return errors.Wrap(err, "unescape path")
-			}
-			param = unescaped
-		}
-		if len(param) > 0 {
-			d := uri.NewPathDecoder(uri.PathDecoderConfig{
-				Param:   "number",
-				Value:   param,
-				Style:   uri.PathStyleSimple,
-				Explode: false,
-			})
-
-			if err := func() error {
-				val, err := d.DecodeValue()
-				if err != nil {
-					return err
-				}
-
-				c, err := conv.ToInt64(val)
-				if err != nil {
-					return err
-				}
-
-				params.Number = c
-				return nil
-			}(); err != nil {
-				return err
-			}
-			if err := func() error {
-				if err := (validate.Int{
-					MinSet:        true,
-					Min:           1,
-					MaxSet:        false,
-					Max:           0,
-					MinExclusive:  false,
-					MaxExclusive:  false,
-					MultipleOfSet: false,
-					MultipleOf:    0,
-					Pattern:       nil,
-				}).Validate(int64(params.Number)); err != nil {
-					return errors.Wrap(err, "int")
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		} else {
-			return validate.ErrFieldRequired
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "number",
 			In:   "path",
 			Err:  err,
 		}

@@ -32,35 +32,35 @@ func TestTaskListFiltersByStatusPriorityAssigneeAndLabel(t *testing.T) {
 	cleanupLabel(t, db, chore.ID)
 
 	// Target: status=in_progress, priority=high, assignee=userC, label=feature.
-	target := mustCreateTask(t, ts, domain.Task{
+	target := mustCreateTask(t, db, ts, domain.Task{
 		Title: marker + " target", CreatorID: userA, Status: domain.TaskStatusInProgress,
 		Priority: domain.TaskPriorityHigh, AssigneeID: &userC,
 	}, []uuid.UUID{feature.ID})
 	cleanupTask(t, db, target.Task.ID)
 
 	// Decoy: matches everything except status.
-	decoyStatus := mustCreateTask(t, ts, domain.Task{
+	decoyStatus := mustCreateTask(t, db, ts, domain.Task{
 		Title: marker + " decoy-status", CreatorID: userA, Status: domain.TaskStatusTodo,
 		Priority: domain.TaskPriorityHigh, AssigneeID: &userC,
 	}, []uuid.UUID{feature.ID})
 	cleanupTask(t, db, decoyStatus.Task.ID)
 
 	// Decoy: matches everything except priority.
-	decoyPriority := mustCreateTask(t, ts, domain.Task{
+	decoyPriority := mustCreateTask(t, db, ts, domain.Task{
 		Title: marker + " decoy-priority", CreatorID: userA, Status: domain.TaskStatusInProgress,
 		Priority: domain.TaskPriorityLow, AssigneeID: &userC,
 	}, []uuid.UUID{feature.ID})
 	cleanupTask(t, db, decoyPriority.Task.ID)
 
 	// Decoy: matches everything except assignee.
-	decoyAssignee := mustCreateTask(t, ts, domain.Task{
+	decoyAssignee := mustCreateTask(t, db, ts, domain.Task{
 		Title: marker + " decoy-assignee", CreatorID: userA, Status: domain.TaskStatusInProgress,
 		Priority: domain.TaskPriorityHigh, AssigneeID: &userD,
 	}, []uuid.UUID{feature.ID})
 	cleanupTask(t, db, decoyAssignee.Task.ID)
 
 	// Decoy: matches everything except label.
-	decoyLabel := mustCreateTask(t, ts, domain.Task{
+	decoyLabel := mustCreateTask(t, db, ts, domain.Task{
 		Title: marker + " decoy-label", CreatorID: userA, Status: domain.TaskStatusInProgress,
 		Priority: domain.TaskPriorityHigh, AssigneeID: &userC,
 	}, []uuid.UUID{chore.ID})
@@ -68,7 +68,7 @@ func TestTaskListFiltersByStatusPriorityAssigneeAndLabel(t *testing.T) {
 
 	// Unassigned task matching status+priority+label must still survive
 	// every filter that doesn't constrain assignee.
-	unassigned := mustCreateTask(t, ts, domain.Task{
+	unassigned := mustCreateTask(t, db, ts, domain.Task{
 		Title: marker + " unassigned", CreatorID: userA, Status: domain.TaskStatusInProgress,
 		Priority: domain.TaskPriorityHigh,
 	}, []uuid.UUID{feature.ID})
@@ -125,13 +125,13 @@ func TestTaskListSearchMatchesTitleOrDescriptionOnly(t *testing.T) {
 
 	marker := "searchtok-" + uuid.NewString()[:8]
 
-	titleMatch := mustCreateTask(t, ts, domain.Task{Title: "Fix the " + marker + " bug", CreatorID: userA}, nil)
+	titleMatch := mustCreateTask(t, db, ts, domain.Task{Title: "Fix the " + marker + " bug", CreatorID: userA}, nil)
 	cleanupTask(t, db, titleMatch.Task.ID)
 
-	descMatch := mustCreateTask(t, ts, domain.Task{Title: "Unrelated title", Description: "root cause is " + marker, CreatorID: userA}, nil)
+	descMatch := mustCreateTask(t, db, ts, domain.Task{Title: "Unrelated title", Description: "root cause is " + marker, CreatorID: userA}, nil)
 	cleanupTask(t, db, descMatch.Task.ID)
 
-	decoy := mustCreateTask(t, ts, domain.Task{Title: "Totally unrelated", Description: "nothing to see here", CreatorID: userA}, nil)
+	decoy := mustCreateTask(t, db, ts, domain.Task{Title: "Totally unrelated", Description: "nothing to see here", CreatorID: userA}, nil)
 	cleanupTask(t, db, decoy.Task.ID)
 
 	res, err := ts.List(ctx, store.TaskListFilter{Search: marker, Archived: "all", Limit: 50})
@@ -149,9 +149,9 @@ func TestTaskListArchivedDefaultExcludesAndFilterIncludes(t *testing.T) {
 
 	marker := "archfilter-" + uuid.NewString()
 
-	active := mustCreateTask(t, ts, domain.Task{Title: marker + " active", CreatorID: userA}, nil)
+	active := mustCreateTask(t, db, ts, domain.Task{Title: marker + " active", CreatorID: userA}, nil)
 	cleanupTask(t, db, active.Task.ID)
-	archived := mustCreateTask(t, ts, domain.Task{Title: marker + " archived", CreatorID: userA}, nil)
+	archived := mustCreateTask(t, db, ts, domain.Task{Title: marker + " archived", CreatorID: userA}, nil)
 	cleanupTask(t, db, archived.Task.ID)
 	_, err := ts.SetArchived(ctx, archived.Task.Number, true, userA)
 	require.NoError(t, err)
@@ -182,7 +182,7 @@ func TestTaskListPaginationBoundary(t *testing.T) {
 	marker := "pagebound-" + uuid.NewString()
 	var created []uuid.UUID
 	for i := 0; i < 5; i++ {
-		out := mustCreateTask(t, ts, domain.Task{Title: marker, CreatorID: userA}, nil)
+		out := mustCreateTask(t, db, ts, domain.Task{Title: marker, CreatorID: userA}, nil)
 		cleanupTask(t, db, out.Task.ID)
 		created = append(created, out.Task.ID)
 	}
@@ -223,11 +223,11 @@ func TestTaskListSortByDueDatePutsUnsetDatesLast(t *testing.T) {
 	early := mustParseDate(t, "2026-08-01")
 	late := mustParseDate(t, "2026-09-01")
 
-	taskEarly := mustCreateTask(t, ts, domain.Task{Title: marker, CreatorID: userA, DueDate: &early}, nil)
+	taskEarly := mustCreateTask(t, db, ts, domain.Task{Title: marker, CreatorID: userA, DueDate: &early}, nil)
 	cleanupTask(t, db, taskEarly.Task.ID)
-	taskLate := mustCreateTask(t, ts, domain.Task{Title: marker, CreatorID: userA, DueDate: &late}, nil)
+	taskLate := mustCreateTask(t, db, ts, domain.Task{Title: marker, CreatorID: userA, DueDate: &late}, nil)
 	cleanupTask(t, db, taskLate.Task.ID)
-	taskNone := mustCreateTask(t, ts, domain.Task{Title: marker, CreatorID: userA}, nil)
+	taskNone := mustCreateTask(t, db, ts, domain.Task{Title: marker, CreatorID: userA}, nil)
 	cleanupTask(t, db, taskNone.Task.ID)
 
 	asc, err := ts.List(ctx, store.TaskListFilter{Search: marker, Sort: "due_date", Order: "asc", Limit: 50})
@@ -251,11 +251,11 @@ func TestTaskListSortByPriorityUsesSeverityRankNotAlphabeticalOrder(t *testing.T
 	ctx := context.Background()
 
 	marker := "priosort-" + uuid.NewString()
-	low := mustCreateTask(t, ts, domain.Task{Title: marker, CreatorID: userA, Priority: domain.TaskPriorityLow}, nil)
+	low := mustCreateTask(t, db, ts, domain.Task{Title: marker, CreatorID: userA, Priority: domain.TaskPriorityLow}, nil)
 	cleanupTask(t, db, low.Task.ID)
-	urgent := mustCreateTask(t, ts, domain.Task{Title: marker, CreatorID: userA, Priority: domain.TaskPriorityUrgent}, nil)
+	urgent := mustCreateTask(t, db, ts, domain.Task{Title: marker, CreatorID: userA, Priority: domain.TaskPriorityUrgent}, nil)
 	cleanupTask(t, db, urgent.Task.ID)
-	medium := mustCreateTask(t, ts, domain.Task{Title: marker, CreatorID: userA, Priority: domain.TaskPriorityMedium}, nil)
+	medium := mustCreateTask(t, db, ts, domain.Task{Title: marker, CreatorID: userA, Priority: domain.TaskPriorityMedium}, nil)
 	cleanupTask(t, db, medium.Task.ID)
 
 	res, err := ts.List(ctx, store.TaskListFilter{Search: marker, Sort: "priority", Order: "desc", Limit: 50})

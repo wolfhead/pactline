@@ -22,7 +22,7 @@ func scanMilestone(s scanner) (domain.Milestone, error) {
 	err := s.Scan(
 		&milestone.ID, &milestone.ProjectID, &milestone.Version,
 		&milestone.Name, &milestone.Outcome,
-		&milestone.Description, &milestone.Status, &milestone.TargetDate,
+		&milestone.Description, &milestone.OwnerID, &milestone.Status, &milestone.TargetDate,
 		&milestone.Position, &milestone.CompletedAt, &milestone.CancelledAt,
 		&milestone.CreatedAt, &milestone.UpdatedAt,
 	)
@@ -32,7 +32,7 @@ func scanMilestone(s scanner) (domain.Milestone, error) {
 	return milestone, nil
 }
 
-const milestoneColumns = `id, project_id, version, name, outcome, description, status,
+const milestoneColumns = `id, project_id, version, name, outcome, description, owner_id, status,
 	target_date, position, completed_at, cancelled_at, created_at, updated_at`
 
 func (s *MilestoneStore) Create(ctx context.Context, milestone domain.Milestone) (domain.Milestone, error) {
@@ -59,7 +59,7 @@ func (s *MilestoneStore) create(
 		milestone.ID = uuid.New()
 	}
 	if milestone.Status == "" {
-		milestone.Status = domain.MilestoneStatusOpen
+		milestone.Status = domain.MilestoneStatusPlanned
 	}
 	if err := milestone.Validate(); err != nil {
 		return domain.Milestone{}, err
@@ -67,11 +67,11 @@ func (s *MilestoneStore) create(
 	if actor == nil {
 		out, err := scanMilestone(s.db.Pool.QueryRow(ctx, `
 			INSERT INTO milestones
-				(id, project_id, name, outcome, description, status, target_date, position)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+				(id, project_id, name, outcome, description, owner_id, status, target_date, position)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 			RETURNING `+milestoneColumns,
 			milestone.ID, milestone.ProjectID, milestone.Name, milestone.Outcome,
-			milestone.Description, milestone.Status, milestone.TargetDate, milestone.Position))
+			milestone.Description, milestone.OwnerID, milestone.Status, milestone.TargetDate, milestone.Position))
 		if err != nil {
 			return domain.Milestone{}, mapPgError(err)
 		}
@@ -84,17 +84,17 @@ func (s *MilestoneStore) create(
 	defer tx.Rollback(ctx) //nolint:errcheck
 	out, err := scanMilestone(tx.QueryRow(ctx, `
 		INSERT INTO milestones
-			(id, project_id, name, outcome, description, status, target_date, position)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+			(id, project_id, name, outcome, description, owner_id, status, target_date, position)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 		RETURNING `+milestoneColumns,
 		milestone.ID, milestone.ProjectID, milestone.Name, milestone.Outcome,
-		milestone.Description, milestone.Status, milestone.TargetDate, milestone.Position))
+		milestone.Description, milestone.OwnerID, milestone.Status, milestone.TargetDate, milestone.Position))
 	if err != nil {
 		return domain.Milestone{}, mapPgError(err)
 	}
 	newValue, _ := json.Marshal(map[string]any{
 		"project_id": out.ProjectID, "name": out.Name, "outcome": out.Outcome,
-		"description": out.Description, "status": out.Status,
+		"description": out.Description, "owner_id": out.OwnerID, "status": out.Status,
 		"target_date": out.TargetDate, "position": out.Position,
 	})
 	if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
@@ -142,6 +142,7 @@ type MilestonePatch struct {
 	Name          *string
 	Outcome       *string
 	Description   *string
+	OwnerID       *uuid.UUID
 	TargetDateSet bool
 	TargetDate    *time.Time
 	Position      *int
@@ -192,6 +193,9 @@ func (s *MilestoneStore) UpdateWithOperation(
 	if patch.Description != nil {
 		current.Description = *patch.Description
 	}
+	if patch.OwnerID != nil {
+		current.OwnerID = *patch.OwnerID
+	}
 	if patch.TargetDateSet {
 		current.TargetDate = patch.TargetDate
 	}
@@ -203,10 +207,10 @@ func (s *MilestoneStore) UpdateWithOperation(
 	}
 	tag, err := tx.Exec(ctx, `
 		UPDATE milestones SET name=$3, outcome=$4, description=$5,
-			target_date=$6, position=$7, updated_at=now()
+			owner_id=$6, target_date=$7, position=$8, updated_at=now()
 		WHERE project_id=$1 AND id=$2`,
 		projectID, milestoneID, current.Name, current.Outcome, current.Description,
-		current.TargetDate, current.Position)
+		current.OwnerID, current.TargetDate, current.Position)
 	if err != nil {
 		return domain.Milestone{}, mapPgError(err)
 	}
@@ -215,6 +219,7 @@ func (s *MilestoneStore) UpdateWithOperation(
 	}
 	if old.Name != current.Name || old.Outcome != current.Outcome ||
 		old.Description != current.Description ||
+		old.OwnerID != current.OwnerID ||
 		datePtrString(old.TargetDate) != datePtrString(current.TargetDate) ||
 		old.Position != current.Position {
 		_, err = tx.Exec(ctx, `
@@ -230,11 +235,11 @@ func (s *MilestoneStore) UpdateWithOperation(
 	}
 	oldValue, _ := json.Marshal(map[string]any{
 		"name": old.Name, "outcome": old.Outcome, "description": old.Description,
-		"target_date": old.TargetDate, "position": old.Position,
+		"owner_id": old.OwnerID, "target_date": old.TargetDate, "position": old.Position,
 	})
 	newValue, _ := json.Marshal(map[string]any{
 		"name": current.Name, "outcome": current.Outcome, "description": current.Description,
-		"target_date": current.TargetDate, "position": current.Position,
+		"owner_id": current.OwnerID, "target_date": current.TargetDate, "position": current.Position,
 	})
 	if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
 		OccurredAt: time.Now().UTC(), Actor: actor, EntityType: "milestone",
@@ -251,6 +256,7 @@ func (s *MilestoneStore) UpdateWithOperation(
 type MilestoneLifecycleAction string
 
 const (
+	MilestoneActionActivate MilestoneLifecycleAction = "milestone_activated"
 	MilestoneActionComplete MilestoneLifecycleAction = "milestone_completed"
 	MilestoneActionCancel   MilestoneLifecycleAction = "milestone_cancelled"
 	MilestoneActionReopen   MilestoneLifecycleAction = "milestone_reopened"
@@ -313,6 +319,8 @@ func (s *MilestoneStore) ApplyLifecycleWithOperation(
 	}
 	oldStatus := milestone.Status
 	switch action {
+	case MilestoneActionActivate:
+		err = milestone.Activate(readiness)
 	case MilestoneActionComplete:
 		err = milestone.Complete(readiness)
 	case MilestoneActionCancel:

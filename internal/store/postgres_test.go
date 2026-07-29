@@ -158,6 +158,135 @@ func migrationsBeforeInvitationAuthorizationVersion(t *testing.T) fstest.MapFS {
 	return out
 }
 
+func migrationsBeforeProjectFirst(t *testing.T) fstest.MapFS {
+	t.Helper()
+	out := fstest.MapFS{}
+	for _, name := range embeddedMigrationNames(t) {
+		if name >= "0013_" {
+			continue
+		}
+		body, err := fs.ReadFile(bountyboard.MigrationFS, "migrations/"+name)
+		require.NoError(t, err)
+		out["migrations/"+name] = &fstest.MapFile{Data: body}
+	}
+	return out
+}
+
+func TestProjectFirstMigrationCutsOverLegacyWork(t *testing.T) {
+	ctx := context.Background()
+	dsn := createThrowawayDatabase(t, testDSN(t))
+	db, err := store.Connect(ctx, dsn)
+	require.NoError(t, err)
+	defer db.Close()
+
+	require.NoError(t, db.Migrate(ctx, migrationsBeforeProjectFirst(t)))
+	_, err = db.Pool.Exec(ctx, `
+		INSERT INTO projects (id,name,outcome,description,owner_id,creator_id,status)
+		VALUES (
+			'10000000-0000-0000-0000-000000000001',
+			'Existing',
+			'Ship it',
+			'',
+			$1,
+			$1,
+			'active'
+		)`,
+		primarySeedID)
+	require.NoError(t, err)
+	_, err = db.Pool.Exec(ctx, `
+		INSERT INTO milestones (id,project_id,name,outcome,description,status,position)
+		VALUES (
+			'20000000-0000-0000-0000-000000000001',
+			'10000000-0000-0000-0000-000000000001',
+			'Legacy milestone',
+			'Deliver it',
+			'',
+			'open',
+			0
+		)`)
+	require.NoError(t, err)
+	_, err = db.Pool.Exec(ctx, `
+		INSERT INTO tasks (id,title,status,priority,creator_id)
+		VALUES (
+			'30000000-0000-0000-0000-000000000001',
+			'Legacy projectless task',
+			'todo',
+			'none',
+			$1
+		)`,
+		primarySeedID)
+	require.NoError(t, err)
+	_, err = db.Pool.Exec(ctx, `
+		INSERT INTO acceptance_criteria
+			(id,project_id,criterion,verification_instructions,position)
+		VALUES (
+			'40000000-0000-0000-0000-000000000001',
+			'10000000-0000-0000-0000-000000000001',
+			'Legacy project criterion',
+			'Check it',
+			0
+		)`)
+	require.NoError(t, err)
+	_, err = db.Pool.Exec(ctx, `
+		INSERT INTO acceptance_checks
+			(id,criterion_id,criterion_revision,outcome,evidence,checker_type,checked_by_user_id)
+		VALUES (
+			'50000000-0000-0000-0000-000000000001',
+			'40000000-0000-0000-0000-000000000001',
+			1,
+			'passed',
+			'Verified',
+			'user',
+			$1
+		)`,
+		primarySeedID)
+	require.NoError(t, err)
+
+	require.NoError(t, db.Migrate(ctx, bountyboard.MigrationFS))
+
+	var migratedProjectName string
+	require.NoError(t, db.Pool.QueryRow(ctx, `
+		SELECT project.name
+		FROM tasks AS task
+		JOIN projects AS project ON project.id = task.project_id
+		WHERE task.id = '30000000-0000-0000-0000-000000000001'`).
+		Scan(&migratedProjectName))
+	require.Equal(t, "待整理", migratedProjectName)
+
+	var milestoneStatus string
+	var milestoneOwner uuid.UUID
+	require.NoError(t, db.Pool.QueryRow(ctx, `
+		SELECT status, owner_id
+		FROM milestones
+		WHERE id = '20000000-0000-0000-0000-000000000001'`).
+		Scan(&milestoneStatus, &milestoneOwner))
+	require.Equal(t, "active", milestoneStatus)
+	require.Equal(t, primarySeedID, milestoneOwner)
+
+	var projectCriterionCount int
+	require.NoError(t, db.Pool.QueryRow(ctx,
+		`SELECT count(*) FROM acceptance_criteria WHERE milestone_id IS NULL AND task_id IS NULL`).
+		Scan(&projectCriterionCount))
+	require.Zero(t, projectCriterionCount)
+
+	var projectIDNullable string
+	require.NoError(t, db.Pool.QueryRow(ctx, `
+		SELECT is_nullable
+		FROM information_schema.columns
+		WHERE table_name = 'tasks' AND column_name = 'project_id'`).
+		Scan(&projectIDNullable))
+	require.Equal(t, "NO", projectIDNullable)
+
+	var legacyProjectColumnCount int
+	require.NoError(t, db.Pool.QueryRow(ctx, `
+		SELECT count(*)
+		FROM information_schema.columns
+		WHERE table_name = 'projects'
+		  AND column_name IN ('outcome','status','target_date','completed_at','cancelled_at')`).
+		Scan(&legacyProjectColumnCount))
+	require.Zero(t, legacyProjectColumnCount)
+}
+
 func TestInvitationAuthorizationVersionMigration(t *testing.T) {
 	ctx := context.Background()
 	dsn := createThrowawayDatabase(t, testDSN(t))

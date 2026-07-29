@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Plus } from 'lucide-react'
 import { createTask } from '../../api/tasks'
+import { listProjects, type Project } from '../../api/projects'
 import { useIdentity } from '../../identity'
 import type { Task } from '../../task-types'
 
@@ -27,42 +28,76 @@ const InlineCreate = forwardRef<InlineCreateHandle, InlineCreateProps>(function 
   const [title, setTitle] = useState('')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
+  const [projects, setProjects] = useState<Project[]>([])
+  const [projectsLoaded, setProjectsLoaded] = useState(false)
+  const [projectNumber, setProjectNumber] = useState<number>(() => {
+    const stored = window.localStorage.getItem('task-capture-project')
+    return stored ? Number(stored) : 0
+  })
   const inputRef = useRef<HTMLInputElement>(null)
-  // Set right before setPending(false) and consumed by the effect below —
-  // see that effect's comment for why a synchronous .focus() here doesn't
-  // work.
-  const refocusPendingRef = useRef(false)
+  const focusRequestedRef = useRef(false)
 
   useImperativeHandle(ref, () => ({
-    focus: () => inputRef.current?.focus(),
+    focus: () => {
+      focusRequestedRef.current = true
+      if (!inputRef.current?.disabled) {
+        focusRequestedRef.current = false
+        inputRef.current?.focus()
+      }
+    },
   }))
 
-  // Re-focuses the input once React has actually committed `disabled` back
-  // to false. Calling .focus() synchronously in submit()'s `finally` block
-  // targets an element that is, at that instant, still disabled (setPending
-  // only *schedules* the re-render) — a silent no-op in every real browser.
-  // Waiting for this effect to run after the `pending` commit is what makes
-  // the input genuinely focusable again.
+  // A focus request can arrive while Projects are still loading or while a
+  // task submission has disabled the input. Keep the request until React has
+  // committed a genuinely focusable input instead of dropping the user's
+  // click as a silent browser no-op.
   useEffect(() => {
-    if (!pending && refocusPendingRef.current) {
-      refocusPendingRef.current = false
+    if (
+      focusRequestedRef.current
+      && !pending
+      && !isReadOnly
+      && projectsLoaded
+      && projects.length > 0
+    ) {
+      focusRequestedRef.current = false
       inputRef.current?.focus()
     }
-  }, [pending])
+  }, [isReadOnly, pending, projects.length, projectsLoaded])
+
+  useEffect(() => {
+    let cancelled = false
+    listProjects()
+      .then((items) => {
+        if (cancelled) return
+        setProjects(items)
+        if (!items.some((project) => project.number === projectNumber) && items[0]) {
+          setProjectNumber(items[0].number)
+          window.localStorage.setItem('task-capture-project', String(items[0].number))
+        }
+      })
+      .catch((reason) => setError(String((reason as Error).message)))
+      .finally(() => {
+        if (!cancelled) setProjectsLoaded(true)
+      })
+    return () => { cancelled = true }
+    // Project selection is initialized once. Subsequent selection changes are
+    // local state and must not refetch the entire navigation catalog.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function submit() {
     const trimmed = title.trim()
-    if (!trimmed || pending) return
+    if (!trimmed || pending || !projectNumber) return
     setPending(true)
     setError('')
     try {
-      const created = await createTask({ title: trimmed })
+      const created = await createTask({ title: trimmed, project_number: projectNumber })
       onCreated(created)
       setTitle('')
     } catch (err) {
       setError(String((err as Error).message))
     } finally {
-      refocusPendingRef.current = true
+      focusRequestedRef.current = true
       setPending(false)
     }
   }
@@ -99,8 +134,21 @@ const InlineCreate = forwardRef<InlineCreateHandle, InlineCreateProps>(function 
         onKeyDown={handleKeyDown}
         placeholder="输入标题，回车创建任务…"
         aria-label="新建任务"
-        disabled={pending || isReadOnly}
+        disabled={pending || isReadOnly || !projectsLoaded || projects.length === 0}
       />
+      <select
+        aria-label="所属项目"
+        value={projectNumber || ''}
+        onChange={(event) => {
+          const value = Number(event.target.value)
+          setProjectNumber(value)
+          window.localStorage.setItem('task-capture-project', String(value))
+        }}
+        disabled={pending || isReadOnly || !projectsLoaded || projects.length === 0}
+        className="max-w-40 border-0 bg-transparent text-xs text-fg-muted outline-none"
+      >
+        {projects.map((project) => <option key={project.id} value={project.number}>{project.name}</option>)}
+      </select>
       {error && <span className="shrink-0 text-xs text-danger">{error}</span>}
     </form>
   )

@@ -16,7 +16,7 @@ func TestCommentCreateListAndOnlyAuthorMayEditOrDelete(t *testing.T) {
 	cs := store.NewCommentStore(db)
 	ctx := context.Background()
 
-	task := mustCreateTask(t, ts, domain.Task{Title: "Commented task", CreatorID: userA}, nil)
+	task := mustCreateTask(t, db, ts, domain.Task{Title: "Commented task", CreatorID: userA}, nil)
 	cleanupTask(t, db, task.Task.ID)
 
 	c, err := cs.Create(ctx, task.Task.ID, userC, "first remark")
@@ -58,7 +58,7 @@ func TestCommentCreateRejectsBlankBody(t *testing.T) {
 	cs := store.NewCommentStore(db)
 	ctx := context.Background()
 
-	task := mustCreateTask(t, ts, domain.Task{Title: "x", CreatorID: userA}, nil)
+	task := mustCreateTask(t, db, ts, domain.Task{Title: "x", CreatorID: userA}, nil)
 	cleanupTask(t, db, task.Task.ID)
 
 	_, err := cs.Create(ctx, task.Task.ID, userA, "   ")
@@ -75,9 +75,9 @@ func TestCommentUpdateWrongTaskIDReturnsNotFound(t *testing.T) {
 	cs := store.NewCommentStore(db)
 	ctx := context.Background()
 
-	taskOne := mustCreateTask(t, ts, domain.Task{Title: "one", CreatorID: userA}, nil)
+	taskOne := mustCreateTask(t, db, ts, domain.Task{Title: "one", CreatorID: userA}, nil)
 	cleanupTask(t, db, taskOne.Task.ID)
-	taskTwo := mustCreateTask(t, ts, domain.Task{Title: "two", CreatorID: userA}, nil)
+	taskTwo := mustCreateTask(t, db, ts, domain.Task{Title: "two", CreatorID: userA}, nil)
 	cleanupTask(t, db, taskTwo.Task.ID)
 
 	c, err := cs.Create(ctx, taskOne.Task.ID, userA, "belongs to task one")

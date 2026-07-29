@@ -245,12 +245,17 @@ func cleanupProjectRows(t *testing.T, db *store.DB, projectID uuid.UUID) {
 		statements := []string{
 			`DELETE FROM acceptance_checks WHERE criterion_id IN (
 				SELECT id FROM acceptance_criteria
-				WHERE project_id=$1 OR milestone_id IN (SELECT id FROM milestones WHERE project_id=$1)
+				WHERE milestone_id IN (SELECT id FROM milestones WHERE project_id=$1)
+				   OR task_id IN (SELECT id FROM tasks WHERE project_id=$1)
 			)`,
 			`DELETE FROM acceptance_criteria
-			 WHERE project_id=$1 OR milestone_id IN (SELECT id FROM milestones WHERE project_id=$1)`,
+			 WHERE milestone_id IN (SELECT id FROM milestones WHERE project_id=$1)
+			    OR task_id IN (SELECT id FROM tasks WHERE project_id=$1)`,
+			`DELETE FROM task_labels WHERE task_id IN (SELECT id FROM tasks WHERE project_id=$1)`,
+			`DELETE FROM task_comments WHERE task_id IN (SELECT id FROM tasks WHERE project_id=$1)`,
+			`DELETE FROM task_activity WHERE task_id IN (SELECT id FROM tasks WHERE project_id=$1)`,
 			`DELETE FROM project_activity WHERE project_id=$1`,
-			`UPDATE tasks SET project_id=NULL, milestone_id=NULL WHERE project_id=$1`,
+			`DELETE FROM tasks WHERE project_id=$1`,
 			`DELETE FROM milestones WHERE project_id=$1`,
 			`DELETE FROM projects WHERE id=$1`,
 		}
@@ -259,4 +264,17 @@ func cleanupProjectRows(t *testing.T, db *store.DB, projectID uuid.UUID) {
 			require.NoError(t, err)
 		}
 	})
+}
+
+func activeProjectNumber(t *testing.T, db *store.DB) int64 {
+	t.Helper()
+	var number int64
+	err := db.Pool.QueryRow(context.Background(), `
+		SELECT number
+		FROM projects
+		WHERE archived_at IS NULL
+		ORDER BY CASE WHEN name='待整理' THEN 0 ELSE 1 END, number
+		LIMIT 1`).Scan(&number)
+	require.NoError(t, err)
+	return number
 }

@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import NavSidebar from './NavSidebar'
 
 const BOTTOM_TABS = [
-  { to: '/tasks', label: '列表', icon: LayoutList, end: false },
+  { to: '/tasks', label: '我的工作', icon: LayoutList, end: false },
   { to: '/projects', label: '项目', icon: FolderKanban, end: false },
 ] as const
 

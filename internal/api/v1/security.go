@@ -3,9 +3,11 @@ package v1
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"bountyboard/internal/access"
 	generated "bountyboard/internal/api/v1generated"
+	"bountyboard/internal/domain"
 	"bountyboard/internal/identity"
 
 	"github.com/ogen-go/ogen/ogenerrors"
@@ -61,7 +63,6 @@ func requiredScope(operation generated.OperationName) access.Scope {
 		generated.GetTaskOperation,
 		generated.ListLabelsOperation,
 		generated.ListMilestoneCriteriaOperation,
-		generated.ListProjectCriteriaOperation,
 		generated.ListProjectsOperation,
 		generated.ListTaskActivityOperation,
 		generated.ListTaskCommentsOperation,
@@ -72,4 +73,15 @@ func requiredScope(operation generated.OperationName) access.Scope {
 	default:
 		return access.ScopeWorkWrite
 	}
+}
+
+func requireAdministrator(ctx context.Context) error {
+	current, ok := identity.FromContext(ctx)
+	if !ok {
+		return ErrAuthenticationRequired
+	}
+	if !current.Subject.Active || current.Subject.PlatformRole != domain.PlatformRoleAdmin {
+		return fmt.Errorf("%w: Administrator access is required", domain.ErrForbidden)
+	}
+	return nil
 }

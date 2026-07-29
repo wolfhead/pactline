@@ -18,12 +18,11 @@ export default function ActivityLog({ task }: ActivityLogProps) {
 
   // Fetches whenever the task changes, is mutated, or identity changes,
   // guarded against out-of-order resolution — mirrors the cancelled-flag
-  // idiom in identity.tsx / WorkFeed.tsx. `task.updated_at` (not
-  // just `task.number`) is a dependency because every server-confirmed
-  // mutation (status, priority, assignee, due date, labels, title,
-  // description, archive/restore — see task_store.go's `updated_at=now()`
-  // on each of those) bumps it, so an on-page change re-triggers this fetch
-  // without polling or refetching on every unrelated render.
+  // idiom in identity.tsx / WorkFeed.tsx. `task.version` (not
+  // `task.updated_at`) is the mutation signal because API timestamps are
+  // serialized to seconds and two confirmed writes can share one timestamp.
+  // Every versioned task mutation increments version, so each on-page change
+  // re-triggers this fetch without polling.
   useEffect(() => {
     let cancelled = false
     listActivity(task.number)
@@ -38,7 +37,7 @@ export default function ActivityLog({ task }: ActivityLogProps) {
     return () => {
       cancelled = true
     }
-  }, [task.number, task.updated_at, me?.id])
+  }, [task.number, task.version, me?.id])
 
   // Assignee/actor activity entries carry bare user UUIDs (see
   // activity-prose.ts); resolve names from the active-user roster, filling

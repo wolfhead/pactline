@@ -38,7 +38,7 @@ describe('AppShell', () => {
   it('keeps the task navigation active while a task detail is open', () => {
     setWidth(1280)
     renderShell('/tasks/678')
-    expect(screen.getByRole('link', { name: '列表' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: '我的工作' })).toHaveAttribute('aria-current', 'page')
   })
 
   it('collapses navigation into a drawer below lg', () => {

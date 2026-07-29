@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import { useIdentity } from '@/identity'
 
 const DEVELOPMENT_USERS = [
@@ -13,12 +13,14 @@ const DEVELOPMENT_USERS = [
 
 export default function LoginPage() {
   const { status, loginForDevelopment } = useIdentity()
+  const location = useLocation()
   const [userID, setUserID] = useState(DEVELOPMENT_USERS[0].id)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
   const development = import.meta.env.VITE_AUTH_PROVIDER === 'development'
 
-  if (status === 'authenticated') return <Navigate to="/" replace />
+  const from = (location.state as { from?: string } | null)?.from
+  if (status === 'authenticated') return <Navigate to={from || '/'} replace />
 
   async function loginDevelopment() {
     setPending(true)

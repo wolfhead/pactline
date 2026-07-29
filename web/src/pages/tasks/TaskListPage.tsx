@@ -46,6 +46,7 @@ export default function TaskListPage() {
   const [error, setError] = useState('')
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({})
   const [reloadToken, setReloadToken] = useState(0)
+  const [ownershipView, setOwnershipView] = useState<'assigned' | 'created'>('assigned')
 
   // Held so both the "＋ 新建任务" filter-bar button and the focusCreate
   // navigation state (below) can jump focus into the capture row without it
@@ -70,7 +71,10 @@ export default function TaskListPage() {
     }
   }, [me?.id])
 
-  const queryKey = useMemo(() => JSON.stringify(filters), [filters])
+  const queryKey = useMemo(
+    () => JSON.stringify({ filters, ownershipView }),
+    [filters, ownershipView],
+  )
 
   // Whether any filter/search narrows the list — sort/order never do, so
   // they're excluded. Distinguishes "genuinely no tasks yet" from "filters
@@ -98,6 +102,9 @@ export default function TaskListPage() {
     setError('')
     let cancelled = false
     listTasks({
+      ...(ownershipView === 'assigned'
+        ? { assignee: me?.id }
+        : { creator_id: me?.id }),
       status: filters.statuses,
       priority: filters.priorities,
       assignee: filters.assignee || undefined,
@@ -145,6 +152,9 @@ export default function TaskListPage() {
     setLoadingMore(true)
     try {
       const res = await listTasks({
+        ...(ownershipView === 'assigned'
+          ? { assignee: me?.id }
+          : { creator_id: me?.id }),
         status: filters.statuses,
         priority: filters.priorities,
         assignee: filters.assignee || undefined,
@@ -294,7 +304,25 @@ export default function TaskListPage() {
           {/* mb-2 is stated here because nothing else supplies it: this
               wrapper declares no gap, and preflight zeroes heading margins.
               Without it the heading sits flush on top of the capture row. */}
-          <h2 className="mb-2 text-sm font-semibold text-fg">任务列表</h2>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold text-fg">我的工作</h2>
+            <div className="flex rounded-md bg-surface-subtle p-0.5 text-xs">
+              <button
+                type="button"
+                onClick={() => setOwnershipView('assigned')}
+                className={ownershipView === 'assigned' ? 'rounded bg-surface px-2 py-1 font-medium shadow-sm' : 'px-2 py-1 text-fg-muted'}
+              >
+                分配给我
+              </button>
+              <button
+                type="button"
+                onClick={() => setOwnershipView('created')}
+                className={ownershipView === 'created' ? 'rounded bg-surface px-2 py-1 font-medium shadow-sm' : 'px-2 py-1 text-fg-muted'}
+              >
+                我创建的
+              </button>
+            </div>
+          </div>
           <InlineCreate ref={createRef} onCreated={handleCreated} />
           <FilterBar
             filters={filters}

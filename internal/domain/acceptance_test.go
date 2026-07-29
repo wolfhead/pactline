@@ -10,13 +10,11 @@ import (
 )
 
 func TestAcceptanceCriterionHasExactlyOneOwner(t *testing.T) {
-	projectID := uuid.New()
 	milestoneID := uuid.New()
 	taskID := uuid.New()
 	for _, criterion := range []domain.AcceptanceCriterion{
 		{Criterion: "Observable", VerificationInstructions: "Run the check"},
-		{ProjectID: &projectID, MilestoneID: &milestoneID, Criterion: "Observable", VerificationInstructions: "Run the check"},
-		{ProjectID: &projectID, TaskID: &taskID, Criterion: "Observable", VerificationInstructions: "Run the check"},
+		{MilestoneID: &milestoneID, TaskID: &taskID, Criterion: "Observable", VerificationInstructions: "Run the check"},
 	} {
 		if err := criterion.Validate(); !errors.Is(err, domain.ErrInvalidInput) {
 			t.Fatalf("Validate() error = %v, want ErrInvalidInput", err)
@@ -24,7 +22,6 @@ func TestAcceptanceCriterionHasExactlyOneOwner(t *testing.T) {
 	}
 
 	for _, criterion := range []domain.AcceptanceCriterion{
-		{ProjectID: &projectID, Criterion: "Observable", VerificationInstructions: "Run the check", Revision: 1},
 		{MilestoneID: &milestoneID, Criterion: "Observable", VerificationInstructions: "Run the check", Revision: 1},
 		{TaskID: &taskID, Criterion: "Observable", VerificationInstructions: "Run the check", Revision: 1},
 	} {
@@ -35,9 +32,9 @@ func TestAcceptanceCriterionHasExactlyOneOwner(t *testing.T) {
 }
 
 func TestAcceptanceCriterionSemanticEditAdvancesRevision(t *testing.T) {
-	projectID := uuid.New()
+	taskID := uuid.New()
 	criterion := domain.AcceptanceCriterion{
-		ProjectID:                &projectID,
+		TaskID:                   &taskID,
 		Criterion:                "Latency is below 250ms",
 		VerificationInstructions: "Run the benchmark",
 		Revision:                 1,

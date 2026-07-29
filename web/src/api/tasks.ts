@@ -31,6 +31,10 @@ export interface TaskListParams {
   cursor?: string
   limit?: number
   archived?: string
+  project_number?: number
+  milestone_id?: string
+  creator_id?: string
+  backlog_only?: boolean
 }
 
 function buildTaskQuery(params: TaskListParams): string {
@@ -45,6 +49,10 @@ function buildTaskQuery(params: TaskListParams): string {
   if (params.cursor) sp.set('cursor', params.cursor)
   if (params.limit) sp.set('limit', String(params.limit))
   if (params.archived) sp.set('archived', params.archived)
+  if (params.project_number) sp.set('project_number', String(params.project_number))
+  if (params.milestone_id) sp.set('milestone_id', params.milestone_id)
+  if (params.creator_id) sp.set('creator_id', params.creator_id)
+  if (params.backlog_only) sp.set('backlog_only', 'true')
   return sp.toString()
 }
 

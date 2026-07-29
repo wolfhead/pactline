@@ -21,7 +21,6 @@ type ProjectService struct {
 type ProjectDetail struct {
 	Project           store.ProjectWithRelations
 	Milestones        []domain.Milestone
-	ProjectCriteria   []store.CriterionWithCurrentCheck
 	MilestoneCriteria map[uuid.UUID][]store.CriterionWithCurrentCheck
 	Tasks             []store.TaskWithRelations
 	Activity          []domain.ProjectActivity
@@ -36,10 +35,6 @@ func (s *ProjectService) GetDetail(ctx context.Context, number int64) (ProjectDe
 	if err != nil {
 		return ProjectDetail{}, err
 	}
-	projectCriteria, err := s.Acceptance.ListForProject(ctx, project.Project.ID)
-	if err != nil {
-		return ProjectDetail{}, err
-	}
 	milestoneCriteria := make(map[uuid.UUID][]store.CriterionWithCurrentCheck, len(milestones))
 	for _, milestone := range milestones {
 		criteria, err := s.Acceptance.ListForMilestone(ctx, milestone.ID)
@@ -48,15 +43,25 @@ func (s *ProjectService) GetDetail(ctx context.Context, number int64) (ProjectDe
 		}
 		milestoneCriteria[milestone.ID] = criteria
 	}
-	taskResult, err := s.Tasks.List(ctx, store.TaskListFilter{
-		ProjectID: &project.Project.ID,
-		Archived:  "all",
-		Sort:      "number",
-		Order:     "asc",
-		Limit:     200,
-	})
-	if err != nil {
-		return ProjectDetail{}, err
+	tasks := make([]store.TaskWithRelations, 0, 200)
+	cursor := ""
+	for {
+		taskResult, err := s.Tasks.List(ctx, store.TaskListFilter{
+			ProjectID: &project.Project.ID,
+			Archived:  "all",
+			Sort:      "number",
+			Order:     "asc",
+			Cursor:    cursor,
+			Limit:     200,
+		})
+		if err != nil {
+			return ProjectDetail{}, err
+		}
+		tasks = append(tasks, taskResult.Items...)
+		if !taskResult.HasMore {
+			break
+		}
+		cursor = taskResult.NextCursor
 	}
 	activity, err := s.Projects.ListActivity(ctx, project.Project.ID)
 	if err != nil {
@@ -65,9 +70,8 @@ func (s *ProjectService) GetDetail(ctx context.Context, number int64) (ProjectDe
 	return ProjectDetail{
 		Project:           project,
 		Milestones:        milestones,
-		ProjectCriteria:   projectCriteria,
 		MilestoneCriteria: milestoneCriteria,
-		Tasks:             taskResult.Items,
+		Tasks:             tasks,
 		Activity:          activity,
 	}, nil
 }
@@ -76,31 +80,28 @@ func (s *ProjectService) ResolveTaskAssociation(
 	ctx context.Context,
 	projectNumber *int64,
 	milestoneID *uuid.UUID,
-) (*uuid.UUID, *uuid.UUID, error) {
+) (uuid.UUID, *uuid.UUID, error) {
 	if projectNumber == nil {
-		if milestoneID != nil {
-			return nil, nil, fmt.Errorf("%w: a milestone requires a project", domain.ErrInvalidInput)
-		}
-		return nil, nil, nil
+		return uuid.Nil, nil, fmt.Errorf("%w: task project is required", domain.ErrInvalidInput)
 	}
 	project, err := s.Projects.GetByNumber(ctx, *projectNumber)
 	if err != nil {
-		return nil, nil, err
+		return uuid.Nil, nil, err
 	}
-	if project.Project.Status == domain.ProjectStatusCompleted || project.Project.Status == domain.ProjectStatusCancelled {
-		return nil, nil, fmt.Errorf("%w: concluded projects cannot accept task associations", domain.ErrConflict)
+	if project.Project.ArchivedAt != nil {
+		return uuid.Nil, nil, fmt.Errorf("%w: archived Projects cannot accept task associations", domain.ErrConflict)
 	}
 	projectID := project.Project.ID
 	if milestoneID != nil {
 		belongs, err := s.Milestones.BelongsToProject(ctx, *milestoneID, projectID)
 		if err != nil {
-			return nil, nil, fmt.Errorf("validate milestone project: %w", err)
+			return uuid.Nil, nil, fmt.Errorf("validate milestone project: %w", err)
 		}
 		if !belongs {
-			return nil, nil, fmt.Errorf("%w: milestone does not belong to project", domain.ErrInvalidInput)
+			return uuid.Nil, nil, fmt.Errorf("%w: milestone does not belong to project", domain.ErrInvalidInput)
 		}
 	}
-	return &projectID, milestoneID, nil
+	return projectID, milestoneID, nil
 }
 
 func (s *ProjectService) ApplyProjectLifecycle(
@@ -138,7 +139,7 @@ func (s *ProjectService) ApplyProjectLifecycleWithOperation(
 		slog.Warn("project lifecycle rejected", "project_number", number, "action", action, "error", err)
 		return store.ProjectWithRelations{}, err
 	}
-	slog.Info("project lifecycle applied", "project_number", number, "action", action, "status", project.Project.Status)
+	slog.Info("Project archive action applied", "project_number", number, "action", action, "archived", project.Project.ArchivedAt != nil)
 	return project, nil
 }
 

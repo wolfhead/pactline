@@ -95,24 +95,20 @@ func (s *Server) Handler(r *http.Request) (http.Handler, string) {
 
 func operationRequiresIfMatch(operationID string) bool {
 	switch operationID {
-	case "archiveProject",
+	case "activateMilestone",
+		"archiveProject",
 		"archiveTask",
 		"cancelMilestone",
-		"cancelProject",
 		"completeMilestone",
-		"completeProject",
 		"createAcceptanceCheck",
 		"createMilestone",
 		"createMilestoneCriterion",
-		"createProjectCriterion",
 		"createTaskComment",
 		"createTaskCriterion",
 		"deleteCriterion",
 		"deleteLabel",
 		"deleteTaskComment",
-		"pauseProject",
 		"reopenMilestone",
-		"reopenProject",
 		"restoreProject",
 		"restoreTask",
 		"updateCriterion",
@@ -129,7 +125,8 @@ func operationRequiresIfMatch(operationID string) bool {
 
 func operationRequiresProjectIfMatch(operationID string) bool {
 	switch operationID {
-	case "cancelMilestone",
+	case "activateMilestone",
+		"cancelMilestone",
 		"completeMilestone",
 		"createMilestoneCriterion",
 		"reopenMilestone",

@@ -50,8 +50,23 @@ func cleanupLabel(t *testing.T, db *store.DB, id uuid.UUID) {
 	})
 }
 
-func mustCreateTask(t *testing.T, ts *store.TaskStore, task domain.Task, labelIDs []uuid.UUID) store.TaskWithRelations {
+func mustCreateTask(
+	t *testing.T,
+	db *store.DB,
+	ts *store.TaskStore,
+	task domain.Task,
+	labelIDs []uuid.UUID,
+) store.TaskWithRelations {
 	t.Helper()
+	if task.ProjectID == uuid.Nil {
+		err := db.Pool.QueryRow(context.Background(), `
+			SELECT id
+			FROM projects
+			WHERE archived_at IS NULL
+			ORDER BY CASE WHEN name='待整理' THEN 0 ELSE 1 END, number
+			LIMIT 1`).Scan(&task.ProjectID)
+		require.NoError(t, err, "task test fixture requires an active Project")
+	}
 	out, err := ts.Create(context.Background(), task, labelIDs)
 	require.NoError(t, err)
 	return out
@@ -71,7 +86,7 @@ func TestTaskCreateDefaultsToTodoAndNone(t *testing.T) {
 	db := newTestDB(t)
 	ts := store.NewTaskStore(db)
 
-	out := mustCreateTask(t, ts, domain.Task{Title: "Write onboarding doc", CreatorID: userA}, nil)
+	out := mustCreateTask(t, db, ts, domain.Task{Title: "Write onboarding doc", CreatorID: userA}, nil)
 	cleanupTask(t, db, out.Task.ID)
 
 	require.Equal(t, domain.TaskStatusTodo, out.Task.Status)
@@ -92,13 +107,13 @@ func TestTaskNumberIsSequentialAndNeverReusedAfterArchive(t *testing.T) {
 	ts := store.NewTaskStore(db)
 	ctx := context.Background()
 
-	first := mustCreateTask(t, ts, domain.Task{Title: "First task", CreatorID: userA}, nil)
+	first := mustCreateTask(t, db, ts, domain.Task{Title: "First task", CreatorID: userA}, nil)
 	cleanupTask(t, db, first.Task.ID)
 
 	_, err := ts.SetArchived(ctx, first.Task.Number, true, userA)
 	require.NoError(t, err)
 
-	second := mustCreateTask(t, ts, domain.Task{Title: "Second task", CreatorID: userA}, nil)
+	second := mustCreateTask(t, db, ts, domain.Task{Title: "Second task", CreatorID: userA}, nil)
 	cleanupTask(t, db, second.Task.ID)
 
 	require.Greater(t, second.Task.Number, first.Task.Number,
@@ -143,7 +158,7 @@ func TestTaskCreateWritesCreatedActivity(t *testing.T) {
 	ts := store.NewTaskStore(db)
 	ctx := context.Background()
 
-	out := mustCreateTask(t, ts, domain.Task{Title: "Task with activity", CreatorID: userB}, nil)
+	out := mustCreateTask(t, db, ts, domain.Task{Title: "Task with activity", CreatorID: userB}, nil)
 	cleanupTask(t, db, out.Task.ID)
 
 	entries, err := ts.ListActivity(ctx, out.Task.ID)
@@ -163,7 +178,7 @@ func TestTaskUpdateAppliesOnlyProvidedFields(t *testing.T) {
 	ts := store.NewTaskStore(db)
 	ctx := context.Background()
 
-	out := mustCreateTask(t, ts, domain.Task{
+	out := mustCreateTask(t, db, ts, domain.Task{
 		Title: "Original title", Description: "Original description", CreatorID: userA,
 	}, nil)
 	cleanupTask(t, db, out.Task.ID)
@@ -192,7 +207,7 @@ func TestTaskUpdateAssigneeExplicitNullVsAbsent(t *testing.T) {
 	ts := store.NewTaskStore(db)
 	ctx := context.Background()
 
-	out := mustCreateTask(t, ts, domain.Task{Title: "Assign me", CreatorID: userA, AssigneeID: &userC}, nil)
+	out := mustCreateTask(t, db, ts, domain.Task{Title: "Assign me", CreatorID: userA, AssigneeID: &userC}, nil)
 	cleanupTask(t, db, out.Task.ID)
 	require.NotNil(t, out.Assignee)
 
@@ -231,7 +246,7 @@ func TestTaskUpdateStatusToDoneSetsCompletedAtAndClearingReverts(t *testing.T) {
 	ts := store.NewTaskStore(db)
 	ctx := context.Background()
 
-	out := mustCreateTask(t, ts, domain.Task{Title: "Ship it", CreatorID: userA, Status: domain.TaskStatusInProgress}, nil)
+	out := mustCreateTask(t, db, ts, domain.Task{Title: "Ship it", CreatorID: userA, Status: domain.TaskStatusInProgress}, nil)
 	cleanupTask(t, db, out.Task.ID)
 	require.Nil(t, out.Task.CompletedAt)
 
@@ -258,7 +273,7 @@ func TestTaskCompletionRequiresCurrentAcceptanceChecks(t *testing.T) {
 	acceptance := store.NewAcceptanceStore(db)
 	ctx := context.Background()
 
-	task := mustCreateTask(t, tasks, domain.Task{
+	task := mustCreateTask(t, db, tasks, domain.Task{
 		Title: "Verify completion gate", CreatorID: userA, Status: domain.TaskStatusInReview,
 	}, nil)
 	cleanupTask(t, db, task.Task.ID)
@@ -305,7 +320,7 @@ func TestTaskUpdateResendingSameValueWritesNoActivity(t *testing.T) {
 	ts := store.NewTaskStore(db)
 	ctx := context.Background()
 
-	out := mustCreateTask(t, ts, domain.Task{Title: "No-op patch", CreatorID: userA, Status: domain.TaskStatusTodo}, nil)
+	out := mustCreateTask(t, db, ts, domain.Task{Title: "No-op patch", CreatorID: userA, Status: domain.TaskStatusTodo}, nil)
 	cleanupTask(t, db, out.Task.ID)
 
 	same := domain.TaskStatusTodo
@@ -329,7 +344,7 @@ func TestTaskUpdateRejectsUnknownStatus(t *testing.T) {
 	db := newTestDB(t)
 	ts := store.NewTaskStore(db)
 	ctx := context.Background()
-	out := mustCreateTask(t, ts, domain.Task{Title: "x", CreatorID: userA}, nil)
+	out := mustCreateTask(t, db, ts, domain.Task{Title: "x", CreatorID: userA}, nil)
 	cleanupTask(t, db, out.Task.ID)
 
 	bad := domain.TaskStatus("nope")
@@ -345,7 +360,7 @@ func TestTaskArchiveAndRestoreRoundTripWithActivity(t *testing.T) {
 	ts := store.NewTaskStore(db)
 	ctx := context.Background()
 
-	out := mustCreateTask(t, ts, domain.Task{Title: "Archive me", CreatorID: userA, Status: domain.TaskStatusInProgress}, nil)
+	out := mustCreateTask(t, db, ts, domain.Task{Title: "Archive me", CreatorID: userA, Status: domain.TaskStatusInProgress}, nil)
 	cleanupTask(t, db, out.Task.ID)
 
 	archived, err := ts.SetArchived(ctx, out.Task.Number, true, userB)
@@ -400,7 +415,7 @@ func TestTaskUpdateLabelsWritesLabelsActivity(t *testing.T) {
 	require.NoError(t, err)
 	cleanupLabel(t, db, urgent.ID)
 
-	out := mustCreateTask(t, ts, domain.Task{Title: "Labeled task", CreatorID: userA}, []uuid.UUID{bug.ID})
+	out := mustCreateTask(t, db, ts, domain.Task{Title: "Labeled task", CreatorID: userA}, []uuid.UUID{bug.ID})
 	cleanupTask(t, db, out.Task.ID)
 	require.Len(t, out.Labels, 1)
 

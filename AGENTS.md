@@ -96,9 +96,17 @@ production `X-User-Id` fallback.
   to any other valid status. Entering `done` is the sole readiness gate: a task
   with no active acceptance criteria completes directly; otherwise every
   active criterion's current revision must be `passed` or human-`waived`.
-- Projects, milestones, and tasks share the same revisioned
-  `AcceptanceCriterion` and immutable `AcceptanceCheck` entities. A criterion
-  has exactly one owner scope.
+- A Project is a long-lived workspace, not a delivery lifecycle. It has no
+  status, outcome, target date, or acceptance criteria. Administrator-only
+  archive/restore controls visibility; archiving requires no active/planned
+  milestones and no unfinished tasks.
+- Every task belongs to exactly one Project. A task without a Milestone belongs
+  to that Project's Backlog; the Project association cannot be cleared.
+- Milestones and tasks share the revisioned `AcceptanceCriterion` and immutable
+  `AcceptanceCheck` entities. A criterion has exactly one owner scope.
+- Milestones are owned delivery windows with
+  `planned | active | completed | cancelled` lifecycle states. Multiple
+  milestones may be active in one Project.
 - Priorities are labels, not scheduling constraints.
 - Tasks are archived/restored, never hard-deleted. Their sequential numbers are
   stable and never reused.

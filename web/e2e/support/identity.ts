@@ -17,5 +17,5 @@ export async function switchIdentity(page: Page, _userId: string): Promise<void>
   await expect(userSelect).toBeVisible()
   await userSelect.selectOption(USERS.sponsorA.id)
   await page.getByRole('button', { name: 'Development 登录' }).click()
-  await expect(page).toHaveURL(/\/tasks$/)
+  await expect(logout).toBeVisible()
 }

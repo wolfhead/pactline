@@ -21,22 +21,20 @@ afterEach(() => {
 beforeEach(() => {
   vi.mocked(projectsApi.listProjects).mockResolvedValue([{
     id: 'p1', number: 12, version: 1, name: 'Launch project surface',
-    outcome: 'Teams can manage delivery outcomes', description: '',
+    description: 'Teams can manage long-lived work',
     owner: { id: 'u1', name: 'Alex', email: 'a@example.com' },
     creator: { id: 'u1', name: 'Alex', email: 'a@example.com' },
-    status: 'active', target_date: null, completed_at: null, cancelled_at: null,
     archived_at: null, created_at: '', updated_at: '', completed_tasks: 3,
-    eligible_tasks: 4, active_criteria: 2, satisfied_criteria: 1,
+    eligible_tasks: 4,
   }])
 })
 
 describe('ProjectListPage', () => {
-  it('shows outcome, ownership, task progress, and acceptance readiness', async () => {
+  it('shows durable Project context, ownership, and task counts', async () => {
     render(<MemoryRouter><ProjectListPage /></MemoryRouter>)
     expect(await screen.findByText('Launch project surface')).toBeVisible()
-    expect(screen.getByText('Teams can manage delivery outcomes')).toBeVisible()
+    expect(screen.getByText('Teams can manage long-lived work')).toBeVisible()
     expect(screen.getByText('负责人：Alex')).toBeVisible()
-    expect(screen.getByText('任务进度：75%')).toBeVisible()
-    expect(screen.getByText('验收：1/2')).toBeVisible()
+    expect(screen.getByText('任务：3/4')).toBeVisible()
   })
 })

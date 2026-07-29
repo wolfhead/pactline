@@ -16,19 +16,19 @@ type v1ProjectJSON struct {
 	ID      uuid.UUID `json:"id"`
 	Number  int64     `json:"number"`
 	Version int64     `json:"version"`
-	Status  string    `json:"status"`
 }
 
 type v1ProjectDetailJSON struct {
-	Project            v1ProjectJSON     `json:"project"`
-	AcceptanceCriteria []v1CriterionJSON `json:"acceptance_criteria"`
-	Milestones         []v1MilestoneJSON `json:"milestones"`
+	Project    v1ProjectJSON     `json:"project"`
+	Milestones []v1MilestoneJSON `json:"milestones"`
 }
 
 type v1MilestoneJSON struct {
 	ID                 uuid.UUID         `json:"id"`
 	Version            int64             `json:"version"`
 	Name               string            `json:"name"`
+	Status             string            `json:"status"`
+	OwnerID            uuid.UUID         `json:"owner_id"`
 	AcceptanceCriteria []v1CriterionJSON `json:"acceptance_criteria"`
 }
 
@@ -45,12 +45,39 @@ type v1AcceptanceCheckJSON struct {
 	CheckerType string    `json:"checker_type"`
 }
 
+func TestV1ProjectAdministrationRejectsMember(t *testing.T) {
+	handler, db := newTaskTestServer(t)
+
+	memberCreate := do(t, handler, http.MethodPost, "/api/v1/projects", userB, map[string]any{
+		"name": "Member-owned Project attempt", "owner_id": userB,
+	})
+	require.Equal(t, http.StatusForbidden, memberCreate.Code, memberCreate.Body.String())
+
+	createdProject := do(t, handler, http.MethodPost, "/api/v1/projects", userA, map[string]any{
+		"name": "Admin-controlled Project", "owner_id": userA,
+	})
+	require.Equal(t, http.StatusCreated, createdProject.Code, createdProject.Body.String())
+	var project v1ProjectJSON
+	decodeJSON(t, createdProject, &project)
+	cleanupProjectRows(t, db, project.ID)
+
+	memberArchive := doWithHeaders(
+		t,
+		handler,
+		http.MethodPost,
+		fmt.Sprintf("/api/v1/projects/%d/archive", project.Number),
+		userB,
+		http.Header{"If-Match": {`"1"`}},
+		nil,
+	)
+	require.Equal(t, http.StatusForbidden, memberArchive.Code, memberArchive.Body.String())
+}
+
 func TestV1ProjectMilestoneAndAcceptanceVersions(t *testing.T) {
 	handler, db := newTaskTestServer(t)
 
 	createdProject := do(t, handler, http.MethodPost, "/api/v1/projects", userA, map[string]any{
-		"name": "Versioned project", "outcome": "Aggregate mutations are safe",
-		"owner_id": userA,
+		"name": "Versioned Project", "owner_id": userA,
 	})
 	require.Equal(t, http.StatusCreated, createdProject.Code, createdProject.Body.String())
 	require.Equal(t, `"1"`, createdProject.Header().Get("ETag"))
@@ -59,62 +86,26 @@ func TestV1ProjectMilestoneAndAcceptanceVersions(t *testing.T) {
 	cleanupProjectRows(t, db, project.ID)
 	projectPath := "/api/v1/projects/" + strconv.FormatInt(project.Number, 10)
 
-	createdProjectCriterion := doWithHeaders(
-		t, handler, http.MethodPost, projectPath+"/criteria", userA,
-		http.Header{"If-Match": {`"1"`}},
-		map[string]any{
-			"criterion":                 "The aggregate workflow passes",
-			"verification_instructions": "Run the versioned project transport test",
-			"position":                  0,
-		},
-	)
-	require.Equal(
-		t, http.StatusCreated, createdProjectCriterion.Code,
-		createdProjectCriterion.Body.String(),
-	)
-	require.Equal(t, `"1"`, createdProjectCriterion.Header().Get("ETag"))
-	var projectCriterion v1CriterionJSON
-	decodeJSON(t, createdProjectCriterion, &projectCriterion)
-
-	projectAfterCriterion := do(t, handler, http.MethodGet, projectPath, userA, nil)
-	require.Equal(t, http.StatusOK, projectAfterCriterion.Code, projectAfterCriterion.Body.String())
-	require.Equal(t, `"2"`, projectAfterCriterion.Header().Get("ETag"))
-
-	staleCriterionCreate := doWithHeaders(
-		t, handler, http.MethodPost, projectPath+"/criteria", userA,
-		http.Header{"If-Match": {`"1"`}},
-		map[string]any{
-			"criterion":                 "Stale criterion",
-			"verification_instructions": "This must not be created",
-			"position":                  1,
-		},
-	)
-	assertVersionConflict(t, staleCriterionCreate, 2)
-
-	activated := doWithHeaders(
-		t, handler, http.MethodPost, projectPath+"/activate", userA,
-		http.Header{"If-Match": {`"2"`}}, nil,
-	)
-	require.Equal(t, http.StatusOK, activated.Code, activated.Body.String())
-	require.Equal(t, `"3"`, activated.Header().Get("ETag"))
-
 	createdMilestone := doWithHeaders(
 		t, handler, http.MethodPost, projectPath+"/milestones", userA,
-		http.Header{"If-Match": {`"3"`}},
+		http.Header{"If-Match": {`"1"`}},
 		map[string]any{
-			"name": "Transport ready", "outcome": "The transport is verified", "position": 0,
+			"name": "Transport ready", "outcome": "The transport is verified",
+			"owner_id": userA, "position": 0,
 		},
 	)
 	require.Equal(t, http.StatusCreated, createdMilestone.Code, createdMilestone.Body.String())
 	require.Equal(t, `"1"`, createdMilestone.Header().Get("ETag"))
 	var milestone v1MilestoneJSON
 	decodeJSON(t, createdMilestone, &milestone)
+	require.Equal(t, "planned", milestone.Status)
+	require.Equal(t, uuid.MustParse(userA), milestone.OwnerID)
 	milestonePath := fmt.Sprintf("%s/milestones/%s", projectPath, milestone.ID)
 
 	missingProjectPrecondition := doWithHeaders(
 		t, handler, http.MethodPatch, milestonePath, userA,
 		http.Header{"If-Match": {`"1"`}},
-		map[string]any{"name": "Missing project ETag"},
+		map[string]any{"name": "Missing Project ETag"},
 	)
 	require.Equal(t, http.StatusPreconditionRequired, missingProjectPrecondition.Code)
 	var missingProblem baseapi.Problem
@@ -125,7 +116,7 @@ func TestV1ProjectMilestoneAndAcceptanceVersions(t *testing.T) {
 		t, handler, http.MethodPatch, milestonePath, userA,
 		http.Header{
 			"If-Match":           {`"1"`},
-			"X-Project-If-Match": {`"4"`},
+			"X-Project-If-Match": {`"2"`},
 		},
 		map[string]any{"name": "Transport verified"},
 	)
@@ -136,11 +127,11 @@ func TestV1ProjectMilestoneAndAcceptanceVersions(t *testing.T) {
 		t, handler, http.MethodPost, milestonePath+"/criteria", userA,
 		http.Header{
 			"If-Match":           {`"2"`},
-			"X-Project-If-Match": {`"5"`},
+			"X-Project-If-Match": {`"3"`},
 		},
 		map[string]any{
 			"criterion":                 "Milestone API is verified",
-			"verification_instructions": "Run the project API test",
+			"verification_instructions": "Run the Project API test",
 			"position":                  0,
 		},
 	)
@@ -151,18 +142,36 @@ func TestV1ProjectMilestoneAndAcceptanceVersions(t *testing.T) {
 	var milestoneCriterion v1CriterionJSON
 	decodeJSON(t, createdMilestoneCriterion, &milestoneCriterion)
 
+	missingActivationPrecondition := doWithHeaders(
+		t, handler, http.MethodPost, milestonePath+"/activate", userA,
+		http.Header{"If-Match": {`"3"`}}, nil,
+	)
+	require.Equal(t, http.StatusPreconditionRequired, missingActivationPrecondition.Code)
+	decodeJSON(t, missingActivationPrecondition, &missingProblem)
+	require.Equal(t, "PRECONDITION_REQUIRED", missingProblem.Code)
+
+	activated := doWithHeaders(
+		t, handler, http.MethodPost, milestonePath+"/activate", userA,
+		http.Header{
+			"If-Match":           {`"3"`},
+			"X-Project-If-Match": {`"4"`},
+		}, nil,
+	)
+	require.Equal(t, http.StatusOK, activated.Code, activated.Body.String())
+	require.Equal(t, `"4"`, activated.Header().Get("ETag"))
+
 	projectDetail := do(t, handler, http.MethodGet, projectPath, userA, nil)
 	require.Equal(t, http.StatusOK, projectDetail.Code, projectDetail.Body.String())
-	require.Equal(t, `"6"`, projectDetail.Header().Get("ETag"))
+	require.Equal(t, `"5"`, projectDetail.Header().Get("ETag"))
 	var detail v1ProjectDetailJSON
 	decodeJSON(t, projectDetail, &detail)
-	require.Len(t, detail.AcceptanceCriteria, 1)
 	require.Len(t, detail.Milestones, 1)
-	require.Equal(t, int64(3), detail.Milestones[0].Version)
+	require.Equal(t, "active", detail.Milestones[0].Status)
 	require.Len(t, detail.Milestones[0].AcceptanceCriteria, 1)
 
 	taskCreated := do(t, handler, http.MethodPost, "/api/v1/tasks", userA, map[string]any{
-		"title": "Verify versioned criteria",
+		"title": "Verify versioned criteria", "project_number": project.Number,
+		"milestone_id": milestone.ID,
 	})
 	require.Equal(t, http.StatusCreated, taskCreated.Code, taskCreated.Body.String())
 	var task v1TaskJSON
@@ -183,9 +192,6 @@ func TestV1ProjectMilestoneAndAcceptanceVersions(t *testing.T) {
 	var taskCriterion v1CriterionJSON
 	decodeJSON(t, createdTaskCriterion, &taskCriterion)
 
-	taskAfterCriterion := do(t, handler, http.MethodGet, taskPath, userA, nil)
-	require.Equal(t, `"2"`, taskAfterCriterion.Header().Get("ETag"))
-
 	createdCheck := doWithHeaders(
 		t, handler, http.MethodPost,
 		"/api/v1/criteria/"+taskCriterion.ID.String()+"/checks", userA,
@@ -201,9 +207,6 @@ func TestV1ProjectMilestoneAndAcceptanceVersions(t *testing.T) {
 	require.Equal(t, "passed", check.Outcome)
 	require.Equal(t, "user", check.CheckerType)
 
-	taskAfterCheck := do(t, handler, http.MethodGet, taskPath, userA, nil)
-	require.Equal(t, `"3"`, taskAfterCheck.Header().Get("ETag"))
-
 	criteriaList := do(t, handler, http.MethodGet, taskPath+"/criteria", userA, nil)
 	require.Equal(t, http.StatusOK, criteriaList.Code, criteriaList.Body.String())
 	var criteria struct {
@@ -214,26 +217,4 @@ func TestV1ProjectMilestoneAndAcceptanceVersions(t *testing.T) {
 	require.Equal(t, int64(2), criteria.Items[0].Version)
 	require.NotNil(t, criteria.Items[0].CurrentCheck)
 	require.Equal(t, check.ID, criteria.Items[0].CurrentCheck.ID)
-
-	updatedCriterion := doWithHeaders(
-		t, handler, http.MethodPatch, "/api/v1/criteria/"+taskCriterion.ID.String(), userA,
-		http.Header{"If-Match": {`"2"`}},
-		map[string]any{"position": 2},
-	)
-	require.Equal(t, http.StatusOK, updatedCriterion.Code, updatedCriterion.Body.String())
-	decodeJSON(t, updatedCriterion, &taskCriterion)
-	require.Equal(t, int64(3), taskCriterion.Version)
-	require.Equal(t, 1, taskCriterion.Revision)
-
-	textUpdatedCriterion := doWithHeaders(
-		t, handler, http.MethodPatch, "/api/v1/criteria/"+taskCriterion.ID.String(), userA,
-		http.Header{"If-Match": {`"3"`}},
-		map[string]any{"criterion": "Task behavior and evidence are verified"},
-	)
-	require.Equal(
-		t, http.StatusOK, textUpdatedCriterion.Code, textUpdatedCriterion.Body.String(),
-	)
-	decodeJSON(t, textUpdatedCriterion, &taskCriterion)
-	require.Equal(t, int64(4), taskCriterion.Version)
-	require.Equal(t, 2, taskCriterion.Revision)
 }

@@ -18,12 +18,16 @@ import (
 )
 
 type recordingAccessAuditStore struct {
-	event access.RequestAuditEvent
-	err   error
+	event       access.RequestAuditEvent
+	contextErr  error
+	hasDeadline bool
+	err         error
 }
 
-func (s *recordingAccessAuditStore) RecordAccessAudit(_ context.Context, event access.RequestAuditEvent) error {
+func (s *recordingAccessAuditStore) RecordAccessAudit(ctx context.Context, event access.RequestAuditEvent) error {
 	s.event = event
+	s.contextErr = ctx.Err()
+	_, s.hasDeadline = ctx.Deadline()
 	return s.err
 }
 
@@ -73,9 +77,31 @@ func TestAccessAuditRecordsMetadataWithoutRequestSecrets(t *testing.T) {
 	require.Equal(t, int64(response.Body.Len()), audits.event.ResponseBytes)
 	require.Equal(t, "audit-test", audits.event.UserAgent)
 	require.Equal(t, "192.0.2.10", audits.event.NetworkAddress)
+	require.NoError(t, audits.contextErr)
+	require.True(t, audits.hasDeadline)
 	serialized, err := json.Marshal(audits.event)
 	require.NoError(t, err)
 	require.NotContains(t, string(serialized), "must-not-be-persisted")
+}
+
+func TestAccessAuditSurvivesClientCancellationAfterResponse(t *testing.T) {
+	audits := &recordingAccessAuditStore{}
+	requestContext, cancelRequest := context.WithCancel(context.Background())
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+		cancelRequest()
+	})
+	handler := apiAccessAudit{store: audits, now: time.Now}.wrap(next)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/tasks", nil).
+		WithContext(requestContext)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusNoContent, response.Code)
+	require.NoError(t, audits.contextErr)
+	require.True(t, audits.hasDeadline)
+	require.Equal(t, http.MethodGet, audits.event.Method)
 }
 
 func TestAccessAuditRecordsRejectedBearerWithoutCredential(t *testing.T) {

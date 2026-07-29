@@ -59,7 +59,7 @@ func (s *TaskService) Update(
 			return store.TaskWithRelations{}, err
 		}
 		patch.ProjectSet = true
-		patch.ProjectID = projectID
+		patch.ProjectID = &projectID
 		if association.MilestoneSet {
 			patch.MilestoneSet = true
 			patch.MilestoneID = milestoneID
@@ -70,9 +70,6 @@ func (s *TaskService) Update(
 			current, err := s.Tasks.GetByNumber(ctx, number)
 			if err != nil {
 				return store.TaskWithRelations{}, err
-			}
-			if current.Project == nil {
-				return store.TaskWithRelations{}, domain.ErrInvalidInput
 			}
 			projectNumber := current.Project.Number
 			_, milestoneID, err := s.Projects.ResolveTaskAssociation(

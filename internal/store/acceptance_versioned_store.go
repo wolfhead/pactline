@@ -43,20 +43,6 @@ func (s *AcceptanceStore) CreateTaskCriterionVersioned(
 	)
 }
 
-func (s *AcceptanceStore) CreateProjectCriterionVersioned(
-	ctx context.Context,
-	projectID uuid.UUID,
-	expectedProjectVersion int64,
-	criterion domain.AcceptanceCriterion,
-	actor domain.OperationActor,
-) (CriterionMutation, error) {
-	criterion.ProjectID = &projectID
-	return s.createVersioned(
-		ctx, criterion, actor,
-		ownerExpectations{project: &expectedProjectVersion},
-	)
-}
-
 func (s *AcceptanceStore) CreateMilestoneCriterionVersioned(
 	ctx context.Context,
 	projectID uuid.UUID,
@@ -112,11 +98,11 @@ func (s *AcceptanceStore) createVersioned(
 	}
 	created, err := scanCriterion(tx.QueryRow(ctx, `
 		INSERT INTO acceptance_criteria
-			(id, project_id, milestone_id, task_id, criterion,
+			(id, milestone_id, task_id, criterion,
 			 verification_instructions, revision, position)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+		VALUES ($1,$2,$3,$4,$5,$6,$7)
 		RETURNING `+criterionReturnColumns,
-		criterion.ID, criterion.ProjectID, criterion.MilestoneID, criterion.TaskID,
+		criterion.ID, criterion.MilestoneID, criterion.TaskID,
 		criterion.Criterion, criterion.VerificationInstructions,
 		criterion.Revision, criterion.Position,
 	))
@@ -127,8 +113,8 @@ func (s *AcceptanceStore) createVersioned(
 		return CriterionMutation{}, err
 	}
 	newValue, _ := json.Marshal(map[string]any{
-		"project_id": created.ProjectID, "milestone_id": created.MilestoneID,
-		"task_id": created.TaskID, "criterion": created.Criterion,
+		"milestone_id": created.MilestoneID, "task_id": created.TaskID,
+		"criterion":                 created.Criterion,
 		"verification_instructions": created.VerificationInstructions,
 		"revision":                  created.Revision, "position": created.Position,
 	})
@@ -343,34 +329,28 @@ func (s *AcceptanceStore) RemoveCriterionVersioned(
 	).Scan(&checkCount); err != nil {
 		return fmt.Errorf("count criterion checks: %w", err)
 	}
-	if criterion.ProjectID != nil || criterion.MilestoneID != nil {
-		projectID := criterion.ProjectID
-		if projectID == nil {
-			projectID = &versions.projectID
-		}
-		var status domain.ProjectStatus
+	if criterion.MilestoneID != nil {
+		var status domain.MilestoneStatus
 		if err := tx.QueryRow(ctx,
-			`SELECT status FROM projects WHERE id=$1`,
-			*projectID,
+			`SELECT status FROM milestones WHERE id=$1`,
+			*criterion.MilestoneID,
 		).Scan(&status); err != nil {
-			return fmt.Errorf("read criterion project status: %w", err)
+			return fmt.Errorf("read criterion Milestone status: %w", err)
 		}
-		if (status == domain.ProjectStatusActive || status == domain.ProjectStatusPaused) &&
-			strings.TrimSpace(reason) == "" {
-			return fmt.Errorf("%w: a reason is required to change active project scope", domain.ErrInvalidInput)
-		}
-		if criterion.ProjectID != nil &&
-			(status == domain.ProjectStatusActive || status == domain.ProjectStatusPaused) {
+		if status == domain.MilestoneStatusActive {
+			if strings.TrimSpace(reason) == "" {
+				return fmt.Errorf("%w: a reason is required to change active Milestone scope", domain.ErrInvalidInput)
+			}
 			var active int
 			if err := tx.QueryRow(ctx, `
 				SELECT count(*) FROM acceptance_criteria
-				WHERE project_id=$1 AND archived_at IS NULL`,
-				*projectID,
+				WHERE milestone_id=$1 AND archived_at IS NULL`,
+				*criterion.MilestoneID,
 			).Scan(&active); err != nil {
-				return fmt.Errorf("count active project criteria: %w", err)
+				return fmt.Errorf("count active Milestone criteria: %w", err)
 			}
 			if active <= 1 {
-				return fmt.Errorf("%w: an active project requires an acceptance criterion", domain.ErrConflict)
+				return fmt.Errorf("%w: an active Milestone requires an acceptance criterion", domain.ErrConflict)
 			}
 		}
 	}
@@ -451,16 +431,6 @@ func lockCriterionOwnersForCreate(
 			return ownerVersions{}, domain.VersionConflictError{CurrentVersion: value}
 		}
 		versions.task = value
-	case criterion.ProjectID != nil:
-		versions.projectID, versions.hasProject = *criterion.ProjectID, true
-		value, err := lockVersion(ctx, tx, "projects", versions.projectID)
-		if err != nil {
-			return ownerVersions{}, err
-		}
-		if expected.project == nil || value != *expected.project {
-			return ownerVersions{}, domain.VersionConflictError{CurrentVersion: value}
-		}
-		versions.project = value
 	case criterion.MilestoneID != nil:
 		versions.projectID, versions.hasProject = expected.projectID, true
 		versions.milestoneID, versions.hasMilestone = *criterion.MilestoneID, true
@@ -502,13 +472,13 @@ func lockCriterionAndOwners(
 	tx pgx.Tx,
 	criterionID uuid.UUID,
 ) (domain.AcceptanceCriterion, ownerVersions, error) {
-	var projectID, milestoneID, taskID *uuid.UUID
+	var milestoneID, taskID *uuid.UUID
 	err := tx.QueryRow(ctx, `
-		SELECT project_id, milestone_id, task_id
+		SELECT milestone_id, task_id
 		FROM acceptance_criteria
 		WHERE id=$1 AND archived_at IS NULL`,
 		criterionID,
-	).Scan(&projectID, &milestoneID, &taskID)
+	).Scan(&milestoneID, &taskID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.AcceptanceCriterion{}, ownerVersions{}, domain.ErrNotFound
 	}
@@ -520,9 +490,6 @@ func lockCriterionAndOwners(
 	case taskID != nil:
 		versions.taskID, versions.hasTask = *taskID, true
 		versions.task, err = lockVersion(ctx, tx, "tasks", versions.taskID)
-	case projectID != nil:
-		versions.projectID, versions.hasProject = *projectID, true
-		versions.project, err = lockVersion(ctx, tx, "projects", versions.projectID)
 	case milestoneID != nil:
 		versions.milestoneID, versions.hasMilestone = *milestoneID, true
 		err = tx.QueryRow(ctx,
@@ -647,8 +614,8 @@ func auditCriterionOwnerChange(
 			Action: action, NewValue: value,
 		})
 	}
-	projectID := criterion.ProjectID
-	if projectID == nil && criterion.MilestoneID != nil {
+	var projectID *uuid.UUID
+	if criterion.MilestoneID != nil {
 		var resolvedProjectID uuid.UUID
 		if err := tx.QueryRow(ctx,
 			`SELECT project_id FROM milestones WHERE id=$1`,

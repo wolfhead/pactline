@@ -66,7 +66,10 @@ func TestAccessAuditQueriesForceAccountOwnerAndSupportAdminFiltersAndCursor(t *t
 	handler, db := newTaskTestServer(t)
 	setTestAdmin(t, db, uuid.MustParse(userA))
 	repository := store.NewAccessAuditStore(db)
-	now := time.Date(2026, 7, 29, 1, 0, 0, 0, time.UTC)
+	// Use an isolated future window so a concurrently running development
+	// server cannot add the account owner's real requests between cursor
+	// pages and make this deterministic pagination test flaky.
+	now := time.Date(2040, 7, 29, 1, 0, 0, 0, time.UTC)
 	userBID, userCID := uuid.MustParse(userB), uuid.MustParse(userC)
 	events := []access.RequestAuditEvent{
 		auditFixture(uuid.New(), userBID, now.Add(-time.Minute), "request-b-latest"),
@@ -83,8 +86,10 @@ func TestAccessAuditQueriesForceAccountOwnerAndSupportAdminFiltersAndCursor(t *t
 		require.NoError(t, err)
 	})
 
+	timeWindow := "&from=" + url.QueryEscape(now.Add(-4*time.Minute).Format(time.RFC3339)) +
+		"&to=" + url.QueryEscape(now.Add(time.Minute).Format(time.RFC3339))
 	firstPage := do(t, handler, http.MethodGet,
-		"/api/account/api-activity?page_size=1", userB, nil)
+		"/api/account/api-activity?page_size=1"+timeWindow, userB, nil)
 	require.Equal(t, http.StatusOK, firstPage.Code, firstPage.Body.String())
 	var first auditPageJSON
 	decodeJSON(t, firstPage, &first)
@@ -93,7 +98,7 @@ func TestAccessAuditQueriesForceAccountOwnerAndSupportAdminFiltersAndCursor(t *t
 	require.NotEmpty(t, first.NextCursor)
 
 	secondPage := do(t, handler, http.MethodGet,
-		"/api/account/api-activity?page_size=1&cursor="+url.QueryEscape(first.NextCursor),
+		"/api/account/api-activity?page_size=1&cursor="+url.QueryEscape(first.NextCursor)+timeWindow,
 		userB, nil)
 	require.Equal(t, http.StatusOK, secondPage.Code, secondPage.Body.String())
 	var second auditPageJSON
@@ -102,7 +107,7 @@ func TestAccessAuditQueriesForceAccountOwnerAndSupportAdminFiltersAndCursor(t *t
 	require.Equal(t, "request-b-oldest", second.Items[0].RequestID)
 
 	adminFiltered := do(t, handler, http.MethodGet,
-		"/api/admin/api-activity?user_id="+userC, userA, nil)
+		"/api/admin/api-activity?user_id="+userC+timeWindow, userA, nil)
 	require.Equal(t, http.StatusOK, adminFiltered.Code, adminFiltered.Body.String())
 	var adminPage auditPageJSON
 	decodeJSON(t, adminFiltered, &adminPage)
@@ -112,12 +117,16 @@ func TestAccessAuditQueriesForceAccountOwnerAndSupportAdminFiltersAndCursor(t *t
 
 func setTestAdmin(t *testing.T, db *store.DB, userID uuid.UUID) {
 	t.Helper()
-	_, err := db.Pool.Exec(context.Background(),
+	var originalRole string
+	err := db.Pool.QueryRow(context.Background(),
+		`SELECT platform_role FROM users WHERE id=$1`, userID).Scan(&originalRole)
+	require.NoError(t, err)
+	_, err = db.Pool.Exec(context.Background(),
 		`UPDATE users SET platform_role='ADMIN' WHERE id=$1`, userID)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		_, cleanupErr := db.Pool.Exec(context.Background(),
-			`UPDATE users SET platform_role='MEMBER' WHERE id=$1`, userID)
+			`UPDATE users SET platform_role=$2 WHERE id=$1`, userID, originalRole)
 		require.NoError(t, cleanupErr)
 	})
 }

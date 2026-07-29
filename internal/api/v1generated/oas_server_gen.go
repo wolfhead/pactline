@@ -8,12 +8,12 @@ import (
 
 // Handler handles operations described by OpenAPI v3 specification.
 type Handler interface {
-	// ActivateProject implements activateProject operation.
+	// ActivateMilestone implements activateMilestone operation.
 	//
-	// Activate a project.
+	// Activate a planned milestone.
 	//
-	// POST /api/v1/projects/{number}/activate
-	ActivateProject(ctx context.Context, req OptLifecycleRequest, params ActivateProjectParams) (ActivateProjectRes, error)
+	// POST /api/v1/projects/{number}/milestones/{id}/activate
+	ActivateMilestone(ctx context.Context, params ActivateMilestoneParams) (ActivateMilestoneRes, error)
 	// ArchiveProject implements archiveProject operation.
 	//
 	// Archive a project.
@@ -32,24 +32,12 @@ type Handler interface {
 	//
 	// POST /api/v1/projects/{number}/milestones/{id}/cancel
 	CancelMilestone(ctx context.Context, req OptLifecycleRequest, params CancelMilestoneParams) (CancelMilestoneRes, error)
-	// CancelProject implements cancelProject operation.
-	//
-	// Cancel a project.
-	//
-	// POST /api/v1/projects/{number}/cancel
-	CancelProject(ctx context.Context, req OptLifecycleRequest, params CancelProjectParams) (CancelProjectRes, error)
 	// CompleteMilestone implements completeMilestone operation.
 	//
 	// Complete a milestone.
 	//
 	// POST /api/v1/projects/{number}/milestones/{id}/complete
 	CompleteMilestone(ctx context.Context, req OptLifecycleRequest, params CompleteMilestoneParams) (CompleteMilestoneRes, error)
-	// CompleteProject implements completeProject operation.
-	//
-	// Complete a project.
-	//
-	// POST /api/v1/projects/{number}/complete
-	CompleteProject(ctx context.Context, req OptLifecycleRequest, params CompleteProjectParams) (CompleteProjectRes, error)
 	// CreateAcceptanceCheck implements createAcceptanceCheck operation.
 	//
 	// Record an immutable acceptance check.
@@ -80,12 +68,6 @@ type Handler interface {
 	//
 	// POST /api/v1/projects
 	CreateProject(ctx context.Context, req *ProjectCreate, params CreateProjectParams) (CreateProjectRes, error)
-	// CreateProjectCriterion implements createProjectCriterion operation.
-	//
-	// Create a project acceptance criterion.
-	//
-	// POST /api/v1/projects/{number}/criteria
-	CreateProjectCriterion(ctx context.Context, req *CriterionCreate, params CreateProjectCriterionParams) (CreateProjectCriterionRes, error)
 	// CreateTask implements createTask operation.
 	//
 	// Create a task.
@@ -152,12 +134,6 @@ type Handler interface {
 	//
 	// GET /api/v1/projects/{number}/milestones/{id}/criteria
 	ListMilestoneCriteria(ctx context.Context, params ListMilestoneCriteriaParams) (ListMilestoneCriteriaRes, error)
-	// ListProjectCriteria implements listProjectCriteria operation.
-	//
-	// List project acceptance criteria.
-	//
-	// GET /api/v1/projects/{number}/criteria
-	ListProjectCriteria(ctx context.Context, params ListProjectCriteriaParams) (ListProjectCriteriaRes, error)
 	// ListProjects implements listProjects operation.
 	//
 	// List projects.
@@ -194,24 +170,12 @@ type Handler interface {
 	//
 	// GET /api/v1/users
 	ListUsers(ctx context.Context, params ListUsersParams) (ListUsersRes, error)
-	// PauseProject implements pauseProject operation.
-	//
-	// Pause a project.
-	//
-	// POST /api/v1/projects/{number}/pause
-	PauseProject(ctx context.Context, req OptLifecycleRequest, params PauseProjectParams) (PauseProjectRes, error)
 	// ReopenMilestone implements reopenMilestone operation.
 	//
 	// Reopen a milestone.
 	//
 	// POST /api/v1/projects/{number}/milestones/{id}/reopen
 	ReopenMilestone(ctx context.Context, req *LifecycleRequest, params ReopenMilestoneParams) (ReopenMilestoneRes, error)
-	// ReopenProject implements reopenProject operation.
-	//
-	// Reopen a project.
-	//
-	// POST /api/v1/projects/{number}/reopen
-	ReopenProject(ctx context.Context, req *LifecycleRequest, params ReopenProjectParams) (ReopenProjectRes, error)
 	// RestoreProject implements restoreProject operation.
 	//
 	// Restore a project.

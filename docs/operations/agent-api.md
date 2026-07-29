@@ -85,7 +85,7 @@ curl --fail-with-body \
   --header "Authorization: Bearer ${AGENT_API_TOKEN}" \
   --header 'Content-Type: application/json' \
   --header 'Idempotency-Key: task-create-example-001' \
-  --data '{"title":"Prepare release evidence"}' \
+  --data '{"title":"Prepare release evidence","project_number":42}' \
   "${AGENT_API_BASE}/api/v1/tasks"
 ```
 
@@ -144,8 +144,9 @@ Recovery procedure:
 
 ## Acceptance checks
 
-Projects, milestones, and tasks use the same revisioned acceptance criterion
-and immutable acceptance check model. An Agent should:
+Milestones and tasks use the same revisioned acceptance criterion and immutable
+acceptance check model. Projects are long-lived workspaces and intentionally
+do not own acceptance criteria. An Agent should:
 
 1. list or create the criterion under its owning resource;
 2. execute `verification_instructions`;

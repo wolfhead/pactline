@@ -138,14 +138,18 @@ func TestMutationRequiresSessionCSRFAndSameOrigin(t *testing.T) {
 
 func TestMeReturnsActorSubjectAndNullableProfileFields(t *testing.T) {
 	handler, db := newTaskTestServer(t)
-	var originalEmail *string
+	var originalEmail, originalAvatarURL *string
+	var originalPlatformRole domain.PlatformRole
 	require.NoError(t, db.Pool.QueryRow(context.Background(),
-		`SELECT email FROM users WHERE id=$1`, userA).Scan(&originalEmail))
-	_, err := db.Pool.Exec(context.Background(), `UPDATE users SET email=NULL WHERE id=$1`, userA)
+		`SELECT email, avatar_url, platform_role FROM users WHERE id=$1`, userA).
+		Scan(&originalEmail, &originalAvatarURL, &originalPlatformRole))
+	_, err := db.Pool.Exec(context.Background(),
+		`UPDATE users SET email=NULL, avatar_url=NULL WHERE id=$1`, userA)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		_, cleanupErr := db.Pool.Exec(context.Background(),
-			`UPDATE users SET email=$2 WHERE id=$1`, userA, originalEmail)
+			`UPDATE users SET email=$2, avatar_url=$3 WHERE id=$1`,
+			userA, originalEmail, originalAvatarURL)
 		require.NoError(t, cleanupErr)
 	})
 	cookies, csrf := developmentLogin(t, handler, userA)
@@ -174,18 +178,21 @@ func TestMeReturnsActorSubjectAndNullableProfileFields(t *testing.T) {
 	require.NotZero(t, body.Actor.UpdatedAt)
 	require.Nil(t, body.Actor.Email)
 	require.Nil(t, body.Actor.AvatarURL)
-	require.Equal(t, domain.PlatformRoleMember, body.Actor.PlatformRole)
+	require.Equal(t, originalPlatformRole, body.Actor.PlatformRole)
 	require.Nil(t, body.Impersonation)
 }
 
 func TestMePropagatesImpersonationActorAndSubject(t *testing.T) {
 	handler, db := newTaskTestServer(t)
 	ctx := context.Background()
+	var originalPlatformRole domain.PlatformRole
+	require.NoError(t, db.Pool.QueryRow(ctx,
+		`SELECT platform_role FROM users WHERE id=$1`, userA).Scan(&originalPlatformRole))
 	_, err := db.Pool.Exec(ctx, `UPDATE users SET platform_role='ADMIN' WHERE id=$1`, userA)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		_, cleanupErr := db.Pool.Exec(context.Background(),
-			`UPDATE users SET platform_role='MEMBER' WHERE id=$1`, userA)
+			`UPDATE users SET platform_role=$2 WHERE id=$1`, userA, originalPlatformRole)
 		require.NoError(t, cleanupErr)
 	})
 	cookies, csrf := developmentLogin(t, handler, userA)

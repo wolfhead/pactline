@@ -18,16 +18,16 @@ func (h *Handler) CreateProject(
 	req *generated.ProjectCreate,
 	_ generated.CreateProjectParams,
 ) (generated.CreateProjectRes, error) {
+	if err := requireAdministrator(ctx); err != nil {
+		return nil, err
+	}
 	actor, subjectID, err := operationContext(ctx)
 	if err != nil {
 		return nil, err
 	}
 	project := domain.Project{
-		Name: req.Name, Outcome: req.Outcome, Description: req.Description.Or(""),
+		Name: req.Name, Description: req.Description.Or(""),
 		OwnerID: req.OwnerID, CreatorID: subjectID,
-	}
-	if value, ok := req.TargetDate.Get(); ok {
-		project.TargetDate = &value
 	}
 	created, err := h.Projects.Projects.CreateWithOperation(ctx, project, actor)
 	if err != nil {
@@ -105,20 +105,11 @@ func (h *Handler) UpdateProject(
 	if value, ok := req.Name.Get(); ok {
 		patch.Name = &value
 	}
-	if value, ok := req.Outcome.Get(); ok {
-		patch.Outcome = &value
-	}
 	if value, ok := req.Description.Get(); ok {
 		patch.Description = &value
 	}
 	if value, ok := req.OwnerID.Get(); ok {
 		patch.OwnerID = &value
-	}
-	if req.TargetDate.IsSet() {
-		patch.TargetDateSet = true
-		if value, ok := req.TargetDate.Get(); ok {
-			patch.TargetDate = &value
-		}
 	}
 	updated, err := h.Projects.Projects.UpdateVersionedWithOperation(
 		ctx, params.Number, expectedVersion, patch, actor,
@@ -127,56 +118,6 @@ func (h *Handler) UpdateProject(
 		return nil, err
 	}
 	return projectResponse(ctx, updated), nil
-}
-
-func (h *Handler) ActivateProject(
-	ctx context.Context,
-	req generated.OptLifecycleRequest,
-	params generated.ActivateProjectParams,
-) (generated.ActivateProjectRes, error) {
-	return h.applyProjectLifecycle(
-		ctx, params.Number, params.IfMatch, store.ProjectActionActivate, optionalReason(req),
-	)
-}
-
-func (h *Handler) PauseProject(
-	ctx context.Context,
-	req generated.OptLifecycleRequest,
-	params generated.PauseProjectParams,
-) (generated.PauseProjectRes, error) {
-	return h.applyProjectLifecycle(
-		ctx, params.Number, params.IfMatch, store.ProjectActionPause, optionalReason(req),
-	)
-}
-
-func (h *Handler) CompleteProject(
-	ctx context.Context,
-	req generated.OptLifecycleRequest,
-	params generated.CompleteProjectParams,
-) (generated.CompleteProjectRes, error) {
-	return h.applyProjectLifecycle(
-		ctx, params.Number, params.IfMatch, store.ProjectActionComplete, optionalReason(req),
-	)
-}
-
-func (h *Handler) CancelProject(
-	ctx context.Context,
-	req generated.OptLifecycleRequest,
-	params generated.CancelProjectParams,
-) (generated.CancelProjectRes, error) {
-	return h.applyProjectLifecycle(
-		ctx, params.Number, params.IfMatch, store.ProjectActionCancel, optionalReason(req),
-	)
-}
-
-func (h *Handler) ReopenProject(
-	ctx context.Context,
-	req *generated.LifecycleRequest,
-	params generated.ReopenProjectParams,
-) (generated.ReopenProjectRes, error) {
-	return h.applyProjectLifecycle(
-		ctx, params.Number, params.IfMatch, store.ProjectActionReopen, req.Reason.Or(""),
-	)
 }
 
 func (h *Handler) ArchiveProject(
@@ -204,6 +145,9 @@ func (h *Handler) applyProjectLifecycle(
 	action store.ProjectLifecycleAction,
 	reason string,
 ) (*generated.ProjectHeaders, error) {
+	if err := requireAdministrator(ctx); err != nil {
+		return nil, err
+	}
 	expectedVersion, err := parseIfMatch(ifMatch)
 	if err != nil {
 		return nil, err
@@ -243,7 +187,7 @@ func (h *Handler) CreateMilestone(
 	}
 	milestone := domain.Milestone{
 		Name: req.Name, Outcome: req.Outcome, Description: req.Description.Or(""),
-		Position: req.Position,
+		OwnerID: req.OwnerID, Position: req.Position,
 	}
 	if value, ok := req.TargetDate.Get(); ok {
 		milestone.TargetDate = &value
@@ -294,6 +238,9 @@ func (h *Handler) UpdateMilestone(
 	if value, ok := req.Description.Get(); ok {
 		patch.Description = &value
 	}
+	if value, ok := req.OwnerID.Get(); ok {
+		patch.OwnerID = &value
+	}
 	if req.TargetDate.IsSet() {
 		patch.TargetDateSet = true
 		if value, ok := req.TargetDate.Get(); ok {
@@ -321,6 +268,16 @@ func (h *Handler) CompleteMilestone(
 	return h.applyMilestoneLifecycle(
 		ctx, params.Number, params.ID, params.IfMatch, params.XProjectIfMatch,
 		store.MilestoneActionComplete, optionalReason(req),
+	)
+}
+
+func (h *Handler) ActivateMilestone(
+	ctx context.Context,
+	params generated.ActivateMilestoneParams,
+) (generated.ActivateMilestoneRes, error) {
+	return h.applyMilestoneLifecycle(
+		ctx, params.Number, params.ID, params.IfMatch, params.XProjectIfMatch,
+		store.MilestoneActionActivate, "",
 	)
 }
 
@@ -420,50 +377,6 @@ func (h *Handler) CreateTaskCriterion(
 	return criterionCreatedResponse(
 		ctx, created.Criterion,
 		fmt.Sprintf("/api/v1/tasks/%d/criteria/%s", params.Number, created.Criterion.ID),
-	), nil
-}
-
-func (h *Handler) ListProjectCriteria(
-	ctx context.Context,
-	params generated.ListProjectCriteriaParams,
-) (generated.ListProjectCriteriaRes, error) {
-	project, err := h.Projects.Projects.GetByNumber(ctx, params.Number)
-	if err != nil {
-		return nil, err
-	}
-	items, err := h.Projects.Acceptance.ListForProject(ctx, project.Project.ID)
-	if err != nil {
-		return nil, err
-	}
-	return criterionListResponse(ctx, items, params.Cursor, params.Limit)
-}
-
-func (h *Handler) CreateProjectCriterion(
-	ctx context.Context,
-	req *generated.CriterionCreate,
-	params generated.CreateProjectCriterionParams,
-) (generated.CreateProjectCriterionRes, error) {
-	expectedVersion, err := parseIfMatch(params.IfMatch)
-	if err != nil {
-		return nil, err
-	}
-	actor, _, err := operationContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	project, err := h.Projects.Projects.GetByNumber(ctx, params.Number)
-	if err != nil {
-		return nil, err
-	}
-	created, err := h.Projects.Acceptance.CreateProjectCriterionVersioned(
-		ctx, project.Project.ID, expectedVersion, criterionFromRequest(req), actor,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return criterionCreatedResponse(
-		ctx, created.Criterion,
-		fmt.Sprintf("/api/v1/projects/%d/criteria/%s", params.Number, created.Criterion.ID),
 	), nil
 }
 
@@ -651,21 +564,10 @@ func projectFromDomain(project store.ProjectWithRelations) generated.Project {
 	out := generated.Project{
 		ID: project.Project.ID, Number: project.Project.Number,
 		Version: project.Project.Version, Name: project.Project.Name,
-		Outcome: project.Project.Outcome, Description: project.Project.Description,
-		Owner: userRefFromDomain(project.Owner), Creator: userRefFromDomain(project.Creator),
-		Status:    generated.ProjectStatus(project.Project.Status),
+		Description: project.Project.Description,
+		Owner:       userRefFromDomain(project.Owner), Creator: userRefFromDomain(project.Creator),
 		CreatedAt: project.Project.CreatedAt, UpdatedAt: project.Project.UpdatedAt,
 		CompletedTasks: project.CompletedTasks, EligibleTasks: project.EligibleTasks,
-		ActiveCriteria: project.ActiveCriteria, SatisfiedCriteria: project.SatisfiedCriteria,
-	}
-	if project.Project.TargetDate != nil {
-		out.TargetDate = generated.NewOptDate(*project.Project.TargetDate)
-	}
-	if project.Project.CompletedAt != nil {
-		out.CompletedAt = generated.NewOptDateTime(*project.Project.CompletedAt)
-	}
-	if project.Project.CancelledAt != nil {
-		out.CancelledAt = generated.NewOptDateTime(*project.Project.CancelledAt)
 	}
 	if project.Project.ArchivedAt != nil {
 		out.ArchivedAt = generated.NewOptDateTime(*project.Project.ArchivedAt)
@@ -675,14 +577,10 @@ func projectFromDomain(project store.ProjectWithRelations) generated.Project {
 
 func projectDetailFromDomain(detail application.ProjectDetail) generated.ProjectDetail {
 	out := generated.ProjectDetail{
-		Project:            projectFromDomain(detail.Project),
-		AcceptanceCriteria: make([]generated.AcceptanceCriterion, len(detail.ProjectCriteria)),
-		Milestones:         make([]generated.Milestone, len(detail.Milestones)),
-		Tasks:              make([]generated.Task, len(detail.Tasks)),
-		Activity:           make([]generated.ProjectActivity, len(detail.Activity)),
-	}
-	for i, criterion := range detail.ProjectCriteria {
-		out.AcceptanceCriteria[i] = acceptanceCriterionFromDomain(criterion)
+		Project:    projectFromDomain(detail.Project),
+		Milestones: make([]generated.Milestone, len(detail.Milestones)),
+		Tasks:      make([]generated.Task, len(detail.Tasks)),
+		Activity:   make([]generated.ProjectActivity, len(detail.Activity)),
 	}
 	for i, milestone := range detail.Milestones {
 		out.Milestones[i] = milestoneFromDomain(
@@ -705,7 +603,8 @@ func milestoneFromDomain(
 	out := generated.Milestone{
 		ID: milestone.ID, ProjectID: milestone.ProjectID, Version: milestone.Version,
 		Name: milestone.Name, Outcome: milestone.Outcome, Description: milestone.Description,
-		Status: generated.MilestoneStatus(milestone.Status), Position: milestone.Position,
+		OwnerID: milestone.OwnerID,
+		Status:  generated.MilestoneStatus(milestone.Status), Position: milestone.Position,
 		CreatedAt: milestone.CreatedAt, UpdatedAt: milestone.UpdatedAt,
 		AcceptanceCriteria: make([]generated.AcceptanceCriterion, len(criteria)),
 	}
@@ -780,9 +679,6 @@ func acceptanceCriterionFromDomain(
 		VerificationInstructions: value.VerificationInstructions,
 		Revision:                 value.Revision, Position: value.Position,
 		CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt,
-	}
-	if value.ProjectID != nil {
-		out.ProjectID = generated.NewOptUUID(*value.ProjectID)
 	}
 	if value.MilestoneID != nil {
 		out.MilestoneID = generated.NewOptUUID(*value.MilestoneID)

@@ -69,6 +69,7 @@ func TestV1TaskCommentAndLabelVersions(t *testing.T) {
 
 	taskCreated := do(t, handler, http.MethodPost, "/api/v1/tasks", userA, map[string]any{
 		"title": "Versioned task", "label_ids": []uuid.UUID{label.ID},
+		"project_number": activeProjectNumber(t, db),
 	})
 	require.Equal(t, http.StatusCreated, taskCreated.Code, taskCreated.Body.String())
 	require.Equal(t, `"1"`, taskCreated.Header().Get("ETag"))

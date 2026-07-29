@@ -23,6 +23,7 @@ test('activity log reads as legible prose and updates live after a status change
   const title = uniqueTitle('Activity prose')
   const task = await tasksApi.createTask(USERS.leadB.id, { title, status: 'todo' })
   trackTask(task.id)
+  const actorName = task.creator.name
 
   await page.goto(`/tasks/${task.number}`)
   await switchIdentity(page, USERS.leadB.id)
@@ -31,7 +32,7 @@ test('activity log reads as legible prose and updates live after a status change
   // is addressed by name rather than by climbing out of its own heading.
   const activitySection = page.getByRole('region', { name: '历史记录' })
   await expect(
-    activitySection.getByText(`${USERS.sponsorA.name} 创建了任务，初始状态为「待办」`, { exact: true }),
+    activitySection.getByText(`${actorName} 创建了任务，初始状态为「待办」`, { exact: true }),
   ).toBeVisible()
   await expect(activitySection.getByText(/将状态从/)).not.toBeVisible()
 
@@ -51,16 +52,16 @@ test('activity log reads as legible prose and updates live after a status change
   // No reload: the new entry must appear purely from the activity fetch
   // re-firing off the task's own updated_at.
   await expect(
-    activitySection.getByText(`${USERS.sponsorA.name} 将状态从「待办」改为「进行中」`, { exact: true }),
+    activitySection.getByText(`${actorName} 将状态从「待办」改为「进行中」`, { exact: true }),
   ).toBeVisible()
 
   const assigneePatch = page.waitForResponse(isPatch)
   await page.getByRole('combobox', { name: '负责人', exact: true }).click()
-  await page.getByRole('option', { name: USERS.sponsorA.name, exact: true }).click()
-  await expect(page.getByRole('combobox', { name: '负责人', exact: true })).toHaveText(USERS.sponsorA.name)
+  await page.getByRole('option', { name: actorName, exact: true }).click()
+  await expect(page.getByRole('combobox', { name: '负责人', exact: true })).toHaveText(actorName)
   await assigneePatch
 
   await expect(
-    activitySection.getByText(`${USERS.sponsorA.name} 将负责人从「未分配」改为「${USERS.sponsorA.name}」`, { exact: true }),
+    activitySection.getByText(`${actorName} 将负责人从「未分配」改为「${actorName}」`, { exact: true }),
   ).toBeVisible()
 })

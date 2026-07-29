@@ -39,16 +39,13 @@ func (h *Handler) CreateTask(
 	if value, ok := req.DueDate.Get(); ok {
 		task.DueDate = &value
 	}
-	var projectNumber *int64
-	if value, ok := req.ProjectNumber.Get(); ok {
-		projectNumber = &value
-	}
+	projectNumber := req.ProjectNumber
 	var milestoneID *uuid.UUID
 	if value, ok := req.MilestoneID.Get(); ok {
 		milestoneID = &value
 	}
 	created, err := h.Tasks.Create(
-		ctx, task, req.LabelIds, projectNumber, milestoneID, actor,
+		ctx, task, req.LabelIds, &projectNumber, milestoneID, actor,
 	)
 	if err != nil {
 		return nil, err
@@ -119,6 +116,15 @@ func (h *Handler) ListTasks(
 			return nil, err
 		}
 		filter.ProjectID = &project.Project.ID
+	}
+	if value, ok := params.MilestoneID.Get(); ok {
+		filter.MilestoneID = &value
+	}
+	if value, ok := params.CreatorID.Get(); ok {
+		filter.CreatorID = &value
+	}
+	if value, ok := params.BacklogOnly.Get(); ok {
+		filter.BacklogOnly = value
 	}
 	if value, ok := params.Archived.Get(); ok {
 		filter.Archived = string(value)
@@ -521,10 +527,8 @@ func taskFromDomain(task store.TaskWithRelations) generated.Task {
 	if task.Task.DueDate != nil {
 		out.DueDate = generated.NewOptDate(*task.Task.DueDate)
 	}
-	if task.Project != nil {
-		out.Project = generated.NewOptProjectRef(generated.ProjectRef{
-			ID: task.Project.ID, Number: task.Project.Number, Name: task.Project.Name,
-		})
+	out.Project = generated.ProjectRef{
+		ID: task.Project.ID, Number: task.Project.Number, Name: task.Project.Name,
 	}
 	if task.Milestone != nil {
 		out.Milestone = generated.NewOptMilestoneRef(generated.MilestoneRef{

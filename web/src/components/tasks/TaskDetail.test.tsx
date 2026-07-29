@@ -25,7 +25,8 @@ const TASK = {
   id: 'id-142', number: 142, version: 1, title: '修复竞价超时导致的丢量',
   description: '丢量比例升到 4.2%', status: 'in_progress' as const,
   priority: 'high' as const, assignee: USERS[0], creator: USERS[0],
-  due_date: '2026-07-30', project: null, milestone: null, labels: [], created_at: '', updated_at: '',
+  due_date: '2026-07-30', project: { id: 'p1', number: 12, name: 'Task Manager' },
+  milestone: null, labels: [], created_at: '', updated_at: '',
   completed_at: null, archived_at: null,
 }
 
@@ -35,6 +36,7 @@ beforeEach(() => {
   vi.mocked(tasksApi.listActivity).mockResolvedValue([])
   vi.mocked(tasksApi.listLabels).mockResolvedValue([])
   vi.mocked(projectsApi.listProjects).mockResolvedValue([])
+  vi.mocked(projectsApi.getProject).mockRejectedValue(new Error('Project detail is not needed in this test'))
   vi.mocked(acceptanceApi.listTaskCriteria).mockResolvedValue([])
 })
 

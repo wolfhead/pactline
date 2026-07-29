@@ -14,7 +14,7 @@ function task(n: number, over: Partial<Task> = {}): Task {
     created_at: '', updated_at: '', completed_at: null, archived_at: null,
     ...over,
     version: over.version ?? 1,
-    project: over.project ?? null,
+    project: over.project ?? { id: 'p1', number: 12, name: 'Task Manager' },
     milestone: over.milestone ?? null,
   }
 }

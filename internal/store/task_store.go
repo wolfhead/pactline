@@ -41,7 +41,7 @@ const taskSelectColumns = taskColumns + `,
 const taskFromJoins = `FROM tasks t
 	JOIN users cu ON cu.id = t.creator_id
 	LEFT JOIN users au ON au.id = t.assignee_id
-	LEFT JOIN projects p ON p.id = t.project_id
+	JOIN projects p ON p.id = t.project_id
 	LEFT JOIN milestones m ON m.id = t.milestone_id
 	LEFT JOIN LATERAL (
 		SELECT json_agg(json_build_object(
@@ -52,13 +52,14 @@ const taskFromJoins = `FROM tasks t
 	) lbl ON true`
 
 // TaskWithRelations is a task together with the entities a frontend needs
-// alongside it in one response: the creator, the assignee (nil when
-// unassigned — a normal, first-class state), and every label it wears.
+// alongside it in one response: the creator, required Project, the assignee
+// (nil when unassigned — a normal, first-class state), and every label it
+// wears.
 type TaskWithRelations struct {
 	Task      domain.Task
 	Creator   domain.UserRef
 	Assignee  *domain.UserRef
-	Project   *ProjectRef
+	Project   ProjectRef
 	Milestone *MilestoneRef
 	Labels    []domain.Label
 }
@@ -80,9 +81,6 @@ func scanTaskWithRelations(s scanner) (TaskWithRelations, error) {
 		assigneeID    *uuid.UUID
 		assigneeName  *string
 		assigneeEmail *string
-		projectID     *uuid.UUID
-		projectNumber *int64
-		projectName   *string
 		milestoneID   *uuid.UUID
 		milestoneName *string
 		labelsJSON    []byte
@@ -95,7 +93,7 @@ func scanTaskWithRelations(s scanner) (TaskWithRelations, error) {
 		&twr.Task.CompletedAt, &twr.Task.ArchivedAt,
 		&twr.Creator.ID, &twr.Creator.Name, &twr.Creator.Email,
 		&assigneeID, &assigneeName, &assigneeEmail,
-		&projectID, &projectNumber, &projectName,
+		&twr.Project.ID, &twr.Project.Number, &twr.Project.Name,
 		&milestoneID, &milestoneName,
 		&labelsJSON,
 	)
@@ -104,9 +102,6 @@ func scanTaskWithRelations(s scanner) (TaskWithRelations, error) {
 	}
 	if assigneeID != nil {
 		twr.Assignee = &domain.UserRef{ID: *assigneeID, Name: derefStr(assigneeName), Email: assigneeEmail}
-	}
-	if projectID != nil {
-		twr.Project = &ProjectRef{ID: *projectID, Number: *projectNumber, Name: derefStr(projectName)}
 	}
 	if milestoneID != nil {
 		twr.Milestone = &MilestoneRef{ID: *milestoneID, Name: derefStr(milestoneName)}
@@ -163,6 +158,9 @@ func (s *TaskStore) CreateWithOperation(
 	}
 	if !t.Priority.Valid() {
 		return TaskWithRelations{}, fmt.Errorf("%w: unknown priority %q", domain.ErrInvalidInput, t.Priority)
+	}
+	if t.ProjectID == uuid.Nil {
+		return TaskWithRelations{}, fmt.Errorf("%w: task project is required", domain.ErrInvalidInput)
 	}
 
 	var completedAt *time.Time
@@ -308,7 +306,7 @@ func (s *TaskStore) updateWithExpectedVersion(
 		oldPriority              domain.TaskPriority
 		oldAssignee              *uuid.UUID
 		oldDueDate               *time.Time
-		oldProject               *uuid.UUID
+		oldProject               uuid.UUID
 		oldMilestone             *uuid.UUID
 		oldCompletedAt           *time.Time
 		oldVersion               int64
@@ -362,8 +360,11 @@ func (s *TaskStore) updateWithExpectedVersion(
 		newDueDate = patch.DueDate
 	}
 	if patch.ProjectSet {
-		projectChanged := uuidPtrString(oldProject) != uuidPtrString(patch.ProjectID)
-		newProject = patch.ProjectID
+		if patch.ProjectID == nil || *patch.ProjectID == uuid.Nil {
+			return TaskWithRelations{}, fmt.Errorf("%w: task project cannot be cleared", domain.ErrInvalidInput)
+		}
+		projectChanged := oldProject != *patch.ProjectID
+		newProject = *patch.ProjectID
 		if projectChanged && !patch.MilestoneSet {
 			newMilestone = nil
 		}
@@ -371,8 +372,8 @@ func (s *TaskStore) updateWithExpectedVersion(
 	if patch.MilestoneSet {
 		newMilestone = patch.MilestoneID
 	}
-	if newProject == nil && newMilestone != nil {
-		return TaskWithRelations{}, fmt.Errorf("%w: a milestone requires a project", domain.ErrInvalidInput)
+	if newProject == uuid.Nil {
+		return TaskWithRelations{}, fmt.Errorf("%w: task project is required", domain.ErrInvalidInput)
 	}
 
 	newCompletedAt := oldCompletedAt
@@ -439,7 +440,7 @@ func (s *TaskStore) updateWithExpectedVersion(
 	if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldDueDate, datePtrString(oldDueDate), datePtrString(newDueDate)); err != nil {
 		return TaskWithRelations{}, err
 	}
-	if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldProject, uuidPtrString(oldProject), uuidPtrString(newProject)); err != nil {
+	if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldProject, oldProject.String(), newProject.String()); err != nil {
 		return TaskWithRelations{}, err
 	}
 	if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldMilestone, uuidPtrString(oldMilestone), uuidPtrString(newMilestone)); err != nil {
@@ -739,9 +740,12 @@ type TaskListFilter struct {
 	AssigneeID *uuid.UUID
 	Unassigned bool
 
-	LabelIDs  []uuid.UUID
-	Search    string
-	ProjectID *uuid.UUID
+	LabelIDs    []uuid.UUID
+	Search      string
+	ProjectID   *uuid.UUID
+	MilestoneID *uuid.UUID
+	CreatorID   *uuid.UUID
+	BacklogOnly bool
 
 	// Archived selects which tasks the archived_at column admits: "" (the
 	// zero value) excludes archived tasks, "only" returns exclusively
@@ -885,6 +889,15 @@ func (s *TaskStore) List(ctx context.Context, f TaskListFilter) (TaskListResult,
 	}
 	if f.ProjectID != nil {
 		where = append(where, "t.project_id = "+arg(*f.ProjectID))
+	}
+	if f.MilestoneID != nil {
+		where = append(where, "t.milestone_id = "+arg(*f.MilestoneID))
+	}
+	if f.CreatorID != nil {
+		where = append(where, "t.creator_id = "+arg(*f.CreatorID))
+	}
+	if f.BacklogOnly {
+		where = append(where, "t.milestone_id IS NULL")
 	}
 	if strings.TrimSpace(f.Search) != "" {
 		needle := "%" + escapeLike(f.Search) + "%"

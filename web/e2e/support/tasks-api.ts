@@ -34,7 +34,7 @@ export interface Task {
   assignee: UserRef | null
   creator: UserRef
   due_date: string | null
-  project: { id: string; number: number; name: string } | null
+  project: { id: string; number: number; name: string }
   milestone: { id: string; name: string } | null
   labels: Label[]
   created_at: string
@@ -154,7 +154,7 @@ export interface CreateTaskInput {
   assignee_id?: string | null
   due_date?: string | null
   label_ids?: string[]
-  project_number?: number | null
+  project_number?: number
   milestone_id?: string | null
 }
 
@@ -174,7 +174,7 @@ export interface TaskPatchInput {
   assignee_id?: string | null
   due_date?: string | null
   label_ids?: string[]
-  project_number?: number | null
+  project_number?: number
   milestone_id?: string | null
 }
 

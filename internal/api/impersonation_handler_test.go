@@ -19,6 +19,18 @@ func TestAdminUserLifecycleAndReadOnlyImpersonationHTTPPolicy(t *testing.T) {
 	ctx := context.Background()
 	testCutoff := time.Now().UTC()
 	adminID, memberID := uuid.MustParse(userA), uuid.MustParse(userB)
+	type originalUserState struct {
+		role   string
+		active bool
+	}
+	original := map[uuid.UUID]originalUserState{}
+	for _, id := range []uuid.UUID{adminID, memberID} {
+		var state originalUserState
+		require.NoError(t, db.Pool.QueryRow(ctx,
+			`SELECT platform_role, active FROM users WHERE id=$1`, id).
+			Scan(&state.role, &state.active))
+		original[id] = state
+	}
 	_, err := db.Pool.Exec(ctx, `UPDATE users SET platform_role='ADMIN' WHERE id=$1`, adminID)
 	require.NoError(t, err)
 	t.Cleanup(func() {
@@ -27,9 +39,12 @@ func TestAdminUserLifecycleAndReadOnlyImpersonationHTTPPolicy(t *testing.T) {
 			WHERE occurred_at >= $1 AND (actor_user_id=$2 OR subject_user_id=$2 OR subject_user_id=$3)`,
 			testCutoff, adminID, memberID)
 		require.NoError(t, cleanupErr)
-		_, cleanupErr = db.Pool.Exec(context.Background(),
-			`UPDATE users SET platform_role='MEMBER',active=true WHERE id=ANY($1)`, []uuid.UUID{adminID, memberID})
-		require.NoError(t, cleanupErr)
+		for id, state := range original {
+			_, cleanupErr = db.Pool.Exec(context.Background(),
+				`UPDATE users SET platform_role=$2, active=$3 WHERE id=$1`,
+				id, state.role, state.active)
+			require.NoError(t, cleanupErr)
+		}
 	})
 
 	memberCookies, _ := developmentLogin(t, handler, userB)
