@@ -17,6 +17,7 @@ interface FilterForm {
   route: string
   status: string
   requestID: string
+  includeSuccessfulReads: boolean
 }
 
 const EMPTY_FILTERS: FilterForm = {
@@ -26,6 +27,7 @@ const EMPTY_FILTERS: FilterForm = {
   route: '',
   status: '',
   requestID: '',
+  includeSuccessfulReads: false,
 }
 
 export default function AdminAPIAuditPage() {
@@ -112,7 +114,9 @@ export default function AdminAPIAuditPage() {
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 p-4 sm:p-6">
       <header>
         <h1 className="text-xl font-semibold">API 审计</h1>
-        <p className="mt-1 text-sm text-fg-muted">查看 Agent API 的认证、路由、结果和幂等重放记录。审计日志不保存请求或响应正文。</p>
+        <p className="mt-1 text-sm text-fg-muted">
+          查看写操作以及被拒绝或失败的请求。成功读取不再逐条记录，历史读取记录可按需显示；审计日志不保存请求或响应正文。
+        </p>
       </header>
 
       <form onSubmit={applyFilters} className="grid gap-3 rounded-lg border border-border bg-surface-raised p-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -137,7 +141,16 @@ export default function AdminAPIAuditPage() {
         <FilterInput label="路由" value={draft.route} onChange={(value) => setDraft({ ...draft, route: value })} placeholder="/api/v1/tasks/{number}" />
         <FilterInput label="状态码" value={draft.status} onChange={(value) => setDraft({ ...draft, status: value })} inputMode="numeric" placeholder="例如：412" />
         <FilterInput label="Request ID" value={draft.requestID} onChange={(value) => setDraft({ ...draft, requestID: value })} placeholder="精确匹配" />
-        <div className="flex items-end gap-2 sm:col-span-2">
+        <label className="flex items-center gap-2 self-end py-2 text-sm">
+          <input
+            type="checkbox"
+            checked={draft.includeSuccessfulReads}
+            onChange={(event) => setDraft({ ...draft, includeSuccessfulReads: event.target.checked })}
+            className="size-4 accent-accent"
+          />
+          显示历史成功读取
+        </label>
+        <div className="flex items-end gap-2">
           <button type="submit" className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg">筛选</button>
           <button
             type="button"
@@ -275,6 +288,7 @@ function toAPIFilters(filters: FilterForm, cursor?: string): APIAccessFilters {
     route: filters.route.trim() || undefined,
     status: Number.isInteger(status) ? status : undefined,
     requestID: filters.requestID.trim() || undefined,
+    importantOnly: !filters.includeSuccessfulReads,
     cursor,
     pageSize: 50,
   }

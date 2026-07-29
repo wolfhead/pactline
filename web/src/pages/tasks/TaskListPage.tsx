@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
+import { Plus } from 'lucide-react'
 import FilterBar, { DEFAULT_FILTERS, type TaskFilters } from '@/components/tasks/FilterBar'
-import InlineCreate, { type InlineCreateHandle } from '@/components/tasks/InlineCreate'
 import TaskDetail from '@/components/tasks/TaskDetail'
 import TaskList from '@/components/tasks/TaskList'
+import { useTaskComposer } from '@/components/tasks/TaskComposer'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { archiveTask, getTask, listLabels, listTasks, restoreTask, updateTask } from '@/api/tasks'
@@ -24,9 +25,9 @@ const PAGE_SIZE = 50
  * the list by way of `handlePatched` — never by re-fetching the list.
  */
 export default function TaskListPage() {
-  const { me, users } = useIdentity()
+  const { me, users, isReadOnly } = useIdentity()
+  const { openTaskComposer } = useTaskComposer()
   const navigate = useNavigate()
-  const location = useLocation()
   const tier = useBreakpoint()
   const { number } = useParams()
 
@@ -47,11 +48,6 @@ export default function TaskListPage() {
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({})
   const [reloadToken, setReloadToken] = useState(0)
   const [ownershipView, setOwnershipView] = useState<'assigned' | 'created'>('assigned')
-
-  // Held so both the "＋ 新建任务" filter-bar button and the focusCreate
-  // navigation state (below) can jump focus into the capture row without it
-  // ever opening a dialog of its own.
-  const createRef = useRef<InlineCreateHandle>(null)
 
   // Labels load once per identity — shared by the filter dropdown and the
   // inline label manager folded into the filter bar.
@@ -178,6 +174,7 @@ export default function TaskListPage() {
   }
 
   function handleCreated(task: Task) {
+    setOwnershipView('created')
     setTasks((ts) => [task, ...ts])
   }
 
@@ -239,24 +236,6 @@ export default function TaskListPage() {
       .catch((err) => setRowErrors((e) => ({ ...e, [task.number]: `恢复失败：${(err as Error).message}` })))
   }
 
-  // Arrived here with a request to focus the capture row — the phone bottom
-  // bar's 新建 tab navigates this way, since it has no capture row of its
-  // own. Keyed on `location.state`, not `[]`: a phone visiting `/tasks/143`
-  // keeps this same TaskListPage instance mounted (the URL's :number just
-  // selects a row, per the module doc above), so tapping 新建 from there
-  // changes location without ever remounting the component. An
-  // on-mount-only effect would fire once for the detail view and never
-  // again — the capture row would silently stay unfocused every time after
-  // the first cold load.
-  useEffect(() => {
-    const state = location.state as { focusCreate?: boolean } | null
-    if (state?.focusCreate) {
-      createRef.current?.focus()
-      navigate(location.pathname, { replace: true, state: {} })
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.state])
-
   function closeDetail() {
     navigate('/tasks')
   }
@@ -306,30 +285,40 @@ export default function TaskListPage() {
               Without it the heading sits flush on top of the capture row. */}
           <div className="mb-2 flex items-center justify-between gap-3">
             <h2 className="text-sm font-semibold text-fg">我的工作</h2>
-            <div className="flex rounded-md bg-surface-subtle p-0.5 text-xs">
-              <button
-                type="button"
-                onClick={() => setOwnershipView('assigned')}
-                className={ownershipView === 'assigned' ? 'rounded bg-surface px-2 py-1 font-medium shadow-sm' : 'px-2 py-1 text-fg-muted'}
-              >
-                分配给我
-              </button>
-              <button
-                type="button"
-                onClick={() => setOwnershipView('created')}
-                className={ownershipView === 'created' ? 'rounded bg-surface px-2 py-1 font-medium shadow-sm' : 'px-2 py-1 text-fg-muted'}
-              >
-                我创建的
-              </button>
+            <div className="flex items-center gap-2">
+              <div className="flex rounded-md bg-surface-subtle p-0.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setOwnershipView('assigned')}
+                  className={ownershipView === 'assigned' ? 'rounded bg-surface px-2 py-1 font-medium shadow-sm' : 'px-2 py-1 text-fg-muted'}
+                >
+                  分配给我
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOwnershipView('created')}
+                  className={ownershipView === 'created' ? 'rounded bg-surface px-2 py-1 font-medium shadow-sm' : 'px-2 py-1 text-fg-muted'}
+                >
+                  我创建的
+                </button>
+              </div>
+              {!isReadOnly && (
+                <button
+                  type="button"
+                  onClick={() => openTaskComposer({ onCreated: handleCreated })}
+                  className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-fg"
+                >
+                  <Plus className="size-3.5" aria-hidden="true" />
+                  新建任务
+                </button>
+              )}
             </div>
           </div>
-          <InlineCreate ref={createRef} onCreated={handleCreated} />
           <FilterBar
             filters={filters}
             onChange={setFilters}
             labels={labels}
             onLabelsChanged={setLabels}
-            onRequestCreate={() => createRef.current?.focus()}
           />
         </div>
 
@@ -356,7 +345,7 @@ export default function TaskListPage() {
             </p>
           )}
           {!loading && !error && tasks.length === 0 && !hasActiveFilters && (
-            <p className="p-3 text-sm text-fg-muted">没有任务 — 在上面输入标题就能创建一个</p>
+            <p className="p-3 text-sm text-fg-muted">没有任务。使用“新建任务”补充背景和期望结果后创建。</p>
           )}
           {!loading && !error && tasks.length > 0 && (
             <>

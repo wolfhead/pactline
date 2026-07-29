@@ -6,6 +6,7 @@ import { useIdentity } from '@/identity'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { cn } from '@/lib/utils'
 import NavSidebar from './NavSidebar'
+import { useTaskComposer } from './TaskComposer'
 
 const BOTTOM_TABS = [
   { to: '/tasks', label: '我的工作', icon: LayoutList, end: false },
@@ -18,6 +19,7 @@ const BOTTOM_TABS = [
 // on a 375px screen.
 export default function AppShell({ children }: { children: ReactNode }) {
   const { actor, subject, impersonation, isReadOnly, logout, endImpersonation } = useIdentity()
+  const { openTaskComposer } = useTaskComposer()
   const tier = useBreakpoint()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [meOpen, setMeOpen] = useState(false)
@@ -92,7 +94,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
       <div className="flex min-h-0 flex-1">
         {showPermanentNav && (
-          <div className="w-44 shrink-0 overflow-y-auto border-r border-border bg-sidebar">
+          <div className="w-60 shrink-0 overflow-y-auto border-r border-border bg-sidebar">
             <NavSidebar />
           </div>
         )}
@@ -129,14 +131,14 @@ export default function AppShell({ children }: { children: ReactNode }) {
             </NavLink>
           ))}
           {!isReadOnly && (
-            <Link
-              to="/tasks"
-              state={{ focusCreate: true }}
+            <button
+              type="button"
+              onClick={() => openTaskComposer()}
               className="flex min-h-11 flex-col items-center justify-center gap-0.5 py-1.5 text-[11px] text-fg-muted"
             >
               <Plus className="size-5" aria-hidden="true" />
               新建
-            </Link>
+            </button>
           )}
           {/* Account controls stay behind 我的 on phones so they consume no
            * standing vertical space above the task list. */}

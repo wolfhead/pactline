@@ -60,6 +60,13 @@ func (m apiAccessAudit) wrap(next http.Handler) http.Handler {
 		if m.store == nil {
 			return
 		}
+		statusCode := recorder.statusCode()
+		// Successful reads are ordinary UI and Agent traffic, not durable
+		// security evidence. Mutations and every rejected or failed request
+		// remain individually auditable.
+		if r.Method == http.MethodGet && statusCode >= 200 && statusCode < 400 {
+			return
+		}
 		route := "unmatched"
 		if m.routes != nil {
 			_, pattern := m.routes.Handler(auditedRequest)
@@ -71,7 +78,7 @@ func (m apiAccessAudit) wrap(next http.Handler) http.Handler {
 			ID: uuid.New(), OccurredAt: started, RequestID: requestID(auditedRequest),
 			AuthMethod: state.authMethod, AuthOutcome: state.authOutcome,
 			UserID: state.userID, TokenID: state.tokenID, TokenName: state.tokenName,
-			Method: r.Method, RoutePattern: route, StatusCode: recorder.statusCode(),
+			Method: r.Method, RoutePattern: route, StatusCode: statusCode,
 			ProblemCode:   state.problemCode,
 			DurationMS:    max(0, now().UTC().Sub(started).Milliseconds()),
 			ResponseBytes: recorder.bytes, IdempotencyReplayed: state.idempotencyReplayed,

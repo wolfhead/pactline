@@ -1,5 +1,3 @@
-import { Plus } from 'lucide-react'
-import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useIdentity } from '@/identity'
 import {
   PRIORITY_LABELS,
@@ -68,7 +66,6 @@ interface FilterBarProps {
   onChange: (next: TaskFilters) => void
   labels: Label[]
   onLabelsChanged: (labels: Label[]) => void
-  onRequestCreate: () => void
 }
 
 /** Every filter is independent and additive — toggling one never clears
@@ -83,9 +80,8 @@ interface FilterBarProps {
  * the five per-row property controls, and highlights itself
  * (`aria-pressed`/accent background) only when it's actually narrowing the
  * list. */
-export default function FilterBar({ filters, onChange, labels, onLabelsChanged, onRequestCreate }: FilterBarProps) {
+export default function FilterBar({ filters, onChange, labels, onLabelsChanged }: FilterBarProps) {
   const { users, isReadOnly } = useIdentity()
-  const tier = useBreakpoint()
 
   function toggleStatus(s: TaskStatus) {
     const has = filters.statuses.includes(s)
@@ -229,24 +225,6 @@ export default function FilterBar({ filters, onChange, labels, onLabelsChanged, 
         {filters.order === 'asc' ? '↑ 升序' : '↓ 降序'}
       </button>
 
-      {/* Not on a phone. There it is the third way to reach the same capture
-       * row — which sits directly above this bar, and which the bottom tab
-       * bar's 新建 tab already jumps focus into — and it wraps onto a fourth
-       * filter row of its own, ~52px of pure duplication on the tier with
-       * the least vertical room. Every other tier keeps it. */}
-      {tier !== 'phone' && !isReadOnly && (
-        <button
-          type="button"
-          onClick={onRequestCreate}
-          className={cn(
-            CONTROL_TRIGGER_CLASS,
-            'ml-auto justify-center border-accent bg-accent px-3 text-accent-fg hover:opacity-90',
-          )}
-        >
-          <Plus className="size-3.5" aria-hidden="true" />
-          新建任务
-        </button>
-      )}
     </div>
   )
 }

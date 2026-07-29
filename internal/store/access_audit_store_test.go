@@ -58,6 +58,46 @@ func TestAccessAuditStorePersistsSafeFieldsAndAppliesRetention(t *testing.T) {
 	require.Equal(t, []uuid.UUID{recentID}, remaining)
 }
 
+func TestAccessAuditImportantFilterExcludesOnlySuccessfulReads(t *testing.T) {
+	db := newTestDB(t)
+	repository := store.NewAccessAuditStore(db)
+	ctx := context.Background()
+	ids := []uuid.UUID{uuid.New(), uuid.New(), uuid.New()}
+	t.Cleanup(func() {
+		_, err := db.Pool.Exec(context.Background(),
+			`DELETE FROM api_request_audit_events WHERE id=ANY($1)`, ids)
+		require.NoError(t, err)
+	})
+
+	base := access.RequestAuditEvent{
+		OccurredAt: time.Now().UTC(), RequestID: "important-filter",
+		AuthMethod:  access.AuthenticationMethodSession,
+		AuthOutcome: access.AuthOutcomeAuthenticated, UserID: pointerUUID(userA),
+		RoutePattern: "/api/v1/tasks", DurationMS: 1, UserAgent: "store-test",
+	}
+	for index, request := range []struct {
+		method string
+		status int
+	}{
+		{method: httpMethodGet, status: 200},
+		{method: httpMethodGet, status: 403},
+		{method: "PATCH", status: 200},
+	} {
+		event := base
+		event.ID = ids[index]
+		event.Method = request.method
+		event.StatusCode = request.status
+		require.NoError(t, repository.RecordAccessAudit(ctx, event))
+	}
+
+	events, err := repository.ListAccessAudit(ctx, access.RequestAuditFilter{
+		RequestID: "important-filter", ImportantOnly: true, Limit: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, events, 2)
+	require.ElementsMatch(t, []int{403, 200}, []int{events[0].StatusCode, events[1].StatusCode})
+}
+
 const httpMethodGet = "GET"
 
 func pointerUUID(value uuid.UUID) *uuid.UUID { return &value }

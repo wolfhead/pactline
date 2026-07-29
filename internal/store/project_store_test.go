@@ -123,7 +123,8 @@ func TestTaskRejectsMilestoneFromAnotherProject(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = tasks.Create(ctx, domain.Task{
-		Title: "Invalid association", CreatorID: userA,
+		Title: "Invalid association", Context: "Context", ExpectedResult: "Result",
+		CreatorID: userA,
 		ProjectID: first.Project.ID, MilestoneID: &milestone.ID,
 	}, nil)
 	require.Error(t, err)

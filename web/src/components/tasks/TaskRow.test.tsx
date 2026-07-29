@@ -10,7 +10,9 @@ const USERS = [
 ]
 const TASK: Task = {
   id: 'id-142', number: 142, version: 1,
-  title: '修复竞价超时导致的丢量', description: '',
+  title: '修复竞价超时导致的丢量',
+  context: '竞价请求近期频繁超时', expected_result: '恢复稳定流量',
+  description: '',
   status: 'todo', priority: 'high', assignee: USERS[0],
   creator: USERS[0], due_date: '2026-07-30',
   project: { id: 'p1', number: 12, name: 'Task Manager' }, milestone: null, labels: [],

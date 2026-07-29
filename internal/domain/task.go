@@ -60,22 +60,24 @@ func (p TaskPriority) Valid() bool {
 // AssigneeID is nullable: unassigned is a normal, first-class state, not an
 // error or a placeholder to fill in later.
 type Task struct {
-	ID          uuid.UUID
-	Number      int64
-	Version     int64
-	Title       string
-	Description string
-	Status      TaskStatus
-	Priority    TaskPriority
-	AssigneeID  *uuid.UUID
-	CreatorID   uuid.UUID
-	DueDate     *time.Time
-	ProjectID   uuid.UUID
-	MilestoneID *uuid.UUID
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	CompletedAt *time.Time
-	ArchivedAt  *time.Time
+	ID             uuid.UUID
+	Number         int64
+	Version        int64
+	Title          string
+	Context        string
+	ExpectedResult string
+	Description    string
+	Status         TaskStatus
+	Priority       TaskPriority
+	AssigneeID     *uuid.UUID
+	CreatorID      uuid.UUID
+	DueDate        *time.Time
+	ProjectID      uuid.UUID
+	MilestoneID    *uuid.UUID
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	CompletedAt    *time.Time
+	ArchivedAt     *time.Time
 }
 
 // TaskCompletionReadiness is a snapshot taken while the task row is locked.
@@ -102,10 +104,12 @@ func (t Task) ValidateCompletion(readiness TaskCompletionReadiness) error {
 // Priority are never null-valued, so a plain pointer (nil = not provided) is
 // enough for them.
 type TaskPatch struct {
-	Title       *string
-	Description *string
-	Status      *TaskStatus
-	Priority    *TaskPriority
+	Title          *string
+	Context        *string
+	ExpectedResult *string
+	Description    *string
+	Status         *TaskStatus
+	Priority       *TaskPriority
 
 	AssigneeSet bool
 	AssigneeID  *uuid.UUID
@@ -126,6 +130,7 @@ type TaskPatch struct {
 // IsEmpty reports whether the patch changes nothing at all, in which case a
 // store Update becomes a harmless no-op read rather than a write.
 func (p TaskPatch) IsEmpty() bool {
-	return p.Title == nil && p.Description == nil && p.Status == nil && p.Priority == nil &&
+	return p.Title == nil && p.Context == nil && p.ExpectedResult == nil &&
+		p.Description == nil && p.Status == nil && p.Priority == nil &&
 		!p.AssigneeSet && !p.DueDateSet && !p.LabelsSet && !p.ProjectSet && !p.MilestoneSet
 }

@@ -131,10 +131,11 @@ func parseAccessAuditFilter(r *http.Request) (access.RequestAuditFilter, error) 
 		pageSize = value
 	}
 	filter := access.RequestAuditFilter{
-		Method:       strings.ToUpper(query.Get("method")),
-		RoutePattern: query.Get("route"),
-		RequestID:    query.Get("request_id"),
-		Limit:        pageSize + 1,
+		Method:        strings.ToUpper(query.Get("method")),
+		RoutePattern:  query.Get("route"),
+		RequestID:     query.Get("request_id"),
+		ImportantOnly: query.Get("important_only") == "true",
+		Limit:         pageSize + 1,
 	}
 	if raw := query.Get("user_id"); raw != "" {
 		value, err := uuid.Parse(raw)

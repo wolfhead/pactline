@@ -1299,12 +1299,20 @@ components:
     TaskCreate:
       type: object
       additionalProperties: false
-      required: [title, project_number]
+      required: [title, context, expected_result, project_number]
       properties:
         title:
           type: string
           minLength: 1
           maxLength: 500
+        context:
+          type: string
+          minLength: 1
+          description: Why the task is needed or what current problem it addresses.
+        expected_result:
+          type: string
+          minLength: 1
+          description: The observable result expected when the task is complete.
         description:
           type: string
         status:
@@ -1336,6 +1344,12 @@ components:
           type: string
           minLength: 1
           maxLength: 500
+        context:
+          type: string
+          minLength: 1
+        expected_result:
+          type: string
+          minLength: 1
         description:
           type: string
         status:
@@ -1390,6 +1404,8 @@ components:
         - number
         - version
         - title
+        - context
+        - expected_result
         - description
         - status
         - priority
@@ -1411,6 +1427,10 @@ components:
           format: int64
           minimum: 1
         title:
+          type: string
+        context:
+          type: string
+        expected_result:
           type: string
         description:
           type: string

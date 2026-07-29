@@ -12,17 +12,19 @@ import (
 type ActivityField string
 
 const (
-	ActivityFieldCreated     ActivityField = "created"
-	ActivityFieldTitle       ActivityField = "title"
-	ActivityFieldDescription ActivityField = "description"
-	ActivityFieldStatus      ActivityField = "status"
-	ActivityFieldPriority    ActivityField = "priority"
-	ActivityFieldAssignee    ActivityField = "assignee"
-	ActivityFieldDueDate     ActivityField = "due_date"
-	ActivityFieldLabels      ActivityField = "labels"
-	ActivityFieldProject     ActivityField = "project"
-	ActivityFieldMilestone   ActivityField = "milestone"
-	ActivityFieldArchived    ActivityField = "archived"
+	ActivityFieldCreated        ActivityField = "created"
+	ActivityFieldTitle          ActivityField = "title"
+	ActivityFieldContext        ActivityField = "context"
+	ActivityFieldExpectedResult ActivityField = "expected_result"
+	ActivityFieldDescription    ActivityField = "description"
+	ActivityFieldStatus         ActivityField = "status"
+	ActivityFieldPriority       ActivityField = "priority"
+	ActivityFieldAssignee       ActivityField = "assignee"
+	ActivityFieldDueDate        ActivityField = "due_date"
+	ActivityFieldLabels         ActivityField = "labels"
+	ActivityFieldProject        ActivityField = "project"
+	ActivityFieldMilestone      ActivityField = "milestone"
+	ActivityFieldArchived       ActivityField = "archived"
 )
 
 // Activity is one append-only record of a change made to a task: what

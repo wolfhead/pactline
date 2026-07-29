@@ -88,6 +88,7 @@ describe('AdminAPIAuditPage', () => {
       route: '/api/v1/tasks/{number}',
       status: 412,
       requestID: 'request-1',
+      importantOnly: true,
       cursor: undefined,
       pageSize: 50,
     }

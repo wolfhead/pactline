@@ -8,7 +8,8 @@ const USERS = [{ id: 'u1', name: '张沁', email: 'a@x.com' }]
 
 function task(n: number, over: Partial<Task> = {}): Task {
   return {
-    id: `id-${n}`, number: n, title: `任务 ${n}`, description: '',
+    id: `id-${n}`, number: n, title: `任务 ${n}`,
+    context: 'Test context', expected_result: 'Test result', description: '',
     status: 'todo', priority: 'none', assignee: null,
     creator: USERS[0], due_date: null, labels: [],
     created_at: '', updated_at: '', completed_at: null, archived_at: null,

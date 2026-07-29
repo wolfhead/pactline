@@ -53,6 +53,8 @@ export interface Task {
   number: number
   version: number
   title: string
+  context: string
+  expected_result: string
   description: string
   status: TaskStatus
   priority: TaskPriority
@@ -87,6 +89,8 @@ export interface Comment {
 export type ActivityField =
   | 'created'
   | 'title'
+  | 'context'
+  | 'expected_result'
   | 'description'
   | 'status'
   | 'priority'
@@ -111,6 +115,8 @@ export interface Activity {
 
 export interface TaskPatchBody {
   title?: string
+  context?: string
+  expected_result?: string
   description?: string
   status?: TaskStatus
   priority?: TaskPriority
@@ -125,6 +131,8 @@ export interface TaskPatchBody {
 
 export interface CreateTaskBody {
   title: string
+  context: string
+  expected_result: string
   description?: string
   status?: TaskStatus
   priority?: TaskPriority

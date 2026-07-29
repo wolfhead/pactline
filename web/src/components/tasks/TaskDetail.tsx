@@ -52,7 +52,7 @@ interface TaskDetailProps {
  * Detail *content* for one task — no dialog, no page chrome, no back link
  * of its own. Task 9 places this inside a third column at xl, a slide-over
  * Sheet at lg/md, and a full page on a phone; this component has no idea
- * which. Title and description are edited exactly where they are read (see
+ * which. The task brief is edited exactly where it is read (see
  * InlineEditable). Every property commits the instant it changes —
  * optimistic update, then reconciled against whatever the server actually
  * persisted, reverting visibly with a reason if it refuses. Archiving does
@@ -466,14 +466,41 @@ export default function TaskDetail({
         />
       </div>
 
-      <InlineEditable
-        value={task.description}
-        onCommit={(next) => patchOptimistic({ description: next }, { description: next })}
-        multiline
-        placeholder="添加描述…"
-        ariaLabel="任务描述"
-        className="text-sm text-fg"
-      />
+      <section className="flex flex-col gap-3 border-t border-border pt-4">
+        <div>
+          <h3 className="text-xs font-medium uppercase tracking-wide text-fg-muted">背景 / 问题</h3>
+          <InlineEditable
+            value={task.context}
+            onCommit={(next) => patchOptimistic({ context: next }, { context: next })}
+            multiline
+            placeholder="补充为什么需要做，以及当前遇到的问题…"
+            ariaLabel="任务背景"
+            className="mt-1 text-sm text-fg"
+          />
+        </div>
+        <div>
+          <h3 className="text-xs font-medium uppercase tracking-wide text-fg-muted">期望结果</h3>
+          <InlineEditable
+            value={task.expected_result}
+            onCommit={(next) => patchOptimistic({ expected_result: next }, { expected_result: next })}
+            multiline
+            placeholder="补充完成后应该达到的状态…"
+            ariaLabel="任务期望结果"
+            className="mt-1 text-sm text-fg"
+          />
+        </div>
+        <div>
+          <h3 className="text-xs font-medium uppercase tracking-wide text-fg-muted">补充说明</h3>
+          <InlineEditable
+            value={task.description}
+            onCommit={(next) => patchOptimistic({ description: next }, { description: next })}
+            multiline
+            placeholder="可选：补充约束、参考资料或实现提示…"
+            ariaLabel="任务补充说明"
+            className="mt-1 text-sm text-fg"
+          />
+        </div>
+      </section>
 
       <AcceptanceChecklist
         title="验收标准"

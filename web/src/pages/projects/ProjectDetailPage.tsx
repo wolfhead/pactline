@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { flushSync } from 'react-dom'
 import { Link, NavLink, useParams } from 'react-router-dom'
+import { Plus } from 'lucide-react'
 import {
   applyMilestoneLifecycle,
   applyProjectArchive,
@@ -13,7 +14,7 @@ import {
   type ProjectActivity,
   type ProjectDetail,
 } from '@/api/projects'
-import { archiveTask, createTask, restoreTask, updateTask } from '@/api/tasks'
+import { archiveTask, restoreTask, updateTask } from '@/api/tasks'
 import {
   checkCriterion,
   removeCriterion,
@@ -24,6 +25,7 @@ import {
 import { ProblemError } from '@/api/v1/client'
 import AcceptanceChecklist from '@/components/projects/AcceptanceChecklist'
 import TaskList from '@/components/tasks/TaskList'
+import { useTaskComposer } from '@/components/tasks/TaskComposer'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useIdentity } from '@/identity'
 import type { Task, TaskPatchBody, UserRef } from '@/task-types'
@@ -208,6 +210,7 @@ export default function ProjectDetailPage({ view = 'overview' }: { view?: Projec
           detail={detail}
           users={users}
           onMutate={mutate}
+          onReload={reload}
         />
       )}
       {view === 'milestones' && (
@@ -304,31 +307,33 @@ function Backlog({
   detail,
   users,
   onMutate,
+  onReload,
 }: {
   detail: ProjectDetail
   users: UserRef[]
   onMutate: (operation: () => Promise<unknown>) => Promise<boolean>
+  onReload: () => Promise<void>
 }) {
-  const [title, setTitle] = useState('')
+  const { openTaskComposer } = useTaskComposer()
   const backlog = detail.tasks.filter((task) => !task.milestone && !task.archived_at)
-  async function submit(event: FormEvent) {
-    event.preventDefault()
-    if (!title.trim()) return
-    const created = await onMutate(() => createTask({
-      title: title.trim(),
-      project_number: detail.project.number,
-    }))
-    if (created) setTitle('')
-  }
   return (
     <section className="rounded-lg border border-border bg-surface-raised">
-      <div className="border-b border-border p-4">
-        <h2 className="font-semibold">项目 Backlog</h2>
-        <p className="mt-1 text-sm text-fg-muted">尚未安排到里程碑的任务。</p>
-        <form onSubmit={submit} className="mt-3 flex gap-2">
-          <input value={title} onChange={(event) => setTitle(event.target.value)} aria-label="新建 Backlog 任务" placeholder="输入标题，回车创建…" className="min-w-0 flex-1 rounded-md border border-border-strong bg-surface px-3 py-2 text-sm" />
-          <button className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white">创建</button>
-        </form>
+      <div className="flex items-start justify-between gap-4 border-b border-border p-4">
+        <div>
+          <h2 className="font-semibold">项目 Backlog</h2>
+          <p className="mt-1 text-sm text-fg-muted">尚未安排到里程碑的任务。</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => openTaskComposer({
+            projectNumber: detail.project.number,
+            onCreated: () => { void onReload() },
+          })}
+          className="flex shrink-0 items-center gap-1.5 rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-fg"
+        >
+          <Plus className="size-4" aria-hidden="true" />
+          新建任务
+        </button>
       </div>
       <ProjectTaskCollection tasks={backlog} users={users} onMutate={onMutate} empty="Backlog 为空。" />
     </section>
@@ -347,12 +352,11 @@ function Milestones({
   onReload: () => Promise<void>
 }) {
   const project = detail.project
-  const [taskTitle, setTaskTitle] = useState('')
+  const { openTaskComposer } = useTaskComposer()
   const [editingMilestone, setEditingMilestone] = useState(false)
   const [acceptanceMutationPending, setAcceptanceMutationPending] = useState(false)
   useEffect(() => {
     setEditingMilestone(false)
-    setTaskTitle('')
     setAcceptanceMutationPending(false)
   }, [selected?.id])
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -484,31 +488,22 @@ function Milestones({
           }}
         />
         <div className="rounded-lg border border-border bg-surface-raised">
-          <div className="border-b border-border p-4">
+          <div className="flex items-center justify-between gap-4 border-b border-border p-4">
             <h3 className="font-semibold">里程碑任务</h3>
-            <form
-              className="mt-3 flex gap-2"
-              onSubmit={async (event) => {
-                event.preventDefault()
-                const title = taskTitle.trim()
-                if (!title) return
-                const created = await onMutate(() => createTask({
-                  title,
-                  project_number: project.number,
-                  milestone_id: selected.id,
-                }))
-                if (created) setTaskTitle('')
-              }}
-            >
-              <input
-                value={taskTitle}
-                onChange={(event) => setTaskTitle(event.target.value)}
-                aria-label="新建里程碑任务"
-                placeholder="输入标题，回车创建…"
-                className="min-w-0 flex-1 rounded-md border border-border-strong bg-surface px-3 py-2 text-sm"
-              />
-              <button className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white">创建</button>
-            </form>
+            {(selected.status === 'planned' || selected.status === 'active') && (
+              <button
+                type="button"
+                onClick={() => openTaskComposer({
+                  projectNumber: project.number,
+                  milestoneID: selected.id,
+                  onCreated: () => { void onReload() },
+                })}
+                className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-fg"
+              >
+                <Plus className="size-4" aria-hidden="true" />
+                新建任务
+              </button>
+            )}
           </div>
           <ProjectTaskCollection tasks={tasks} users={users} onMutate={onMutate} empty="还没有任务归入此里程碑。" />
         </div>

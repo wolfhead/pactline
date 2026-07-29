@@ -102,6 +102,9 @@ func (s *AccessAuditStore) ListAccessAudit(
 	if filter.RequestID != "" {
 		add("request_id", filter.RequestID)
 	}
+	if filter.ImportantOnly {
+		query.WriteString(" AND NOT (method='GET' AND status_code >= 200 AND status_code < 400)")
+	}
 	if filter.From != nil {
 		args = append(args, *filter.From)
 		fmt.Fprintf(&query, " AND occurred_at >= $%d", len(args))

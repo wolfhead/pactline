@@ -57,6 +57,7 @@ export interface APIAccessFilters {
   route?: string
   status?: number
   requestID?: string
+  importantOnly?: boolean
   from?: string
   to?: string
   cursor?: string
@@ -103,6 +104,7 @@ function accessQuery(filters: APIAccessFilters): string {
   if (filters.route) query.set('route', filters.route)
   if (filters.status !== undefined) query.set('status', String(filters.status))
   if (filters.requestID) query.set('request_id', filters.requestID)
+  if (filters.importantOnly) query.set('important_only', 'true')
   if (filters.from) query.set('from', filters.from)
   if (filters.to) query.set('to', filters.to)
   if (filters.cursor) query.set('cursor', filters.cursor)

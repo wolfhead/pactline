@@ -47,13 +47,13 @@ func TestV1TransportUsesApplicationAuthenticationAndScopes(t *testing.T) {
 	require.NoError(t, json.NewDecoder(bearer.Body).Decode(&bearerPrincipal))
 	require.Equal(t, "api_token", bearerPrincipal.AuthenticationMethod)
 	require.Equal(t, []string{"work:read"}, bearerPrincipal.Scopes)
-	var auditedRoute string
+	var successfulReadAudits int
 	require.NoError(t, db.Pool.QueryRow(
 		context.Background(),
-		`SELECT route_pattern FROM api_request_audit_events WHERE request_id=$1`,
+		`SELECT count(*) FROM api_request_audit_events WHERE request_id=$1`,
 		bearer.Header().Get("X-Request-ID"),
-	).Scan(&auditedRoute))
-	require.Equal(t, "/api/v1/me", auditedRoute)
+	).Scan(&successfulReadAudits))
+	require.Zero(t, successfulReadAudits)
 
 	mutationRequest := httptest.NewRequest(
 		http.MethodPost,
@@ -69,4 +69,11 @@ func TestV1TransportUsesApplicationAuthenticationAndScopes(t *testing.T) {
 	var problem baseapi.Problem
 	require.NoError(t, json.NewDecoder(mutation.Body).Decode(&problem))
 	require.Equal(t, "INSUFFICIENT_SCOPE", problem.Code)
+	var auditedRoute string
+	require.NoError(t, db.Pool.QueryRow(
+		context.Background(),
+		`SELECT route_pattern FROM api_request_audit_events WHERE request_id=$1`,
+		mutation.Header().Get("X-Request-ID"),
+	).Scan(&auditedRoute))
+	require.Equal(t, "/api/v1/labels", auditedRoute)
 }

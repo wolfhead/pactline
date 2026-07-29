@@ -4820,23 +4820,25 @@ func (s *SessionCookie) SetRoles(val []string) {
 
 // Ref: #/components/schemas/Task
 type Task struct {
-	ID          uuid.UUID       `json:"id"`
-	Number      int64           `json:"number"`
-	Version     int64           `json:"version"`
-	Title       string          `json:"title"`
-	Description string          `json:"description"`
-	Status      TaskStatus      `json:"status"`
-	Priority    TaskPriority    `json:"priority"`
-	Assignee    OptUserRef      `json:"assignee"`
-	Creator     UserRef         `json:"creator"`
-	DueDate     OptDate         `json:"due_date"`
-	Project     ProjectRef      `json:"project"`
-	Milestone   OptMilestoneRef `json:"milestone"`
-	Labels      []Label         `json:"labels"`
-	CreatedAt   time.Time       `json:"created_at"`
-	UpdatedAt   time.Time       `json:"updated_at"`
-	CompletedAt OptDateTime     `json:"completed_at"`
-	ArchivedAt  OptDateTime     `json:"archived_at"`
+	ID             uuid.UUID       `json:"id"`
+	Number         int64           `json:"number"`
+	Version        int64           `json:"version"`
+	Title          string          `json:"title"`
+	Context        string          `json:"context"`
+	ExpectedResult string          `json:"expected_result"`
+	Description    string          `json:"description"`
+	Status         TaskStatus      `json:"status"`
+	Priority       TaskPriority    `json:"priority"`
+	Assignee       OptUserRef      `json:"assignee"`
+	Creator        UserRef         `json:"creator"`
+	DueDate        OptDate         `json:"due_date"`
+	Project        ProjectRef      `json:"project"`
+	Milestone      OptMilestoneRef `json:"milestone"`
+	Labels         []Label         `json:"labels"`
+	CreatedAt      time.Time       `json:"created_at"`
+	UpdatedAt      time.Time       `json:"updated_at"`
+	CompletedAt    OptDateTime     `json:"completed_at"`
+	ArchivedAt     OptDateTime     `json:"archived_at"`
 }
 
 // GetID returns the value of ID.
@@ -4857,6 +4859,16 @@ func (s *Task) GetVersion() int64 {
 // GetTitle returns the value of Title.
 func (s *Task) GetTitle() string {
 	return s.Title
+}
+
+// GetContext returns the value of Context.
+func (s *Task) GetContext() string {
+	return s.Context
+}
+
+// GetExpectedResult returns the value of ExpectedResult.
+func (s *Task) GetExpectedResult() string {
+	return s.ExpectedResult
 }
 
 // GetDescription returns the value of Description.
@@ -4942,6 +4954,16 @@ func (s *Task) SetVersion(val int64) {
 // SetTitle sets the value of Title.
 func (s *Task) SetTitle(val string) {
 	s.Title = val
+}
+
+// SetContext sets the value of Context.
+func (s *Task) SetContext(val string) {
+	s.Context = val
+}
+
+// SetExpectedResult sets the value of ExpectedResult.
+func (s *Task) SetExpectedResult(val string) {
+	s.ExpectedResult = val
 }
 
 // SetDescription sets the value of Description.
@@ -5243,20 +5265,34 @@ func (*TaskActivityListHeaders) listTaskActivityRes() {}
 
 // Ref: #/components/schemas/TaskCreate
 type TaskCreate struct {
-	Title         string          `json:"title"`
-	Description   OptString       `json:"description"`
-	Status        OptTaskStatus   `json:"status"`
-	Priority      OptTaskPriority `json:"priority"`
-	AssigneeID    OptNilUUID      `json:"assignee_id"`
-	DueDate       OptNilDate      `json:"due_date"`
-	LabelIds      []uuid.UUID     `json:"label_ids"`
-	ProjectNumber int64           `json:"project_number"`
-	MilestoneID   OptNilUUID      `json:"milestone_id"`
+	Title string `json:"title"`
+	// Why the task is needed or what current problem it addresses.
+	Context string `json:"context"`
+	// The observable result expected when the task is complete.
+	ExpectedResult string          `json:"expected_result"`
+	Description    OptString       `json:"description"`
+	Status         OptTaskStatus   `json:"status"`
+	Priority       OptTaskPriority `json:"priority"`
+	AssigneeID     OptNilUUID      `json:"assignee_id"`
+	DueDate        OptNilDate      `json:"due_date"`
+	LabelIds       []uuid.UUID     `json:"label_ids"`
+	ProjectNumber  int64           `json:"project_number"`
+	MilestoneID    OptNilUUID      `json:"milestone_id"`
 }
 
 // GetTitle returns the value of Title.
 func (s *TaskCreate) GetTitle() string {
 	return s.Title
+}
+
+// GetContext returns the value of Context.
+func (s *TaskCreate) GetContext() string {
+	return s.Context
+}
+
+// GetExpectedResult returns the value of ExpectedResult.
+func (s *TaskCreate) GetExpectedResult() string {
+	return s.ExpectedResult
 }
 
 // GetDescription returns the value of Description.
@@ -5302,6 +5338,16 @@ func (s *TaskCreate) GetMilestoneID() OptNilUUID {
 // SetTitle sets the value of Title.
 func (s *TaskCreate) SetTitle(val string) {
 	s.Title = val
+}
+
+// SetContext sets the value of Context.
+func (s *TaskCreate) SetContext(val string) {
+	s.Context = val
+}
+
+// SetExpectedResult sets the value of ExpectedResult.
+func (s *TaskCreate) SetExpectedResult(val string) {
+	s.ExpectedResult = val
 }
 
 // SetDescription sets the value of Description.
@@ -5614,20 +5660,32 @@ func (*TaskListHeaders) listTasksRes() {}
 
 // Ref: #/components/schemas/TaskPatch
 type TaskPatch struct {
-	Title         OptString       `json:"title"`
-	Description   OptString       `json:"description"`
-	Status        OptTaskStatus   `json:"status"`
-	Priority      OptTaskPriority `json:"priority"`
-	AssigneeID    OptNilUUID      `json:"assignee_id"`
-	DueDate       OptNilDate      `json:"due_date"`
-	LabelIds      []uuid.UUID     `json:"label_ids"`
-	ProjectNumber OptInt64        `json:"project_number"`
-	MilestoneID   OptNilUUID      `json:"milestone_id"`
+	Title          OptString       `json:"title"`
+	Context        OptString       `json:"context"`
+	ExpectedResult OptString       `json:"expected_result"`
+	Description    OptString       `json:"description"`
+	Status         OptTaskStatus   `json:"status"`
+	Priority       OptTaskPriority `json:"priority"`
+	AssigneeID     OptNilUUID      `json:"assignee_id"`
+	DueDate        OptNilDate      `json:"due_date"`
+	LabelIds       []uuid.UUID     `json:"label_ids"`
+	ProjectNumber  OptInt64        `json:"project_number"`
+	MilestoneID    OptNilUUID      `json:"milestone_id"`
 }
 
 // GetTitle returns the value of Title.
 func (s *TaskPatch) GetTitle() OptString {
 	return s.Title
+}
+
+// GetContext returns the value of Context.
+func (s *TaskPatch) GetContext() OptString {
+	return s.Context
+}
+
+// GetExpectedResult returns the value of ExpectedResult.
+func (s *TaskPatch) GetExpectedResult() OptString {
+	return s.ExpectedResult
 }
 
 // GetDescription returns the value of Description.
@@ -5673,6 +5731,16 @@ func (s *TaskPatch) GetMilestoneID() OptNilUUID {
 // SetTitle sets the value of Title.
 func (s *TaskPatch) SetTitle(val OptString) {
 	s.Title = val
+}
+
+// SetContext sets the value of Context.
+func (s *TaskPatch) SetContext(val OptString) {
+	s.Context = val
+}
+
+// SetExpectedResult sets the value of ExpectedResult.
+func (s *TaskPatch) SetExpectedResult(val OptString) {
+	s.ExpectedResult = val
 }
 
 // SetDescription sets the value of Description.

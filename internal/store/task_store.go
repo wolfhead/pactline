@@ -23,7 +23,8 @@ type TaskStore struct{ db *DB }
 // NewTaskStore wires a TaskStore to the pool.
 func NewTaskStore(db *DB) *TaskStore { return &TaskStore{db: db} }
 
-const taskColumns = `t.id, t.number, t.version, t.title, t.description, t.status, t.priority,
+const taskColumns = `t.id, t.number, t.version, t.title, t.context, t.expected_result,
+	t.description, t.status, t.priority,
 	t.assignee_id, t.creator_id, t.due_date, t.project_id, t.milestone_id,
 	t.created_at, t.updated_at, t.completed_at, t.archived_at`
 
@@ -87,7 +88,8 @@ func scanTaskWithRelations(s scanner) (TaskWithRelations, error) {
 	)
 	err := s.Scan(
 		&twr.Task.ID, &twr.Task.Number, &twr.Task.Version,
-		&twr.Task.Title, &twr.Task.Description, &twr.Task.Status, &twr.Task.Priority,
+		&twr.Task.Title, &twr.Task.Context, &twr.Task.ExpectedResult,
+		&twr.Task.Description, &twr.Task.Status, &twr.Task.Priority,
 		&twr.Task.AssigneeID, &twr.Task.CreatorID, &twr.Task.DueDate, &twr.Task.ProjectID, &twr.Task.MilestoneID,
 		&twr.Task.CreatedAt, &twr.Task.UpdatedAt,
 		&twr.Task.CompletedAt, &twr.Task.ArchivedAt,
@@ -147,6 +149,12 @@ func (s *TaskStore) CreateWithOperation(
 	if strings.TrimSpace(t.Title) == "" {
 		return TaskWithRelations{}, fmt.Errorf("%w: title is required", domain.ErrInvalidInput)
 	}
+	if strings.TrimSpace(t.Context) == "" {
+		return TaskWithRelations{}, fmt.Errorf("%w: task context is required", domain.ErrInvalidInput)
+	}
+	if strings.TrimSpace(t.ExpectedResult) == "" {
+		return TaskWithRelations{}, fmt.Errorf("%w: task expected result is required", domain.ErrInvalidInput)
+	}
 	if t.Status == "" {
 		t.Status = domain.TaskStatusTodo
 	}
@@ -181,12 +189,13 @@ func (s *TaskStore) CreateWithOperation(
 	)
 	err = tx.QueryRow(ctx, `
 		INSERT INTO tasks
-			(id, title, description, status, priority, assignee_id, creator_id,
-			 due_date, project_id, milestone_id, completed_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+			(id, title, context, expected_result, description, status, priority,
+			 assignee_id, creator_id, due_date, project_id, milestone_id, completed_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 		RETURNING id, number`,
-		t.ID, t.Title, t.Description, string(t.Status), string(t.Priority), t.AssigneeID,
-		t.CreatorID, t.DueDate, t.ProjectID, t.MilestoneID, completedAt,
+		t.ID, t.Title, t.Context, t.ExpectedResult, t.Description,
+		string(t.Status), string(t.Priority), t.AssigneeID, t.CreatorID,
+		t.DueDate, t.ProjectID, t.MilestoneID, completedAt,
 	).Scan(&id, &number)
 	if err != nil {
 		return TaskWithRelations{}, mapPgError(err)
@@ -203,7 +212,8 @@ func (s *TaskStore) CreateWithOperation(
 		return TaskWithRelations{}, err
 	}
 	newValue, _ := json.Marshal(map[string]any{
-		"title": t.Title, "description": t.Description, "status": t.Status,
+		"title": t.Title, "context": t.Context, "expected_result": t.ExpectedResult,
+		"description": t.Description, "status": t.Status,
 		"priority": t.Priority, "assignee_id": t.AssigneeID,
 		"due_date": t.DueDate, "project_id": t.ProjectID,
 		"milestone_id": t.MilestoneID, "label_ids": labelIDs,
@@ -300,22 +310,24 @@ func (s *TaskStore) updateWithExpectedVersion(
 	defer tx.Rollback(ctx) //nolint:errcheck // no-op once committed
 
 	var (
-		id                       uuid.UUID
-		oldTitle, oldDescription string
-		oldStatus                domain.TaskStatus
-		oldPriority              domain.TaskPriority
-		oldAssignee              *uuid.UUID
-		oldDueDate               *time.Time
-		oldProject               uuid.UUID
-		oldMilestone             *uuid.UUID
-		oldCompletedAt           *time.Time
-		oldVersion               int64
+		id                                                      uuid.UUID
+		oldTitle, oldContext, oldExpectedResult, oldDescription string
+		oldStatus                                               domain.TaskStatus
+		oldPriority                                             domain.TaskPriority
+		oldAssignee                                             *uuid.UUID
+		oldDueDate                                              *time.Time
+		oldProject                                              uuid.UUID
+		oldMilestone                                            *uuid.UUID
+		oldCompletedAt                                          *time.Time
+		oldVersion                                              int64
 	)
 	err = tx.QueryRow(ctx,
-		`SELECT id, version, title, description, status, priority, assignee_id, due_date,
+		`SELECT id, version, title, context, expected_result, description,
+		        status, priority, assignee_id, due_date,
 		        project_id, milestone_id, completed_at
 		 FROM tasks WHERE number = $1 FOR UPDATE`, number,
-	).Scan(&id, &oldVersion, &oldTitle, &oldDescription, &oldStatus, &oldPriority, &oldAssignee,
+	).Scan(&id, &oldVersion, &oldTitle, &oldContext, &oldExpectedResult,
+		&oldDescription, &oldStatus, &oldPriority, &oldAssignee,
 		&oldDueDate, &oldProject, &oldMilestone, &oldCompletedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return TaskWithRelations{}, domain.ErrNotFound
@@ -327,7 +339,8 @@ func (s *TaskStore) updateWithExpectedVersion(
 		return TaskWithRelations{}, domain.VersionConflictError{CurrentVersion: oldVersion}
 	}
 
-	newTitle, newDescription := oldTitle, oldDescription
+	newTitle, newContext := oldTitle, oldContext
+	newExpectedResult, newDescription := oldExpectedResult, oldDescription
 	newStatus, newPriority := oldStatus, oldPriority
 	newAssignee, newDueDate := oldAssignee, oldDueDate
 	newProject, newMilestone := oldProject, oldMilestone
@@ -337,6 +350,18 @@ func (s *TaskStore) updateWithExpectedVersion(
 			return TaskWithRelations{}, fmt.Errorf("%w: title is required", domain.ErrInvalidInput)
 		}
 		newTitle = *patch.Title
+	}
+	if patch.Context != nil {
+		if strings.TrimSpace(*patch.Context) == "" {
+			return TaskWithRelations{}, fmt.Errorf("%w: task context is required", domain.ErrInvalidInput)
+		}
+		newContext = *patch.Context
+	}
+	if patch.ExpectedResult != nil {
+		if strings.TrimSpace(*patch.ExpectedResult) == "" {
+			return TaskWithRelations{}, fmt.Errorf("%w: task expected result is required", domain.ErrInvalidInput)
+		}
+		newExpectedResult = *patch.ExpectedResult
 	}
 	if patch.Description != nil {
 		newDescription = *patch.Description
@@ -411,18 +436,26 @@ func (s *TaskStore) updateWithExpectedVersion(
 	var nextVersion int64
 	if err := tx.QueryRow(ctx, `
 		UPDATE tasks SET
-			title=$2, description=$3, status=$4, priority=$5,
-			assignee_id=$6, due_date=$7, project_id=$8, milestone_id=$9,
-			completed_at=$10, version=version+1, updated_at=now()
-		WHERE id=$1 AND version=$11
+			title=$2, context=$3, expected_result=$4, description=$5,
+			status=$6, priority=$7, assignee_id=$8, due_date=$9,
+			project_id=$10, milestone_id=$11, completed_at=$12,
+			version=version+1, updated_at=now()
+		WHERE id=$1 AND version=$13
 		RETURNING version`,
-		id, newTitle, newDescription, string(newStatus), string(newPriority),
-		newAssignee, newDueDate, newProject, newMilestone, newCompletedAt, oldVersion,
+		id, newTitle, newContext, newExpectedResult, newDescription,
+		string(newStatus), string(newPriority), newAssignee, newDueDate,
+		newProject, newMilestone, newCompletedAt, oldVersion,
 	).Scan(&nextVersion); err != nil {
 		return TaskWithRelations{}, mapPgError(err)
 	}
 
 	if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldTitle, oldTitle, newTitle); err != nil {
+		return TaskWithRelations{}, err
+	}
+	if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldContext, oldContext, newContext); err != nil {
+		return TaskWithRelations{}, err
+	}
+	if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldExpectedResult, oldExpectedResult, newExpectedResult); err != nil {
 		return TaskWithRelations{}, err
 	}
 	if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldDescription, oldDescription, newDescription); err != nil {
@@ -464,12 +497,14 @@ func (s *TaskStore) updateWithExpectedVersion(
 		}
 	}
 	oldValue, _ := json.Marshal(map[string]any{
-		"title": oldTitle, "description": oldDescription, "status": oldStatus,
+		"title": oldTitle, "context": oldContext, "expected_result": oldExpectedResult,
+		"description": oldDescription, "status": oldStatus,
 		"priority": oldPriority, "assignee_id": oldAssignee,
 		"due_date": oldDueDate, "project_id": oldProject, "milestone_id": oldMilestone,
 	})
 	newValue, _ := json.Marshal(map[string]any{
-		"title": newTitle, "description": newDescription, "status": newStatus,
+		"title": newTitle, "context": newContext, "expected_result": newExpectedResult,
+		"description": newDescription, "status": newStatus,
 		"priority": newPriority, "assignee_id": newAssignee,
 		"due_date": newDueDate, "project_id": newProject, "milestone_id": newMilestone,
 	})
@@ -902,7 +937,11 @@ func (s *TaskStore) List(ctx context.Context, f TaskListFilter) (TaskListResult,
 	if strings.TrimSpace(f.Search) != "" {
 		needle := "%" + escapeLike(f.Search) + "%"
 		placeholder := arg(needle)
-		where = append(where, fmt.Sprintf("(t.title ILIKE %s ESCAPE '\\' OR t.description ILIKE %s ESCAPE '\\')", placeholder, placeholder))
+		where = append(where, fmt.Sprintf(
+			"(t.title ILIKE %[1]s ESCAPE '\\' OR t.context ILIKE %[1]s ESCAPE '\\' OR "+
+				"t.expected_result ILIKE %[1]s ESCAPE '\\' OR t.description ILIKE %[1]s ESCAPE '\\')",
+			placeholder,
+		))
 	}
 	if f.Cursor != "" {
 		cur, err := decodeTaskCursor(f.Cursor, sortField)

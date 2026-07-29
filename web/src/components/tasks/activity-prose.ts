@@ -3,7 +3,7 @@ import { PRIORITY_LABELS, STATUS_LABELS, type Activity, type TaskPriority, type 
 /**
  * Turns one activity_log row into a plain-language sentence. The store
  * (internal/store/task_store.go) writes old/new values as display-ready
- * text for title/description/due_date/labels, but as raw enum strings for
+ * text for task brief fields/due_date/labels, but as raw enum strings for
  * status/priority and as bare user-UUID strings for assignee — those three
  * need translating here, not shown as `todo` / `a1b2c3d4-...`.
  */
@@ -16,6 +16,10 @@ export function describeActivity(activity: Activity, actorName: string, userName
     }
     case 'title':
       return `${who} 将标题从「${activity.old_value ?? ''}」改为「${activity.new_value ?? ''}」`
+    case 'context':
+      return `${who} 更新了任务背景`
+    case 'expected_result':
+      return `${who} 更新了期望结果`
     case 'description':
       return `${who} 更新了描述`
     case 'status': {

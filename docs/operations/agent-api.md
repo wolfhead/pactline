@@ -85,9 +85,18 @@ curl --fail-with-body \
   --header "Authorization: Bearer ${AGENT_API_TOKEN}" \
   --header 'Content-Type: application/json' \
   --header 'Idempotency-Key: task-create-example-001' \
-  --data '{"title":"Prepare release evidence","project_number":42}' \
+  --data '{
+    "title":"Prepare release evidence",
+    "context":"The release decision currently lacks durable verification evidence.",
+    "expected_result":"Reviewers can verify every release claim from linked evidence.",
+    "project_number":42
+  }' \
   "${AGENT_API_BASE}/api/v1/tasks"
 ```
+
+`title`, `context`, `expected_result`, and `project_number` are required.
+Acceptance criteria remain optional and may be added when the work needs a
+formal, checkable completion contract.
 
 Repeating the same method, canonical route, key, and request returns the stored
 response without duplicating the mutation and sets:
@@ -210,15 +219,19 @@ Users see their token metadata and recent API activity on **API Token**.
 Administrators use **API 审计** to filter by user, token, method, route, status,
 request ID, and time range.
 
-Access audit records include authentication outcome, route pattern, status,
-duration, response size, and idempotency replay state. They never include
-request or response bodies. Access events are retained for 90 days.
+Access audit records every mutation and every rejected or failed request.
+Successful GET requests are intentionally not persisted because route-pattern
+metadata cannot identify the exact resource read and ordinary UI refreshes
+otherwise dominate the audit stream. Recorded events include authentication
+outcome, route pattern, status, duration, response size, and idempotency replay
+state. They never include request or response bodies. Access events are
+retained for 90 days.
 
 Business audit and product activity retain the actor, request ID,
 authentication method, token ID, and token-name snapshot transactionally with
 the mutation. Business history is retained indefinitely.
 
-Use `request_id` to correlate:
+For mutations and failed requests, use `request_id` to correlate:
 
 - the client response;
 - structured application logs;

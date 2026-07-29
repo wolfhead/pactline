@@ -133,8 +133,11 @@ func TestGeneratedClientAgentWorkflow(t *testing.T) {
 	taskResult, err := client.CreateTask(
 		ctx,
 		&generated.TaskCreate{
-			Title: "Exercise the generated API", ProjectNumber: project.Number,
-			MilestoneID: generated.NewOptNilUUID(milestone.ID),
+			Title:          "Exercise the generated API",
+			Context:        "The generated API workflow needs end-to-end verification.",
+			ExpectedResult: "The Agent completes the versioned workflow through generated types.",
+			ProjectNumber:  project.Number,
+			MilestoneID:    generated.NewOptNilUUID(milestone.ID),
 		},
 		generated.CreateTaskParams{
 			IdempotencyKey: generated.NewOptString("create-task-" + uuid.NewString()),

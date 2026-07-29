@@ -19,6 +19,7 @@ import (
 
 type recordingAccessAuditStore struct {
 	event       access.RequestAuditEvent
+	recorded    int
 	contextErr  error
 	hasDeadline bool
 	err         error
@@ -26,6 +27,7 @@ type recordingAccessAuditStore struct {
 
 func (s *recordingAccessAuditStore) RecordAccessAudit(ctx context.Context, event access.RequestAuditEvent) error {
 	s.event = event
+	s.recorded++
 	s.contextErr = ctx.Err()
 	_, s.hasDeadline = ctx.Deadline()
 	return s.err
@@ -92,7 +94,7 @@ func TestAccessAuditSurvivesClientCancellationAfterResponse(t *testing.T) {
 		cancelRequest()
 	})
 	handler := apiAccessAudit{store: audits, now: time.Now}.wrap(next)
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/tasks", nil).
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/tasks", nil).
 		WithContext(requestContext)
 	response := httptest.NewRecorder()
 
@@ -101,7 +103,20 @@ func TestAccessAuditSurvivesClientCancellationAfterResponse(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, response.Code)
 	require.NoError(t, audits.contextErr)
 	require.True(t, audits.hasDeadline)
-	require.Equal(t, http.MethodGet, audits.event.Method)
+	require.Equal(t, http.MethodPost, audits.event.Method)
+}
+
+func TestAccessAuditSkipsSuccessfulReads(t *testing.T) {
+	audits := &recordingAccessAuditStore{}
+	handler := apiAccessAudit{store: audits, now: time.Now}.wrap(http.HandlerFunc(
+		func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		},
+	))
+
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/v1/tasks", nil))
+
+	require.Zero(t, audits.recorded)
 }
 
 func TestAccessAuditRecordsRejectedBearerWithoutCredential(t *testing.T) {
@@ -122,6 +137,7 @@ func TestAccessAuditRecordsRejectedBearerWithoutCredential(t *testing.T) {
 	handler.ServeHTTP(response, request)
 
 	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, 1, audits.recorded)
 	require.Equal(t, access.AuthenticationMethodAPIToken, audits.event.AuthMethod)
 	require.Equal(t, access.AuthOutcomeRejected, audits.event.AuthOutcome)
 	require.Nil(t, audits.event.UserID)

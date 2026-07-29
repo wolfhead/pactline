@@ -212,6 +212,8 @@ test('a human can provision, inspect, and revoke an Agent that completes version
       idempotencyKey: `task-${runTag}`,
       data: {
         title: taskTitle,
+        context: 'An Agent-managed task must remain understandable to human collaborators.',
+        expected_result: 'The Agent and a human complete one versioned task workflow together.',
         project_number: project.number,
         milestone_id: milestone.id,
       },

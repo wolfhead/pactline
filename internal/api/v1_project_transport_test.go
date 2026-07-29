@@ -170,8 +170,11 @@ func TestV1ProjectMilestoneAndAcceptanceVersions(t *testing.T) {
 	require.Len(t, detail.Milestones[0].AcceptanceCriteria, 1)
 
 	taskCreated := do(t, handler, http.MethodPost, "/api/v1/tasks", userA, map[string]any{
-		"title": "Verify versioned criteria", "project_number": project.Number,
-		"milestone_id": milestone.ID,
+		"title":           "Verify versioned criteria",
+		"context":         "Versioned acceptance needs transport coverage",
+		"expected_result": "Criterion changes preserve every aggregate version",
+		"project_number":  project.Number,
+		"milestone_id":    milestone.ID,
 	})
 	require.Equal(t, http.StatusCreated, taskCreated.Code, taskCreated.Body.String())
 	var task v1TaskJSON

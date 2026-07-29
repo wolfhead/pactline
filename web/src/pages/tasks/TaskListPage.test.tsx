@@ -10,6 +10,9 @@ import { ProblemError } from '@/api/v1/client'
 vi.mock('@/api/tasks')
 vi.mock('@/api/projects')
 vi.mock('@/api/acceptance')
+vi.mock('@/components/tasks/TaskComposer', () => ({
+  useTaskComposer: () => ({ openTaskComposer: vi.fn() }),
+}))
 vi.mock('@/identity', async () => ({
   ...(await vi.importActual<typeof import('@/identity')>('@/identity')),
   useIdentity: () => ({
@@ -25,7 +28,8 @@ function setWidth(px: number) {
 }
 
 const TASK = {
-  id: 'id-142', number: 142, version: 1, title: '修复竞价超时', description: '',
+  id: 'id-142', number: 142, version: 1, title: '修复竞价超时',
+  context: '竞价请求近期频繁超时', expected_result: '恢复稳定流量', description: '',
   status: 'todo' as const, priority: 'none' as const, assignee: null,
   creator: { id: 'u1', name: '张沁', email: 'a@x.com' },
   due_date: null, project: { id: 'p1', number: 12, name: 'Task Manager' },

@@ -24,8 +24,10 @@ func (h *Handler) CreateTask(
 		return nil, err
 	}
 	task := domain.Task{
-		Title: req.Title, Description: req.Description.Or(""),
-		CreatorID: subjectID,
+		Title: req.Title, Context: req.Context,
+		ExpectedResult: req.ExpectedResult,
+		Description:    req.Description.Or(""),
+		CreatorID:      subjectID,
 	}
 	if value, ok := req.Status.Get(); ok {
 		task.Status = domain.TaskStatus(value)
@@ -169,6 +171,12 @@ func (h *Handler) UpdateTask(
 	var patch domain.TaskPatch
 	if value, ok := req.Title.Get(); ok {
 		patch.Title = &value
+	}
+	if value, ok := req.Context.Get(); ok {
+		patch.Context = &value
+	}
+	if value, ok := req.ExpectedResult.Get(); ok {
+		patch.ExpectedResult = &value
 	}
 	if value, ok := req.Description.Get(); ok {
 		patch.Description = &value
@@ -511,7 +519,8 @@ func taskResponse(ctx context.Context, task store.TaskWithRelations) *generated.
 func taskFromDomain(task store.TaskWithRelations) generated.Task {
 	out := generated.Task{
 		ID: task.Task.ID, Number: task.Task.Number, Version: task.Task.Version,
-		Title: task.Task.Title, Description: task.Task.Description,
+		Title: task.Task.Title, Context: task.Task.Context,
+		ExpectedResult: task.Task.ExpectedResult, Description: task.Task.Description,
 		Status:    generated.TaskStatus(task.Task.Status),
 		Priority:  generated.TaskPriority(task.Task.Priority),
 		Creator:   userRefFromDomain(task.Creator),

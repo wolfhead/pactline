@@ -3,6 +3,8 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { useIdentity } from '@/identity'
 import { listProjects, type Project } from '@/api/projects'
+import { Plus } from 'lucide-react'
+import { useTaskComposer } from './TaskComposer'
 
 const ITEMS = [
   { to: '/tasks', label: '我的工作', end: false },
@@ -18,7 +20,8 @@ const ITEMS = [
  * drawer close itself the instant a link is picked, since a drawer that
  * stays open after navigating reads as broken. */
 export default function NavSidebar({ onNavigate }: { onNavigate?: () => void }) {
-  const { actor, impersonation, me } = useIdentity()
+  const { actor, impersonation, me, isReadOnly } = useIdentity()
+  const { openTaskComposer } = useTaskComposer()
   const location = useLocation()
   const [projects, setProjects] = useState<Project[]>([])
   useEffect(() => {
@@ -41,6 +44,19 @@ export default function NavSidebar({ onNavigate }: { onNavigate?: () => void }) 
     : baseItems
   return (
     <nav aria-label="主导航" className="flex flex-col gap-1 p-3">
+      {!isReadOnly && (
+        <button
+          type="button"
+          onClick={() => {
+            openTaskComposer()
+            onNavigate?.()
+          }}
+          className="mb-2 flex min-h-10 items-center justify-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-fg shadow-sm hover:opacity-90"
+        >
+          <Plus className="size-4" aria-hidden="true" />
+          新建任务
+        </button>
+      )}
       {items.slice(0, 1).map((item) => (
         <NavLink
           key={item.to}
@@ -72,8 +88,9 @@ export default function NavSidebar({ onNavigate }: { onNavigate?: () => void }) 
           key={project.id}
           to={`/projects/${project.number}/overview`}
           onClick={onNavigate}
+          title={project.name}
           className={({ isActive }) => cn(
-            'flex min-h-11 items-center truncate rounded-md px-3 py-2 text-sm font-medium',
+            'line-clamp-2 min-h-11 rounded-md px-3 py-2 text-sm font-medium leading-5',
             isActive ? 'bg-accent text-accent-fg shadow-sm' : 'text-fg-muted hover:bg-surface/70 hover:text-fg',
           )}
         >

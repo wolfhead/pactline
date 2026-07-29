@@ -28,6 +28,8 @@ export interface Task {
   number: number
   version: number
   title: string
+  context: string
+  expected_result: string
   description: string
   status: TaskStatus
   priority: TaskPriority
@@ -148,6 +150,8 @@ export function developmentSession(): Promise<DevelopmentSession> {
 
 export interface CreateTaskInput {
   title: string
+  context?: string
+  expected_result?: string
   description?: string
   status?: TaskStatus
   priority?: TaskPriority
@@ -159,7 +163,11 @@ export interface CreateTaskInput {
 }
 
 export function createTask(userId: string, input: CreateTaskInput): Promise<Task> {
-  return call<Task>(userId, 'POST', '/api/v1/tasks', input)
+  return call<Task>(userId, 'POST', '/api/v1/tasks', {
+    ...input,
+    context: input.context ?? 'E2E fixture context',
+    expected_result: input.expected_result ?? 'E2E fixture expected result',
+  })
 }
 
 export function getTask(userId: string, number: number): Promise<Task> {
@@ -168,6 +176,8 @@ export function getTask(userId: string, number: number): Promise<Task> {
 
 export interface TaskPatchInput {
   title?: string
+  context?: string
+  expected_result?: string
   description?: string
   status?: TaskStatus
   priority?: TaskPriority

@@ -1,7 +1,11 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import AppShell from './AppShell'
+
+vi.mock('./TaskComposer', () => ({
+  useTaskComposer: () => ({ openTaskComposer: vi.fn() }),
+}))
 
 function setWidth(px: number) {
   Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: px })

@@ -58,6 +58,12 @@ func mustCreateTask(
 	labelIDs []uuid.UUID,
 ) store.TaskWithRelations {
 	t.Helper()
+	if task.Context == "" {
+		task.Context = "Test task context"
+	}
+	if task.ExpectedResult == "" {
+		task.ExpectedResult = "Test task expected result"
+	}
 	if task.ProjectID == uuid.Nil {
 		err := db.Pool.QueryRow(context.Background(), `
 			SELECT id
@@ -131,7 +137,24 @@ func TestTaskNumberIsSequentialAndNeverReusedAfterArchive(t *testing.T) {
 func TestTaskCreateRejectsBlankTitle(t *testing.T) {
 	db := newTestDB(t)
 	ts := store.NewTaskStore(db)
-	_, err := ts.Create(context.Background(), domain.Task{Title: "   ", CreatorID: userA}, nil)
+	_, err := ts.Create(context.Background(), domain.Task{
+		Title: "   ", Context: "Context", ExpectedResult: "Result", CreatorID: userA,
+	}, nil)
+	require.ErrorIs(t, err, domain.ErrInvalidInput)
+}
+
+func TestTaskCreateRejectsBlankBriefFields(t *testing.T) {
+	db := newTestDB(t)
+	ts := store.NewTaskStore(db)
+
+	_, err := ts.Create(context.Background(), domain.Task{
+		Title: "Task", Context: "  ", ExpectedResult: "Result", CreatorID: userA,
+	}, nil)
+	require.ErrorIs(t, err, domain.ErrInvalidInput)
+
+	_, err = ts.Create(context.Background(), domain.Task{
+		Title: "Task", Context: "Context", ExpectedResult: "\n", CreatorID: userA,
+	}, nil)
 	require.ErrorIs(t, err, domain.ErrInvalidInput)
 }
 
@@ -140,13 +163,22 @@ func TestTaskCreateRejectsUnknownStatusAndPriority(t *testing.T) {
 	ts := store.NewTaskStore(db)
 	ctx := context.Background()
 
-	_, err := ts.Create(ctx, domain.Task{Title: "x", CreatorID: userA, Status: "backlog"}, nil)
+	validBrief := domain.Task{
+		Title: "x", Context: "Context", ExpectedResult: "Result", CreatorID: userA,
+	}
+	task := validBrief
+	task.Status = "backlog"
+	_, err := ts.Create(ctx, task, nil)
 	require.ErrorIs(t, err, domain.ErrInvalidInput)
 
-	_, err = ts.Create(ctx, domain.Task{Title: "x", CreatorID: userA, Status: "not-a-status"}, nil)
+	task = validBrief
+	task.Status = "not-a-status"
+	_, err = ts.Create(ctx, task, nil)
 	require.ErrorIs(t, err, domain.ErrInvalidInput)
 
-	_, err = ts.Create(ctx, domain.Task{Title: "x", CreatorID: userA, Priority: "not-a-priority"}, nil)
+	task = validBrief
+	task.Priority = "not-a-priority"
+	_, err = ts.Create(ctx, task, nil)
 	require.ErrorIs(t, err, domain.ErrInvalidInput)
 }
 

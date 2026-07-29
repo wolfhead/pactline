@@ -41,14 +41,15 @@ type RequestAuditCursor struct {
 }
 
 type RequestAuditFilter struct {
-	UserID       *uuid.UUID
-	TokenID      *uuid.UUID
-	Method       string
-	RoutePattern string
-	StatusCode   *int
-	RequestID    string
-	From         *time.Time
-	To           *time.Time
-	Before       *RequestAuditCursor
-	Limit        int
+	UserID        *uuid.UUID
+	TokenID       *uuid.UUID
+	Method        string
+	RoutePattern  string
+	StatusCode    *int
+	RequestID     string
+	ImportantOnly bool
+	From          *time.Time
+	To            *time.Time
+	Before        *RequestAuditCursor
+	Limit         int
 }
