@@ -15,8 +15,10 @@ import (
 	"time"
 
 	"bountyboard"
+	contract "bountyboard/api"
 	"bountyboard/internal/access"
 	"bountyboard/internal/api"
+	apiv1 "bountyboard/internal/api/v1"
 	"bountyboard/internal/application"
 	"bountyboard/internal/identity"
 	"bountyboard/internal/integrations/devauth"
@@ -100,13 +102,17 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 		Projects: projects, Milestones: milestones, Acceptance: acceptance,
 		ProjectService: projectService,
 	}
+	v1Handler, err := apiv1.NewServer(&apiv1.Handler{Users: users})
+	require.NoError(t, err)
 	h := api.NewRouter(users, legacyHandler, api.RouterOptions{
 		Auth: api.AuthSurface{
 			Sessions: identityService, Tokens: tokenService,
 			AccessAudit: accessAuditStore, Idempotency: store.NewIdempotencyStore(db),
 			Development: devauth.New(users, identityService), AppBaseURL: baseURL,
 		},
-		Tasks: taskSurface,
+		Tasks:   taskSurface,
+		V1:      v1Handler,
+		OpenAPI: apiv1.OpenAPIHandler(contract.OpenAPIDocument),
 	})
 	return h, db
 }

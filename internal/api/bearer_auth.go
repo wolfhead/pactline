@@ -182,7 +182,8 @@ func isolateBearerFromInternal(next http.Handler) http.Handler {
 		authorization := strings.TrimSpace(r.Header.Get("Authorization"))
 		scheme, _, _ := strings.Cut(authorization, " ")
 		v1 := r.URL.Path == "/api/v1" || strings.HasPrefix(r.URL.Path, "/api/v1/")
-		if strings.EqualFold(scheme, "Bearer") && !v1 {
+		openAPI := r.URL.Path == "/api/openapi.yaml"
+		if strings.EqualFold(scheme, "Bearer") && !v1 && !openAPI {
 			http.NotFound(w, r)
 			return
 		}

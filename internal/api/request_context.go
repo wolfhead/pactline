@@ -15,7 +15,11 @@ func withRequestID(ctx context.Context, value string) context.Context {
 }
 
 func requestID(r *http.Request) string {
-	value, _ := r.Context().Value(requestIDContextKey{}).(string)
+	return RequestIDFromContext(r.Context())
+}
+
+func RequestIDFromContext(ctx context.Context) string {
+	value, _ := ctx.Value(requestIDContextKey{}).(string)
 	return value
 }
 

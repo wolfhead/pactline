@@ -8,8 +8,10 @@ import (
 	"os"
 
 	"bountyboard"
+	contract "bountyboard/api"
 	"bountyboard/internal/access"
 	"bountyboard/internal/api"
+	apiv1 "bountyboard/internal/api/v1"
 	"bountyboard/internal/application"
 	"bountyboard/internal/identity"
 	"bountyboard/internal/integrations/devauth"
@@ -120,6 +122,11 @@ func main() {
 		Tasks: tasks, Comments: comments, Labels: labels, Projects: projects,
 		Milestones: milestones, Acceptance: acceptance, ProjectService: projectService,
 	}
+	v1Handler, err := apiv1.NewServer(&apiv1.Handler{Users: users})
+	if err != nil {
+		slog.Error("configure OpenAPI v1 server", "error", err)
+		os.Exit(1)
+	}
 	handler := api.NewRouter(users, legacyHandler, api.RouterOptions{
 		Auth: api.AuthSurface{
 			Sessions: identityService, Tokens: tokenService,
@@ -129,7 +136,9 @@ func main() {
 			LarkEnabled:   cfg.AuthProvider == AuthProviderLark,
 			SecureCookies: cfg.AppEnv != EnvironmentDevelopment && cfg.AppEnv != EnvironmentTest,
 		},
-		Tasks: taskSurface,
+		Tasks:   taskSurface,
+		V1:      v1Handler,
+		OpenAPI: apiv1.OpenAPIHandler(contract.OpenAPIDocument),
 	})
 
 	addr := os.Getenv("ADDR")

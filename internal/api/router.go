@@ -38,9 +38,10 @@ type AuthSurface struct {
 }
 
 type RouterOptions struct {
-	Auth  AuthSurface
-	Tasks *TaskSurface
-	V1    http.Handler
+	Auth    AuthSurface
+	Tasks   *TaskSurface
+	V1      http.Handler
+	OpenAPI http.Handler
 }
 
 type accessAuditStore interface {
@@ -124,6 +125,7 @@ func NewRouter(
 		sessions: options.Auth.Sessions, appBaseURL: options.Auth.AppBaseURL, cookies: cookies,
 	}.wrap(v1)
 	resolver, _ := v1.(routeResolver)
+	limiter := newTokenBucketLimiter()
 	v1Bearer := idempotencyMiddleware{
 		store: options.Auth.Idempotency, routes: resolver,
 	}.wrap(v1)
@@ -132,10 +134,20 @@ func NewRouter(
 	}.wrap(bearerAuthentication{
 		tokens:  options.Auth.Tokens,
 		owners:  options.Auth.Sessions,
-		limiter: newTokenBucketLimiter(),
+		limiter: limiter,
 	}.wrap(v1Bearer, v1Session))
 	root.Handle("/api/v1", v1Audited)
 	root.Handle("/api/v1/", v1Audited)
+	if options.OpenAPI != nil {
+		document := RequireWorkRead(options.OpenAPI)
+		documentSession := identityMiddleware{
+			sessions: options.Auth.Sessions, appBaseURL: options.Auth.AppBaseURL, cookies: cookies,
+		}.wrap(document)
+		documentAuthenticated := bearerAuthentication{
+			tokens: options.Auth.Tokens, owners: options.Auth.Sessions, limiter: limiter,
+		}.wrap(document, documentSession)
+		root.Handle("/api/openapi.yaml", documentAuthenticated)
+	}
 	root.Handle("/", middleware.wrap(protected))
 	return RequestIDMiddleware(isolateBearerFromInternal(root))
 }
