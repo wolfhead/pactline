@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { FolderKanban, LayoutList, LogOut, Menu, Plus, User } from 'lucide-react'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
+import PactlineBrand from '@/components/brand/PactlineBrand'
 import { useIdentity } from '@/identity'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { cn } from '@/lib/utils'
@@ -86,8 +87,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
               </SheetContent>
             </Sheet>
           )}
-          <span aria-hidden="true" className="size-2 rounded-full bg-secondary" />
-          <span className="text-sm font-semibold tracking-tight">任务面板</span>
+          <PactlineBrand compact />
         </div>
         {!showBottomTabs && <div className="flex items-center gap-3">{accountControls}</div>}
       </header>

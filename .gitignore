@@ -19,6 +19,8 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.cache/
+.playwright-cli/
+output/playwright/
 
 # Env & local config
 .env
@@ -28,6 +30,10 @@ playwright/.cache/
 
 # Brainstorming mockups (the sdd/ reports alongside them are tracked)
 .superpowers/brainstorm/
+
+# Local design and implementation notes. These may contain internal context
+# and are intentionally excluded from the distributable repository.
+docs/superpowers/
 
 # Editor / OS
 .DS_Store

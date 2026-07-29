@@ -4,8 +4,7 @@ This tree holds the team-management mechanism this project originally built:
 bounties and their status graph, credits (attribution), the work feed,
 personal portfolios, scoring, settlement, calibration, the anchor list, and
 the steward correction channel. See `../../docs/mechanism-design.md` for the
-mechanism's design and `../../docs/superpowers/specs/2026-07-26-bounty-board-design.md`
-for the original system spec — both describe this code, unchanged.
+mechanism's design.
 
 ## Why it's here
 

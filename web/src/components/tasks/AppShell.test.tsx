@@ -34,6 +34,7 @@ describe('AppShell', () => {
   it('keeps navigation permanently on screen at lg and above', () => {
     setWidth(1280)
     renderShell()
+    expect(screen.getByText('Pactline')).toBeVisible()
     // navigation landmark present without opening anything
     expect(screen.getByRole('navigation', { name: '主导航' })).toBeVisible()
     expect(screen.queryByRole('button', { name: '打开导航' })).not.toBeInTheDocument()

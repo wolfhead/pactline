@@ -10,14 +10,12 @@ task-product behavior.
 Use this order when sources disagree:
 
 1. Current code, migrations, and executable tests.
-2. The newest accepted design in `docs/superpowers/specs/`.
-3. The matching implementation plan in `docs/superpowers/plans/`.
-4. `README.md`, `docs/mechanism-design.md`, and the original bounty-board
-   specification for legacy context only.
+2. `docs/product-model.md` and the applicable operating documentation.
+3. `README.md` and `docs/mechanism-design.md` for legacy context only.
 
-Implementation-plan checkboxes are instructions, not reliable live progress
-tracking. Confirm the working tree and recent commits before deciding what is
-already implemented.
+Local design and implementation notes under `docs/superpowers/` are ignored by
+Git and may not exist in another checkout. Do not make committed code or
+documentation depend on them.
 
 The normative implementation and review conventions are in
 `docs/coding-standards.md`. Follow them for all code changes. In particular,
@@ -226,11 +224,16 @@ intentionally running the Go API or Vite server.
 
 - Keep implementation conventions in `docs/coding-standards.md`; update it when
   an agreed rule changes or repeated review feedback reveals a missing rule.
-- Put accepted product designs in `docs/superpowers/specs/`.
-- Put stepwise execution plans in `docs/superpowers/plans/`.
-- Date new design/plan filenames as `YYYY-MM-DD-topic.md`.
+- Keep durable product semantics in `docs/product-model.md`.
+- Local brainstorming, accepted design notes, and implementation plans may live
+  under ignored `docs/superpowers/`; distill stable decisions into tracked
+  documentation before code depends on them.
 - Record the rationale for irreversible or surprising decisions, not transient
   work status.
 - Update `README.md` when setup commands or the high-level product direction
   change. Keep this file focused on instructions that coding agents need on
   every task.
+- Follow `docs/repository-policy.md`. This is a public repository, so every
+  tracked file and commit must be safe for immediate public exposure. Never
+  commit secrets, company information, personal information, internal
+  infrastructure details, or production data.

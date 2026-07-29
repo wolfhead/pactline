@@ -331,7 +331,7 @@ test('a human can provision, inspect, and revoke an Agent that completes version
 
       await page.goto('/api-docs')
       await expect(page.getByRole('heading', { name: 'API 文档' })).toBeVisible()
-      await expect(page.getByRole('heading', { name: /^Bounty Board Work API/ })).toBeVisible()
+      await expect(page.getByRole('heading', { name: /^Pactline Work API/ })).toBeVisible()
       await expect(page.getByText(/确认前，文档仅可阅读/)).toBeVisible()
 
       await page.goto('/admin/api-audit')

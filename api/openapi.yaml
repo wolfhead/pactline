@@ -1,6 +1,6 @@
 openapi: 3.1.1
 info:
-  title: Bounty Board Work API
+  title: Pactline Work API
   version: 1.0.0
   description: Versioned work-management API for authenticated people and agents.
 security:

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 64" role="img" aria-labelledby="title description">
+  <title id="title">Pactline</title>
+  <desc id="description">Two paths converge at a milestone and continue forward.</desc>
+  <path d="M8 17h17c6 0 8 4 13 9" fill="none" stroke="#2563eb" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M8 47h17c6 0 8-4 13-9" fill="none" stroke="#0f766e" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="43" cy="32" r="7" fill="#172b3d"/>
+  <path d="M50 32h7" fill="none" stroke="#172b3d" stroke-width="7" stroke-linecap="round"/>
+  <text x="78" y="42" fill="#172b3d" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="34" font-weight="700" letter-spacing="-1">Pactline</text>
+</svg>

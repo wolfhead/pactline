@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { apiPost } from '@/api/client'
+import PactlineBrand from '@/components/brand/PactlineBrand'
 
 export default function InvitePage() {
   const started = useRef(false)
@@ -27,7 +28,8 @@ export default function InvitePage() {
   return (
     <main className="grid min-h-dvh place-items-center bg-canvas p-5 text-fg">
       <section className="w-full max-w-sm rounded-xl border border-border bg-surface-raised p-6 text-center">
-        <h1 className="text-lg font-semibold">加入任务面板</h1>
+        <PactlineBrand className="justify-center" />
+        <h1 className="mt-5 text-lg font-semibold">加入 Pactline</h1>
         {error ? (
           <p role="alert" className="mt-3 text-sm text-danger">{error}</p>
         ) : (

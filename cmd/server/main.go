@@ -1,4 +1,4 @@
-// Command server runs the Bounty Board HTTP API.
+// Command server runs the Pactline HTTP API.
 package main
 
 import (
