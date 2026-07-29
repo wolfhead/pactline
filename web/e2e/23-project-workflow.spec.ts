@@ -80,18 +80,21 @@ test('a project moves from planned scope through milestone and evidence-backed c
 
   await page.getByRole('article').filter({ hasText: 'API ready' })
     .getByRole('button', { name: '完成里程碑' }).click()
+  await expect(milestone.getByText('已完成', { exact: true })).toBeVisible()
+
+  const projectHeader = page.locator('header')
   await page.getByRole('button', { name: '完成项目' }).click()
-  await expect(page.getByText('已完成', { exact: true }).first()).toBeVisible()
+  await expect(projectHeader.getByText('已完成', { exact: true })).toBeVisible()
 
   page.once('dialog', (dialog) => dialog.accept('A follow-up delivery is required'))
   await page.getByRole('button', { name: '重新开启', exact: true }).click()
-  await expect(page.getByText('进行中', { exact: true }).first()).toBeVisible()
+  await expect(projectHeader.getByText('进行中', { exact: true })).toBeVisible()
   await expect(page.getByText(/重新开启了项目：A follow-up delivery is required/)).toBeVisible()
   await page.getByRole('button', { name: '完成项目' }).click()
-  await expect(page.getByText('已完成', { exact: true }).first()).toBeVisible()
+  await expect(projectHeader.getByText('已完成', { exact: true })).toBeVisible()
 
   await page.getByRole('button', { name: '归档', exact: true }).click()
   await expect(page.getByText('已归档', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '恢复', exact: true }).click()
-  await expect(page.getByText('已完成', { exact: true }).first()).toBeVisible()
+  await expect(projectHeader.getByText('已完成', { exact: true })).toBeVisible()
 })

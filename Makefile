@@ -1,10 +1,11 @@
 DSN ?= postgres://bounty:bounty@localhost:5433/bountyboard?sslmode=disable
+COMPOSE_PROJECT_NAME ?= task_manager
 
 up:
-	docker compose up -d --wait
+	docker compose -p "$(COMPOSE_PROJECT_NAME)" up -d --wait
 
 down:
-	docker compose down -v
+	docker compose -p "$(COMPOSE_PROJECT_NAME)" down -v
 
 test: up
 	DATABASE_URL="$(DSN)" go test ./... -count=1 -p 1
@@ -23,6 +24,9 @@ web-dev:
 web-test:
 	cd web && npm test
 
+web-build:
+	cd web && npm run build
+
 openapi-generate:
 	go generate ./api
 
@@ -37,4 +41,7 @@ openapi-check:
 e2e:
 	cd web && npx playwright test
 
-.PHONY: up down test run web-install web-dev web-test openapi-generate openapi-check e2e
+agent-api-e2e:
+	cd web && npx playwright test e2e/26-agent-api.spec.ts
+
+.PHONY: up down test run web-install web-dev web-test web-build openapi-generate openapi-check e2e agent-api-e2e

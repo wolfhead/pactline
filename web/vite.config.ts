@@ -11,7 +11,10 @@ export default defineConfig({
   },
   server: {
     port: Number(process.env.VITE_PORT ?? 5173),
-    proxy: { '/api': process.env.VITE_API_TARGET ?? 'http://localhost:8080' },
+    // Match the API namespace with its slash boundary. `/api-docs` is a
+    // client-side route and must reach Vite's history fallback, not the Go
+    // API proxy.
+    proxy: { '^/api/': process.env.VITE_API_TARGET ?? 'http://localhost:8080' },
   },
   test: {
     environment: 'jsdom',

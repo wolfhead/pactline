@@ -26,7 +26,7 @@ test('task acceptance criteria block completion until evidence satisfies them', 
 
   await status.click()
   await page.getByRole('option', { name: '已完成' }).click()
-  await expect(page.getByText(/task acceptance is not satisfied/)).toBeVisible()
+  await expect(page.getByText(/The operation conflicts with current state/)).toBeVisible()
   await expect(status).toHaveText('待评审')
 
   await checklist.getByRole('button', { name: '检查' }).click()
