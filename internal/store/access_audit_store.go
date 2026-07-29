@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"bountyboard/internal/access"
+	"github.com/wolfhead/pactline/internal/access"
 )
 
 type AccessAuditStore struct{ db *DB }

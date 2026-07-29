@@ -3,8 +3,8 @@ package v1
 import (
 	"net/http"
 
-	baseapi "bountyboard/internal/api"
-	generated "bountyboard/internal/api/v1generated"
+	baseapi "github.com/wolfhead/pactline/internal/api"
+	generated "github.com/wolfhead/pactline/internal/api/v1generated"
 )
 
 type Server struct {

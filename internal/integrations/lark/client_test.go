@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"bountyboard/internal/identity"
+	"github.com/wolfhead/pactline/internal/identity"
 
 	"github.com/stretchr/testify/require"
 )

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	userdomain "bountyboard/internal/domain"
-	"bountyboard/internal/legacy/domain"
+	userdomain "github.com/wolfhead/pactline/internal/domain"
+	"github.com/wolfhead/pactline/internal/legacy/domain"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"

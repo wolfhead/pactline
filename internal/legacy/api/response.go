@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"net/http"
 
-	sharedapi "bountyboard/internal/api"
-	userdomain "bountyboard/internal/domain"
-	"bountyboard/internal/legacy/domain"
+	sharedapi "github.com/wolfhead/pactline/internal/api"
+	userdomain "github.com/wolfhead/pactline/internal/domain"
+	"github.com/wolfhead/pactline/internal/legacy/domain"
 )
 
 // writeError maps a domain error onto an HTTP status. Unknown errors become

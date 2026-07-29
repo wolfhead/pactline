@@ -114,5 +114,5 @@ not the model for new Pactline behavior. See
 
 ## License
 
-No open-source license has been selected yet. Until a license is added, all
-rights are reserved and the source must not be treated as open source.
+Pactline is licensed under the
+[Apache License 2.0](LICENSE).

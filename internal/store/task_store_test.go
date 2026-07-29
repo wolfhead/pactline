@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"bountyboard/internal/domain"
-	"bountyboard/internal/store"
+	"github.com/wolfhead/pactline/internal/domain"
+	"github.com/wolfhead/pactline/internal/store"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"

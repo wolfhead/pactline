@@ -3,8 +3,8 @@ package scoring_test
 import (
 	"testing"
 
-	"bountyboard/internal/legacy/domain"
-	"bountyboard/internal/legacy/scoring"
+	"github.com/wolfhead/pactline/internal/legacy/domain"
+	"github.com/wolfhead/pactline/internal/legacy/scoring"
 
 	"github.com/stretchr/testify/require"
 )

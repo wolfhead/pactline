@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 
-	"bountyboard/internal/domain"
-	"bountyboard/internal/store"
+	"github.com/wolfhead/pactline/internal/domain"
+	"github.com/wolfhead/pactline/internal/store"
 
 	"github.com/google/uuid"
 )

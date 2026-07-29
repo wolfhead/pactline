@@ -8,12 +8,12 @@ import (
 	"net/url"
 	"strconv"
 
-	baseapi "bountyboard/internal/api"
-	generated "bountyboard/internal/api/v1generated"
-	"bountyboard/internal/application"
-	"bountyboard/internal/domain"
-	"bountyboard/internal/identity"
-	"bountyboard/internal/store"
+	baseapi "github.com/wolfhead/pactline/internal/api"
+	generated "github.com/wolfhead/pactline/internal/api/v1generated"
+	"github.com/wolfhead/pactline/internal/application"
+	"github.com/wolfhead/pactline/internal/domain"
+	"github.com/wolfhead/pactline/internal/identity"
+	"github.com/wolfhead/pactline/internal/store"
 )
 
 type Handler struct {

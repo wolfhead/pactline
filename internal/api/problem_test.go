@@ -12,7 +12,7 @@ import (
 func TestWriteProblemEmitsRFC9457MediaTypeAndExtensions(t *testing.T) {
 	handler := RequestIDMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		WriteProblem(w, r, Problem{
-			Type:   "https://bountyboard.dev/problems/validation",
+			Type:   "urn:pactline:problem:validation",
 			Title:  "Validation failed",
 			Status: http.StatusBadRequest,
 			Detail: "name is required",

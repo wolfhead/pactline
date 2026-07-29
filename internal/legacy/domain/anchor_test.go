@@ -3,7 +3,7 @@ package domain_test
 import (
 	"testing"
 
-	"bountyboard/internal/legacy/domain"
+	"github.com/wolfhead/pactline/internal/legacy/domain"
 
 	"github.com/stretchr/testify/require"
 )

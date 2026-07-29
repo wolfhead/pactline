@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"sort"
 
-	sharedapi "bountyboard/internal/api"
-	"bountyboard/internal/legacy/domain"
-	"bountyboard/internal/legacy/store"
-	sharedstore "bountyboard/internal/store"
+	sharedapi "github.com/wolfhead/pactline/internal/api"
+	"github.com/wolfhead/pactline/internal/legacy/domain"
+	"github.com/wolfhead/pactline/internal/legacy/store"
+	sharedstore "github.com/wolfhead/pactline/internal/store"
 
 	"github.com/google/uuid"
 )

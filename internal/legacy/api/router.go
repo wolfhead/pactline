@@ -3,8 +3,8 @@ package api
 import (
 	"net/http"
 
-	"bountyboard/internal/legacy/store"
-	sharedstore "bountyboard/internal/store"
+	"github.com/wolfhead/pactline/internal/legacy/store"
+	sharedstore "github.com/wolfhead/pactline/internal/store"
 )
 
 // NewRouter builds the legacy mechanism's HTTP handler: bounties, credits,

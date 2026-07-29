@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"bountyboard/internal/identity"
-	"bountyboard/internal/integrations/devauth"
+	"github.com/wolfhead/pactline/internal/identity"
+	"github.com/wolfhead/pactline/internal/integrations/devauth"
 
 	"github.com/google/uuid"
 )

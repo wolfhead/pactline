@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"bountyboard/internal/access"
+	"github.com/wolfhead/pactline/internal/access"
 
 	"github.com/google/uuid"
 )

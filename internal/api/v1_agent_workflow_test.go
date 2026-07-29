@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	generated "bountyboard/internal/api/v1generated"
+	generated "github.com/wolfhead/pactline/internal/api/v1generated"
 
 	"github.com/google/uuid"
 	"github.com/ogen-go/ogen/ogenerrors"

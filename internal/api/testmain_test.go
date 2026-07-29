@@ -14,17 +14,17 @@ import (
 	"testing"
 	"time"
 
-	"bountyboard"
-	contract "bountyboard/api"
-	"bountyboard/internal/access"
-	"bountyboard/internal/api"
-	apiv1 "bountyboard/internal/api/v1"
-	"bountyboard/internal/application"
-	"bountyboard/internal/identity"
-	"bountyboard/internal/integrations/devauth"
-	legacyapi "bountyboard/internal/legacy/api"
-	legacystore "bountyboard/internal/legacy/store"
-	"bountyboard/internal/store"
+	"github.com/wolfhead/pactline"
+	contract "github.com/wolfhead/pactline/api"
+	"github.com/wolfhead/pactline/internal/access"
+	"github.com/wolfhead/pactline/internal/api"
+	apiv1 "github.com/wolfhead/pactline/internal/api/v1"
+	"github.com/wolfhead/pactline/internal/application"
+	"github.com/wolfhead/pactline/internal/identity"
+	"github.com/wolfhead/pactline/internal/integrations/devauth"
+	legacyapi "github.com/wolfhead/pactline/internal/legacy/api"
+	legacystore "github.com/wolfhead/pactline/internal/legacy/store"
+	"github.com/wolfhead/pactline/internal/store"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -54,7 +54,7 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 	}
 	db, err := store.Connect(context.Background(), dsn)
 	require.NoError(t, err)
-	require.NoError(t, db.Migrate(context.Background(), bountyboard.MigrationFS))
+	require.NoError(t, db.Migrate(context.Background(), pactline.MigrationFS))
 	t.Cleanup(db.Close)
 	sessionCutoff := time.Now().UTC()
 	t.Cleanup(func() {

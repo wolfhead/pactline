@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"bountyboard/internal/legacy/domain"
-	"bountyboard/internal/legacy/store"
+	"github.com/wolfhead/pactline/internal/legacy/domain"
+	"github.com/wolfhead/pactline/internal/legacy/store"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"

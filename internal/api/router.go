@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"net/url"
 
-	"bountyboard/internal/access"
-	"bountyboard/internal/identity"
+	"github.com/wolfhead/pactline/internal/access"
+	"github.com/wolfhead/pactline/internal/identity"
 )
 
 type AuthSurface struct {

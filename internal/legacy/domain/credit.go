@@ -3,7 +3,7 @@ package domain
 import (
 	"time"
 
-	userdomain "bountyboard/internal/domain"
+	userdomain "github.com/wolfhead/pactline/internal/domain"
 
 	"github.com/google/uuid"
 )

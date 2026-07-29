@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"bountyboard/internal/identity"
+	"github.com/wolfhead/pactline/internal/identity"
 )
 
 type ProviderError struct {

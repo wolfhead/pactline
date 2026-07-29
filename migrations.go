@@ -1,5 +1,5 @@
-// Package bountyboard embeds SQL migrations so they ship inside the binary.
-package bountyboard
+// Package pactline embeds SQL migrations so they ship inside the binary.
+package pactline
 
 import "embed"
 

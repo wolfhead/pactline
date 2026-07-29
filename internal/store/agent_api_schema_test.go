@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"bountyboard"
-	"bountyboard/internal/store"
+	"github.com/wolfhead/pactline"
+	"github.com/wolfhead/pactline/internal/store"
 
 	"github.com/stretchr/testify/require"
 )
@@ -17,7 +17,7 @@ func TestAgentAPIFoundationSchema(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	require.NoError(t, db.Migrate(ctx, bountyboard.MigrationFS))
+	require.NoError(t, db.Migrate(ctx, pactline.MigrationFS))
 
 	for _, table := range []string{
 		"api_tokens",

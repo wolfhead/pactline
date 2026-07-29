@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"bountyboard/internal/access"
-	"bountyboard/internal/store"
+	"github.com/wolfhead/pactline/internal/access"
+	"github.com/wolfhead/pactline/internal/store"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"

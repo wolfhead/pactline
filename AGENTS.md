@@ -45,7 +45,7 @@ overlap rather than guessing which version should win.
 
 ### Backend
 
-- Go 1.24 module: `bountyboard`.
+- Go 1.24 module: `github.com/wolfhead/pactline`.
 - `cmd/server/main.go` wires dependencies, runs migrations, and starts the HTTP
   server.
 - `internal/domain` contains task-product entities and validation without I/O.

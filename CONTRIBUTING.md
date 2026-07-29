@@ -59,5 +59,5 @@ credentials in a pull request, issue, screenshot, test fixture, log, or commit.
 
 ## License
 
-The project has no open-source license yet. External contributions cannot be
-accepted until the owner selects a license and contribution terms.
+By contributing, you agree that your contributions will be licensed under the
+[Apache License 2.0](LICENSE).

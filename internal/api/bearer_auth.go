@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"bountyboard/internal/access"
-	"bountyboard/internal/domain"
-	"bountyboard/internal/identity"
+	"github.com/wolfhead/pactline/internal/access"
+	"github.com/wolfhead/pactline/internal/domain"
+	"github.com/wolfhead/pactline/internal/identity"
 )
 
 type BearerAuthenticator interface {

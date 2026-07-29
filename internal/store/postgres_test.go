@@ -13,8 +13,8 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"bountyboard"
-	"bountyboard/internal/store"
+	"github.com/wolfhead/pactline"
+	"github.com/wolfhead/pactline/internal/store"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -117,7 +117,7 @@ func createThrowawayDatabase(t *testing.T, baseDSN string) string {
 // hardcoded, driftable one.
 func embeddedMigrationNames(t *testing.T) []string {
 	t.Helper()
-	entries, err := fs.ReadDir(bountyboard.MigrationFS, "migrations")
+	entries, err := fs.ReadDir(pactline.MigrationFS, "migrations")
 	require.NoError(t, err)
 
 	names := make([]string, 0, len(entries))
@@ -137,7 +137,7 @@ func migrationsBeforeIdentity(t *testing.T) fstest.MapFS {
 		if name >= "0009_" {
 			continue
 		}
-		body, err := fs.ReadFile(bountyboard.MigrationFS, "migrations/"+name)
+		body, err := fs.ReadFile(pactline.MigrationFS, "migrations/"+name)
 		require.NoError(t, err)
 		out["migrations/"+name] = &fstest.MapFile{Data: body}
 	}
@@ -151,7 +151,7 @@ func migrationsBeforeInvitationAuthorizationVersion(t *testing.T) fstest.MapFS {
 		if name >= "0010_" {
 			continue
 		}
-		body, err := fs.ReadFile(bountyboard.MigrationFS, "migrations/"+name)
+		body, err := fs.ReadFile(pactline.MigrationFS, "migrations/"+name)
 		require.NoError(t, err)
 		out["migrations/"+name] = &fstest.MapFile{Data: body}
 	}
@@ -165,7 +165,7 @@ func migrationsBeforeProjectFirst(t *testing.T) fstest.MapFS {
 		if name >= "0013_" {
 			continue
 		}
-		body, err := fs.ReadFile(bountyboard.MigrationFS, "migrations/"+name)
+		body, err := fs.ReadFile(pactline.MigrationFS, "migrations/"+name)
 		require.NoError(t, err)
 		out["migrations/"+name] = &fstest.MapFile{Data: body}
 	}
@@ -242,7 +242,7 @@ func TestProjectFirstMigrationCutsOverLegacyWork(t *testing.T) {
 		primarySeedID)
 	require.NoError(t, err)
 
-	require.NoError(t, db.Migrate(ctx, bountyboard.MigrationFS))
+	require.NoError(t, db.Migrate(ctx, pactline.MigrationFS))
 
 	var migratedProjectName string
 	require.NoError(t, db.Pool.QueryRow(ctx, `
@@ -313,7 +313,7 @@ func TestInvitationAuthorizationVersionMigration(t *testing.T) {
 		[]byte("legacy-invitation-state-hash"), invitationID)
 	require.NoError(t, err)
 
-	require.NoError(t, db.Migrate(ctx, bountyboard.MigrationFS))
+	require.NoError(t, db.Migrate(ctx, pactline.MigrationFS))
 	var loginTokenHash []byte
 	require.NoError(t, db.Pool.QueryRow(ctx, `
 		SELECT invitation_token_hash
@@ -505,7 +505,7 @@ func TestIdentityMigrationConsolidatesSeedAttribution(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
 
-	require.NoError(t, db.Migrate(ctx, bountyboard.MigrationFS))
+	require.NoError(t, db.Migrate(ctx, pactline.MigrationFS))
 
 	var activeSecondary int
 	require.NoError(t, db.Pool.QueryRow(ctx, `
@@ -598,7 +598,7 @@ func TestIdentityMigrationCreatesAccessSchema(t *testing.T) {
 	db, err := store.Connect(context.Background(), testDSN(t))
 	require.NoError(t, err)
 	defer db.Close()
-	require.NoError(t, db.Migrate(context.Background(), bountyboard.MigrationFS))
+	require.NoError(t, db.Migrate(context.Background(), pactline.MigrationFS))
 
 	expectedTables := []string{
 		"external_identities",
@@ -684,7 +684,7 @@ func TestMigrateConcurrentCallsAreSerializedByAdvisoryLock(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			<-start
-			errs[i] = dbs[i].Migrate(ctx, bountyboard.MigrationFS)
+			errs[i] = dbs[i].Migrate(ctx, pactline.MigrationFS)
 		}(i)
 	}
 	close(start)

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"bountyboard/internal/domain"
+	"github.com/wolfhead/pactline/internal/domain"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"

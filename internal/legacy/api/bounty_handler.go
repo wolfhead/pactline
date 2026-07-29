@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"time"
 
-	sharedapi "bountyboard/internal/api"
-	userdomain "bountyboard/internal/domain"
-	"bountyboard/internal/legacy/domain"
-	"bountyboard/internal/legacy/store"
+	sharedapi "github.com/wolfhead/pactline/internal/api"
+	userdomain "github.com/wolfhead/pactline/internal/domain"
+	"github.com/wolfhead/pactline/internal/legacy/domain"
+	"github.com/wolfhead/pactline/internal/legacy/store"
 
 	"github.com/google/uuid"
 )

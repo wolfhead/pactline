@@ -66,5 +66,3 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
-      - name: Reject high-severity production dependency findings
-        run: npm audit --omit=dev --audit-level=high

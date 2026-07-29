@@ -7,19 +7,19 @@ import (
 	"net/http"
 	"os"
 
-	"bountyboard"
-	contract "bountyboard/api"
-	"bountyboard/internal/access"
-	"bountyboard/internal/api"
-	apiv1 "bountyboard/internal/api/v1"
-	"bountyboard/internal/application"
-	"bountyboard/internal/identity"
-	"bountyboard/internal/integrations/devauth"
-	"bountyboard/internal/integrations/lark"
-	legacyapi "bountyboard/internal/legacy/api"
-	legacystore "bountyboard/internal/legacy/store"
-	"bountyboard/internal/logging"
-	"bountyboard/internal/store"
+	"github.com/wolfhead/pactline"
+	contract "github.com/wolfhead/pactline/api"
+	"github.com/wolfhead/pactline/internal/access"
+	"github.com/wolfhead/pactline/internal/api"
+	apiv1 "github.com/wolfhead/pactline/internal/api/v1"
+	"github.com/wolfhead/pactline/internal/application"
+	"github.com/wolfhead/pactline/internal/identity"
+	"github.com/wolfhead/pactline/internal/integrations/devauth"
+	"github.com/wolfhead/pactline/internal/integrations/lark"
+	legacyapi "github.com/wolfhead/pactline/internal/legacy/api"
+	legacystore "github.com/wolfhead/pactline/internal/legacy/store"
+	"github.com/wolfhead/pactline/internal/logging"
+	"github.com/wolfhead/pactline/internal/store"
 )
 
 func main() {
@@ -43,7 +43,7 @@ func main() {
 	}
 	defer db.Close()
 
-	if err := db.Migrate(context.Background(), bountyboard.MigrationFS); err != nil {
+	if err := db.Migrate(context.Background(), pactline.MigrationFS); err != nil {
 		slog.Error("migrate", "error", err)
 		os.Exit(1)
 	}

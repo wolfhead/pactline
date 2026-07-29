@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
-	"bountyboard/internal/domain"
-	"bountyboard/internal/identity"
+	"github.com/wolfhead/pactline/internal/domain"
+	"github.com/wolfhead/pactline/internal/identity"
 )
 
 type requestIDContextKey struct{}

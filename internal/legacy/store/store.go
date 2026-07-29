@@ -4,7 +4,7 @@
 // internal/store.
 package store
 
-import pgstore "bountyboard/internal/store"
+import pgstore "github.com/wolfhead/pactline/internal/store"
 
 // DB aliases the shared connection pool type (internal/store.DB) so the
 // stores in this package can keep writing "*DB", exactly as they did before

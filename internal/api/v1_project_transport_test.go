@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"testing"
 
-	baseapi "bountyboard/internal/api"
+	baseapi "github.com/wolfhead/pactline/internal/api"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"

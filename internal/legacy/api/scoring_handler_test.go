@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	legacyapi "bountyboard/internal/legacy/api"
-	"bountyboard/internal/legacy/domain"
+	legacyapi "github.com/wolfhead/pactline/internal/legacy/api"
+	"github.com/wolfhead/pactline/internal/legacy/domain"
 
 	"github.com/stretchr/testify/require"
 )

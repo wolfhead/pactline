@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"bountyboard/internal/identity"
+	"github.com/wolfhead/pactline/internal/identity"
 )
 
 const (

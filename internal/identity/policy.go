@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"bountyboard/internal/domain"
+	"github.com/wolfhead/pactline/internal/domain"
 )
 
 const (

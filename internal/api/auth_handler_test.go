@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"bountyboard/internal/api"
-	"bountyboard/internal/domain"
-	"bountyboard/internal/identity"
-	"bountyboard/internal/integrations/devauth"
-	"bountyboard/internal/store"
+	"github.com/wolfhead/pactline/internal/api"
+	"github.com/wolfhead/pactline/internal/domain"
+	"github.com/wolfhead/pactline/internal/identity"
+	"github.com/wolfhead/pactline/internal/integrations/devauth"
+	"github.com/wolfhead/pactline/internal/store"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"

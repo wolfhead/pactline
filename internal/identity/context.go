@@ -3,8 +3,8 @@ package identity
 import (
 	"context"
 
-	"bountyboard/internal/access"
-	"bountyboard/internal/domain"
+	"github.com/wolfhead/pactline/internal/access"
+	"github.com/wolfhead/pactline/internal/domain"
 
 	"github.com/google/uuid"
 )

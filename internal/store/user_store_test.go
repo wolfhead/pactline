@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"bountyboard"
-	"bountyboard/internal/domain"
-	"bountyboard/internal/store"
+	"github.com/wolfhead/pactline"
+	"github.com/wolfhead/pactline/internal/domain"
+	"github.com/wolfhead/pactline/internal/store"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -18,7 +18,7 @@ func newTestDB(t *testing.T) *store.DB {
 	t.Helper()
 	db, err := store.Connect(context.Background(), testDSN(t))
 	require.NoError(t, err)
-	require.NoError(t, db.Migrate(context.Background(), bountyboard.MigrationFS))
+	require.NoError(t, db.Migrate(context.Background(), pactline.MigrationFS))
 	t.Cleanup(db.Close)
 	return db
 }

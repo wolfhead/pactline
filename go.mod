@@ -1,4 +1,4 @@
-module bountyboard
+module github.com/wolfhead/pactline
 
 go 1.24.0
 

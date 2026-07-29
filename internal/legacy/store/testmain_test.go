@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"bountyboard"
-	pgstore "bountyboard/internal/store"
+	"github.com/wolfhead/pactline"
+	pgstore "github.com/wolfhead/pactline/internal/store"
 
 	"github.com/stretchr/testify/require"
 )
@@ -65,7 +65,7 @@ func newTestDB(t *testing.T) *pgstore.DB {
 	t.Helper()
 	db, err := pgstore.Connect(context.Background(), testDSN(t))
 	require.NoError(t, err)
-	require.NoError(t, db.Migrate(context.Background(), bountyboard.MigrationFS))
+	require.NoError(t, db.Migrate(context.Background(), pactline.MigrationFS))
 	t.Cleanup(db.Close)
 	return db
 }

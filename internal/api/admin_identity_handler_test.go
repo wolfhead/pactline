@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"bountyboard/internal/domain"
-	"bountyboard/internal/identity"
+	"github.com/wolfhead/pactline/internal/domain"
+	"github.com/wolfhead/pactline/internal/identity"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"

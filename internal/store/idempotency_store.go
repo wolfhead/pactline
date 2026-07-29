@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"bountyboard/internal/access"
+	"github.com/wolfhead/pactline/internal/access"
 
 	"github.com/jackc/pgx/v5"
 )

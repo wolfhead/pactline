@@ -5,7 +5,7 @@
 // live.
 package scoring
 
-import "bountyboard/internal/legacy/domain"
+import "github.com/wolfhead/pactline/internal/legacy/domain"
 
 // The constants below are the whole of Phase 2's tuning surface. Spec §13
 // explicitly rejected building a configuration layer for them — Owner

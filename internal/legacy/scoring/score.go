@@ -3,7 +3,7 @@ package scoring
 import (
 	"fmt"
 
-	"bountyboard/internal/legacy/domain"
+	"github.com/wolfhead/pactline/internal/legacy/domain"
 )
 
 // Score computes a terminal bounty's settlement score from spec §7.1's

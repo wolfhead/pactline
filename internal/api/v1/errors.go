@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 
-	baseapi "bountyboard/internal/api"
-	"bountyboard/internal/domain"
+	baseapi "github.com/wolfhead/pactline/internal/api"
+	"github.com/wolfhead/pactline/internal/domain"
 
 	ht "github.com/ogen-go/ogen/http"
 	"github.com/ogen-go/ogen/ogenerrors"

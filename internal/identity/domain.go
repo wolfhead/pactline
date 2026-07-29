@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"bountyboard/internal/domain"
+	"github.com/wolfhead/pactline/internal/domain"
 
 	"github.com/google/uuid"
 )

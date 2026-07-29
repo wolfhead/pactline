@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"bountyboard/internal/legacy/domain"
+	"github.com/wolfhead/pactline/internal/legacy/domain"
 
 	"github.com/google/uuid"
 )

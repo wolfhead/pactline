@@ -41,15 +41,17 @@ tracked documentation such as `docs/product-model.md`.
 
 Before the first source push, or before replacing published Git history:
 
-1. Select and add an open-source license with the owner's explicit approval.
+1. Verify that the approved open-source license is present and referenced from
+   the README and contribution guide.
 2. Run secret and personal-information scans against both the working tree and
    the complete Git history.
 3. Rewrite or replace Git history if author metadata or old content contains
    information that is not approved for publication.
 4. Rotate every credential that has ever been shared outside its intended
    secret store, even when it was never committed.
-5. Resolve production dependency vulnerabilities and document any accepted
-   development-only risk.
+5. Review dependency advisories against the deployed threat model. Fix or
+   record material exposure; repository visibility alone is not a reason to
+   upgrade dependencies.
 6. Verify that ignored local documents are absent from the remote repository
    and that no tracked document links to them.
 7. Confirm GitHub branch protection, required CI checks, vulnerability alerts,
