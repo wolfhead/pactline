@@ -23,7 +23,12 @@ type CommentStore struct{ db *DB }
 // NewCommentStore wires a CommentStore to the pool.
 func NewCommentStore(db *DB) *CommentStore { return &CommentStore{db: db} }
 
-const commentColumns = `id, task_id, author_id, body, created_at, updated_at`
+const commentColumns = `id, task_id, author_id, body, version, created_at, updated_at`
+
+type CommentCreation struct {
+	Comment     domain.Comment
+	TaskVersion int64
+}
 
 // List returns every comment on a task, oldest first.
 func (s *CommentStore) List(ctx context.Context, taskID uuid.UUID) ([]domain.Comment, error) {
@@ -57,39 +62,85 @@ func (s *CommentStore) CreateWithOperation(
 	body string,
 	actor domain.OperationActor,
 ) (domain.Comment, error) {
+	created, err := s.createWithExpectedTaskVersion(
+		ctx, taskID, nil, authorID, body, actor,
+	)
+	return created.Comment, err
+}
+
+func (s *CommentStore) CreateVersionedWithOperation(
+	ctx context.Context,
+	taskID uuid.UUID,
+	expectedTaskVersion int64,
+	authorID uuid.UUID,
+	body string,
+	actor domain.OperationActor,
+) (CommentCreation, error) {
+	return s.createWithExpectedTaskVersion(
+		ctx, taskID, &expectedTaskVersion, authorID, body, actor,
+	)
+}
+
+func (s *CommentStore) createWithExpectedTaskVersion(
+	ctx context.Context,
+	taskID uuid.UUID,
+	expectedTaskVersion *int64,
+	authorID uuid.UUID,
+	body string,
+	actor domain.OperationActor,
+) (CommentCreation, error) {
 	if strings.TrimSpace(body) == "" {
-		return domain.Comment{}, fmt.Errorf("%w: comment body is required", domain.ErrInvalidInput)
+		return CommentCreation{}, fmt.Errorf("%w: comment body is required", domain.ErrInvalidInput)
 	}
 	if err := actor.Validate(); err != nil {
-		return domain.Comment{}, err
+		return CommentCreation{}, err
 	}
 	if authorID != actor.UserID {
-		return domain.Comment{}, fmt.Errorf("%w: comment author must match operation actor", domain.ErrForbidden)
+		return CommentCreation{}, fmt.Errorf("%w: comment author must match operation actor", domain.ErrForbidden)
 	}
 	tx, err := s.db.Pool.Begin(ctx)
 	if err != nil {
-		return domain.Comment{}, fmt.Errorf("begin create comment: %w", err)
+		return CommentCreation{}, fmt.Errorf("begin create comment: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
+	var taskVersion int64
+	err = tx.QueryRow(ctx, `SELECT version FROM tasks WHERE id=$1 FOR UPDATE`, taskID).
+		Scan(&taskVersion)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return CommentCreation{}, domain.ErrNotFound
+	}
+	if err != nil {
+		return CommentCreation{}, fmt.Errorf("lock task %s for comment: %w", taskID, err)
+	}
+	if expectedTaskVersion != nil && taskVersion != *expectedTaskVersion {
+		return CommentCreation{}, domain.VersionConflictError{CurrentVersion: taskVersion}
+	}
 	row := tx.QueryRow(ctx,
 		`INSERT INTO task_comments (id, task_id, author_id, body) VALUES ($1,$2,$3,$4) RETURNING `+commentColumns,
 		uuid.New(), taskID, authorID, body)
 	c, err := scanComment(row)
 	if err != nil {
-		return domain.Comment{}, mapPgError(err)
+		return CommentCreation{}, mapPgError(err)
+	}
+	if err := tx.QueryRow(ctx, `
+		UPDATE tasks SET version=version+1, updated_at=now()
+		WHERE id=$1 AND version=$2 RETURNING version`,
+		taskID, taskVersion,
+	).Scan(&taskVersion); err != nil {
+		return CommentCreation{}, fmt.Errorf("increment task version for comment: %w", err)
 	}
 	newValue, _ := json.Marshal(map[string]any{"task_id": taskID, "body": c.Body})
 	if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
 		OccurredAt: time.Now().UTC(), Actor: actor, EntityType: "comment",
 		EntityID: c.ID, Action: "created", NewValue: newValue,
 	}); err != nil {
-		return domain.Comment{}, err
+		return CommentCreation{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return domain.Comment{}, fmt.Errorf("commit create comment: %w", err)
+		return CommentCreation{}, fmt.Errorf("commit create comment: %w", err)
 	}
 	slog.Info("comment created", "comment_id", c.ID, "task_id", taskID, "author_id", authorID)
-	return c, nil
+	return CommentCreation{Comment: c, TaskVersion: taskVersion}, nil
 }
 
 // Update rewrites a comment's body. taskID scopes the lookup to the task the
@@ -109,6 +160,26 @@ func (s *CommentStore) UpdateWithOperation(
 	body string,
 	actor domain.OperationActor,
 ) (domain.Comment, error) {
+	return s.updateWithExpectedVersion(ctx, taskID, id, nil, body, actor)
+}
+
+func (s *CommentStore) UpdateVersionedWithOperation(
+	ctx context.Context,
+	taskID, id uuid.UUID,
+	expectedVersion int64,
+	body string,
+	actor domain.OperationActor,
+) (domain.Comment, error) {
+	return s.updateWithExpectedVersion(ctx, taskID, id, &expectedVersion, body, actor)
+}
+
+func (s *CommentStore) updateWithExpectedVersion(
+	ctx context.Context,
+	taskID, id uuid.UUID,
+	expectedVersion *int64,
+	body string,
+	actor domain.OperationActor,
+) (domain.Comment, error) {
 	if strings.TrimSpace(body) == "" {
 		return domain.Comment{}, fmt.Errorf("%w: comment body is required", domain.ErrInvalidInput)
 	}
@@ -122,10 +193,11 @@ func (s *CommentStore) UpdateWithOperation(
 	defer tx.Rollback(ctx) //nolint:errcheck
 	var author uuid.UUID
 	var oldBody string
+	var oldVersion int64
 	err = tx.QueryRow(ctx,
-		`SELECT author_id, body FROM task_comments WHERE id=$1 AND task_id=$2 FOR UPDATE`,
+		`SELECT author_id, body, version FROM task_comments WHERE id=$1 AND task_id=$2 FOR UPDATE`,
 		id, taskID,
-	).Scan(&author, &oldBody)
+	).Scan(&author, &oldBody, &oldVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Comment{}, domain.ErrNotFound
 	}
@@ -135,7 +207,14 @@ func (s *CommentStore) UpdateWithOperation(
 	if author != actor.UserID {
 		return domain.Comment{}, domain.ErrForbidden
 	}
-	row := tx.QueryRow(ctx, `UPDATE task_comments SET body=$2, updated_at=now() WHERE id=$1 RETURNING `+commentColumns, id, body)
+	if expectedVersion != nil && oldVersion != *expectedVersion {
+		return domain.Comment{}, domain.VersionConflictError{CurrentVersion: oldVersion}
+	}
+	row := tx.QueryRow(ctx, `
+		UPDATE task_comments SET body=$2, version=version+1, updated_at=now()
+		WHERE id=$1 AND version=$3 RETURNING `+commentColumns,
+		id, body, oldVersion,
+	)
 	c, err := scanComment(row)
 	if err != nil {
 		return domain.Comment{}, mapPgError(err)
@@ -168,6 +247,24 @@ func (s *CommentStore) DeleteWithOperation(
 	taskID, id uuid.UUID,
 	actor domain.OperationActor,
 ) error {
+	return s.deleteWithExpectedVersion(ctx, taskID, id, nil, actor)
+}
+
+func (s *CommentStore) DeleteVersionedWithOperation(
+	ctx context.Context,
+	taskID, id uuid.UUID,
+	expectedVersion int64,
+	actor domain.OperationActor,
+) error {
+	return s.deleteWithExpectedVersion(ctx, taskID, id, &expectedVersion, actor)
+}
+
+func (s *CommentStore) deleteWithExpectedVersion(
+	ctx context.Context,
+	taskID, id uuid.UUID,
+	expectedVersion *int64,
+	actor domain.OperationActor,
+) error {
 	if err := actor.Validate(); err != nil {
 		return err
 	}
@@ -178,10 +275,11 @@ func (s *CommentStore) DeleteWithOperation(
 	defer tx.Rollback(ctx) //nolint:errcheck
 	var author uuid.UUID
 	var body string
+	var oldVersion int64
 	err = tx.QueryRow(ctx,
-		`SELECT author_id, body FROM task_comments WHERE id=$1 AND task_id=$2 FOR UPDATE`,
+		`SELECT author_id, body, version FROM task_comments WHERE id=$1 AND task_id=$2 FOR UPDATE`,
 		id, taskID,
-	).Scan(&author, &body)
+	).Scan(&author, &body, &oldVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.ErrNotFound
 	}
@@ -191,7 +289,13 @@ func (s *CommentStore) DeleteWithOperation(
 	if author != actor.UserID {
 		return domain.ErrForbidden
 	}
-	if _, err := tx.Exec(ctx, `DELETE FROM task_comments WHERE id=$1`, id); err != nil {
+	if expectedVersion != nil && oldVersion != *expectedVersion {
+		return domain.VersionConflictError{CurrentVersion: oldVersion}
+	}
+	if _, err := tx.Exec(ctx, `
+		DELETE FROM task_comments WHERE id=$1 AND version=$2`,
+		id, oldVersion,
+	); err != nil {
 		return fmt.Errorf("delete comment %s: %w", id, err)
 	}
 	oldValue, _ := json.Marshal(map[string]any{"task_id": taskID, "body": body})
@@ -210,7 +314,9 @@ func (s *CommentStore) DeleteWithOperation(
 
 func scanComment(s scanner) (domain.Comment, error) {
 	var c domain.Comment
-	if err := s.Scan(&c.ID, &c.TaskID, &c.AuthorID, &c.Body, &c.CreatedAt, &c.UpdatedAt); err != nil {
+	if err := s.Scan(
+		&c.ID, &c.TaskID, &c.AuthorID, &c.Body, &c.Version, &c.CreatedAt, &c.UpdatedAt,
+	); err != nil {
 		return domain.Comment{}, fmt.Errorf("scan comment: %w", err)
 	}
 	return c, nil

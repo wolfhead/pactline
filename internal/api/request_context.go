@@ -24,7 +24,11 @@ func RequestIDFromContext(ctx context.Context) string {
 }
 
 func operationActor(r *http.Request) (domain.OperationActor, bool) {
-	current, ok := identity.FromContext(r.Context())
+	return OperationActorFromContext(r.Context())
+}
+
+func OperationActorFromContext(ctx context.Context) (domain.OperationActor, bool) {
+	current, ok := identity.FromContext(ctx)
 	if !ok {
 		return domain.OperationActor{}, false
 	}
@@ -33,7 +37,7 @@ func operationActor(r *http.Request) (domain.OperationActor, bool) {
 		AuthMethod: current.AuthenticationMethod,
 		TokenID:    current.APITokenID,
 		TokenName:  current.APITokenName,
-		RequestID:  requestID(r),
+		RequestID:  RequestIDFromContext(ctx),
 	}
 	return actor, actor.Validate() == nil
 }

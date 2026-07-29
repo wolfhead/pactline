@@ -122,6 +122,25 @@ func TestGeneratedServerDoesNotExposeInternalRoutes(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, response.Code)
 }
 
+func TestGeneratedServerRequiresIfMatchBeforeCallingHandler(t *testing.T) {
+	handler := newGeneratedTestHandler(t)
+	request := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/v1/labels/00000000-0000-0000-0000-000000000001",
+		bytes.NewBufferString(`{"name":"renamed"}`),
+	)
+	request.Header.Set("Authorization", "Bearer write-token")
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusPreconditionRequired, response.Code, response.Body.String())
+	var problem baseapi.Problem
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&problem))
+	require.Equal(t, "PRECONDITION_REQUIRED", problem.Code)
+}
+
 func newGeneratedTestHandler(t *testing.T) http.Handler {
 	t.Helper()
 	server, err := NewServer(&Handler{})

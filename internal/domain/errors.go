@@ -1,6 +1,9 @@
 package domain
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // ErrNotFound is returned when a requested entity does not exist. It is
 // shared across every store (user, and the legacy mechanism stores under
@@ -26,3 +29,20 @@ var ErrForbidden = errors.New("forbidden")
 // practice (a uniqueness violation), not a status-transition gate: the task
 // rules relax every transition gate, not every database constraint.
 var ErrConflict = errors.New("conflict")
+
+// ErrVersionConflict identifies an optimistic-concurrency failure.
+var ErrVersionConflict = errors.New("version conflict")
+
+// VersionConflictError carries the current persisted version without exposing
+// storage details to transport adapters.
+type VersionConflictError struct {
+	CurrentVersion int64
+}
+
+func (e VersionConflictError) Error() string {
+	return fmt.Sprintf("%s: current version is %d", ErrVersionConflict, e.CurrentVersion)
+}
+
+func (e VersionConflictError) Unwrap() error {
+	return ErrVersionConflict
+}

@@ -102,7 +102,13 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 		Projects: projects, Milestones: milestones, Acceptance: acceptance,
 		ProjectService: projectService,
 	}
-	v1Handler, err := apiv1.NewServer(&apiv1.Handler{Users: users})
+	v1Handler, err := apiv1.NewServer(&apiv1.Handler{
+		Users: users,
+		Tasks: &application.TaskService{
+			Tasks: tasks, Comments: comments, Projects: projectService,
+		},
+		Labels: &application.LabelService{Labels: labels},
+	})
 	require.NoError(t, err)
 	h := api.NewRouter(users, legacyHandler, api.RouterOptions{
 		Auth: api.AuthSurface{
@@ -163,6 +169,16 @@ func TestMain(m *testing.M) {
 }
 
 func do(t *testing.T, h http.Handler, method, path, userID string, body any) *httptest.ResponseRecorder {
+	return doWithHeaders(t, h, method, path, userID, nil, body)
+}
+
+func doWithHeaders(
+	t *testing.T,
+	h http.Handler,
+	method, path, userID string,
+	headers http.Header,
+	body any,
+) *httptest.ResponseRecorder {
 	t.Helper()
 	var cookies []*http.Cookie
 	csrfToken := ""
@@ -186,6 +202,11 @@ func do(t *testing.T, h http.Handler, method, path, userID string, body any) *ht
 		require.NoError(t, json.NewEncoder(&buf).Encode(body))
 	}
 	req := httptest.NewRequest(method, path, &buf)
+	for name, values := range headers {
+		for _, value := range values {
+			req.Header.Add(name, value)
+		}
+	}
 	for _, cookie := range cookies {
 		req.AddCookie(cookie)
 	}

@@ -122,7 +122,13 @@ func main() {
 		Tasks: tasks, Comments: comments, Labels: labels, Projects: projects,
 		Milestones: milestones, Acceptance: acceptance, ProjectService: projectService,
 	}
-	v1Handler, err := apiv1.NewServer(&apiv1.Handler{Users: users})
+	v1Handler, err := apiv1.NewServer(&apiv1.Handler{
+		Users: users,
+		Tasks: &application.TaskService{
+			Tasks: tasks, Comments: comments, Projects: projectService,
+		},
+		Labels: &application.LabelService{Labels: labels},
+	})
 	if err != nil {
 		slog.Error("configure OpenAPI v1 server", "error", err)
 		os.Exit(1)

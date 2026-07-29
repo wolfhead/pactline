@@ -3,6 +3,7 @@ package v1
 import (
 	"net/http"
 
+	baseapi "bountyboard/internal/api"
 	generated "bountyboard/internal/api/v1generated"
 )
 
@@ -23,6 +24,34 @@ func NewServer(handler *Handler) (*Server, error) {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if route, ok := s.generated.FindPath(r.Method, r.URL); ok &&
+		operationRequiresIfMatch(route.OperationID()) {
+		values := r.Header.Values("If-Match")
+		if len(values) == 0 || values[0] == "" {
+			baseapi.WriteProblem(w, r, baseapi.Problem{
+				Title: "Precondition required", Status: http.StatusPreconditionRequired,
+				Detail: "The current resource ETag is required in If-Match.",
+				Code:   "PRECONDITION_REQUIRED",
+			})
+			return
+		}
+		if len(values) != 1 {
+			baseapi.WriteProblem(w, r, baseapi.Problem{
+				Title: "Invalid request", Status: http.StatusBadRequest,
+				Detail: "If-Match must contain one quoted positive integer.",
+				Code:   "INVALID_REQUEST",
+			})
+			return
+		}
+		if _, err := parseIfMatch(values[0]); err != nil {
+			baseapi.WriteProblem(w, r, baseapi.Problem{
+				Title: "Invalid request", Status: http.StatusBadRequest,
+				Detail: "If-Match must contain one quoted positive integer.",
+				Code:   "INVALID_REQUEST",
+			})
+			return
+		}
+	}
 	s.generated.ServeHTTP(w, r)
 }
 
@@ -35,6 +64,40 @@ func (s *Server) Handler(r *http.Request) (http.Handler, string) {
 		return nil, ""
 	}
 	return s, r.Method + " " + route.PathPattern()
+}
+
+func operationRequiresIfMatch(operationID string) bool {
+	switch operationID {
+	case "archiveProject",
+		"archiveTask",
+		"cancelMilestone",
+		"cancelProject",
+		"completeMilestone",
+		"completeProject",
+		"createAcceptanceCheck",
+		"createMilestone",
+		"createMilestoneCriterion",
+		"createProjectCriterion",
+		"createTaskComment",
+		"createTaskCriterion",
+		"deleteCriterion",
+		"deleteLabel",
+		"deleteTaskComment",
+		"pauseProject",
+		"reopenMilestone",
+		"reopenProject",
+		"restoreProject",
+		"restoreTask",
+		"updateCriterion",
+		"updateLabel",
+		"updateMilestone",
+		"updateProject",
+		"updateTask",
+		"updateTaskComment":
+		return true
+	default:
+		return false
+	}
 }
 
 func OpenAPIHandler(document []byte) http.Handler {

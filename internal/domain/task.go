@@ -61,6 +61,7 @@ func (p TaskPriority) Valid() bool {
 type Task struct {
 	ID          uuid.UUID
 	Number      int64
+	Version     int64
 	Title       string
 	Description string
 	Status      TaskStatus

@@ -23,7 +23,7 @@ type TaskStore struct{ db *DB }
 // NewTaskStore wires a TaskStore to the pool.
 func NewTaskStore(db *DB) *TaskStore { return &TaskStore{db: db} }
 
-const taskColumns = `t.id, t.number, t.title, t.description, t.status, t.priority,
+const taskColumns = `t.id, t.number, t.version, t.title, t.description, t.status, t.priority,
 	t.assignee_id, t.creator_id, t.due_date, t.project_id, t.milestone_id,
 	t.created_at, t.updated_at, t.completed_at, t.archived_at`
 
@@ -44,7 +44,9 @@ const taskFromJoins = `FROM tasks t
 	LEFT JOIN projects p ON p.id = t.project_id
 	LEFT JOIN milestones m ON m.id = t.milestone_id
 	LEFT JOIN LATERAL (
-		SELECT json_agg(json_build_object('id', l.id, 'name', l.name, 'created_at', l.created_at) ORDER BY l.name) AS labels
+		SELECT json_agg(json_build_object(
+			'id', l.id, 'name', l.name, 'version', l.version, 'created_at', l.created_at
+		) ORDER BY l.name) AS labels
 		FROM task_labels tl JOIN labels l ON l.id = tl.label_id
 		WHERE tl.task_id = t.id
 	) lbl ON true`
@@ -86,7 +88,8 @@ func scanTaskWithRelations(s scanner) (TaskWithRelations, error) {
 		labelsJSON    []byte
 	)
 	err := s.Scan(
-		&twr.Task.ID, &twr.Task.Number, &twr.Task.Title, &twr.Task.Description, &twr.Task.Status, &twr.Task.Priority,
+		&twr.Task.ID, &twr.Task.Number, &twr.Task.Version,
+		&twr.Task.Title, &twr.Task.Description, &twr.Task.Status, &twr.Task.Priority,
 		&twr.Task.AssigneeID, &twr.Task.CreatorID, &twr.Task.DueDate, &twr.Task.ProjectID, &twr.Task.MilestoneID,
 		&twr.Task.CreatedAt, &twr.Task.UpdatedAt,
 		&twr.Task.CompletedAt, &twr.Task.ArchivedAt,
@@ -270,6 +273,25 @@ func (s *TaskStore) UpdateWithOperation(
 	patch domain.TaskPatch,
 	actor domain.OperationActor,
 ) (TaskWithRelations, error) {
+	return s.updateWithExpectedVersion(ctx, number, nil, patch, actor)
+}
+
+func (s *TaskStore) UpdateVersionedWithOperation(
+	ctx context.Context,
+	number, expectedVersion int64,
+	patch domain.TaskPatch,
+	actor domain.OperationActor,
+) (TaskWithRelations, error) {
+	return s.updateWithExpectedVersion(ctx, number, &expectedVersion, patch, actor)
+}
+
+func (s *TaskStore) updateWithExpectedVersion(
+	ctx context.Context,
+	number int64,
+	expectedVersion *int64,
+	patch domain.TaskPatch,
+	actor domain.OperationActor,
+) (TaskWithRelations, error) {
 	if err := actor.Validate(); err != nil {
 		return TaskWithRelations{}, err
 	}
@@ -289,18 +311,22 @@ func (s *TaskStore) UpdateWithOperation(
 		oldProject               *uuid.UUID
 		oldMilestone             *uuid.UUID
 		oldCompletedAt           *time.Time
+		oldVersion               int64
 	)
 	err = tx.QueryRow(ctx,
-		`SELECT id, title, description, status, priority, assignee_id, due_date,
+		`SELECT id, version, title, description, status, priority, assignee_id, due_date,
 		        project_id, milestone_id, completed_at
 		 FROM tasks WHERE number = $1 FOR UPDATE`, number,
-	).Scan(&id, &oldTitle, &oldDescription, &oldStatus, &oldPriority, &oldAssignee,
+	).Scan(&id, &oldVersion, &oldTitle, &oldDescription, &oldStatus, &oldPriority, &oldAssignee,
 		&oldDueDate, &oldProject, &oldMilestone, &oldCompletedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return TaskWithRelations{}, domain.ErrNotFound
 	}
 	if err != nil {
 		return TaskWithRelations{}, fmt.Errorf("lookup task %d for update: %w", number, err)
+	}
+	if expectedVersion != nil && oldVersion != *expectedVersion {
+		return TaskWithRelations{}, domain.VersionConflictError{CurrentVersion: oldVersion}
 	}
 
 	newTitle, newDescription := oldTitle, oldDescription
@@ -381,15 +407,17 @@ func (s *TaskStore) UpdateWithOperation(
 		newCompletedAt = nil
 	}
 
-	if _, err := tx.Exec(ctx, `
+	var nextVersion int64
+	if err := tx.QueryRow(ctx, `
 		UPDATE tasks SET
 			title=$2, description=$3, status=$4, priority=$5,
 			assignee_id=$6, due_date=$7, project_id=$8, milestone_id=$9,
-			completed_at=$10, updated_at=now()
-		WHERE id=$1`,
+			completed_at=$10, version=version+1, updated_at=now()
+		WHERE id=$1 AND version=$11
+		RETURNING version`,
 		id, newTitle, newDescription, string(newStatus), string(newPriority),
-		newAssignee, newDueDate, newProject, newMilestone, newCompletedAt,
-	); err != nil {
+		newAssignee, newDueDate, newProject, newMilestone, newCompletedAt, oldVersion,
+	).Scan(&nextVersion); err != nil {
 		return TaskWithRelations{}, mapPgError(err)
 	}
 
@@ -489,6 +517,25 @@ func (s *TaskStore) SetArchivedWithOperation(
 	archived bool,
 	actor domain.OperationActor,
 ) (TaskWithRelations, error) {
+	return s.setArchivedWithExpectedVersion(ctx, number, nil, archived, actor)
+}
+
+func (s *TaskStore) SetArchivedVersionedWithOperation(
+	ctx context.Context,
+	number, expectedVersion int64,
+	archived bool,
+	actor domain.OperationActor,
+) (TaskWithRelations, error) {
+	return s.setArchivedWithExpectedVersion(ctx, number, &expectedVersion, archived, actor)
+}
+
+func (s *TaskStore) setArchivedWithExpectedVersion(
+	ctx context.Context,
+	number int64,
+	expectedVersion *int64,
+	archived bool,
+	actor domain.OperationActor,
+) (TaskWithRelations, error) {
 	if err := actor.Validate(); err != nil {
 		return TaskWithRelations{}, err
 	}
@@ -501,21 +548,21 @@ func (s *TaskStore) SetArchivedWithOperation(
 	var (
 		id          uuid.UUID
 		wasArchived bool
+		oldVersion  int64
 	)
-	err = tx.QueryRow(ctx, `SELECT id, archived_at IS NOT NULL FROM tasks WHERE number = $1 FOR UPDATE`, number).
-		Scan(&id, &wasArchived)
+	err = tx.QueryRow(ctx, `SELECT id, version, archived_at IS NOT NULL FROM tasks WHERE number = $1 FOR UPDATE`, number).
+		Scan(&id, &oldVersion, &wasArchived)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return TaskWithRelations{}, domain.ErrNotFound
 	}
 	if err != nil {
 		return TaskWithRelations{}, fmt.Errorf("lookup task %d for archive: %w", number, err)
 	}
+	if expectedVersion != nil && oldVersion != *expectedVersion {
+		return TaskWithRelations{}, domain.VersionConflictError{CurrentVersion: oldVersion}
+	}
 
 	if wasArchived != archived {
-		if _, err := tx.Exec(ctx, `UPDATE tasks SET archived_at = CASE WHEN $2 THEN now() ELSE NULL END, updated_at = now() WHERE id = $1`,
-			id, archived); err != nil {
-			return TaskWithRelations{}, fmt.Errorf("set archived on task %d: %w", number, err)
-		}
 		if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldArchived, strconv.FormatBool(wasArchived), strconv.FormatBool(archived)); err != nil {
 			return TaskWithRelations{}, err
 		}
@@ -532,6 +579,17 @@ func (s *TaskStore) SetArchivedWithOperation(
 		}); err != nil {
 			return TaskWithRelations{}, err
 		}
+	}
+	var nextVersion int64
+	if err := tx.QueryRow(ctx, `
+		UPDATE tasks
+		SET archived_at = CASE WHEN $2 THEN COALESCE(archived_at, now()) ELSE NULL END,
+		    version=version+1, updated_at=now()
+		WHERE id=$1 AND version=$3
+		RETURNING version`,
+		id, archived, oldVersion,
+	).Scan(&nextVersion); err != nil {
+		return TaskWithRelations{}, fmt.Errorf("set archived on task %d: %w", number, err)
 	}
 
 	row := tx.QueryRow(ctx, `SELECT `+taskSelectColumns+` `+taskFromJoins+` WHERE t.id = $1`, id)

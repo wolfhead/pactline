@@ -10,6 +10,7 @@ import (
 
 	baseapi "bountyboard/internal/api"
 	generated "bountyboard/internal/api/v1generated"
+	"bountyboard/internal/application"
 	"bountyboard/internal/domain"
 	"bountyboard/internal/identity"
 	"bountyboard/internal/store"
@@ -17,7 +18,9 @@ import (
 
 type Handler struct {
 	generated.UnimplementedHandler
-	Users *store.UserStore
+	Users  *store.UserStore
+	Tasks  *application.TaskService
+	Labels *application.LabelService
 }
 
 func (h *Handler) GetCurrentPrincipal(ctx context.Context) (generated.GetCurrentPrincipalRes, error) {

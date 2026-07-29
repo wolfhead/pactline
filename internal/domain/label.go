@@ -12,5 +12,6 @@ import (
 type Label struct {
 	ID        uuid.UUID
 	Name      string
+	Version   int64
 	CreatedAt time.Time
 }

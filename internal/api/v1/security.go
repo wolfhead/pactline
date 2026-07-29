@@ -15,6 +15,7 @@ var (
 	ErrAuthenticationRequired = errors.New("authentication required")
 	ErrInsufficientScope      = errors.New("insufficient scope")
 	ErrInvalidRequest         = errors.New("invalid request")
+	ErrPreconditionRequired   = errors.New("precondition required")
 )
 
 type Security struct{}

@@ -13,6 +13,7 @@ type Comment struct {
 	TaskID    uuid.UUID
 	AuthorID  uuid.UUID
 	Body      string
+	Version   int64
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }

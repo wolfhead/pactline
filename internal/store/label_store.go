@@ -24,7 +24,7 @@ type LabelStore struct{ db *DB }
 // NewLabelStore wires a LabelStore to the pool.
 func NewLabelStore(db *DB) *LabelStore { return &LabelStore{db: db} }
 
-const labelColumns = `id, name, created_at`
+const labelColumns = `id, name, version, created_at`
 
 // List returns every label, ordered by name.
 func (s *LabelStore) List(ctx context.Context) ([]domain.Label, error) {
@@ -112,7 +112,11 @@ func (s *LabelStore) RenameWithOperation(
 		return domain.Label{}, fmt.Errorf("%w: label name is required", domain.ErrInvalidInput)
 	}
 	if actor.UserID == uuid.Nil {
-		row := s.db.Pool.QueryRow(ctx, `UPDATE labels SET name=$2 WHERE id=$1 RETURNING `+labelColumns, id, name)
+		row := s.db.Pool.QueryRow(ctx, `
+			UPDATE labels SET name=$2, version=version+1
+			WHERE id=$1 RETURNING `+labelColumns,
+			id, name,
+		)
 		l, err := scanLabel(row)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.Label{}, domain.ErrNotFound
@@ -123,6 +127,30 @@ func (s *LabelStore) RenameWithOperation(
 		slog.Info("label renamed", "label_id", id, "name", name)
 		return l, nil
 	}
+	return s.renameVersionedWithOperation(ctx, id, nil, name, actor)
+}
+
+func (s *LabelStore) RenameVersionedWithOperation(
+	ctx context.Context,
+	id uuid.UUID,
+	expectedVersion int64,
+	name string,
+	actor domain.OperationActor,
+) (domain.Label, error) {
+	return s.renameVersionedWithOperation(ctx, id, &expectedVersion, name, actor)
+}
+
+func (s *LabelStore) renameVersionedWithOperation(
+	ctx context.Context,
+	id uuid.UUID,
+	expectedVersion *int64,
+	name string,
+	actor domain.OperationActor,
+) (domain.Label, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return domain.Label{}, fmt.Errorf("%w: label name is required", domain.ErrInvalidInput)
+	}
 	if err := actor.Validate(); err != nil {
 		return domain.Label{}, err
 	}
@@ -132,14 +160,23 @@ func (s *LabelStore) RenameWithOperation(
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 	var oldName string
-	err = tx.QueryRow(ctx, `SELECT name FROM labels WHERE id=$1 FOR UPDATE`, id).Scan(&oldName)
+	var oldVersion int64
+	err = tx.QueryRow(ctx, `SELECT name, version FROM labels WHERE id=$1 FOR UPDATE`, id).
+		Scan(&oldName, &oldVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Label{}, domain.ErrNotFound
 	}
 	if err != nil {
 		return domain.Label{}, fmt.Errorf("lock label %s: %w", id, err)
 	}
-	row := tx.QueryRow(ctx, `UPDATE labels SET name=$2 WHERE id=$1 RETURNING `+labelColumns, id, name)
+	if expectedVersion != nil && oldVersion != *expectedVersion {
+		return domain.Label{}, domain.VersionConflictError{CurrentVersion: oldVersion}
+	}
+	row := tx.QueryRow(ctx, `
+		UPDATE labels SET name=$2, version=version+1
+		WHERE id=$1 AND version=$3 RETURNING `+labelColumns,
+		id, name, oldVersion,
+	)
 	l, err := scanLabel(row)
 	if err != nil {
 		return domain.Label{}, mapPgError(err)
@@ -181,6 +218,24 @@ func (s *LabelStore) DeleteWithOperation(
 		slog.Info("label deleted", "label_id", id)
 		return nil
 	}
+	return s.deleteVersionedWithOperation(ctx, id, nil, actor)
+}
+
+func (s *LabelStore) DeleteVersionedWithOperation(
+	ctx context.Context,
+	id uuid.UUID,
+	expectedVersion int64,
+	actor domain.OperationActor,
+) error {
+	return s.deleteVersionedWithOperation(ctx, id, &expectedVersion, actor)
+}
+
+func (s *LabelStore) deleteVersionedWithOperation(
+	ctx context.Context,
+	id uuid.UUID,
+	expectedVersion *int64,
+	actor domain.OperationActor,
+) error {
 	if err := actor.Validate(); err != nil {
 		return err
 	}
@@ -190,15 +245,73 @@ func (s *LabelStore) DeleteWithOperation(
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 	var oldName string
-	err = tx.QueryRow(ctx, `SELECT name FROM labels WHERE id=$1 FOR UPDATE`, id).Scan(&oldName)
+	var oldVersion int64
+	err = tx.QueryRow(ctx, `SELECT name, version FROM labels WHERE id=$1 FOR UPDATE`, id).
+		Scan(&oldName, &oldVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.ErrNotFound
 	}
 	if err != nil {
 		return fmt.Errorf("lock label %s: %w", id, err)
 	}
-	if _, err := tx.Exec(ctx, `DELETE FROM labels WHERE id=$1`, id); err != nil {
+	if expectedVersion != nil && oldVersion != *expectedVersion {
+		return domain.VersionConflictError{CurrentVersion: oldVersion}
+	}
+	type affectedTask struct {
+		ID      uuid.UUID
+		Number  int64
+		Version int64
+	}
+	rows, err := tx.Query(ctx, `
+		SELECT t.id, t.number, t.version
+		FROM tasks t
+		JOIN task_labels tl ON tl.task_id=t.id
+		WHERE tl.label_id=$1
+		ORDER BY t.id
+		FOR UPDATE OF t`,
+		id,
+	)
+	if err != nil {
+		return fmt.Errorf("lock tasks affected by label %s: %w", id, err)
+	}
+	var affected []affectedTask
+	for rows.Next() {
+		var task affectedTask
+		if err := rows.Scan(&task.ID, &task.Number, &task.Version); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan task affected by label %s: %w", id, err)
+		}
+		affected = append(affected, task)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("list tasks affected by label %s: %w", id, err)
+	}
+	rows.Close()
+	if _, err := tx.Exec(ctx, `
+		DELETE FROM labels WHERE id=$1 AND version=$2`,
+		id, oldVersion,
+	); err != nil {
 		return fmt.Errorf("delete label %s: %w", id, err)
+	}
+	for _, task := range affected {
+		if _, err := tx.Exec(ctx, `
+			UPDATE tasks SET version=version+1, updated_at=now()
+			WHERE id=$1 AND version=$2`,
+			task.ID, task.Version,
+		); err != nil {
+			return fmt.Errorf("increment task %s after label deletion: %w", task.ID, err)
+		}
+		oldTaskValue, _ := json.Marshal(map[string]any{
+			"label_id": id, "label_name": oldName,
+		})
+		if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
+			OccurredAt: time.Now().UTC(), Actor: actor, EntityType: "task",
+			EntityID: task.ID, EntityNumber: &task.Number, Action: "label_removed",
+			OldValue: oldTaskValue,
+		}); err != nil {
+			return err
+		}
 	}
 	oldValue, _ := json.Marshal(map[string]any{"name": oldName})
 	if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
@@ -216,7 +329,7 @@ func (s *LabelStore) DeleteWithOperation(
 
 func scanLabel(s scanner) (domain.Label, error) {
 	var l domain.Label
-	if err := s.Scan(&l.ID, &l.Name, &l.CreatedAt); err != nil {
+	if err := s.Scan(&l.ID, &l.Name, &l.Version, &l.CreatedAt); err != nil {
 		return domain.Label{}, fmt.Errorf("scan label: %w", err)
 	}
 	return l, nil

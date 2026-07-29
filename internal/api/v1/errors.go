@@ -30,6 +30,18 @@ func ErrorHandler(_ context.Context, w http.ResponseWriter, r *http.Request, err
 	case errors.Is(err, ErrInvalidRequest):
 		problem.Status, problem.Title = http.StatusBadRequest, "Invalid request"
 		problem.Detail, problem.Code = "The request is invalid.", "INVALID_REQUEST"
+	case errors.Is(err, ErrPreconditionRequired):
+		problem.Status, problem.Title = http.StatusPreconditionRequired, "Precondition required"
+		problem.Detail = "The current resource ETag is required in If-Match."
+		problem.Code = "PRECONDITION_REQUIRED"
+	case errors.Is(err, domain.ErrVersionConflict):
+		problem.Status, problem.Title = http.StatusPreconditionFailed, "Version conflict"
+		problem.Detail = "The resource changed after the supplied ETag was issued."
+		problem.Code = "VERSION_CONFLICT"
+		var conflict domain.VersionConflictError
+		if errors.As(err, &conflict) {
+			problem.CurrentVersion = &conflict.CurrentVersion
+		}
 	case errors.Is(err, domain.ErrNotFound):
 		problem.Status, problem.Title = http.StatusNotFound, "Not found"
 		problem.Detail, problem.Code = "The requested resource was not found.", "NOT_FOUND"
