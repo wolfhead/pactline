@@ -54,11 +54,16 @@ func (h *acceptanceHandler) createProject(w http.ResponseWriter, r *http.Request
 		WriteError(w, r, err)
 		return
 	}
-	criterion, err := h.acceptance.Create(r.Context(), domain.AcceptanceCriterion{
+	actor, ok := operationActor(r)
+	if !ok {
+		WriteJSON(w, http.StatusUnauthorized, ErrorBody{Error: "authentication required"})
+		return
+	}
+	criterion, err := h.acceptance.CreateWithOperation(r.Context(), domain.AcceptanceCriterion{
 		ProjectID: &projectID, Criterion: request.Criterion,
 		VerificationInstructions: request.VerificationInstructions,
 		Revision:                 1, Position: request.Position,
-	})
+	}, actor)
 	if err != nil {
 		WriteError(w, r, err)
 		return
@@ -114,11 +119,16 @@ func (h *acceptanceHandler) createMilestone(w http.ResponseWriter, r *http.Reque
 	if !DecodeBody(w, r, &request) {
 		return
 	}
-	criterion, err := h.acceptance.Create(r.Context(), domain.AcceptanceCriterion{
+	actor, ok := operationActor(r)
+	if !ok {
+		WriteJSON(w, http.StatusUnauthorized, ErrorBody{Error: "authentication required"})
+		return
+	}
+	criterion, err := h.acceptance.CreateWithOperation(r.Context(), domain.AcceptanceCriterion{
 		MilestoneID: &milestoneID, Criterion: request.Criterion,
 		VerificationInstructions: request.VerificationInstructions,
 		Revision:                 1, Position: request.Position,
-	})
+	}, actor)
 	if err != nil {
 		WriteError(w, r, err)
 		return
@@ -161,11 +171,16 @@ func (h *acceptanceHandler) createTask(w http.ResponseWriter, r *http.Request) {
 	if !DecodeBody(w, r, &request) {
 		return
 	}
-	criterion, err := h.acceptance.Create(r.Context(), domain.AcceptanceCriterion{
+	actor, ok := operationActor(r)
+	if !ok {
+		WriteJSON(w, http.StatusUnauthorized, ErrorBody{Error: "authentication required"})
+		return
+	}
+	criterion, err := h.acceptance.CreateWithOperation(r.Context(), domain.AcceptanceCriterion{
 		TaskID: &taskID, Criterion: request.Criterion,
 		VerificationInstructions: request.VerificationInstructions,
 		Revision:                 1, Position: request.Position,
-	})
+	}, actor)
 	if err != nil {
 		WriteError(w, r, err)
 		return
@@ -189,9 +204,14 @@ func (h *acceptanceHandler) update(w http.ResponseWriter, r *http.Request) {
 	if !DecodeBody(w, r, &request) {
 		return
 	}
-	criterion, err := h.acceptance.Update(
+	actor, ok := operationActor(r)
+	if !ok {
+		WriteJSON(w, http.StatusUnauthorized, ErrorBody{Error: "authentication required"})
+		return
+	}
+	criterion, err := h.acceptance.UpdateWithOperation(
 		r.Context(), criterionID, request.Criterion,
-		request.VerificationInstructions, request.Position)
+		request.VerificationInstructions, request.Position, actor)
 	if err != nil {
 		WriteError(w, r, err)
 		return
@@ -216,11 +236,16 @@ func (h *acceptanceHandler) check(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID := CurrentUser(r).ID
-	check, err := h.acceptance.AddCheck(r.Context(), domain.AcceptanceCheck{
+	actor, ok := operationActor(r)
+	if !ok {
+		WriteJSON(w, http.StatusUnauthorized, ErrorBody{Error: "authentication required"})
+		return
+	}
+	check, err := h.acceptance.AddCheckWithOperation(r.Context(), domain.AcceptanceCheck{
 		CriterionID: criterionID, CriterionRevision: request.CriterionRevision,
 		Outcome: request.Outcome, Evidence: request.Evidence,
 		Checker: domain.Actor{Type: domain.ActorTypeUser, UserID: &userID},
-	})
+	}, actor)
 	if err != nil {
 		WriteError(w, r, err)
 		return
@@ -243,11 +268,13 @@ func (h *acceptanceHandler) remove(w http.ResponseWriter, r *http.Request) {
 	if r.Body != nil && r.ContentLength != 0 && !DecodeBody(w, r, &request) {
 		return
 	}
-	userID := CurrentUser(r).ID
-	if err := h.acceptance.RemoveCriterion(
-		r.Context(), criterionID,
-		domain.Actor{Type: domain.ActorTypeUser, UserID: &userID},
-		request.Reason,
+	actor, ok := operationActor(r)
+	if !ok {
+		WriteJSON(w, http.StatusUnauthorized, ErrorBody{Error: "authentication required"})
+		return
+	}
+	if err := h.acceptance.RemoveCriterionWithOperation(
+		r.Context(), criterionID, actor, request.Reason,
 	); err != nil {
 		WriteError(w, r, err)
 		return

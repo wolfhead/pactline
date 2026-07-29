@@ -31,11 +31,15 @@ const (
 // code path that performs the underlying change (see task_store.go), so it
 // cannot drift from what actually happened.
 type Activity struct {
-	ID        uuid.UUID
-	TaskID    uuid.UUID
-	ActorID   uuid.UUID
-	Field     ActivityField
-	OldValue  *string
-	NewValue  *string
-	CreatedAt time.Time
+	ID         uuid.UUID
+	TaskID     uuid.UUID
+	ActorID    uuid.UUID
+	Field      ActivityField
+	OldValue   *string
+	NewValue   *string
+	RequestID  *string
+	AuthMethod *AuthenticationMethod
+	APITokenID *uuid.UUID
+	TokenName  *string
+	CreatedAt  time.Time
 }

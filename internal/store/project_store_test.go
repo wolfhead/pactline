@@ -17,6 +17,11 @@ func cleanupProject(t *testing.T, db *store.DB, projectID uuid.UUID) {
 	t.Cleanup(func() {
 		ctx := context.Background()
 		statements := []string{
+			`DELETE FROM business_audit_events
+			WHERE (entity_type='project' AND entity_id=$1)
+			   OR (entity_type='milestone' AND entity_id IN (
+					SELECT id FROM milestones WHERE project_id=$1
+			   ))`,
 			`DELETE FROM acceptance_checks
 			WHERE criterion_id IN (
 				SELECT id FROM acceptance_criteria

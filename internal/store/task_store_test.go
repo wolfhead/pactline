@@ -25,7 +25,10 @@ var (
 func cleanupTask(t *testing.T, db *store.DB, id uuid.UUID) {
 	t.Helper()
 	t.Cleanup(func() {
-		_, err := db.Pool.Exec(context.Background(), `
+		_, err := db.Pool.Exec(context.Background(),
+			`DELETE FROM business_audit_events WHERE entity_type='task' AND entity_id=$1`, id)
+		require.NoError(t, err)
+		_, err = db.Pool.Exec(context.Background(), `
 			DELETE FROM acceptance_checks
 			WHERE criterion_id IN (
 				SELECT id FROM acceptance_criteria WHERE task_id=$1

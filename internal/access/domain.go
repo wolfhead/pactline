@@ -19,11 +19,11 @@ const (
 	ScopeWorkWrite Scope = "work:write"
 )
 
-type AuthenticationMethod string
+type AuthenticationMethod = domain.AuthenticationMethod
 
 const (
-	AuthenticationMethodSession  AuthenticationMethod = "session"
-	AuthenticationMethodAPIToken AuthenticationMethod = "api_token"
+	AuthenticationMethodSession  = domain.AuthenticationMethodSession
+	AuthenticationMethodAPIToken = domain.AuthenticationMethodAPIToken
 )
 
 const (

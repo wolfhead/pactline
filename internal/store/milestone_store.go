@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -34,6 +35,25 @@ const milestoneColumns = `id, project_id, name, outcome, description, status,
 	target_date, position, completed_at, cancelled_at, created_at, updated_at`
 
 func (s *MilestoneStore) Create(ctx context.Context, milestone domain.Milestone) (domain.Milestone, error) {
+	return s.create(ctx, milestone, nil)
+}
+
+func (s *MilestoneStore) CreateWithOperation(
+	ctx context.Context,
+	milestone domain.Milestone,
+	actor domain.OperationActor,
+) (domain.Milestone, error) {
+	if err := actor.Validate(); err != nil {
+		return domain.Milestone{}, err
+	}
+	return s.create(ctx, milestone, &actor)
+}
+
+func (s *MilestoneStore) create(
+	ctx context.Context,
+	milestone domain.Milestone,
+	actor *domain.OperationActor,
+) (domain.Milestone, error) {
 	if milestone.ID == uuid.Nil {
 		milestone.ID = uuid.New()
 	}
@@ -43,7 +63,25 @@ func (s *MilestoneStore) Create(ctx context.Context, milestone domain.Milestone)
 	if err := milestone.Validate(); err != nil {
 		return domain.Milestone{}, err
 	}
-	out, err := scanMilestone(s.db.Pool.QueryRow(ctx, `
+	if actor == nil {
+		out, err := scanMilestone(s.db.Pool.QueryRow(ctx, `
+			INSERT INTO milestones
+				(id, project_id, name, outcome, description, status, target_date, position)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+			RETURNING `+milestoneColumns,
+			milestone.ID, milestone.ProjectID, milestone.Name, milestone.Outcome,
+			milestone.Description, milestone.Status, milestone.TargetDate, milestone.Position))
+		if err != nil {
+			return domain.Milestone{}, mapPgError(err)
+		}
+		return out, nil
+	}
+	tx, err := s.db.Pool.Begin(ctx)
+	if err != nil {
+		return domain.Milestone{}, fmt.Errorf("begin create milestone: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	out, err := scanMilestone(tx.QueryRow(ctx, `
 		INSERT INTO milestones
 			(id, project_id, name, outcome, description, status, target_date, position)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
@@ -52,6 +90,20 @@ func (s *MilestoneStore) Create(ctx context.Context, milestone domain.Milestone)
 		milestone.Description, milestone.Status, milestone.TargetDate, milestone.Position))
 	if err != nil {
 		return domain.Milestone{}, mapPgError(err)
+	}
+	newValue, _ := json.Marshal(map[string]any{
+		"project_id": out.ProjectID, "name": out.Name, "outcome": out.Outcome,
+		"description": out.Description, "status": out.Status,
+		"target_date": out.TargetDate, "position": out.Position,
+	})
+	if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
+		OccurredAt: time.Now().UTC(), Actor: *actor, EntityType: "milestone",
+		EntityID: out.ID, Action: "created", NewValue: newValue,
+	}); err != nil {
+		return domain.Milestone{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return domain.Milestone{}, fmt.Errorf("commit create milestone: %w", err)
 	}
 	return out, nil
 }
@@ -100,6 +152,20 @@ func (s *MilestoneStore) Update(
 	patch MilestonePatch,
 	actorID uuid.UUID,
 ) (domain.Milestone, error) {
+	return s.UpdateWithOperation(
+		ctx, projectID, milestoneID, patch, domain.SessionOperation(actorID, "internal"),
+	)
+}
+
+func (s *MilestoneStore) UpdateWithOperation(
+	ctx context.Context,
+	projectID, milestoneID uuid.UUID,
+	patch MilestonePatch,
+	actor domain.OperationActor,
+) (domain.Milestone, error) {
+	if err := actor.Validate(); err != nil {
+		return domain.Milestone{}, err
+	}
 	tx, err := s.db.Pool.Begin(ctx)
 	if err != nil {
 		return domain.Milestone{}, fmt.Errorf("begin update milestone: %w", err)
@@ -152,12 +218,28 @@ func (s *MilestoneStore) Update(
 		old.Position != current.Position {
 		_, err = tx.Exec(ctx, `
 			INSERT INTO project_activity
-				(id, project_id, milestone_id, actor_id, action, old_value, new_value)
-			VALUES ($1,$2,$3,$4,'milestone_updated',$5,$6)`,
-			uuid.New(), projectID, milestoneID, actorID, old.Name, current.Name)
+				(id, project_id, milestone_id, actor_id, action, old_value, new_value,
+				 request_id, auth_method, api_token_id, token_name_snapshot)
+			VALUES ($1,$2,$3,$4,'milestone_updated',$5,$6,$7,$8,$9,$10)`,
+			uuid.New(), projectID, milestoneID, actor.UserID, old.Name, current.Name,
+			actor.RequestID, actor.AuthMethod, actor.TokenID, nullIfEmpty(actor.TokenName))
 		if err != nil {
 			return domain.Milestone{}, fmt.Errorf("record milestone update: %w", err)
 		}
+	}
+	oldValue, _ := json.Marshal(map[string]any{
+		"name": old.Name, "outcome": old.Outcome, "description": old.Description,
+		"target_date": old.TargetDate, "position": old.Position,
+	})
+	newValue, _ := json.Marshal(map[string]any{
+		"name": current.Name, "outcome": current.Outcome, "description": current.Description,
+		"target_date": current.TargetDate, "position": current.Position,
+	})
+	if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
+		OccurredAt: time.Now().UTC(), Actor: actor, EntityType: "milestone",
+		EntityID: current.ID, Action: "updated", OldValue: oldValue, NewValue: newValue,
+	}); err != nil {
+		return domain.Milestone{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return domain.Milestone{}, fmt.Errorf("commit update milestone: %w", err)
@@ -180,8 +262,24 @@ func (s *MilestoneStore) ApplyLifecycle(
 	actor domain.Actor,
 	reason string,
 ) (domain.Milestone, error) {
-	if !actor.IsHuman() {
+	if !actor.IsHuman() || actor.UserID == nil {
 		return domain.Milestone{}, fmt.Errorf("%w: milestone lifecycle actions require a human user", domain.ErrForbidden)
+	}
+	return s.ApplyLifecycleWithOperation(
+		ctx, projectID, milestoneID, action,
+		domain.SessionOperation(*actor.UserID, "internal"), reason,
+	)
+}
+
+func (s *MilestoneStore) ApplyLifecycleWithOperation(
+	ctx context.Context,
+	projectID, milestoneID uuid.UUID,
+	action MilestoneLifecycleAction,
+	actor domain.OperationActor,
+	reason string,
+) (domain.Milestone, error) {
+	if err := actor.Validate(); err != nil {
+		return domain.Milestone{}, err
 	}
 	tx, err := s.db.Pool.Begin(ctx)
 	if err != nil {
@@ -219,7 +317,8 @@ func (s *MilestoneStore) ApplyLifecycle(
 	case MilestoneActionCancel:
 		err = milestone.Cancel(readiness)
 	case MilestoneActionReopen:
-		err = milestone.Reopen(actor, reason)
+		userID := actor.UserID
+		err = milestone.Reopen(domain.Actor{Type: domain.ActorTypeUser, UserID: &userID}, reason)
 	default:
 		err = fmt.Errorf("%w: unknown milestone lifecycle action", domain.ErrInvalidInput)
 	}
@@ -235,11 +334,22 @@ func (s *MilestoneStore) ApplyLifecycle(
 	}
 	_, err = tx.Exec(ctx, `
 		INSERT INTO project_activity
-			(id, project_id, milestone_id, actor_id, action, reason, old_value, new_value)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-		uuid.New(), projectID, milestoneID, *actor.UserID, action, reason, oldStatus, milestone.Status)
+			(id, project_id, milestone_id, actor_id, action, reason, old_value, new_value,
+			 request_id, auth_method, api_token_id, token_name_snapshot)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+		uuid.New(), projectID, milestoneID, actor.UserID, action, reason, oldStatus, milestone.Status,
+		actor.RequestID, actor.AuthMethod, actor.TokenID, nullIfEmpty(actor.TokenName))
 	if err != nil {
 		return domain.Milestone{}, fmt.Errorf("record milestone lifecycle: %w", err)
+	}
+	oldValue, _ := json.Marshal(map[string]any{"status": oldStatus})
+	newValue, _ := json.Marshal(map[string]any{"status": milestone.Status, "reason": reason})
+	if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
+		OccurredAt: time.Now().UTC(), Actor: actor, EntityType: "milestone",
+		EntityID: milestone.ID, Action: string(action),
+		OldValue: oldValue, NewValue: newValue,
+	}); err != nil {
+		return domain.Milestone{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return domain.Milestone{}, fmt.Errorf("commit milestone lifecycle: %w", err)

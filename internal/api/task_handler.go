@@ -75,8 +75,13 @@ func (h *taskHandler) create(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, r, err)
 		return
 	}
+	actor, ok := operationActor(r)
+	if !ok {
+		WriteJSON(w, http.StatusUnauthorized, ErrorBody{Error: "authentication required"})
+		return
+	}
 
-	out, err := h.tasks.Create(r.Context(), domain.Task{
+	out, err := h.tasks.CreateWithOperation(r.Context(), domain.Task{
 		Title:       req.Title,
 		Description: req.Description,
 		Status:      domain.TaskStatus(req.Status),
@@ -86,7 +91,7 @@ func (h *taskHandler) create(w http.ResponseWriter, r *http.Request) {
 		DueDate:     dueDate,
 		ProjectID:   projectID,
 		MilestoneID: milestoneID,
-	}, req.LabelIDs)
+	}, req.LabelIDs, actor)
 	if err != nil {
 		WriteError(w, r, err)
 		return
@@ -280,8 +285,12 @@ func (h *taskHandler) update(w http.ResponseWriter, r *http.Request) {
 			patch.MilestoneID = milestoneID
 		}
 	}
-	me := CurrentUser(r)
-	out, err := h.tasks.Update(r.Context(), number, patch, me.ID)
+	actor, ok := operationActor(r)
+	if !ok {
+		WriteJSON(w, http.StatusUnauthorized, ErrorBody{Error: "authentication required"})
+		return
+	}
+	out, err := h.tasks.UpdateWithOperation(r.Context(), number, patch, actor)
 	if err != nil {
 		WriteError(w, r, err)
 		return
@@ -297,8 +306,12 @@ func (h *taskHandler) setArchived(w http.ResponseWriter, r *http.Request, archiv
 	if !ok {
 		return
 	}
-	me := CurrentUser(r)
-	out, err := h.tasks.SetArchived(r.Context(), number, archived, me.ID)
+	actor, ok := operationActor(r)
+	if !ok {
+		WriteJSON(w, http.StatusUnauthorized, ErrorBody{Error: "authentication required"})
+		return
+	}
+	out, err := h.tasks.SetArchivedWithOperation(r.Context(), number, archived, actor)
 	if err != nil {
 		WriteError(w, r, err)
 		return

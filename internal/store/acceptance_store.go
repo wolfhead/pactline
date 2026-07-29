@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -44,6 +45,25 @@ func scanCriterion(s scanner) (domain.AcceptanceCriterion, error) {
 }
 
 func (s *AcceptanceStore) Create(ctx context.Context, criterion domain.AcceptanceCriterion) (domain.AcceptanceCriterion, error) {
+	return s.create(ctx, criterion, nil)
+}
+
+func (s *AcceptanceStore) CreateWithOperation(
+	ctx context.Context,
+	criterion domain.AcceptanceCriterion,
+	actor domain.OperationActor,
+) (domain.AcceptanceCriterion, error) {
+	if err := actor.Validate(); err != nil {
+		return domain.AcceptanceCriterion{}, err
+	}
+	return s.create(ctx, criterion, &actor)
+}
+
+func (s *AcceptanceStore) create(
+	ctx context.Context,
+	criterion domain.AcceptanceCriterion,
+	actor *domain.OperationActor,
+) (domain.AcceptanceCriterion, error) {
 	if criterion.ID == uuid.Nil {
 		criterion.ID = uuid.New()
 	}
@@ -53,7 +73,25 @@ func (s *AcceptanceStore) Create(ctx context.Context, criterion domain.Acceptanc
 	if err := criterion.Validate(); err != nil {
 		return domain.AcceptanceCriterion{}, err
 	}
-	out, err := scanCriterion(s.db.Pool.QueryRow(ctx, `
+	if actor == nil {
+		out, err := scanCriterion(s.db.Pool.QueryRow(ctx, `
+			INSERT INTO acceptance_criteria
+				(id, project_id, milestone_id, task_id, criterion, verification_instructions, revision, position)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+			RETURNING `+criterionReturnColumns,
+			criterion.ID, criterion.ProjectID, criterion.MilestoneID, criterion.TaskID, criterion.Criterion,
+			criterion.VerificationInstructions, criterion.Revision, criterion.Position))
+		if err != nil {
+			return domain.AcceptanceCriterion{}, mapPgError(err)
+		}
+		return out, nil
+	}
+	tx, err := s.db.Pool.Begin(ctx)
+	if err != nil {
+		return domain.AcceptanceCriterion{}, fmt.Errorf("begin create acceptance criterion: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	out, err := scanCriterion(tx.QueryRow(ctx, `
 		INSERT INTO acceptance_criteria
 			(id, project_id, milestone_id, task_id, criterion, verification_instructions, revision, position)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
@@ -62,6 +100,20 @@ func (s *AcceptanceStore) Create(ctx context.Context, criterion domain.Acceptanc
 		criterion.VerificationInstructions, criterion.Revision, criterion.Position))
 	if err != nil {
 		return domain.AcceptanceCriterion{}, mapPgError(err)
+	}
+	newValue, _ := json.Marshal(map[string]any{
+		"project_id": out.ProjectID, "milestone_id": out.MilestoneID, "task_id": out.TaskID,
+		"criterion": out.Criterion, "verification_instructions": out.VerificationInstructions,
+		"revision": out.Revision, "position": out.Position,
+	})
+	if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
+		OccurredAt: time.Now().UTC(), Actor: *actor, EntityType: "acceptance_criterion",
+		EntityID: out.ID, Action: "created", NewValue: newValue,
+	}); err != nil {
+		return domain.AcceptanceCriterion{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return domain.AcceptanceCriterion{}, fmt.Errorf("commit create acceptance criterion: %w", err)
 	}
 	return out, nil
 }
@@ -156,6 +208,29 @@ func (s *AcceptanceStore) Update(
 	criterionText, instructions *string,
 	position *int,
 ) (domain.AcceptanceCriterion, error) {
+	return s.update(ctx, criterionID, criterionText, instructions, position, nil)
+}
+
+func (s *AcceptanceStore) UpdateWithOperation(
+	ctx context.Context,
+	criterionID uuid.UUID,
+	criterionText, instructions *string,
+	position *int,
+	actor domain.OperationActor,
+) (domain.AcceptanceCriterion, error) {
+	if err := actor.Validate(); err != nil {
+		return domain.AcceptanceCriterion{}, err
+	}
+	return s.update(ctx, criterionID, criterionText, instructions, position, &actor)
+}
+
+func (s *AcceptanceStore) update(
+	ctx context.Context,
+	criterionID uuid.UUID,
+	criterionText, instructions *string,
+	position *int,
+	actor *domain.OperationActor,
+) (domain.AcceptanceCriterion, error) {
 	tx, err := s.db.Pool.Begin(ctx)
 	if err != nil {
 		return domain.AcceptanceCriterion{}, fmt.Errorf("begin update acceptance criterion: %w", err)
@@ -169,6 +244,7 @@ func (s *AcceptanceStore) Update(
 	if err != nil {
 		return domain.AcceptanceCriterion{}, err
 	}
+	old := current
 	newText := current.Criterion
 	newInstructions := current.VerificationInstructions
 	if criterionText != nil {
@@ -194,6 +270,22 @@ func (s *AcceptanceStore) Update(
 	if err != nil {
 		return domain.AcceptanceCriterion{}, mapPgError(err)
 	}
+	if actor != nil {
+		oldValue, _ := json.Marshal(map[string]any{
+			"criterion": old.Criterion, "verification_instructions": old.VerificationInstructions,
+			"revision": old.Revision, "position": old.Position,
+		})
+		newValue, _ := json.Marshal(map[string]any{
+			"criterion": current.Criterion, "verification_instructions": current.VerificationInstructions,
+			"revision": current.Revision, "position": current.Position,
+		})
+		if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
+			OccurredAt: time.Now().UTC(), Actor: *actor, EntityType: "acceptance_criterion",
+			EntityID: current.ID, Action: "updated", OldValue: oldValue, NewValue: newValue,
+		}); err != nil {
+			return domain.AcceptanceCriterion{}, err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return domain.AcceptanceCriterion{}, fmt.Errorf("commit update acceptance criterion: %w", err)
 	}
@@ -201,6 +293,25 @@ func (s *AcceptanceStore) Update(
 }
 
 func (s *AcceptanceStore) AddCheck(ctx context.Context, check domain.AcceptanceCheck) (domain.AcceptanceCheck, error) {
+	return s.addCheck(ctx, check, nil)
+}
+
+func (s *AcceptanceStore) AddCheckWithOperation(
+	ctx context.Context,
+	check domain.AcceptanceCheck,
+	actor domain.OperationActor,
+) (domain.AcceptanceCheck, error) {
+	if err := actor.Validate(); err != nil {
+		return domain.AcceptanceCheck{}, err
+	}
+	return s.addCheck(ctx, check, &actor)
+}
+
+func (s *AcceptanceStore) addCheck(
+	ctx context.Context,
+	check domain.AcceptanceCheck,
+	actor *domain.OperationActor,
+) (domain.AcceptanceCheck, error) {
 	tx, err := s.db.Pool.Begin(ctx)
 	if err != nil {
 		return domain.AcceptanceCheck{}, fmt.Errorf("begin acceptance check: %w", err)
@@ -244,6 +355,20 @@ func (s *AcceptanceStore) AddCheck(ctx context.Context, check domain.AcceptanceC
 	if err != nil {
 		return domain.AcceptanceCheck{}, mapPgError(err)
 	}
+	if actor != nil {
+		newValue, _ := json.Marshal(map[string]any{
+			"criterion_id": check.CriterionID, "criterion_revision": check.CriterionRevision,
+			"outcome": check.Outcome, "evidence": check.Evidence,
+			"checker_type": check.Checker.Type, "checked_by_user_id": userID,
+			"checker_ref": checkerRef,
+		})
+		if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
+			OccurredAt: time.Now().UTC(), Actor: *actor, EntityType: "acceptance_check",
+			EntityID: check.ID, Action: "created", NewValue: newValue,
+		}); err != nil {
+			return domain.AcceptanceCheck{}, err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return domain.AcceptanceCheck{}, fmt.Errorf("commit acceptance check: %w", err)
 	}
@@ -256,8 +381,22 @@ func (s *AcceptanceStore) RemoveCriterion(
 	actor domain.Actor,
 	reason string,
 ) error {
-	if !actor.IsHuman() {
+	if !actor.IsHuman() || actor.UserID == nil {
 		return fmt.Errorf("%w: only a human user may remove an acceptance criterion", domain.ErrForbidden)
+	}
+	return s.RemoveCriterionWithOperation(
+		ctx, criterionID, domain.SessionOperation(*actor.UserID, "internal"), reason,
+	)
+}
+
+func (s *AcceptanceStore) RemoveCriterionWithOperation(
+	ctx context.Context,
+	criterionID uuid.UUID,
+	actor domain.OperationActor,
+	reason string,
+) error {
+	if err := actor.Validate(); err != nil {
+		return err
 	}
 	tx, err := s.db.Pool.Begin(ctx)
 	if err != nil {
@@ -299,6 +438,15 @@ func (s *AcceptanceStore) RemoveCriterion(
 		if err != nil {
 			return fmt.Errorf("remove task acceptance criterion: %w", err)
 		}
+		oldValue, _ := json.Marshal(map[string]any{
+			"task_id": taskID, "check_count": checkCount, "reason": strings.TrimSpace(reason),
+		})
+		if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
+			OccurredAt: time.Now().UTC(), Actor: actor, EntityType: "acceptance_criterion",
+			EntityID: criterionID, Action: "removed", OldValue: oldValue,
+		}); err != nil {
+			return err
+		}
 		if err := tx.Commit(ctx); err != nil {
 			return fmt.Errorf("commit task criterion removal: %w", err)
 		}
@@ -339,11 +487,24 @@ func (s *AcceptanceStore) RemoveCriterion(
 		return fmt.Errorf("remove acceptance criterion: %w", err)
 	}
 	_, err = tx.Exec(ctx, `
-		INSERT INTO project_activity (id, project_id, actor_id, action, reason, old_value)
-		VALUES ($1,$2,$3,$4,$5,$6)`,
-		uuid.New(), *projectID, *actor.UserID, action, strings.TrimSpace(reason), criterionID.String())
+		INSERT INTO project_activity (
+			id, project_id, actor_id, action, reason, old_value,
+			request_id, auth_method, api_token_id, token_name_snapshot
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+		uuid.New(), *projectID, actor.UserID, action, strings.TrimSpace(reason),
+		criterionID.String(), actor.RequestID, actor.AuthMethod, actor.TokenID,
+		nullIfEmpty(actor.TokenName))
 	if err != nil {
 		return fmt.Errorf("record criterion removal: %w", err)
+	}
+	oldValue, _ := json.Marshal(map[string]any{
+		"project_id": projectID, "check_count": checkCount, "reason": strings.TrimSpace(reason),
+	})
+	if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
+		OccurredAt: time.Now().UTC(), Actor: actor, EntityType: "acceptance_criterion",
+		EntityID: criterionID, Action: action, OldValue: oldValue,
+	}); err != nil {
+		return err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit criterion removal: %w", err)

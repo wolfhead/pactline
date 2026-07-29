@@ -61,11 +61,16 @@ func (h *projectHandler) create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	project, err := h.projects.Create(r.Context(), domain.Project{
+	actor, ok := operationActor(r)
+	if !ok {
+		WriteJSON(w, http.StatusUnauthorized, ErrorBody{Error: "authentication required"})
+		return
+	}
+	project, err := h.projects.CreateWithOperation(r.Context(), domain.Project{
 		Name: request.Name, Outcome: request.Outcome, Description: request.Description,
 		OwnerID: request.OwnerID, CreatorID: CurrentUser(r).ID,
 		Status: domain.ProjectStatusPlanned, TargetDate: targetDate,
-	})
+	}, actor)
 	if err != nil {
 		WriteError(w, r, err)
 		return
@@ -157,7 +162,12 @@ func (h *projectHandler) update(w http.ResponseWriter, r *http.Request) {
 			patch.TargetDate = targetDate
 		}
 	}
-	project, err := h.projects.Update(r.Context(), number, patch, CurrentUser(r).ID)
+	actor, ok := operationActor(r)
+	if !ok {
+		WriteJSON(w, http.StatusUnauthorized, ErrorBody{Error: "authentication required"})
+		return
+	}
+	project, err := h.projects.UpdateWithOperation(r.Context(), number, patch, actor)
 	if err != nil {
 		WriteError(w, r, err)
 		return
@@ -179,9 +189,13 @@ func (h *projectHandler) lifecycle(action store.ProjectLifecycleAction) http.Han
 		if r.Body != nil && r.ContentLength != 0 && !DecodeBody(w, r, &request) {
 			return
 		}
-		userID := CurrentUser(r).ID
-		project, err := h.service.ApplyProjectLifecycle(r.Context(), number, action,
-			domain.Actor{Type: domain.ActorTypeUser, UserID: &userID}, request.Reason)
+		actor, ok := operationActor(r)
+		if !ok {
+			WriteJSON(w, http.StatusUnauthorized, ErrorBody{Error: "authentication required"})
+			return
+		}
+		project, err := h.service.ApplyProjectLifecycleWithOperation(
+			r.Context(), number, action, actor, request.Reason)
 		if err != nil {
 			WriteError(w, r, err)
 			return

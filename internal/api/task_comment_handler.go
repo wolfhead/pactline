@@ -54,7 +54,12 @@ func (h *commentHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	me := CurrentUser(r)
-	c, err := h.comments.Create(r.Context(), task.Task.ID, me.ID, req.Body)
+	actor, ok := operationActor(r)
+	if !ok {
+		WriteJSON(w, http.StatusUnauthorized, ErrorBody{Error: "authentication required"})
+		return
+	}
+	c, err := h.comments.CreateWithOperation(r.Context(), task.Task.ID, me.ID, req.Body, actor)
 	if err != nil {
 		WriteError(w, r, err)
 		return
@@ -81,8 +86,12 @@ func (h *commentHandler) update(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, r, err)
 		return
 	}
-	me := CurrentUser(r)
-	c, err := h.comments.Update(r.Context(), task.Task.ID, id, me.ID, req.Body)
+	actor, ok := operationActor(r)
+	if !ok {
+		WriteJSON(w, http.StatusUnauthorized, ErrorBody{Error: "authentication required"})
+		return
+	}
+	c, err := h.comments.UpdateWithOperation(r.Context(), task.Task.ID, id, req.Body, actor)
 	if err != nil {
 		WriteError(w, r, err)
 		return
@@ -105,8 +114,12 @@ func (h *commentHandler) delete(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, r, err)
 		return
 	}
-	me := CurrentUser(r)
-	if err := h.comments.Delete(r.Context(), task.Task.ID, id, me.ID); err != nil {
+	actor, ok := operationActor(r)
+	if !ok {
+		WriteJSON(w, http.StatusUnauthorized, ErrorBody{Error: "authentication required"})
+		return
+	}
+	if err := h.comments.DeleteWithOperation(r.Context(), task.Task.ID, id, actor); err != nil {
 		WriteError(w, r, err)
 		return
 	}

@@ -57,11 +57,16 @@ func (h *milestoneHandler) create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	milestone, err := h.milestones.Create(r.Context(), domain.Milestone{
+	actor, ok := operationActor(r)
+	if !ok {
+		WriteJSON(w, http.StatusUnauthorized, ErrorBody{Error: "authentication required"})
+		return
+	}
+	milestone, err := h.milestones.CreateWithOperation(r.Context(), domain.Milestone{
 		ProjectID: projectID, Name: request.Name, Outcome: request.Outcome,
 		Description: request.Description, Status: domain.MilestoneStatusOpen,
 		TargetDate: targetDate, Position: request.Position,
-	})
+	}, actor)
 	if err != nil {
 		WriteError(w, r, err)
 		return
@@ -135,8 +140,13 @@ func (h *milestoneHandler) update(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	milestone, err := h.milestones.Update(
-		r.Context(), projectID, milestoneID, patch, CurrentUser(r).ID)
+	actor, ok := operationActor(r)
+	if !ok {
+		WriteJSON(w, http.StatusUnauthorized, ErrorBody{Error: "authentication required"})
+		return
+	}
+	milestone, err := h.milestones.UpdateWithOperation(
+		r.Context(), projectID, milestoneID, patch, actor)
 	if err != nil {
 		WriteError(w, r, err)
 		return
@@ -158,10 +168,13 @@ func (h *milestoneHandler) lifecycle(action store.MilestoneLifecycleAction) http
 		if r.Body != nil && r.ContentLength != 0 && !DecodeBody(w, r, &request) {
 			return
 		}
-		userID := CurrentUser(r).ID
-		milestone, err := h.service.ApplyMilestoneLifecycle(
-			r.Context(), number, milestoneID, action,
-			domain.Actor{Type: domain.ActorTypeUser, UserID: &userID}, request.Reason)
+		actor, ok := operationActor(r)
+		if !ok {
+			WriteJSON(w, http.StatusUnauthorized, ErrorBody{Error: "authentication required"})
+			return
+		}
+		milestone, err := h.service.ApplyMilestoneLifecycleWithOperation(
+			r.Context(), number, milestoneID, action, actor, request.Reason)
 		if err != nil {
 			WriteError(w, r, err)
 			return

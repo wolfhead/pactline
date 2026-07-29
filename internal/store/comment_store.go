@@ -2,10 +2,12 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"bountyboard/internal/domain"
 
@@ -44,15 +46,47 @@ func (s *CommentStore) List(ctx context.Context, taskID uuid.UUID) ([]domain.Com
 
 // Create adds a comment to a task.
 func (s *CommentStore) Create(ctx context.Context, taskID, authorID uuid.UUID, body string) (domain.Comment, error) {
+	return s.CreateWithOperation(
+		ctx, taskID, authorID, body, domain.SessionOperation(authorID, "internal"),
+	)
+}
+
+func (s *CommentStore) CreateWithOperation(
+	ctx context.Context,
+	taskID, authorID uuid.UUID,
+	body string,
+	actor domain.OperationActor,
+) (domain.Comment, error) {
 	if strings.TrimSpace(body) == "" {
 		return domain.Comment{}, fmt.Errorf("%w: comment body is required", domain.ErrInvalidInput)
 	}
-	row := s.db.Pool.QueryRow(ctx,
+	if err := actor.Validate(); err != nil {
+		return domain.Comment{}, err
+	}
+	if authorID != actor.UserID {
+		return domain.Comment{}, fmt.Errorf("%w: comment author must match operation actor", domain.ErrForbidden)
+	}
+	tx, err := s.db.Pool.Begin(ctx)
+	if err != nil {
+		return domain.Comment{}, fmt.Errorf("begin create comment: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	row := tx.QueryRow(ctx,
 		`INSERT INTO task_comments (id, task_id, author_id, body) VALUES ($1,$2,$3,$4) RETURNING `+commentColumns,
 		uuid.New(), taskID, authorID, body)
 	c, err := scanComment(row)
 	if err != nil {
 		return domain.Comment{}, mapPgError(err)
+	}
+	newValue, _ := json.Marshal(map[string]any{"task_id": taskID, "body": c.Body})
+	if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
+		OccurredAt: time.Now().UTC(), Actor: actor, EntityType: "comment",
+		EntityID: c.ID, Action: "created", NewValue: newValue,
+	}); err != nil {
+		return domain.Comment{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return domain.Comment{}, fmt.Errorf("commit create comment: %w", err)
 	}
 	slog.Info("comment created", "comment_id", c.ID, "task_id", taskID, "author_id", authorID)
 	return c, nil
@@ -64,52 +98,114 @@ func (s *CommentStore) Create(ctx context.Context, taskID, authorID uuid.UUID, b
 // no such comment exists under that task, or domain.ErrForbidden if actorID
 // is not the comment's author.
 func (s *CommentStore) Update(ctx context.Context, taskID, id, actorID uuid.UUID, body string) (domain.Comment, error) {
+	return s.UpdateWithOperation(
+		ctx, taskID, id, body, domain.SessionOperation(actorID, "internal"),
+	)
+}
+
+func (s *CommentStore) UpdateWithOperation(
+	ctx context.Context,
+	taskID, id uuid.UUID,
+	body string,
+	actor domain.OperationActor,
+) (domain.Comment, error) {
 	if strings.TrimSpace(body) == "" {
 		return domain.Comment{}, fmt.Errorf("%w: comment body is required", domain.ErrInvalidInput)
 	}
-	author, err := s.authorOf(ctx, taskID, id)
-	if err != nil {
+	if err := actor.Validate(); err != nil {
 		return domain.Comment{}, err
 	}
-	if author != actorID {
+	tx, err := s.db.Pool.Begin(ctx)
+	if err != nil {
+		return domain.Comment{}, fmt.Errorf("begin update comment: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	var author uuid.UUID
+	var oldBody string
+	err = tx.QueryRow(ctx,
+		`SELECT author_id, body FROM task_comments WHERE id=$1 AND task_id=$2 FOR UPDATE`,
+		id, taskID,
+	).Scan(&author, &oldBody)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.Comment{}, domain.ErrNotFound
+	}
+	if err != nil {
+		return domain.Comment{}, fmt.Errorf("lock comment %s: %w", id, err)
+	}
+	if author != actor.UserID {
 		return domain.Comment{}, domain.ErrForbidden
 	}
-	row := s.db.Pool.QueryRow(ctx, `UPDATE task_comments SET body=$2, updated_at=now() WHERE id=$1 RETURNING `+commentColumns, id, body)
+	row := tx.QueryRow(ctx, `UPDATE task_comments SET body=$2, updated_at=now() WHERE id=$1 RETURNING `+commentColumns, id, body)
 	c, err := scanComment(row)
 	if err != nil {
 		return domain.Comment{}, mapPgError(err)
 	}
-	slog.Info("comment updated", "comment_id", id, "task_id", taskID, "actor_id", actorID)
+	oldValue, _ := json.Marshal(map[string]any{"body": oldBody})
+	newValue, _ := json.Marshal(map[string]any{"body": c.Body})
+	if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
+		OccurredAt: time.Now().UTC(), Actor: actor, EntityType: "comment",
+		EntityID: c.ID, Action: "updated", OldValue: oldValue, NewValue: newValue,
+	}); err != nil {
+		return domain.Comment{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return domain.Comment{}, fmt.Errorf("commit update comment: %w", err)
+	}
+	slog.Info("comment updated", "comment_id", id, "task_id", taskID, "actor_id", actor.UserID)
 	return c, nil
 }
 
 // Delete removes a comment. See Update for the taskID scoping and error
 // semantics.
 func (s *CommentStore) Delete(ctx context.Context, taskID, id, actorID uuid.UUID) error {
-	author, err := s.authorOf(ctx, taskID, id)
-	if err != nil {
-		return err
-	}
-	if author != actorID {
-		return domain.ErrForbidden
-	}
-	if _, err := s.db.Pool.Exec(ctx, `DELETE FROM task_comments WHERE id=$1`, id); err != nil {
-		return fmt.Errorf("delete comment %s: %w", id, err)
-	}
-	slog.Info("comment deleted", "comment_id", id, "task_id", taskID, "actor_id", actorID)
-	return nil
+	return s.DeleteWithOperation(
+		ctx, taskID, id, domain.SessionOperation(actorID, "internal"),
+	)
 }
 
-func (s *CommentStore) authorOf(ctx context.Context, taskID, id uuid.UUID) (uuid.UUID, error) {
+func (s *CommentStore) DeleteWithOperation(
+	ctx context.Context,
+	taskID, id uuid.UUID,
+	actor domain.OperationActor,
+) error {
+	if err := actor.Validate(); err != nil {
+		return err
+	}
+	tx, err := s.db.Pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin delete comment: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
 	var author uuid.UUID
-	err := s.db.Pool.QueryRow(ctx, `SELECT author_id FROM task_comments WHERE id=$1 AND task_id=$2`, id, taskID).Scan(&author)
+	var body string
+	err = tx.QueryRow(ctx,
+		`SELECT author_id, body FROM task_comments WHERE id=$1 AND task_id=$2 FOR UPDATE`,
+		id, taskID,
+	).Scan(&author, &body)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return uuid.Nil, domain.ErrNotFound
+		return domain.ErrNotFound
 	}
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("lookup comment %s: %w", id, err)
+		return fmt.Errorf("lock comment %s: %w", id, err)
 	}
-	return author, nil
+	if author != actor.UserID {
+		return domain.ErrForbidden
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM task_comments WHERE id=$1`, id); err != nil {
+		return fmt.Errorf("delete comment %s: %w", id, err)
+	}
+	oldValue, _ := json.Marshal(map[string]any{"task_id": taskID, "body": body})
+	if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
+		OccurredAt: time.Now().UTC(), Actor: actor, EntityType: "comment",
+		EntityID: id, Action: "deleted", OldValue: oldValue,
+	}); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit delete comment: %w", err)
+	}
+	slog.Info("comment deleted", "comment_id", id, "task_id", taskID, "actor_id", actor.UserID)
+	return nil
 }
 
 func scanComment(s scanner) (domain.Comment, error) {

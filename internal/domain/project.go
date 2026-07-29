@@ -52,6 +52,10 @@ type ProjectActivity struct {
 	Reason      *string
 	OldValue    *string
 	NewValue    *string
+	RequestID   *string
+	AuthMethod  *AuthenticationMethod
+	APITokenID  *uuid.UUID
+	TokenName   *string
 	CreatedAt   time.Time
 }
 

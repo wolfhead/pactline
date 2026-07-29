@@ -110,8 +110,30 @@ func (s *ProjectService) ApplyProjectLifecycle(
 	actor domain.Actor,
 	reason string,
 ) (store.ProjectWithRelations, error) {
+	if !actor.IsHuman() || actor.UserID == nil {
+		return store.ProjectWithRelations{}, fmt.Errorf(
+			"%w: project lifecycle actions require a human user", domain.ErrForbidden,
+		)
+	}
+	return s.ApplyProjectLifecycleWithOperation(
+		ctx, number, action, domain.SessionOperation(*actor.UserID, "internal"), reason,
+	)
+}
+
+func (s *ProjectService) ApplyProjectLifecycleWithOperation(
+	ctx context.Context,
+	number int64,
+	action store.ProjectLifecycleAction,
+	actor domain.OperationActor,
+	reason string,
+) (store.ProjectWithRelations, error) {
 	slog.Info("project lifecycle requested", "project_number", number, "action", action)
-	project, err := s.Projects.ApplyLifecycle(ctx, number, action, actor, reason)
+	userID := actor.UserID
+	project, err := s.Projects.ApplyLifecycleWithOperation(
+		ctx, number, action,
+		domain.Actor{Type: domain.ActorTypeUser, UserID: &userID},
+		reason, actor,
+	)
 	if err != nil {
 		slog.Warn("project lifecycle rejected", "project_number", number, "action", action, "error", err)
 		return store.ProjectWithRelations{}, err
@@ -128,12 +150,32 @@ func (s *ProjectService) ApplyMilestoneLifecycle(
 	actor domain.Actor,
 	reason string,
 ) (domain.Milestone, error) {
+	if !actor.IsHuman() || actor.UserID == nil {
+		return domain.Milestone{}, fmt.Errorf(
+			"%w: milestone lifecycle actions require a human user", domain.ErrForbidden,
+		)
+	}
+	return s.ApplyMilestoneLifecycleWithOperation(
+		ctx, projectNumber, milestoneID, action,
+		domain.SessionOperation(*actor.UserID, "internal"), reason,
+	)
+}
+
+func (s *ProjectService) ApplyMilestoneLifecycleWithOperation(
+	ctx context.Context,
+	projectNumber int64,
+	milestoneID uuid.UUID,
+	action store.MilestoneLifecycleAction,
+	actor domain.OperationActor,
+	reason string,
+) (domain.Milestone, error) {
 	projectID, err := s.Projects.ResolveProjectID(ctx, projectNumber)
 	if err != nil {
 		return domain.Milestone{}, err
 	}
 	slog.Info("milestone lifecycle requested", "project_number", projectNumber, "milestone_id", milestoneID, "action", action)
-	milestone, err := s.Milestones.ApplyLifecycle(ctx, projectID, milestoneID, action, actor, reason)
+	milestone, err := s.Milestones.ApplyLifecycleWithOperation(
+		ctx, projectID, milestoneID, action, actor, reason)
 	if err != nil {
 		slog.Warn("milestone lifecycle rejected", "project_number", projectNumber, "milestone_id", milestoneID, "action", action, "error", err)
 		return domain.Milestone{}, err

@@ -128,6 +128,21 @@ func derefStr(s *string) string {
 // the two can never drift apart. Status/Priority default to todo/none
 // when left blank, mirroring the column defaults.
 func (s *TaskStore) Create(ctx context.Context, t domain.Task, labelIDs []uuid.UUID) (TaskWithRelations, error) {
+	return s.CreateWithOperation(ctx, t, labelIDs, domain.SessionOperation(t.CreatorID, "internal"))
+}
+
+func (s *TaskStore) CreateWithOperation(
+	ctx context.Context,
+	t domain.Task,
+	labelIDs []uuid.UUID,
+	actor domain.OperationActor,
+) (TaskWithRelations, error) {
+	if err := actor.Validate(); err != nil {
+		return TaskWithRelations{}, err
+	}
+	if t.CreatorID != actor.UserID {
+		return TaskWithRelations{}, fmt.Errorf("%w: task creator must match operation actor", domain.ErrForbidden)
+	}
 	if t.ID == uuid.Nil {
 		t.ID = uuid.New()
 	}
@@ -159,16 +174,19 @@ func (s *TaskStore) Create(ctx context.Context, t domain.Task, labelIDs []uuid.U
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck // no-op once committed
 
-	var id uuid.UUID
+	var (
+		id     uuid.UUID
+		number int64
+	)
 	err = tx.QueryRow(ctx, `
 		INSERT INTO tasks
 			(id, title, description, status, priority, assignee_id, creator_id,
 			 due_date, project_id, milestone_id, completed_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-		RETURNING id`,
+		RETURNING id, number`,
 		t.ID, t.Title, t.Description, string(t.Status), string(t.Priority), t.AssigneeID,
 		t.CreatorID, t.DueDate, t.ProjectID, t.MilestoneID, completedAt,
-	).Scan(&id)
+	).Scan(&id, &number)
 	if err != nil {
 		return TaskWithRelations{}, mapPgError(err)
 	}
@@ -180,7 +198,19 @@ func (s *TaskStore) Create(ctx context.Context, t domain.Task, labelIDs []uuid.U
 	}
 
 	statusVal := string(t.Status)
-	if err := insertActivity(ctx, tx, id, t.CreatorID, domain.ActivityFieldCreated, nil, &statusVal); err != nil {
+	if err := insertActivity(ctx, tx, id, actor, domain.ActivityFieldCreated, nil, &statusVal); err != nil {
+		return TaskWithRelations{}, err
+	}
+	newValue, _ := json.Marshal(map[string]any{
+		"title": t.Title, "description": t.Description, "status": t.Status,
+		"priority": t.Priority, "assignee_id": t.AssigneeID,
+		"due_date": t.DueDate, "project_id": t.ProjectID,
+		"milestone_id": t.MilestoneID, "label_ids": labelIDs,
+	})
+	if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
+		OccurredAt: time.Now().UTC(), Actor: actor, EntityType: "task",
+		EntityID: id, EntityNumber: &number, Action: "created", NewValue: newValue,
+	}); err != nil {
 		return TaskWithRelations{}, err
 	}
 
@@ -225,7 +255,24 @@ func (s *TaskStore) GetByNumber(ctx context.Context, number int64) (TaskWithRela
 // status becomes "done" and cleared the moment status leaves "done", so it
 // always answers "when did this last become done" without the caller having
 // to manage it, and without it being a gate on any other field.
-func (s *TaskStore) Update(ctx context.Context, number int64, patch domain.TaskPatch, actorID uuid.UUID) (TaskWithRelations, error) {
+func (s *TaskStore) Update(
+	ctx context.Context,
+	number int64,
+	patch domain.TaskPatch,
+	actorID uuid.UUID,
+) (TaskWithRelations, error) {
+	return s.UpdateWithOperation(ctx, number, patch, domain.SessionOperation(actorID, "internal"))
+}
+
+func (s *TaskStore) UpdateWithOperation(
+	ctx context.Context,
+	number int64,
+	patch domain.TaskPatch,
+	actor domain.OperationActor,
+) (TaskWithRelations, error) {
+	if err := actor.Validate(); err != nil {
+		return TaskWithRelations{}, err
+	}
 	tx, err := s.db.Pool.Begin(ctx)
 	if err != nil {
 		return TaskWithRelations{}, fmt.Errorf("begin update task: %w", err)
@@ -346,28 +393,28 @@ func (s *TaskStore) Update(ctx context.Context, number int64, patch domain.TaskP
 		return TaskWithRelations{}, mapPgError(err)
 	}
 
-	if err := recordFieldChange(ctx, tx, id, actorID, domain.ActivityFieldTitle, oldTitle, newTitle); err != nil {
+	if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldTitle, oldTitle, newTitle); err != nil {
 		return TaskWithRelations{}, err
 	}
-	if err := recordFieldChange(ctx, tx, id, actorID, domain.ActivityFieldDescription, oldDescription, newDescription); err != nil {
+	if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldDescription, oldDescription, newDescription); err != nil {
 		return TaskWithRelations{}, err
 	}
-	if err := recordFieldChange(ctx, tx, id, actorID, domain.ActivityFieldStatus, string(oldStatus), string(newStatus)); err != nil {
+	if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldStatus, string(oldStatus), string(newStatus)); err != nil {
 		return TaskWithRelations{}, err
 	}
-	if err := recordFieldChange(ctx, tx, id, actorID, domain.ActivityFieldPriority, string(oldPriority), string(newPriority)); err != nil {
+	if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldPriority, string(oldPriority), string(newPriority)); err != nil {
 		return TaskWithRelations{}, err
 	}
-	if err := recordFieldChange(ctx, tx, id, actorID, domain.ActivityFieldAssignee, uuidPtrString(oldAssignee), uuidPtrString(newAssignee)); err != nil {
+	if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldAssignee, uuidPtrString(oldAssignee), uuidPtrString(newAssignee)); err != nil {
 		return TaskWithRelations{}, err
 	}
-	if err := recordFieldChange(ctx, tx, id, actorID, domain.ActivityFieldDueDate, datePtrString(oldDueDate), datePtrString(newDueDate)); err != nil {
+	if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldDueDate, datePtrString(oldDueDate), datePtrString(newDueDate)); err != nil {
 		return TaskWithRelations{}, err
 	}
-	if err := recordFieldChange(ctx, tx, id, actorID, domain.ActivityFieldProject, uuidPtrString(oldProject), uuidPtrString(newProject)); err != nil {
+	if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldProject, uuidPtrString(oldProject), uuidPtrString(newProject)); err != nil {
 		return TaskWithRelations{}, err
 	}
-	if err := recordFieldChange(ctx, tx, id, actorID, domain.ActivityFieldMilestone, uuidPtrString(oldMilestone), uuidPtrString(newMilestone)); err != nil {
+	if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldMilestone, uuidPtrString(oldMilestone), uuidPtrString(newMilestone)); err != nil {
 		return TaskWithRelations{}, err
 	}
 
@@ -383,9 +430,26 @@ func (s *TaskStore) Update(ctx context.Context, number int64, patch domain.TaskP
 		if err != nil {
 			return TaskWithRelations{}, err
 		}
-		if err := recordFieldChange(ctx, tx, id, actorID, domain.ActivityFieldLabels, strings.Join(oldNames, ", "), strings.Join(newNames, ", ")); err != nil {
+		if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldLabels, strings.Join(oldNames, ", "), strings.Join(newNames, ", ")); err != nil {
 			return TaskWithRelations{}, err
 		}
+	}
+	oldValue, _ := json.Marshal(map[string]any{
+		"title": oldTitle, "description": oldDescription, "status": oldStatus,
+		"priority": oldPriority, "assignee_id": oldAssignee,
+		"due_date": oldDueDate, "project_id": oldProject, "milestone_id": oldMilestone,
+	})
+	newValue, _ := json.Marshal(map[string]any{
+		"title": newTitle, "description": newDescription, "status": newStatus,
+		"priority": newPriority, "assignee_id": newAssignee,
+		"due_date": newDueDate, "project_id": newProject, "milestone_id": newMilestone,
+	})
+	if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
+		OccurredAt: time.Now().UTC(), Actor: actor, EntityType: "task",
+		EntityID: id, EntityNumber: &number, Action: "updated",
+		OldValue: oldValue, NewValue: newValue,
+	}); err != nil {
+		return TaskWithRelations{}, err
 	}
 
 	row := tx.QueryRow(ctx, `SELECT `+taskSelectColumns+` `+taskFromJoins+` WHERE t.id = $1`, id)
@@ -398,7 +462,7 @@ func (s *TaskStore) Update(ctx context.Context, number int64, patch domain.TaskP
 		return TaskWithRelations{}, fmt.Errorf("commit update task: %w", err)
 	}
 
-	slog.Info("task updated", "task_id", id, "number", number, "actor_id", actorID,
+	slog.Info("task updated", "task_id", id, "number", number, "actor_id", actor.UserID,
 		"status", out.Task.Status, "priority", out.Task.Priority, "assignee_id", out.Task.AssigneeID,
 		"due_date", out.Task.DueDate, "title", out.Task.Title)
 	return out, nil
@@ -408,7 +472,26 @@ func (s *TaskStore) Update(ctx context.Context, number int64, patch domain.TaskP
 // Calling it with the value already in effect is a harmless no-op (no new
 // activity entry, no error) — archiving is a state, not a one-shot action,
 // so re-asserting it is not a client error.
-func (s *TaskStore) SetArchived(ctx context.Context, number int64, archived bool, actorID uuid.UUID) (TaskWithRelations, error) {
+func (s *TaskStore) SetArchived(
+	ctx context.Context,
+	number int64,
+	archived bool,
+	actorID uuid.UUID,
+) (TaskWithRelations, error) {
+	return s.SetArchivedWithOperation(
+		ctx, number, archived, domain.SessionOperation(actorID, "internal"),
+	)
+}
+
+func (s *TaskStore) SetArchivedWithOperation(
+	ctx context.Context,
+	number int64,
+	archived bool,
+	actor domain.OperationActor,
+) (TaskWithRelations, error) {
+	if err := actor.Validate(); err != nil {
+		return TaskWithRelations{}, err
+	}
 	tx, err := s.db.Pool.Begin(ctx)
 	if err != nil {
 		return TaskWithRelations{}, fmt.Errorf("begin set archived: %w", err)
@@ -433,7 +516,20 @@ func (s *TaskStore) SetArchived(ctx context.Context, number int64, archived bool
 			id, archived); err != nil {
 			return TaskWithRelations{}, fmt.Errorf("set archived on task %d: %w", number, err)
 		}
-		if err := recordFieldChange(ctx, tx, id, actorID, domain.ActivityFieldArchived, strconv.FormatBool(wasArchived), strconv.FormatBool(archived)); err != nil {
+		if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldArchived, strconv.FormatBool(wasArchived), strconv.FormatBool(archived)); err != nil {
+			return TaskWithRelations{}, err
+		}
+		oldValue, _ := json.Marshal(map[string]bool{"archived": wasArchived})
+		newValue, _ := json.Marshal(map[string]bool{"archived": archived})
+		action := "archived"
+		if !archived {
+			action = "restored"
+		}
+		if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
+			OccurredAt: time.Now().UTC(), Actor: actor, EntityType: "task",
+			EntityID: id, EntityNumber: &number, Action: action,
+			OldValue: oldValue, NewValue: newValue,
+		}); err != nil {
 			return TaskWithRelations{}, err
 		}
 	}
@@ -448,7 +544,7 @@ func (s *TaskStore) SetArchived(ctx context.Context, number int64, archived bool
 		return TaskWithRelations{}, fmt.Errorf("commit set archived: %w", err)
 	}
 
-	slog.Info("task archived flag changed", "task_id", id, "number", number, "actor_id", actorID, "archived", archived)
+	slog.Info("task archived flag changed", "task_id", id, "number", number, "actor_id", actor.UserID, "archived", archived)
 	return out, nil
 }
 
@@ -483,10 +579,21 @@ func labelNamesForTask(ctx context.Context, tx pgx.Tx, taskID uuid.UUID) ([]stri
 	return names, rows.Err()
 }
 
-func insertActivity(ctx context.Context, tx pgx.Tx, taskID, actorID uuid.UUID, field domain.ActivityField, oldValue, newValue *string) error {
+func insertActivity(
+	ctx context.Context,
+	tx pgx.Tx,
+	taskID uuid.UUID,
+	actor domain.OperationActor,
+	field domain.ActivityField,
+	oldValue, newValue *string,
+) error {
 	_, err := tx.Exec(ctx,
-		`INSERT INTO task_activity (id, task_id, actor_id, field, old_value, new_value) VALUES ($1,$2,$3,$4,$5,$6)`,
-		uuid.New(), taskID, actorID, string(field), oldValue, newValue)
+		`INSERT INTO task_activity (
+			id, task_id, actor_id, field, old_value, new_value,
+			request_id, auth_method, api_token_id, token_name_snapshot
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+		uuid.New(), taskID, actor.UserID, string(field), oldValue, newValue,
+		actor.RequestID, actor.AuthMethod, actor.TokenID, nullIfEmpty(actor.TokenName))
 	if err != nil {
 		return fmt.Errorf("insert activity %s for task %s: %w", field, taskID, err)
 	}
@@ -496,11 +603,18 @@ func insertActivity(ctx context.Context, tx pgx.Tx, taskID, actorID uuid.UUID, f
 // recordFieldChange writes an activity entry only when oldVal != newVal,
 // keeping the log free of no-op noise from a PATCH that resends a field's
 // current value unchanged.
-func recordFieldChange(ctx context.Context, tx pgx.Tx, taskID, actorID uuid.UUID, field domain.ActivityField, oldVal, newVal string) error {
+func recordFieldChange(
+	ctx context.Context,
+	tx pgx.Tx,
+	taskID uuid.UUID,
+	actor domain.OperationActor,
+	field domain.ActivityField,
+	oldVal, newVal string,
+) error {
 	if oldVal == newVal {
 		return nil
 	}
-	return insertActivity(ctx, tx, taskID, actorID, field, strPtrOrNil(oldVal), strPtrOrNil(newVal))
+	return insertActivity(ctx, tx, taskID, actor, field, strPtrOrNil(oldVal), strPtrOrNil(newVal))
 }
 
 func strPtrOrNil(s string) *string {
@@ -528,7 +642,9 @@ func datePtrString(t *time.Time) string {
 // reads as a chronological timeline of what happened to the task.
 func (s *TaskStore) ListActivity(ctx context.Context, taskID uuid.UUID) ([]domain.Activity, error) {
 	rows, err := s.db.Pool.Query(ctx,
-		`SELECT id, task_id, actor_id, field, old_value, new_value, created_at
+		`SELECT id, task_id, actor_id, field, old_value, new_value,
+		        request_id, auth_method, api_token_id, token_name_snapshot,
+		        created_at
 		 FROM task_activity WHERE task_id = $1 ORDER BY created_at ASC, id ASC`, taskID)
 	if err != nil {
 		return nil, fmt.Errorf("query activity for task %s: %w", taskID, err)
@@ -538,7 +654,11 @@ func (s *TaskStore) ListActivity(ctx context.Context, taskID uuid.UUID) ([]domai
 	out := []domain.Activity{}
 	for rows.Next() {
 		var a domain.Activity
-		if err := rows.Scan(&a.ID, &a.TaskID, &a.ActorID, &a.Field, &a.OldValue, &a.NewValue, &a.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&a.ID, &a.TaskID, &a.ActorID, &a.Field, &a.OldValue, &a.NewValue,
+			&a.RequestID, &a.AuthMethod, &a.APITokenID, &a.TokenName,
+			&a.CreatedAt,
+		); err != nil {
 			return nil, fmt.Errorf("scan activity: %w", err)
 		}
 		out = append(out, a)
