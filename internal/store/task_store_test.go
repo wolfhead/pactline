@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -9,14 +10,15 @@ import (
 	"github.com/wolfhead/pactline/internal/store"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
 
 var (
-	userA = uuid.MustParse("00000000-0000-0000-0000-000000000001") // 产品 A
-	userB = uuid.MustParse("00000000-0000-0000-0000-000000000002") // 技术 Leader B
-	userC = uuid.MustParse("00000000-0000-0000-0000-000000000003") // 研发 C
-	userD = uuid.MustParse("00000000-0000-0000-0000-000000000004") // 研发 D
+	userA = uuid.MustParse("00000000-0000-0000-0000-000000000001") // Product owner fixture
+	userB = uuid.MustParse("00000000-0000-0000-0000-000000000002") // Technical lead fixture
+	userC = uuid.MustParse("00000000-0000-0000-0000-000000000003") // Engineer fixture
+	userD = uuid.MustParse("00000000-0000-0000-0000-000000000004") // Engineer fixture
 )
 
 // cleanupTask deletes task-owned acceptance history before deleting the task.
@@ -71,6 +73,21 @@ func mustCreateTask(
 			WHERE archived_at IS NULL
 			ORDER BY CASE WHEN name='待整理' THEN 0 ELSE 1 END, number
 			LIMIT 1`).Scan(&task.ProjectID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			project, createErr := store.NewProjectStore(db).Create(
+				context.Background(),
+				domain.Project{
+					Name:        "Store test workspace",
+					Description: "Workspace fixture for Task store tests",
+					OwnerID:     userA,
+					CreatorID:   userA,
+				},
+			)
+			require.NoError(t, createErr)
+			cleanupProject(t, db, project.Project.ID)
+			task.ProjectID = project.Project.ID
+			err = nil
+		}
 		require.NoError(t, err, "task test fixture requires an active Project")
 	}
 	out, err := ts.Create(context.Background(), task, labelIDs)

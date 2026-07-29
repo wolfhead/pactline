@@ -31,10 +31,10 @@ import (
 )
 
 const (
-	userA = "00000000-0000-0000-0000-000000000001" // 产品 A
-	userB = "00000000-0000-0000-0000-000000000002" // 技术 Leader B
-	userC = "00000000-0000-0000-0000-000000000003" // 研发 C
-	userD = "00000000-0000-0000-0000-000000000004" // 研发 D
+	userA = "00000000-0000-0000-0000-000000000001" // Product owner fixture
+	userB = "00000000-0000-0000-0000-000000000002" // Technical lead fixture
+	userC = "00000000-0000-0000-0000-000000000003" // Engineer fixture
+	userD = "00000000-0000-0000-0000-000000000004" // Engineer fixture
 )
 
 // skippedForNoDatabase counts tests in this package that skipped for lack of
@@ -71,6 +71,7 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 		require.NoError(t, cleanupErr)
 	})
 	enableLegacySeedIdentities(t, db)
+	ensureAPITestProject(t, db)
 
 	users := store.NewUserStore(db)
 	tasks := store.NewTaskStore(db)
@@ -119,35 +120,74 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 }
 
 // The HTTP suite exercises Development sessions with all six historical role
-// fixtures. The identity migration intentionally deactivates five of them, so
-// expose them only for each test and restore the migrated state afterward.
+// fixtures. It also treats the primary identity as the single administrator.
+// Restore the migrated state after each test so the shared test database does
+// not accumulate authorization state.
 func enableLegacySeedIdentities(t *testing.T, db *store.DB) {
 	t.Helper()
 	ctx := context.Background()
+	var originalPrimaryRole string
+	require.NoError(t, db.Pool.QueryRow(ctx,
+		`SELECT platform_role FROM users WHERE id=$1`, userA,
+	).Scan(&originalPrimaryRole))
 	_, err := db.Pool.Exec(ctx, `
 		UPDATE users
-		SET active = true, updated_at = now()
+		SET active = true,
+		    platform_role = CASE WHEN id=$1 THEN 'ADMIN' ELSE platform_role END,
+		    updated_at = now()
 		WHERE id IN (
+			'00000000-0000-0000-0000-000000000001',
 			'00000000-0000-0000-0000-000000000002',
 			'00000000-0000-0000-0000-000000000003',
 			'00000000-0000-0000-0000-000000000004',
 			'00000000-0000-0000-0000-000000000005',
 			'00000000-0000-0000-0000-000000000006'
 		)
-	`)
+	`, userA)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		_, cleanupErr := db.Pool.Exec(context.Background(), `
 			UPDATE users
-			SET active = false, updated_at = now()
+			SET active = CASE WHEN id=$1 THEN true ELSE false END,
+			    platform_role = CASE WHEN id=$1 THEN $2 ELSE platform_role END,
+			    updated_at = now()
 			WHERE id IN (
+				'00000000-0000-0000-0000-000000000001',
 				'00000000-0000-0000-0000-000000000002',
 				'00000000-0000-0000-0000-000000000003',
 				'00000000-0000-0000-0000-000000000004',
 				'00000000-0000-0000-0000-000000000005',
 				'00000000-0000-0000-0000-000000000006'
 			)
-		`)
+		`, userA, originalPrimaryRole)
+		require.NoError(t, cleanupErr)
+	})
+}
+
+// Fresh databases contain no Project until real work is created. API tests
+// that create Tasks without first exercising Project creation still need one
+// explicit workspace fixture; a developer's pre-existing local data must not
+// be what makes the suite pass.
+func ensureAPITestProject(t *testing.T, db *store.DB) {
+	t.Helper()
+	ctx := context.Background()
+	var exists bool
+	require.NoError(t, db.Pool.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM projects WHERE archived_at IS NULL)`,
+	).Scan(&exists))
+	if exists {
+		return
+	}
+
+	projectID := uuid.New()
+	_, err := db.Pool.Exec(ctx, `
+		INSERT INTO projects (id, name, description, owner_id, creator_id)
+		VALUES ($1, $2, $3, $4, $4)
+	`, projectID, "API test workspace", "Workspace fixture for API integration tests", userA)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, cleanupErr := db.Pool.Exec(context.Background(),
+			`DELETE FROM projects WHERE id=$1`, projectID)
 		require.NoError(t, cleanupErr)
 	})
 }
