@@ -153,10 +153,14 @@ func ParseToken(raw string) (uuid.UUID, []byte, error) {
 	if !ok {
 		return uuid.Nil, nil, ErrTokenInvalid
 	}
-	encodedID, encodedSecret, ok := strings.Cut(encoded, "_")
-	if !ok || encodedID == "" || encodedSecret == "" || strings.Contains(encodedSecret, "_") {
+	encodedIDLength := base64.RawURLEncoding.EncodedLen(16)
+	encodedSecretLength := base64.RawURLEncoding.EncodedLen(SecretSize)
+	if len(encoded) != encodedIDLength+1+encodedSecretLength ||
+		encoded[encodedIDLength] != '_' {
 		return uuid.Nil, nil, ErrTokenInvalid
 	}
+	encodedID := encoded[:encodedIDLength]
+	encodedSecret := encoded[encodedIDLength+1:]
 	idBytes, err := base64.RawURLEncoding.DecodeString(encodedID)
 	if err != nil || len(idBytes) != 16 {
 		return uuid.Nil, nil, ErrTokenInvalid

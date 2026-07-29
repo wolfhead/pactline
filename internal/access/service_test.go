@@ -142,6 +142,21 @@ func TestAuthenticateTokenReturnsPrincipalAndThrottlesTouch(t *testing.T) {
 	require.Equal(t, now.Add(-LastUsedTouchInterval), repository.touchBefore)
 }
 
+func TestParseTokenAcceptsUnderscoresInsideBase64URLSegments(t *testing.T) {
+	id := uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff")
+	secret := make([]byte, SecretSize)
+	for i := range secret {
+		secret[i] = 0xff
+	}
+	raw := FormatToken(id, secret)
+
+	parsedID, parsedSecret, err := ParseToken(raw)
+
+	require.NoError(t, err)
+	require.Equal(t, id, parsedID)
+	require.Equal(t, secret, parsedSecret)
+}
+
 func TestAuthenticateTokenRejectsSpecificInactiveStates(t *testing.T) {
 	now := time.Date(2026, 7, 28, 2, 3, 4, 0, time.UTC)
 	owner := domain.User{ID: uuid.New(), Active: true}
