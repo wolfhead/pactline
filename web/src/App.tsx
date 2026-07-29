@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import AppShell from './components/tasks/AppShell'
 import TaskListPage from './pages/tasks/TaskListPage'
@@ -7,7 +8,11 @@ import LoginPage from './pages/auth/LoginPage'
 import InvitePage from './pages/auth/InvitePage'
 import AdminUsersPage from './pages/admin/AdminUsersPage'
 import AdminInvitationsPage from './pages/admin/AdminInvitationsPage'
+import APITokensPage from './pages/account/APITokensPage'
+import AdminAPIAuditPage from './pages/admin/AdminAPIAuditPage'
 import { useIdentity } from './identity'
+
+const APIDocsPage = lazy(() => import('./pages/APIDocsPage'))
 
 function ProtectedApplication() {
   const { status, error, actor, impersonation } = useIdentity()
@@ -31,8 +36,18 @@ function ProtectedApplication() {
         <Route path="/tasks/:number" element={<TaskListPage />} />
         <Route path="/projects" element={<ProjectListPage />} />
         <Route path="/projects/:number" element={<ProjectDetailPage />} />
+        <Route path="/account/api-tokens" element={!impersonation ? <APITokensPage /> : <Navigate to="/" replace />} />
+        <Route
+          path="/api-docs"
+          element={(
+            <Suspense fallback={<p className="p-5 text-sm text-fg-muted">正在加载 API 文档…</p>}>
+              <APIDocsPage />
+            </Suspense>
+          )}
+        />
         <Route path="/admin/users" element={adminVisible ? <AdminUsersPage /> : <Navigate to="/" replace />} />
         <Route path="/admin/invitations" element={adminVisible ? <AdminInvitationsPage /> : <Navigate to="/" replace />} />
+        <Route path="/admin/api-audit" element={adminVisible ? <AdminAPIAuditPage /> : <Navigate to="/" replace />} />
         <Route path="/" element={<Navigate to="/tasks" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

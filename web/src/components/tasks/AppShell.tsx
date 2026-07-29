@@ -159,6 +159,16 @@ export default function AppShell({ children }: { children: ReactNode }) {
             >
               <SheetTitle className="text-sm">我的</SheetTitle>
               <div className="flex flex-col gap-3">{accountControls}</div>
+              <div className="flex flex-col gap-1 border-t border-border pt-3">
+                {!impersonation && (
+                  <Link to="/account/api-tokens" onClick={() => setMeOpen(false)} className="rounded-md px-3 py-2 text-sm hover:bg-surface-subtle">
+                    API Token
+                  </Link>
+                )}
+                <Link to="/api-docs" onClick={() => setMeOpen(false)} className="rounded-md px-3 py-2 text-sm hover:bg-surface-subtle">
+                  API 文档
+                </Link>
+              </div>
               {showAdminLinks && (
                 <div className="flex flex-col gap-1 border-t border-border pt-3">
                   <Link to="/admin/users" onClick={() => setMeOpen(false)} className="rounded-md px-3 py-2 text-sm hover:bg-surface-subtle">
@@ -166,6 +176,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
                   </Link>
                   <Link to="/admin/invitations" onClick={() => setMeOpen(false)} className="rounded-md px-3 py-2 text-sm hover:bg-surface-subtle">
                     邀请成员
+                  </Link>
+                  <Link to="/admin/api-audit" onClick={() => setMeOpen(false)} className="rounded-md px-3 py-2 text-sm hover:bg-surface-subtle">
+                    API 审计
                   </Link>
                 </div>
               )}

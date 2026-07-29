@@ -5,6 +5,8 @@ import { useIdentity } from '@/identity'
 const ITEMS = [
   { to: '/tasks', label: '列表', end: false },
   { to: '/projects', label: '项目', end: false },
+  { to: '/account/api-tokens', label: 'API Token', end: false },
+  { to: '/api-docs', label: 'API 文档', end: false },
 ] as const
 
 // Label management belongs to the tags-and-relations plan, not this pass —
@@ -16,13 +18,17 @@ const ITEMS = [
  * stays open after navigating reads as broken. */
 export default function NavSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { actor, impersonation } = useIdentity()
+  const baseItems = impersonation
+    ? ITEMS.filter((item) => item.to !== '/account/api-tokens')
+    : ITEMS
   const items = actor?.platform_role === 'ADMIN' && !impersonation
     ? [
-        ...ITEMS,
+        ...baseItems,
         { to: '/admin/users', label: '用户', end: false },
         { to: '/admin/invitations', label: '邀请', end: false },
+        { to: '/admin/api-audit', label: 'API 审计', end: false },
       ]
-    : ITEMS
+    : baseItems
   return (
     <nav aria-label="主导航" className="flex flex-col gap-1 p-3">
       {items.map((item) => (
