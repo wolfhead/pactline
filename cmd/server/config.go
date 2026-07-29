@@ -32,17 +32,28 @@ type Config struct {
 }
 
 func LoadConfig() (Config, error) {
+	sessionSecret, err := readConfigurationValue("SESSION_SECRET")
+	if err != nil {
+		return Config{}, err
+	}
+	tokenEncryptionKey, err := readConfigurationValue("OAUTH_TOKEN_ENCRYPTION_KEY")
+	if err != nil {
+		return Config{}, err
+	}
+	larkAppSecret, err := readConfigurationValue("LARK_APP_SECRET")
+	if err != nil {
+		return Config{}, err
+	}
 	cfg := Config{
 		AppEnv:               strings.TrimSpace(os.Getenv("APP_ENV")),
 		AuthProvider:         strings.TrimSpace(os.Getenv("AUTH_PROVIDER")),
 		TokenEncryptionKeyID: strings.TrimSpace(os.Getenv("OAUTH_TOKEN_ENCRYPTION_KEY_ID")),
 		LarkAppID:            strings.TrimSpace(os.Getenv("LARK_APP_ID")),
-		LarkAppSecret:        os.Getenv("LARK_APP_SECRET"),
+		LarkAppSecret:        larkAppSecret,
 		LarkTenantKey:        strings.TrimSpace(os.Getenv("LARK_TENANT_KEY")),
 		BootstrapAdminEmail:  strings.TrimSpace(os.Getenv("BOOTSTRAP_ADMIN_EMAIL")),
 	}
-	var err error
-	cfg.SessionSecret, err = decodeSecret("SESSION_SECRET", os.Getenv("SESSION_SECRET"))
+	cfg.SessionSecret, err = decodeSecret("SESSION_SECRET", sessionSecret)
 	if err != nil {
 		return Config{}, err
 	}
@@ -54,7 +65,7 @@ func LoadConfig() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	if encoded := os.Getenv("OAUTH_TOKEN_ENCRYPTION_KEY"); encoded != "" {
+	if encoded := tokenEncryptionKey; encoded != "" {
 		cfg.TokenEncryptionKey, err = decodeEncryptionKey(encoded)
 		if err != nil {
 			return Config{}, err
@@ -64,6 +75,23 @@ func LoadConfig() (Config, error) {
 		return Config{}, err
 	}
 	return cfg, nil
+}
+
+func readConfigurationValue(name string) (string, error) {
+	value := os.Getenv(name)
+	fileName := name + "_FILE"
+	path := strings.TrimSpace(os.Getenv(fileName))
+	if value != "" && path != "" {
+		return "", fmt.Errorf("%s and %s cannot both be set", name, fileName)
+	}
+	if path == "" {
+		return value, nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read %s: %w", fileName, err)
+	}
+	return strings.TrimRight(string(data), "\r\n"), nil
 }
 
 func (c Config) Validate() error {

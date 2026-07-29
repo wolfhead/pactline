@@ -1,11 +1,13 @@
 DSN ?= postgres://bounty:bounty@localhost:5433/bountyboard?sslmode=disable
 COMPOSE_PROJECT_NAME ?= task_manager
+TEST_COMPOSE_FILE ?= docker-compose.yml
+STACK_COMPOSE_FILE ?= compose.yaml
 
 up:
-	docker compose -p "$(COMPOSE_PROJECT_NAME)" up -d --wait
+	docker compose -p "$(COMPOSE_PROJECT_NAME)" -f "$(TEST_COMPOSE_FILE)" up -d --wait
 
 down:
-	docker compose -p "$(COMPOSE_PROJECT_NAME)" down -v
+	docker compose -p "$(COMPOSE_PROJECT_NAME)" -f "$(TEST_COMPOSE_FILE)" down -v
 
 test: up
 	DATABASE_URL="$(DSN)" go test ./... -count=1 -p 1
@@ -27,6 +29,15 @@ web-test:
 web-build:
 	cd web && npm run build
 
+stack-up:
+	docker compose -f "$(STACK_COMPOSE_FILE)" up -d --build --wait
+
+stack-down:
+	docker compose -f "$(STACK_COMPOSE_FILE)" down
+
+stack-logs:
+	docker compose -f "$(STACK_COMPOSE_FILE)" logs -f api web
+
 openapi-generate:
 	go generate ./api
 
@@ -44,4 +55,4 @@ e2e:
 agent-api-e2e:
 	cd web && npx playwright test e2e/26-agent-api.spec.ts
 
-.PHONY: up down test run web-install web-dev web-test web-build openapi-generate openapi-check e2e agent-api-e2e
+.PHONY: up down test run web-install web-dev web-test web-build stack-up stack-down stack-logs openapi-generate openapi-check e2e agent-api-e2e

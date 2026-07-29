@@ -3,9 +3,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/wolfhead/pactline"
 	contract "github.com/wolfhead/pactline/api"
@@ -30,9 +34,13 @@ func main() {
 		slog.Error("invalid server configuration", "error", err)
 		os.Exit(1)
 	}
-	dsn := os.Getenv("DATABASE_URL")
+	dsn, err := readConfigurationValue("DATABASE_URL")
+	if err != nil {
+		slog.Error("load database configuration", "error", err)
+		os.Exit(1)
+	}
 	if dsn == "" {
-		slog.Error("DATABASE_URL is required")
+		slog.Error("DATABASE_URL or DATABASE_URL_FILE is required")
 		os.Exit(1)
 	}
 
@@ -130,7 +138,7 @@ func main() {
 		slog.Error("configure OpenAPI v1 server", "error", err)
 		os.Exit(1)
 	}
-	handler := api.NewRouter(legacyHandler, api.RouterOptions{
+	applicationHandler := api.NewRouter(legacyHandler, api.RouterOptions{
 		Auth: api.AuthSurface{
 			Sessions: identityService, Tokens: tokenService,
 			AccessAudit: accessAuditStore,
@@ -142,14 +150,41 @@ func main() {
 		V1:      v1Handler,
 		OpenAPI: apiv1.OpenAPIHandler(contract.OpenAPIDocument),
 	})
+	handler := withOperationalEndpoints(applicationHandler, db.Pool)
 
 	addr := os.Getenv("ADDR")
 	if addr == "" {
 		addr = ":8080"
 	}
+	server := &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+	}
+	runContext, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
+	shutdownComplete := make(chan struct{})
+	go func() {
+		<-runContext.Done()
+		slog.Info("server shutdown started")
+		shutdownContext, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if shutdownErr := server.Shutdown(shutdownContext); shutdownErr != nil {
+			slog.Error("server graceful shutdown failed", "error", shutdownErr)
+		}
+		close(shutdownComplete)
+	}()
+
 	slog.Info("server listening", "addr", addr, "app_env", cfg.AppEnv, "auth_provider", cfg.AuthProvider)
-	if err := http.ListenAndServe(addr, handler); err != nil {
+	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		slog.Error("server stopped", "error", err)
 		os.Exit(1)
+	}
+	if runContext.Err() != nil {
+		<-shutdownComplete
+		slog.Info("server shutdown complete")
 	}
 }

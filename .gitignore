@@ -35,6 +35,10 @@ output/playwright/
 # and are intentionally excluded from the distributable repository.
 docs/superpowers/
 
+# Deployment state. Only examples and deployment definitions are tracked.
+deploy/secrets/
+deploy/backups/
+
 # Editor / OS
 .DS_Store
 .idea/

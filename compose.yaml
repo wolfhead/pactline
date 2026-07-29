@@ -1,0 +1,87 @@
+name: pactline-local
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: pactline
+      POSTGRES_PASSWORD: pactline
+      POSTGRES_DB: pactline
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pactline -d pactline"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - data
+
+  api:
+    build:
+      context: .
+      dockerfile: deploy/api.Dockerfile
+    environment:
+      ADDR: :8080
+      APP_ENV: development
+      AUTH_PROVIDER: development
+      APP_BASE_URL: http://localhost:${PACTLINE_HTTP_PORT:-5173}
+      DATABASE_URL: postgres://pactline:pactline@postgres:5432/pactline?sslmode=disable
+      LOG_LEVEL: ${PACTLINE_LOG_LEVEL:-info}
+      SESSION_SECRET: ZGV2ZWxvcG1lbnQtc2Vzc2lvbi1zZWNyZXQtMzJieXQ=
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - app
+      - data
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/web.Dockerfile
+      args:
+        PACTLINE_IDENTITY_MODE: development
+    ports:
+      - "127.0.0.1:${PACTLINE_HTTP_PORT:-5173}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    read_only: true
+    tmpfs:
+      - /config:uid=10001,gid=10001,mode=0700
+      - /data:uid=10001,gid=10001,mode=0700
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - app
+
+volumes:
+  postgres_data:
+
+networks:
+  app:
+  data:
+    internal: true

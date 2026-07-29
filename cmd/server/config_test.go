@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/base64"
 	"net/url"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -94,4 +96,67 @@ func TestDevelopmentAndTestRequireDecoded32ByteSessionSecret(t *testing.T) {
 	t.Setenv("SESSION_SECRET", "not-base64!")
 	_, err = LoadConfig()
 	require.ErrorContains(t, err, "SESSION_SECRET must be base64 encoded")
+}
+
+func TestReadConfigurationValueFromFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session-secret")
+	require.NoError(t, os.WriteFile(path, []byte("secret-value\n"), 0o600))
+	t.Setenv("SESSION_SECRET_FILE", path)
+
+	value, err := readConfigurationValue("SESSION_SECRET")
+
+	require.NoError(t, err)
+	require.Equal(t, "secret-value", value)
+}
+
+func TestReadConfigurationValueRejectsAmbiguousSources(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session-secret")
+	require.NoError(t, os.WriteFile(path, []byte("file-value"), 0o600))
+	t.Setenv("SESSION_SECRET", "environment-value")
+	t.Setenv("SESSION_SECRET_FILE", path)
+
+	_, err := readConfigurationValue("SESSION_SECRET")
+
+	require.ErrorContains(t, err, "SESSION_SECRET and SESSION_SECRET_FILE cannot both be set")
+}
+
+func TestReadConfigurationValueReportsUnreadableFile(t *testing.T) {
+	t.Setenv("SESSION_SECRET_FILE", filepath.Join(t.TempDir(), "missing"))
+
+	_, err := readConfigurationValue("SESSION_SECRET")
+
+	require.ErrorContains(t, err, "read SESSION_SECRET_FILE")
+}
+
+func TestLoadConfigReadsProductionSecretsFromFiles(t *testing.T) {
+	secretDir := t.TempDir()
+	writeSecret := func(name, value string) string {
+		path := filepath.Join(secretDir, name)
+		require.NoError(t, os.WriteFile(path, []byte(value+"\n"), 0o600))
+		return path
+	}
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("AUTH_PROVIDER", "lark")
+	t.Setenv("APP_BASE_URL", "https://tasks.example.test")
+	t.Setenv("SESSION_SECRET_FILE", writeSecret(
+		"session_secret",
+		base64.StdEncoding.EncodeToString(make([]byte, 32)),
+	))
+	t.Setenv("OAUTH_TOKEN_ENCRYPTION_KEY_FILE", writeSecret(
+		"oauth_token_encryption_key",
+		base64.StdEncoding.EncodeToString(make([]byte, 32)),
+	))
+	t.Setenv("OAUTH_TOKEN_ENCRYPTION_KEY_ID", "key-1")
+	t.Setenv("LARK_APP_ID", "app-id")
+	t.Setenv("LARK_APP_SECRET_FILE", writeSecret("lark_app_secret", "app-secret"))
+	t.Setenv("LARK_TENANT_KEY", "tenant")
+	t.Setenv("LARK_REDIRECT_URI", "https://tasks.example.test/api/auth/lark/callback")
+	t.Setenv("BOOTSTRAP_ADMIN_EMAIL", "admin@example.test")
+
+	cfg, err := LoadConfig()
+
+	require.NoError(t, err)
+	require.Len(t, cfg.SessionSecret, 32)
+	require.Len(t, cfg.TokenEncryptionKey, 32)
+	require.Equal(t, "app-secret", cfg.LarkAppSecret)
 }

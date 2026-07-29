@@ -56,8 +56,18 @@ make web-dev
 Open <http://localhost:5173>. Local development uses the explicit development
 identity provider; production rejects it at startup.
 
-Copy `.env.example` when preparing a deployment. Never commit the resulting
-environment file or real provider credentials.
+For a production-equivalent local container run:
+
+```bash
+make stack-up
+make stack-logs
+make stack-down
+```
+
+The full deployment model, production configuration, backups, upgrades, and
+rollback constraints are documented in
+[`docs/operations/deployment.md`](docs/operations/deployment.md). Never commit
+populated environment files or provider credentials.
 
 ## Verification
 
@@ -101,6 +111,8 @@ Do not edit `internal/api/v1generated` manually.
   operation
 - [`docs/operations/lark-identity.md`](docs/operations/lark-identity.md) —
   identity operation
+- [`docs/operations/deployment.md`](docs/operations/deployment.md) —
+  container deployment, backup, and rollback
 
 Local design notes under `docs/superpowers/` are intentionally ignored and are
 not part of the distributable repository.

@@ -1,0 +1,105 @@
+name: Release container images
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify release source
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pactline_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d pactline_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      CI: "true"
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/pactline_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Verify generated OpenAPI transport
+        run: make openapi-check
+      - name: Run Go tests
+        run: go test ./... -count=1 -p 1
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+      - name: Run web tests
+        working-directory: web
+        run: npm test
+      - name: Build web
+        working-directory: web
+        run: npm run build
+
+  publish:
+    name: Publish ${{ matrix.component }}
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: api
+            dockerfile: deploy/api.Dockerfile
+            build_args: ""
+          - component: web
+            dockerfile: deploy/web.Dockerfile
+            build_args: PACTLINE_IDENTITY_MODE=lark
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: metadata
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/pactline-${{ matrix.component }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=sha,format=long
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          build-args: ${{ matrix.build_args }}
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+          provenance: true
+          sbom: true

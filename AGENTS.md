@@ -188,6 +188,8 @@ make up            # PostgreSQL 16 on localhost:5433
 make run           # migrate and run Go API on localhost:8080
 make web-install   # install frontend dependencies
 make web-dev       # Vite on localhost:5173
+make stack-up      # build and run the complete local container stack
+make stack-down    # stop the local stack while preserving its database volume
 
 make test          # all Go tests; starts PostgreSQL; serialized with -p 1
 make web-test      # Vitest component tests
