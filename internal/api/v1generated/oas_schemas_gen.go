@@ -4,10 +4,474 @@ package api
 
 import (
 	"net/url"
+	"time"
 
 	"github.com/go-faster/errors"
 	"github.com/google/uuid"
 )
+
+// Ref: #/components/schemas/AcceptanceCheck
+type AcceptanceCheck struct {
+	ID                uuid.UUID                  `json:"id"`
+	CriterionID       uuid.UUID                  `json:"criterion_id"`
+	CriterionRevision int                        `json:"criterion_revision"`
+	Outcome           AcceptanceOutcome          `json:"outcome"`
+	Evidence          string                     `json:"evidence"`
+	CheckerType       AcceptanceCheckCheckerType `json:"checker_type"`
+	CheckedByUserID   OptUUID                    `json:"checked_by_user_id"`
+	CheckerRef        OptString                  `json:"checker_ref"`
+	CheckedAt         time.Time                  `json:"checked_at"`
+}
+
+// GetID returns the value of ID.
+func (s *AcceptanceCheck) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetCriterionID returns the value of CriterionID.
+func (s *AcceptanceCheck) GetCriterionID() uuid.UUID {
+	return s.CriterionID
+}
+
+// GetCriterionRevision returns the value of CriterionRevision.
+func (s *AcceptanceCheck) GetCriterionRevision() int {
+	return s.CriterionRevision
+}
+
+// GetOutcome returns the value of Outcome.
+func (s *AcceptanceCheck) GetOutcome() AcceptanceOutcome {
+	return s.Outcome
+}
+
+// GetEvidence returns the value of Evidence.
+func (s *AcceptanceCheck) GetEvidence() string {
+	return s.Evidence
+}
+
+// GetCheckerType returns the value of CheckerType.
+func (s *AcceptanceCheck) GetCheckerType() AcceptanceCheckCheckerType {
+	return s.CheckerType
+}
+
+// GetCheckedByUserID returns the value of CheckedByUserID.
+func (s *AcceptanceCheck) GetCheckedByUserID() OptUUID {
+	return s.CheckedByUserID
+}
+
+// GetCheckerRef returns the value of CheckerRef.
+func (s *AcceptanceCheck) GetCheckerRef() OptString {
+	return s.CheckerRef
+}
+
+// GetCheckedAt returns the value of CheckedAt.
+func (s *AcceptanceCheck) GetCheckedAt() time.Time {
+	return s.CheckedAt
+}
+
+// SetID sets the value of ID.
+func (s *AcceptanceCheck) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetCriterionID sets the value of CriterionID.
+func (s *AcceptanceCheck) SetCriterionID(val uuid.UUID) {
+	s.CriterionID = val
+}
+
+// SetCriterionRevision sets the value of CriterionRevision.
+func (s *AcceptanceCheck) SetCriterionRevision(val int) {
+	s.CriterionRevision = val
+}
+
+// SetOutcome sets the value of Outcome.
+func (s *AcceptanceCheck) SetOutcome(val AcceptanceOutcome) {
+	s.Outcome = val
+}
+
+// SetEvidence sets the value of Evidence.
+func (s *AcceptanceCheck) SetEvidence(val string) {
+	s.Evidence = val
+}
+
+// SetCheckerType sets the value of CheckerType.
+func (s *AcceptanceCheck) SetCheckerType(val AcceptanceCheckCheckerType) {
+	s.CheckerType = val
+}
+
+// SetCheckedByUserID sets the value of CheckedByUserID.
+func (s *AcceptanceCheck) SetCheckedByUserID(val OptUUID) {
+	s.CheckedByUserID = val
+}
+
+// SetCheckerRef sets the value of CheckerRef.
+func (s *AcceptanceCheck) SetCheckerRef(val OptString) {
+	s.CheckerRef = val
+}
+
+// SetCheckedAt sets the value of CheckedAt.
+func (s *AcceptanceCheck) SetCheckedAt(val time.Time) {
+	s.CheckedAt = val
+}
+
+type AcceptanceCheckCheckerType string
+
+const (
+	AcceptanceCheckCheckerTypeUser   AcceptanceCheckCheckerType = "user"
+	AcceptanceCheckCheckerTypeAgent  AcceptanceCheckCheckerType = "agent"
+	AcceptanceCheckCheckerTypeSystem AcceptanceCheckCheckerType = "system"
+)
+
+// AllValues returns all AcceptanceCheckCheckerType values.
+func (AcceptanceCheckCheckerType) AllValues() []AcceptanceCheckCheckerType {
+	return []AcceptanceCheckCheckerType{
+		AcceptanceCheckCheckerTypeUser,
+		AcceptanceCheckCheckerTypeAgent,
+		AcceptanceCheckCheckerTypeSystem,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s AcceptanceCheckCheckerType) MarshalText() ([]byte, error) {
+	switch s {
+	case AcceptanceCheckCheckerTypeUser:
+		return []byte(s), nil
+	case AcceptanceCheckCheckerTypeAgent:
+		return []byte(s), nil
+	case AcceptanceCheckCheckerTypeSystem:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *AcceptanceCheckCheckerType) UnmarshalText(data []byte) error {
+	switch AcceptanceCheckCheckerType(data) {
+	case AcceptanceCheckCheckerTypeUser:
+		*s = AcceptanceCheckCheckerTypeUser
+		return nil
+	case AcceptanceCheckCheckerTypeAgent:
+		*s = AcceptanceCheckCheckerTypeAgent
+		return nil
+	case AcceptanceCheckCheckerTypeSystem:
+		*s = AcceptanceCheckCheckerTypeSystem
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/AcceptanceCheckCreate
+type AcceptanceCheckCreate struct {
+	CriterionRevision int               `json:"criterion_revision"`
+	Outcome           AcceptanceOutcome `json:"outcome"`
+	Evidence          string            `json:"evidence"`
+}
+
+// GetCriterionRevision returns the value of CriterionRevision.
+func (s *AcceptanceCheckCreate) GetCriterionRevision() int {
+	return s.CriterionRevision
+}
+
+// GetOutcome returns the value of Outcome.
+func (s *AcceptanceCheckCreate) GetOutcome() AcceptanceOutcome {
+	return s.Outcome
+}
+
+// GetEvidence returns the value of Evidence.
+func (s *AcceptanceCheckCreate) GetEvidence() string {
+	return s.Evidence
+}
+
+// SetCriterionRevision sets the value of CriterionRevision.
+func (s *AcceptanceCheckCreate) SetCriterionRevision(val int) {
+	s.CriterionRevision = val
+}
+
+// SetOutcome sets the value of Outcome.
+func (s *AcceptanceCheckCreate) SetOutcome(val AcceptanceOutcome) {
+	s.Outcome = val
+}
+
+// SetEvidence sets the value of Evidence.
+func (s *AcceptanceCheckCreate) SetEvidence(val string) {
+	s.Evidence = val
+}
+
+// AcceptanceCheckCreatedHeaders wraps AcceptanceCheck with response headers.
+type AcceptanceCheckCreatedHeaders struct {
+	IdempotencyReplayed OptBool
+	Location            OptString
+	RatelimitLimit      OptInt
+	RatelimitRemaining  OptInt
+	RatelimitReset      OptInt
+	XRequestID          OptString
+	Response            AcceptanceCheck
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *AcceptanceCheckCreatedHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetLocation returns the value of Location.
+func (s *AcceptanceCheckCreatedHeaders) GetLocation() OptString {
+	return s.Location
+}
+
+// GetRatelimitLimit returns the value of RatelimitLimit.
+func (s *AcceptanceCheckCreatedHeaders) GetRatelimitLimit() OptInt {
+	return s.RatelimitLimit
+}
+
+// GetRatelimitRemaining returns the value of RatelimitRemaining.
+func (s *AcceptanceCheckCreatedHeaders) GetRatelimitRemaining() OptInt {
+	return s.RatelimitRemaining
+}
+
+// GetRatelimitReset returns the value of RatelimitReset.
+func (s *AcceptanceCheckCreatedHeaders) GetRatelimitReset() OptInt {
+	return s.RatelimitReset
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *AcceptanceCheckCreatedHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *AcceptanceCheckCreatedHeaders) GetResponse() AcceptanceCheck {
+	return s.Response
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *AcceptanceCheckCreatedHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetLocation sets the value of Location.
+func (s *AcceptanceCheckCreatedHeaders) SetLocation(val OptString) {
+	s.Location = val
+}
+
+// SetRatelimitLimit sets the value of RatelimitLimit.
+func (s *AcceptanceCheckCreatedHeaders) SetRatelimitLimit(val OptInt) {
+	s.RatelimitLimit = val
+}
+
+// SetRatelimitRemaining sets the value of RatelimitRemaining.
+func (s *AcceptanceCheckCreatedHeaders) SetRatelimitRemaining(val OptInt) {
+	s.RatelimitRemaining = val
+}
+
+// SetRatelimitReset sets the value of RatelimitReset.
+func (s *AcceptanceCheckCreatedHeaders) SetRatelimitReset(val OptInt) {
+	s.RatelimitReset = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *AcceptanceCheckCreatedHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *AcceptanceCheckCreatedHeaders) SetResponse(val AcceptanceCheck) {
+	s.Response = val
+}
+
+func (*AcceptanceCheckCreatedHeaders) createAcceptanceCheckRes() {}
+
+// Ref: #/components/schemas/AcceptanceCriterion
+type AcceptanceCriterion struct {
+	ID                       uuid.UUID          `json:"id"`
+	Version                  int64              `json:"version"`
+	ProjectID                OptUUID            `json:"project_id"`
+	MilestoneID              OptUUID            `json:"milestone_id"`
+	TaskID                   OptUUID            `json:"task_id"`
+	Criterion                string             `json:"criterion"`
+	VerificationInstructions string             `json:"verification_instructions"`
+	Revision                 int                `json:"revision"`
+	Position                 int                `json:"position"`
+	CurrentCheck             OptAcceptanceCheck `json:"current_check"`
+	CreatedAt                time.Time          `json:"created_at"`
+	UpdatedAt                time.Time          `json:"updated_at"`
+}
+
+// GetID returns the value of ID.
+func (s *AcceptanceCriterion) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetVersion returns the value of Version.
+func (s *AcceptanceCriterion) GetVersion() int64 {
+	return s.Version
+}
+
+// GetProjectID returns the value of ProjectID.
+func (s *AcceptanceCriterion) GetProjectID() OptUUID {
+	return s.ProjectID
+}
+
+// GetMilestoneID returns the value of MilestoneID.
+func (s *AcceptanceCriterion) GetMilestoneID() OptUUID {
+	return s.MilestoneID
+}
+
+// GetTaskID returns the value of TaskID.
+func (s *AcceptanceCriterion) GetTaskID() OptUUID {
+	return s.TaskID
+}
+
+// GetCriterion returns the value of Criterion.
+func (s *AcceptanceCriterion) GetCriterion() string {
+	return s.Criterion
+}
+
+// GetVerificationInstructions returns the value of VerificationInstructions.
+func (s *AcceptanceCriterion) GetVerificationInstructions() string {
+	return s.VerificationInstructions
+}
+
+// GetRevision returns the value of Revision.
+func (s *AcceptanceCriterion) GetRevision() int {
+	return s.Revision
+}
+
+// GetPosition returns the value of Position.
+func (s *AcceptanceCriterion) GetPosition() int {
+	return s.Position
+}
+
+// GetCurrentCheck returns the value of CurrentCheck.
+func (s *AcceptanceCriterion) GetCurrentCheck() OptAcceptanceCheck {
+	return s.CurrentCheck
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *AcceptanceCriterion) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *AcceptanceCriterion) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// SetID sets the value of ID.
+func (s *AcceptanceCriterion) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetVersion sets the value of Version.
+func (s *AcceptanceCriterion) SetVersion(val int64) {
+	s.Version = val
+}
+
+// SetProjectID sets the value of ProjectID.
+func (s *AcceptanceCriterion) SetProjectID(val OptUUID) {
+	s.ProjectID = val
+}
+
+// SetMilestoneID sets the value of MilestoneID.
+func (s *AcceptanceCriterion) SetMilestoneID(val OptUUID) {
+	s.MilestoneID = val
+}
+
+// SetTaskID sets the value of TaskID.
+func (s *AcceptanceCriterion) SetTaskID(val OptUUID) {
+	s.TaskID = val
+}
+
+// SetCriterion sets the value of Criterion.
+func (s *AcceptanceCriterion) SetCriterion(val string) {
+	s.Criterion = val
+}
+
+// SetVerificationInstructions sets the value of VerificationInstructions.
+func (s *AcceptanceCriterion) SetVerificationInstructions(val string) {
+	s.VerificationInstructions = val
+}
+
+// SetRevision sets the value of Revision.
+func (s *AcceptanceCriterion) SetRevision(val int) {
+	s.Revision = val
+}
+
+// SetPosition sets the value of Position.
+func (s *AcceptanceCriterion) SetPosition(val int) {
+	s.Position = val
+}
+
+// SetCurrentCheck sets the value of CurrentCheck.
+func (s *AcceptanceCriterion) SetCurrentCheck(val OptAcceptanceCheck) {
+	s.CurrentCheck = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *AcceptanceCriterion) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *AcceptanceCriterion) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// Ref: #/components/schemas/AcceptanceOutcome
+type AcceptanceOutcome string
+
+const (
+	AcceptanceOutcomePassed AcceptanceOutcome = "passed"
+	AcceptanceOutcomeFailed AcceptanceOutcome = "failed"
+	AcceptanceOutcomeUnable AcceptanceOutcome = "unable"
+	AcceptanceOutcomeWaived AcceptanceOutcome = "waived"
+)
+
+// AllValues returns all AcceptanceOutcome values.
+func (AcceptanceOutcome) AllValues() []AcceptanceOutcome {
+	return []AcceptanceOutcome{
+		AcceptanceOutcomePassed,
+		AcceptanceOutcomeFailed,
+		AcceptanceOutcomeUnable,
+		AcceptanceOutcomeWaived,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s AcceptanceOutcome) MarshalText() ([]byte, error) {
+	switch s {
+	case AcceptanceOutcomePassed:
+		return []byte(s), nil
+	case AcceptanceOutcomeFailed:
+		return []byte(s), nil
+	case AcceptanceOutcomeUnable:
+		return []byte(s), nil
+	case AcceptanceOutcomeWaived:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *AcceptanceOutcome) UnmarshalText(data []byte) error {
+	switch AcceptanceOutcome(data) {
+	case AcceptanceOutcomePassed:
+		*s = AcceptanceOutcomePassed
+		return nil
+	case AcceptanceOutcomeFailed:
+		*s = AcceptanceOutcomeFailed
+		return nil
+	case AcceptanceOutcomeUnable:
+		*s = AcceptanceOutcomeUnable
+		return nil
+	case AcceptanceOutcomeWaived:
+		*s = AcceptanceOutcomeWaived
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
 
 type BearerAuth struct {
 	Token string
@@ -32,6 +496,710 @@ func (s *BearerAuth) SetToken(val string) {
 // SetRoles sets the value of Roles.
 func (s *BearerAuth) SetRoles(val []string) {
 	s.Roles = val
+}
+
+// Ref: #/components/schemas/Comment
+type Comment struct {
+	ID        uuid.UUID `json:"id"`
+	TaskID    uuid.UUID `json:"task_id"`
+	AuthorID  uuid.UUID `json:"author_id"`
+	Body      string    `json:"body"`
+	Version   int64     `json:"version"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// GetID returns the value of ID.
+func (s *Comment) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetTaskID returns the value of TaskID.
+func (s *Comment) GetTaskID() uuid.UUID {
+	return s.TaskID
+}
+
+// GetAuthorID returns the value of AuthorID.
+func (s *Comment) GetAuthorID() uuid.UUID {
+	return s.AuthorID
+}
+
+// GetBody returns the value of Body.
+func (s *Comment) GetBody() string {
+	return s.Body
+}
+
+// GetVersion returns the value of Version.
+func (s *Comment) GetVersion() int64 {
+	return s.Version
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *Comment) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *Comment) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// SetID sets the value of ID.
+func (s *Comment) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetTaskID sets the value of TaskID.
+func (s *Comment) SetTaskID(val uuid.UUID) {
+	s.TaskID = val
+}
+
+// SetAuthorID sets the value of AuthorID.
+func (s *Comment) SetAuthorID(val uuid.UUID) {
+	s.AuthorID = val
+}
+
+// SetBody sets the value of Body.
+func (s *Comment) SetBody(val string) {
+	s.Body = val
+}
+
+// SetVersion sets the value of Version.
+func (s *Comment) SetVersion(val int64) {
+	s.Version = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *Comment) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *Comment) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// CommentCreatedHeaders wraps Comment with response headers.
+type CommentCreatedHeaders struct {
+	Etag                OptString
+	IdempotencyReplayed OptBool
+	Location            OptString
+	RatelimitLimit      OptInt
+	RatelimitRemaining  OptInt
+	RatelimitReset      OptInt
+	XRequestID          OptString
+	Response            Comment
+}
+
+// GetEtag returns the value of Etag.
+func (s *CommentCreatedHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *CommentCreatedHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetLocation returns the value of Location.
+func (s *CommentCreatedHeaders) GetLocation() OptString {
+	return s.Location
+}
+
+// GetRatelimitLimit returns the value of RatelimitLimit.
+func (s *CommentCreatedHeaders) GetRatelimitLimit() OptInt {
+	return s.RatelimitLimit
+}
+
+// GetRatelimitRemaining returns the value of RatelimitRemaining.
+func (s *CommentCreatedHeaders) GetRatelimitRemaining() OptInt {
+	return s.RatelimitRemaining
+}
+
+// GetRatelimitReset returns the value of RatelimitReset.
+func (s *CommentCreatedHeaders) GetRatelimitReset() OptInt {
+	return s.RatelimitReset
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *CommentCreatedHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *CommentCreatedHeaders) GetResponse() Comment {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *CommentCreatedHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *CommentCreatedHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetLocation sets the value of Location.
+func (s *CommentCreatedHeaders) SetLocation(val OptString) {
+	s.Location = val
+}
+
+// SetRatelimitLimit sets the value of RatelimitLimit.
+func (s *CommentCreatedHeaders) SetRatelimitLimit(val OptInt) {
+	s.RatelimitLimit = val
+}
+
+// SetRatelimitRemaining sets the value of RatelimitRemaining.
+func (s *CommentCreatedHeaders) SetRatelimitRemaining(val OptInt) {
+	s.RatelimitRemaining = val
+}
+
+// SetRatelimitReset sets the value of RatelimitReset.
+func (s *CommentCreatedHeaders) SetRatelimitReset(val OptInt) {
+	s.RatelimitReset = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *CommentCreatedHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *CommentCreatedHeaders) SetResponse(val Comment) {
+	s.Response = val
+}
+
+func (*CommentCreatedHeaders) createTaskCommentRes() {}
+
+// CommentHeaders wraps Comment with response headers.
+type CommentHeaders struct {
+	Etag                OptString
+	IdempotencyReplayed OptBool
+	RatelimitLimit      OptInt
+	RatelimitRemaining  OptInt
+	RatelimitReset      OptInt
+	XRequestID          OptString
+	Response            Comment
+}
+
+// GetEtag returns the value of Etag.
+func (s *CommentHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *CommentHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetRatelimitLimit returns the value of RatelimitLimit.
+func (s *CommentHeaders) GetRatelimitLimit() OptInt {
+	return s.RatelimitLimit
+}
+
+// GetRatelimitRemaining returns the value of RatelimitRemaining.
+func (s *CommentHeaders) GetRatelimitRemaining() OptInt {
+	return s.RatelimitRemaining
+}
+
+// GetRatelimitReset returns the value of RatelimitReset.
+func (s *CommentHeaders) GetRatelimitReset() OptInt {
+	return s.RatelimitReset
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *CommentHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *CommentHeaders) GetResponse() Comment {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *CommentHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *CommentHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetRatelimitLimit sets the value of RatelimitLimit.
+func (s *CommentHeaders) SetRatelimitLimit(val OptInt) {
+	s.RatelimitLimit = val
+}
+
+// SetRatelimitRemaining sets the value of RatelimitRemaining.
+func (s *CommentHeaders) SetRatelimitRemaining(val OptInt) {
+	s.RatelimitRemaining = val
+}
+
+// SetRatelimitReset sets the value of RatelimitReset.
+func (s *CommentHeaders) SetRatelimitReset(val OptInt) {
+	s.RatelimitReset = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *CommentHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *CommentHeaders) SetResponse(val Comment) {
+	s.Response = val
+}
+
+func (*CommentHeaders) updateTaskCommentRes() {}
+
+// Merged schema.
+// Ref: #/components/schemas/CommentList
+type CommentList struct {
+	NextCursor OptString `json:"next_cursor"`
+	Items      []Comment `json:"items"`
+}
+
+// GetNextCursor returns the value of NextCursor.
+func (s *CommentList) GetNextCursor() OptString {
+	return s.NextCursor
+}
+
+// GetItems returns the value of Items.
+func (s *CommentList) GetItems() []Comment {
+	return s.Items
+}
+
+// SetNextCursor sets the value of NextCursor.
+func (s *CommentList) SetNextCursor(val OptString) {
+	s.NextCursor = val
+}
+
+// SetItems sets the value of Items.
+func (s *CommentList) SetItems(val []Comment) {
+	s.Items = val
+}
+
+// CommentListHeaders wraps CommentList with response headers.
+type CommentListHeaders struct {
+	RatelimitLimit     OptInt
+	RatelimitRemaining OptInt
+	RatelimitReset     OptInt
+	XRequestID         OptString
+	Response           CommentList
+}
+
+// GetRatelimitLimit returns the value of RatelimitLimit.
+func (s *CommentListHeaders) GetRatelimitLimit() OptInt {
+	return s.RatelimitLimit
+}
+
+// GetRatelimitRemaining returns the value of RatelimitRemaining.
+func (s *CommentListHeaders) GetRatelimitRemaining() OptInt {
+	return s.RatelimitRemaining
+}
+
+// GetRatelimitReset returns the value of RatelimitReset.
+func (s *CommentListHeaders) GetRatelimitReset() OptInt {
+	return s.RatelimitReset
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *CommentListHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *CommentListHeaders) GetResponse() CommentList {
+	return s.Response
+}
+
+// SetRatelimitLimit sets the value of RatelimitLimit.
+func (s *CommentListHeaders) SetRatelimitLimit(val OptInt) {
+	s.RatelimitLimit = val
+}
+
+// SetRatelimitRemaining sets the value of RatelimitRemaining.
+func (s *CommentListHeaders) SetRatelimitRemaining(val OptInt) {
+	s.RatelimitRemaining = val
+}
+
+// SetRatelimitReset sets the value of RatelimitReset.
+func (s *CommentListHeaders) SetRatelimitReset(val OptInt) {
+	s.RatelimitReset = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *CommentListHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *CommentListHeaders) SetResponse(val CommentList) {
+	s.Response = val
+}
+
+func (*CommentListHeaders) listTaskCommentsRes() {}
+
+// Ref: #/components/schemas/CommentWrite
+type CommentWrite struct {
+	Body string `json:"body"`
+}
+
+// GetBody returns the value of Body.
+func (s *CommentWrite) GetBody() string {
+	return s.Body
+}
+
+// SetBody sets the value of Body.
+func (s *CommentWrite) SetBody(val string) {
+	s.Body = val
+}
+
+// Ref: #/components/schemas/CriterionCreate
+type CriterionCreate struct {
+	Criterion                string `json:"criterion"`
+	VerificationInstructions string `json:"verification_instructions"`
+	Position                 int    `json:"position"`
+}
+
+// GetCriterion returns the value of Criterion.
+func (s *CriterionCreate) GetCriterion() string {
+	return s.Criterion
+}
+
+// GetVerificationInstructions returns the value of VerificationInstructions.
+func (s *CriterionCreate) GetVerificationInstructions() string {
+	return s.VerificationInstructions
+}
+
+// GetPosition returns the value of Position.
+func (s *CriterionCreate) GetPosition() int {
+	return s.Position
+}
+
+// SetCriterion sets the value of Criterion.
+func (s *CriterionCreate) SetCriterion(val string) {
+	s.Criterion = val
+}
+
+// SetVerificationInstructions sets the value of VerificationInstructions.
+func (s *CriterionCreate) SetVerificationInstructions(val string) {
+	s.VerificationInstructions = val
+}
+
+// SetPosition sets the value of Position.
+func (s *CriterionCreate) SetPosition(val int) {
+	s.Position = val
+}
+
+// CriterionCreatedHeaders wraps AcceptanceCriterion with response headers.
+type CriterionCreatedHeaders struct {
+	Etag                OptString
+	IdempotencyReplayed OptBool
+	Location            OptString
+	RatelimitLimit      OptInt
+	RatelimitRemaining  OptInt
+	RatelimitReset      OptInt
+	XRequestID          OptString
+	Response            AcceptanceCriterion
+}
+
+// GetEtag returns the value of Etag.
+func (s *CriterionCreatedHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *CriterionCreatedHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetLocation returns the value of Location.
+func (s *CriterionCreatedHeaders) GetLocation() OptString {
+	return s.Location
+}
+
+// GetRatelimitLimit returns the value of RatelimitLimit.
+func (s *CriterionCreatedHeaders) GetRatelimitLimit() OptInt {
+	return s.RatelimitLimit
+}
+
+// GetRatelimitRemaining returns the value of RatelimitRemaining.
+func (s *CriterionCreatedHeaders) GetRatelimitRemaining() OptInt {
+	return s.RatelimitRemaining
+}
+
+// GetRatelimitReset returns the value of RatelimitReset.
+func (s *CriterionCreatedHeaders) GetRatelimitReset() OptInt {
+	return s.RatelimitReset
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *CriterionCreatedHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *CriterionCreatedHeaders) GetResponse() AcceptanceCriterion {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *CriterionCreatedHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *CriterionCreatedHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetLocation sets the value of Location.
+func (s *CriterionCreatedHeaders) SetLocation(val OptString) {
+	s.Location = val
+}
+
+// SetRatelimitLimit sets the value of RatelimitLimit.
+func (s *CriterionCreatedHeaders) SetRatelimitLimit(val OptInt) {
+	s.RatelimitLimit = val
+}
+
+// SetRatelimitRemaining sets the value of RatelimitRemaining.
+func (s *CriterionCreatedHeaders) SetRatelimitRemaining(val OptInt) {
+	s.RatelimitRemaining = val
+}
+
+// SetRatelimitReset sets the value of RatelimitReset.
+func (s *CriterionCreatedHeaders) SetRatelimitReset(val OptInt) {
+	s.RatelimitReset = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *CriterionCreatedHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *CriterionCreatedHeaders) SetResponse(val AcceptanceCriterion) {
+	s.Response = val
+}
+
+func (*CriterionCreatedHeaders) createMilestoneCriterionRes() {}
+func (*CriterionCreatedHeaders) createProjectCriterionRes()   {}
+func (*CriterionCreatedHeaders) createTaskCriterionRes()      {}
+
+// CriterionHeaders wraps AcceptanceCriterion with response headers.
+type CriterionHeaders struct {
+	Etag                OptString
+	IdempotencyReplayed OptBool
+	RatelimitLimit      OptInt
+	RatelimitRemaining  OptInt
+	RatelimitReset      OptInt
+	XRequestID          OptString
+	Response            AcceptanceCriterion
+}
+
+// GetEtag returns the value of Etag.
+func (s *CriterionHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *CriterionHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetRatelimitLimit returns the value of RatelimitLimit.
+func (s *CriterionHeaders) GetRatelimitLimit() OptInt {
+	return s.RatelimitLimit
+}
+
+// GetRatelimitRemaining returns the value of RatelimitRemaining.
+func (s *CriterionHeaders) GetRatelimitRemaining() OptInt {
+	return s.RatelimitRemaining
+}
+
+// GetRatelimitReset returns the value of RatelimitReset.
+func (s *CriterionHeaders) GetRatelimitReset() OptInt {
+	return s.RatelimitReset
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *CriterionHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *CriterionHeaders) GetResponse() AcceptanceCriterion {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *CriterionHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *CriterionHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetRatelimitLimit sets the value of RatelimitLimit.
+func (s *CriterionHeaders) SetRatelimitLimit(val OptInt) {
+	s.RatelimitLimit = val
+}
+
+// SetRatelimitRemaining sets the value of RatelimitRemaining.
+func (s *CriterionHeaders) SetRatelimitRemaining(val OptInt) {
+	s.RatelimitRemaining = val
+}
+
+// SetRatelimitReset sets the value of RatelimitReset.
+func (s *CriterionHeaders) SetRatelimitReset(val OptInt) {
+	s.RatelimitReset = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *CriterionHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *CriterionHeaders) SetResponse(val AcceptanceCriterion) {
+	s.Response = val
+}
+
+func (*CriterionHeaders) updateCriterionRes() {}
+
+// Merged schema.
+// Ref: #/components/schemas/CriterionList
+type CriterionList struct {
+	NextCursor OptString             `json:"next_cursor"`
+	Items      []AcceptanceCriterion `json:"items"`
+}
+
+// GetNextCursor returns the value of NextCursor.
+func (s *CriterionList) GetNextCursor() OptString {
+	return s.NextCursor
+}
+
+// GetItems returns the value of Items.
+func (s *CriterionList) GetItems() []AcceptanceCriterion {
+	return s.Items
+}
+
+// SetNextCursor sets the value of NextCursor.
+func (s *CriterionList) SetNextCursor(val OptString) {
+	s.NextCursor = val
+}
+
+// SetItems sets the value of Items.
+func (s *CriterionList) SetItems(val []AcceptanceCriterion) {
+	s.Items = val
+}
+
+// CriterionListHeaders wraps CriterionList with response headers.
+type CriterionListHeaders struct {
+	RatelimitLimit     OptInt
+	RatelimitRemaining OptInt
+	RatelimitReset     OptInt
+	XRequestID         OptString
+	Response           CriterionList
+}
+
+// GetRatelimitLimit returns the value of RatelimitLimit.
+func (s *CriterionListHeaders) GetRatelimitLimit() OptInt {
+	return s.RatelimitLimit
+}
+
+// GetRatelimitRemaining returns the value of RatelimitRemaining.
+func (s *CriterionListHeaders) GetRatelimitRemaining() OptInt {
+	return s.RatelimitRemaining
+}
+
+// GetRatelimitReset returns the value of RatelimitReset.
+func (s *CriterionListHeaders) GetRatelimitReset() OptInt {
+	return s.RatelimitReset
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *CriterionListHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *CriterionListHeaders) GetResponse() CriterionList {
+	return s.Response
+}
+
+// SetRatelimitLimit sets the value of RatelimitLimit.
+func (s *CriterionListHeaders) SetRatelimitLimit(val OptInt) {
+	s.RatelimitLimit = val
+}
+
+// SetRatelimitRemaining sets the value of RatelimitRemaining.
+func (s *CriterionListHeaders) SetRatelimitRemaining(val OptInt) {
+	s.RatelimitRemaining = val
+}
+
+// SetRatelimitReset sets the value of RatelimitReset.
+func (s *CriterionListHeaders) SetRatelimitReset(val OptInt) {
+	s.RatelimitReset = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *CriterionListHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *CriterionListHeaders) SetResponse(val CriterionList) {
+	s.Response = val
+}
+
+func (*CriterionListHeaders) listMilestoneCriteriaRes() {}
+func (*CriterionListHeaders) listProjectCriteriaRes()   {}
+func (*CriterionListHeaders) listTaskCriteriaRes()      {}
+
+// Ref: #/components/schemas/CriterionPatch
+type CriterionPatch struct {
+	Criterion                OptString `json:"criterion"`
+	VerificationInstructions OptString `json:"verification_instructions"`
+	Position                 OptInt    `json:"position"`
+}
+
+// GetCriterion returns the value of Criterion.
+func (s *CriterionPatch) GetCriterion() OptString {
+	return s.Criterion
+}
+
+// GetVerificationInstructions returns the value of VerificationInstructions.
+func (s *CriterionPatch) GetVerificationInstructions() OptString {
+	return s.VerificationInstructions
+}
+
+// GetPosition returns the value of Position.
+func (s *CriterionPatch) GetPosition() OptInt {
+	return s.Position
+}
+
+// SetCriterion sets the value of Criterion.
+func (s *CriterionPatch) SetCriterion(val OptString) {
+	s.Criterion = val
+}
+
+// SetVerificationInstructions sets the value of VerificationInstructions.
+func (s *CriterionPatch) SetVerificationInstructions(val OptString) {
+	s.VerificationInstructions = val
+}
+
+// SetPosition sets the value of Position.
+func (s *CriterionPatch) SetPosition(val OptInt) {
+	s.Position = val
 }
 
 // Ref: #/components/schemas/CurrentPrincipal
@@ -93,8 +1261,6 @@ func (s *CurrentPrincipal) SetImpersonating(val bool) {
 	s.Impersonating = val
 }
 
-func (*CurrentPrincipal) getCurrentPrincipalRes() {}
-
 type CurrentPrincipalAuthenticationMethod string
 
 const (
@@ -135,6 +1301,67 @@ func (s *CurrentPrincipalAuthenticationMethod) UnmarshalText(data []byte) error 
 		return errors.Errorf("invalid value: %q", data)
 	}
 }
+
+// CurrentPrincipalHeaders wraps CurrentPrincipal with response headers.
+type CurrentPrincipalHeaders struct {
+	RatelimitLimit     OptInt
+	RatelimitRemaining OptInt
+	RatelimitReset     OptInt
+	XRequestID         OptString
+	Response           CurrentPrincipal
+}
+
+// GetRatelimitLimit returns the value of RatelimitLimit.
+func (s *CurrentPrincipalHeaders) GetRatelimitLimit() OptInt {
+	return s.RatelimitLimit
+}
+
+// GetRatelimitRemaining returns the value of RatelimitRemaining.
+func (s *CurrentPrincipalHeaders) GetRatelimitRemaining() OptInt {
+	return s.RatelimitRemaining
+}
+
+// GetRatelimitReset returns the value of RatelimitReset.
+func (s *CurrentPrincipalHeaders) GetRatelimitReset() OptInt {
+	return s.RatelimitReset
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *CurrentPrincipalHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *CurrentPrincipalHeaders) GetResponse() CurrentPrincipal {
+	return s.Response
+}
+
+// SetRatelimitLimit sets the value of RatelimitLimit.
+func (s *CurrentPrincipalHeaders) SetRatelimitLimit(val OptInt) {
+	s.RatelimitLimit = val
+}
+
+// SetRatelimitRemaining sets the value of RatelimitRemaining.
+func (s *CurrentPrincipalHeaders) SetRatelimitRemaining(val OptInt) {
+	s.RatelimitRemaining = val
+}
+
+// SetRatelimitReset sets the value of RatelimitReset.
+func (s *CurrentPrincipalHeaders) SetRatelimitReset(val OptInt) {
+	s.RatelimitReset = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *CurrentPrincipalHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *CurrentPrincipalHeaders) SetResponse(val CurrentPrincipal) {
+	s.Response = val
+}
+
+func (*CurrentPrincipalHeaders) getCurrentPrincipalRes() {}
 
 type CurrentPrincipalScopesItem string
 
@@ -177,6 +1404,1174 @@ func (s *CurrentPrincipalScopesItem) UnmarshalText(data []byte) error {
 	}
 }
 
+// Ref: #/components/schemas/Label
+type Label struct {
+	ID        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	Version   int64     `json:"version"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// GetID returns the value of ID.
+func (s *Label) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetName returns the value of Name.
+func (s *Label) GetName() string {
+	return s.Name
+}
+
+// GetVersion returns the value of Version.
+func (s *Label) GetVersion() int64 {
+	return s.Version
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *Label) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// SetID sets the value of ID.
+func (s *Label) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetName sets the value of Name.
+func (s *Label) SetName(val string) {
+	s.Name = val
+}
+
+// SetVersion sets the value of Version.
+func (s *Label) SetVersion(val int64) {
+	s.Version = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *Label) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// LabelCreatedHeaders wraps Label with response headers.
+type LabelCreatedHeaders struct {
+	Etag                OptString
+	IdempotencyReplayed OptBool
+	Location            OptString
+	RatelimitLimit      OptInt
+	RatelimitRemaining  OptInt
+	RatelimitReset      OptInt
+	XRequestID          OptString
+	Response            Label
+}
+
+// GetEtag returns the value of Etag.
+func (s *LabelCreatedHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *LabelCreatedHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetLocation returns the value of Location.
+func (s *LabelCreatedHeaders) GetLocation() OptString {
+	return s.Location
+}
+
+// GetRatelimitLimit returns the value of RatelimitLimit.
+func (s *LabelCreatedHeaders) GetRatelimitLimit() OptInt {
+	return s.RatelimitLimit
+}
+
+// GetRatelimitRemaining returns the value of RatelimitRemaining.
+func (s *LabelCreatedHeaders) GetRatelimitRemaining() OptInt {
+	return s.RatelimitRemaining
+}
+
+// GetRatelimitReset returns the value of RatelimitReset.
+func (s *LabelCreatedHeaders) GetRatelimitReset() OptInt {
+	return s.RatelimitReset
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *LabelCreatedHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *LabelCreatedHeaders) GetResponse() Label {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *LabelCreatedHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *LabelCreatedHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetLocation sets the value of Location.
+func (s *LabelCreatedHeaders) SetLocation(val OptString) {
+	s.Location = val
+}
+
+// SetRatelimitLimit sets the value of RatelimitLimit.
+func (s *LabelCreatedHeaders) SetRatelimitLimit(val OptInt) {
+	s.RatelimitLimit = val
+}
+
+// SetRatelimitRemaining sets the value of RatelimitRemaining.
+func (s *LabelCreatedHeaders) SetRatelimitRemaining(val OptInt) {
+	s.RatelimitRemaining = val
+}
+
+// SetRatelimitReset sets the value of RatelimitReset.
+func (s *LabelCreatedHeaders) SetRatelimitReset(val OptInt) {
+	s.RatelimitReset = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *LabelCreatedHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *LabelCreatedHeaders) SetResponse(val Label) {
+	s.Response = val
+}
+
+func (*LabelCreatedHeaders) createLabelRes() {}
+
+// LabelHeaders wraps Label with response headers.
+type LabelHeaders struct {
+	Etag                OptString
+	IdempotencyReplayed OptBool
+	RatelimitLimit      OptInt
+	RatelimitRemaining  OptInt
+	RatelimitReset      OptInt
+	XRequestID          OptString
+	Response            Label
+}
+
+// GetEtag returns the value of Etag.
+func (s *LabelHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *LabelHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetRatelimitLimit returns the value of RatelimitLimit.
+func (s *LabelHeaders) GetRatelimitLimit() OptInt {
+	return s.RatelimitLimit
+}
+
+// GetRatelimitRemaining returns the value of RatelimitRemaining.
+func (s *LabelHeaders) GetRatelimitRemaining() OptInt {
+	return s.RatelimitRemaining
+}
+
+// GetRatelimitReset returns the value of RatelimitReset.
+func (s *LabelHeaders) GetRatelimitReset() OptInt {
+	return s.RatelimitReset
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *LabelHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *LabelHeaders) GetResponse() Label {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *LabelHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *LabelHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetRatelimitLimit sets the value of RatelimitLimit.
+func (s *LabelHeaders) SetRatelimitLimit(val OptInt) {
+	s.RatelimitLimit = val
+}
+
+// SetRatelimitRemaining sets the value of RatelimitRemaining.
+func (s *LabelHeaders) SetRatelimitRemaining(val OptInt) {
+	s.RatelimitRemaining = val
+}
+
+// SetRatelimitReset sets the value of RatelimitReset.
+func (s *LabelHeaders) SetRatelimitReset(val OptInt) {
+	s.RatelimitReset = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *LabelHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *LabelHeaders) SetResponse(val Label) {
+	s.Response = val
+}
+
+func (*LabelHeaders) updateLabelRes() {}
+
+// Merged schema.
+// Ref: #/components/schemas/LabelList
+type LabelList struct {
+	NextCursor OptString `json:"next_cursor"`
+	Items      []Label   `json:"items"`
+}
+
+// GetNextCursor returns the value of NextCursor.
+func (s *LabelList) GetNextCursor() OptString {
+	return s.NextCursor
+}
+
+// GetItems returns the value of Items.
+func (s *LabelList) GetItems() []Label {
+	return s.Items
+}
+
+// SetNextCursor sets the value of NextCursor.
+func (s *LabelList) SetNextCursor(val OptString) {
+	s.NextCursor = val
+}
+
+// SetItems sets the value of Items.
+func (s *LabelList) SetItems(val []Label) {
+	s.Items = val
+}
+
+// LabelListHeaders wraps LabelList with response headers.
+type LabelListHeaders struct {
+	RatelimitLimit     OptInt
+	RatelimitRemaining OptInt
+	RatelimitReset     OptInt
+	XRequestID         OptString
+	Response           LabelList
+}
+
+// GetRatelimitLimit returns the value of RatelimitLimit.
+func (s *LabelListHeaders) GetRatelimitLimit() OptInt {
+	return s.RatelimitLimit
+}
+
+// GetRatelimitRemaining returns the value of RatelimitRemaining.
+func (s *LabelListHeaders) GetRatelimitRemaining() OptInt {
+	return s.RatelimitRemaining
+}
+
+// GetRatelimitReset returns the value of RatelimitReset.
+func (s *LabelListHeaders) GetRatelimitReset() OptInt {
+	return s.RatelimitReset
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *LabelListHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *LabelListHeaders) GetResponse() LabelList {
+	return s.Response
+}
+
+// SetRatelimitLimit sets the value of RatelimitLimit.
+func (s *LabelListHeaders) SetRatelimitLimit(val OptInt) {
+	s.RatelimitLimit = val
+}
+
+// SetRatelimitRemaining sets the value of RatelimitRemaining.
+func (s *LabelListHeaders) SetRatelimitRemaining(val OptInt) {
+	s.RatelimitRemaining = val
+}
+
+// SetRatelimitReset sets the value of RatelimitReset.
+func (s *LabelListHeaders) SetRatelimitReset(val OptInt) {
+	s.RatelimitReset = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *LabelListHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *LabelListHeaders) SetResponse(val LabelList) {
+	s.Response = val
+}
+
+func (*LabelListHeaders) listLabelsRes() {}
+
+// Ref: #/components/schemas/LabelWrite
+type LabelWrite struct {
+	Name string `json:"name"`
+}
+
+// GetName returns the value of Name.
+func (s *LabelWrite) GetName() string {
+	return s.Name
+}
+
+// SetName sets the value of Name.
+func (s *LabelWrite) SetName(val string) {
+	s.Name = val
+}
+
+// Ref: #/components/schemas/LifecycleRequest
+type LifecycleRequest struct {
+	Reason OptString `json:"reason"`
+}
+
+// GetReason returns the value of Reason.
+func (s *LifecycleRequest) GetReason() OptString {
+	return s.Reason
+}
+
+// SetReason sets the value of Reason.
+func (s *LifecycleRequest) SetReason(val OptString) {
+	s.Reason = val
+}
+
+type ListProjectsArchived string
+
+const (
+	ListProjectsArchivedExclude ListProjectsArchived = "exclude"
+	ListProjectsArchivedAll     ListProjectsArchived = "all"
+)
+
+// AllValues returns all ListProjectsArchived values.
+func (ListProjectsArchived) AllValues() []ListProjectsArchived {
+	return []ListProjectsArchived{
+		ListProjectsArchivedExclude,
+		ListProjectsArchivedAll,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s ListProjectsArchived) MarshalText() ([]byte, error) {
+	switch s {
+	case ListProjectsArchivedExclude:
+		return []byte(s), nil
+	case ListProjectsArchivedAll:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *ListProjectsArchived) UnmarshalText(data []byte) error {
+	switch ListProjectsArchived(data) {
+	case ListProjectsArchivedExclude:
+		*s = ListProjectsArchivedExclude
+		return nil
+	case ListProjectsArchivedAll:
+		*s = ListProjectsArchivedAll
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+type ListTasksArchived string
+
+const (
+	ListTasksArchivedExclude ListTasksArchived = "exclude"
+	ListTasksArchivedOnly    ListTasksArchived = "only"
+	ListTasksArchivedAll     ListTasksArchived = "all"
+)
+
+// AllValues returns all ListTasksArchived values.
+func (ListTasksArchived) AllValues() []ListTasksArchived {
+	return []ListTasksArchived{
+		ListTasksArchivedExclude,
+		ListTasksArchivedOnly,
+		ListTasksArchivedAll,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s ListTasksArchived) MarshalText() ([]byte, error) {
+	switch s {
+	case ListTasksArchivedExclude:
+		return []byte(s), nil
+	case ListTasksArchivedOnly:
+		return []byte(s), nil
+	case ListTasksArchivedAll:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *ListTasksArchived) UnmarshalText(data []byte) error {
+	switch ListTasksArchived(data) {
+	case ListTasksArchivedExclude:
+		*s = ListTasksArchivedExclude
+		return nil
+	case ListTasksArchivedOnly:
+		*s = ListTasksArchivedOnly
+		return nil
+	case ListTasksArchivedAll:
+		*s = ListTasksArchivedAll
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+type ListTasksOrder string
+
+const (
+	ListTasksOrderAsc  ListTasksOrder = "asc"
+	ListTasksOrderDesc ListTasksOrder = "desc"
+)
+
+// AllValues returns all ListTasksOrder values.
+func (ListTasksOrder) AllValues() []ListTasksOrder {
+	return []ListTasksOrder{
+		ListTasksOrderAsc,
+		ListTasksOrderDesc,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s ListTasksOrder) MarshalText() ([]byte, error) {
+	switch s {
+	case ListTasksOrderAsc:
+		return []byte(s), nil
+	case ListTasksOrderDesc:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *ListTasksOrder) UnmarshalText(data []byte) error {
+	switch ListTasksOrder(data) {
+	case ListTasksOrderAsc:
+		*s = ListTasksOrderAsc
+		return nil
+	case ListTasksOrderDesc:
+		*s = ListTasksOrderDesc
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+type ListTasksSort string
+
+const (
+	ListTasksSortNumber    ListTasksSort = "number"
+	ListTasksSortUpdatedAt ListTasksSort = "updated_at"
+	ListTasksSortDueDate   ListTasksSort = "due_date"
+	ListTasksSortPriority  ListTasksSort = "priority"
+)
+
+// AllValues returns all ListTasksSort values.
+func (ListTasksSort) AllValues() []ListTasksSort {
+	return []ListTasksSort{
+		ListTasksSortNumber,
+		ListTasksSortUpdatedAt,
+		ListTasksSortDueDate,
+		ListTasksSortPriority,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s ListTasksSort) MarshalText() ([]byte, error) {
+	switch s {
+	case ListTasksSortNumber:
+		return []byte(s), nil
+	case ListTasksSortUpdatedAt:
+		return []byte(s), nil
+	case ListTasksSortDueDate:
+		return []byte(s), nil
+	case ListTasksSortPriority:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *ListTasksSort) UnmarshalText(data []byte) error {
+	switch ListTasksSort(data) {
+	case ListTasksSortNumber:
+		*s = ListTasksSortNumber
+		return nil
+	case ListTasksSortUpdatedAt:
+		*s = ListTasksSortUpdatedAt
+		return nil
+	case ListTasksSortDueDate:
+		*s = ListTasksSortDueDate
+		return nil
+	case ListTasksSortPriority:
+		*s = ListTasksSortPriority
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/Milestone
+type Milestone struct {
+	ID                 uuid.UUID             `json:"id"`
+	ProjectID          uuid.UUID             `json:"project_id"`
+	Version            int64                 `json:"version"`
+	Name               string                `json:"name"`
+	Outcome            string                `json:"outcome"`
+	Description        string                `json:"description"`
+	Status             MilestoneStatus       `json:"status"`
+	TargetDate         OptDate               `json:"target_date"`
+	Position           int                   `json:"position"`
+	CompletedAt        OptDateTime           `json:"completed_at"`
+	CancelledAt        OptDateTime           `json:"cancelled_at"`
+	CreatedAt          time.Time             `json:"created_at"`
+	UpdatedAt          time.Time             `json:"updated_at"`
+	AcceptanceCriteria []AcceptanceCriterion `json:"acceptance_criteria"`
+}
+
+// GetID returns the value of ID.
+func (s *Milestone) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetProjectID returns the value of ProjectID.
+func (s *Milestone) GetProjectID() uuid.UUID {
+	return s.ProjectID
+}
+
+// GetVersion returns the value of Version.
+func (s *Milestone) GetVersion() int64 {
+	return s.Version
+}
+
+// GetName returns the value of Name.
+func (s *Milestone) GetName() string {
+	return s.Name
+}
+
+// GetOutcome returns the value of Outcome.
+func (s *Milestone) GetOutcome() string {
+	return s.Outcome
+}
+
+// GetDescription returns the value of Description.
+func (s *Milestone) GetDescription() string {
+	return s.Description
+}
+
+// GetStatus returns the value of Status.
+func (s *Milestone) GetStatus() MilestoneStatus {
+	return s.Status
+}
+
+// GetTargetDate returns the value of TargetDate.
+func (s *Milestone) GetTargetDate() OptDate {
+	return s.TargetDate
+}
+
+// GetPosition returns the value of Position.
+func (s *Milestone) GetPosition() int {
+	return s.Position
+}
+
+// GetCompletedAt returns the value of CompletedAt.
+func (s *Milestone) GetCompletedAt() OptDateTime {
+	return s.CompletedAt
+}
+
+// GetCancelledAt returns the value of CancelledAt.
+func (s *Milestone) GetCancelledAt() OptDateTime {
+	return s.CancelledAt
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *Milestone) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *Milestone) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// GetAcceptanceCriteria returns the value of AcceptanceCriteria.
+func (s *Milestone) GetAcceptanceCriteria() []AcceptanceCriterion {
+	return s.AcceptanceCriteria
+}
+
+// SetID sets the value of ID.
+func (s *Milestone) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetProjectID sets the value of ProjectID.
+func (s *Milestone) SetProjectID(val uuid.UUID) {
+	s.ProjectID = val
+}
+
+// SetVersion sets the value of Version.
+func (s *Milestone) SetVersion(val int64) {
+	s.Version = val
+}
+
+// SetName sets the value of Name.
+func (s *Milestone) SetName(val string) {
+	s.Name = val
+}
+
+// SetOutcome sets the value of Outcome.
+func (s *Milestone) SetOutcome(val string) {
+	s.Outcome = val
+}
+
+// SetDescription sets the value of Description.
+func (s *Milestone) SetDescription(val string) {
+	s.Description = val
+}
+
+// SetStatus sets the value of Status.
+func (s *Milestone) SetStatus(val MilestoneStatus) {
+	s.Status = val
+}
+
+// SetTargetDate sets the value of TargetDate.
+func (s *Milestone) SetTargetDate(val OptDate) {
+	s.TargetDate = val
+}
+
+// SetPosition sets the value of Position.
+func (s *Milestone) SetPosition(val int) {
+	s.Position = val
+}
+
+// SetCompletedAt sets the value of CompletedAt.
+func (s *Milestone) SetCompletedAt(val OptDateTime) {
+	s.CompletedAt = val
+}
+
+// SetCancelledAt sets the value of CancelledAt.
+func (s *Milestone) SetCancelledAt(val OptDateTime) {
+	s.CancelledAt = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *Milestone) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *Milestone) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// SetAcceptanceCriteria sets the value of AcceptanceCriteria.
+func (s *Milestone) SetAcceptanceCriteria(val []AcceptanceCriterion) {
+	s.AcceptanceCriteria = val
+}
+
+// Ref: #/components/schemas/MilestoneCreate
+type MilestoneCreate struct {
+	Name        string     `json:"name"`
+	Outcome     string     `json:"outcome"`
+	Description OptString  `json:"description"`
+	TargetDate  OptNilDate `json:"target_date"`
+	Position    int        `json:"position"`
+}
+
+// GetName returns the value of Name.
+func (s *MilestoneCreate) GetName() string {
+	return s.Name
+}
+
+// GetOutcome returns the value of Outcome.
+func (s *MilestoneCreate) GetOutcome() string {
+	return s.Outcome
+}
+
+// GetDescription returns the value of Description.
+func (s *MilestoneCreate) GetDescription() OptString {
+	return s.Description
+}
+
+// GetTargetDate returns the value of TargetDate.
+func (s *MilestoneCreate) GetTargetDate() OptNilDate {
+	return s.TargetDate
+}
+
+// GetPosition returns the value of Position.
+func (s *MilestoneCreate) GetPosition() int {
+	return s.Position
+}
+
+// SetName sets the value of Name.
+func (s *MilestoneCreate) SetName(val string) {
+	s.Name = val
+}
+
+// SetOutcome sets the value of Outcome.
+func (s *MilestoneCreate) SetOutcome(val string) {
+	s.Outcome = val
+}
+
+// SetDescription sets the value of Description.
+func (s *MilestoneCreate) SetDescription(val OptString) {
+	s.Description = val
+}
+
+// SetTargetDate sets the value of TargetDate.
+func (s *MilestoneCreate) SetTargetDate(val OptNilDate) {
+	s.TargetDate = val
+}
+
+// SetPosition sets the value of Position.
+func (s *MilestoneCreate) SetPosition(val int) {
+	s.Position = val
+}
+
+// MilestoneCreatedHeaders wraps Milestone with response headers.
+type MilestoneCreatedHeaders struct {
+	Etag                OptString
+	IdempotencyReplayed OptBool
+	Location            OptString
+	RatelimitLimit      OptInt
+	RatelimitRemaining  OptInt
+	RatelimitReset      OptInt
+	XRequestID          OptString
+	Response            Milestone
+}
+
+// GetEtag returns the value of Etag.
+func (s *MilestoneCreatedHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *MilestoneCreatedHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetLocation returns the value of Location.
+func (s *MilestoneCreatedHeaders) GetLocation() OptString {
+	return s.Location
+}
+
+// GetRatelimitLimit returns the value of RatelimitLimit.
+func (s *MilestoneCreatedHeaders) GetRatelimitLimit() OptInt {
+	return s.RatelimitLimit
+}
+
+// GetRatelimitRemaining returns the value of RatelimitRemaining.
+func (s *MilestoneCreatedHeaders) GetRatelimitRemaining() OptInt {
+	return s.RatelimitRemaining
+}
+
+// GetRatelimitReset returns the value of RatelimitReset.
+func (s *MilestoneCreatedHeaders) GetRatelimitReset() OptInt {
+	return s.RatelimitReset
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *MilestoneCreatedHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *MilestoneCreatedHeaders) GetResponse() Milestone {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *MilestoneCreatedHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *MilestoneCreatedHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetLocation sets the value of Location.
+func (s *MilestoneCreatedHeaders) SetLocation(val OptString) {
+	s.Location = val
+}
+
+// SetRatelimitLimit sets the value of RatelimitLimit.
+func (s *MilestoneCreatedHeaders) SetRatelimitLimit(val OptInt) {
+	s.RatelimitLimit = val
+}
+
+// SetRatelimitRemaining sets the value of RatelimitRemaining.
+func (s *MilestoneCreatedHeaders) SetRatelimitRemaining(val OptInt) {
+	s.RatelimitRemaining = val
+}
+
+// SetRatelimitReset sets the value of RatelimitReset.
+func (s *MilestoneCreatedHeaders) SetRatelimitReset(val OptInt) {
+	s.RatelimitReset = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *MilestoneCreatedHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *MilestoneCreatedHeaders) SetResponse(val Milestone) {
+	s.Response = val
+}
+
+func (*MilestoneCreatedHeaders) createMilestoneRes() {}
+
+// MilestoneHeaders wraps Milestone with response headers.
+type MilestoneHeaders struct {
+	Etag                OptString
+	IdempotencyReplayed OptBool
+	RatelimitLimit      OptInt
+	RatelimitRemaining  OptInt
+	RatelimitReset      OptInt
+	XRequestID          OptString
+	Response            Milestone
+}
+
+// GetEtag returns the value of Etag.
+func (s *MilestoneHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *MilestoneHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetRatelimitLimit returns the value of RatelimitLimit.
+func (s *MilestoneHeaders) GetRatelimitLimit() OptInt {
+	return s.RatelimitLimit
+}
+
+// GetRatelimitRemaining returns the value of RatelimitRemaining.
+func (s *MilestoneHeaders) GetRatelimitRemaining() OptInt {
+	return s.RatelimitRemaining
+}
+
+// GetRatelimitReset returns the value of RatelimitReset.
+func (s *MilestoneHeaders) GetRatelimitReset() OptInt {
+	return s.RatelimitReset
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *MilestoneHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *MilestoneHeaders) GetResponse() Milestone {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *MilestoneHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *MilestoneHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetRatelimitLimit sets the value of RatelimitLimit.
+func (s *MilestoneHeaders) SetRatelimitLimit(val OptInt) {
+	s.RatelimitLimit = val
+}
+
+// SetRatelimitRemaining sets the value of RatelimitRemaining.
+func (s *MilestoneHeaders) SetRatelimitRemaining(val OptInt) {
+	s.RatelimitRemaining = val
+}
+
+// SetRatelimitReset sets the value of RatelimitReset.
+func (s *MilestoneHeaders) SetRatelimitReset(val OptInt) {
+	s.RatelimitReset = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *MilestoneHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *MilestoneHeaders) SetResponse(val Milestone) {
+	s.Response = val
+}
+
+func (*MilestoneHeaders) cancelMilestoneRes()   {}
+func (*MilestoneHeaders) completeMilestoneRes() {}
+func (*MilestoneHeaders) reopenMilestoneRes()   {}
+func (*MilestoneHeaders) updateMilestoneRes()   {}
+
+// Ref: #/components/schemas/MilestonePatch
+type MilestonePatch struct {
+	Name        OptString  `json:"name"`
+	Outcome     OptString  `json:"outcome"`
+	Description OptString  `json:"description"`
+	TargetDate  OptNilDate `json:"target_date"`
+	Position    OptInt     `json:"position"`
+}
+
+// GetName returns the value of Name.
+func (s *MilestonePatch) GetName() OptString {
+	return s.Name
+}
+
+// GetOutcome returns the value of Outcome.
+func (s *MilestonePatch) GetOutcome() OptString {
+	return s.Outcome
+}
+
+// GetDescription returns the value of Description.
+func (s *MilestonePatch) GetDescription() OptString {
+	return s.Description
+}
+
+// GetTargetDate returns the value of TargetDate.
+func (s *MilestonePatch) GetTargetDate() OptNilDate {
+	return s.TargetDate
+}
+
+// GetPosition returns the value of Position.
+func (s *MilestonePatch) GetPosition() OptInt {
+	return s.Position
+}
+
+// SetName sets the value of Name.
+func (s *MilestonePatch) SetName(val OptString) {
+	s.Name = val
+}
+
+// SetOutcome sets the value of Outcome.
+func (s *MilestonePatch) SetOutcome(val OptString) {
+	s.Outcome = val
+}
+
+// SetDescription sets the value of Description.
+func (s *MilestonePatch) SetDescription(val OptString) {
+	s.Description = val
+}
+
+// SetTargetDate sets the value of TargetDate.
+func (s *MilestonePatch) SetTargetDate(val OptNilDate) {
+	s.TargetDate = val
+}
+
+// SetPosition sets the value of Position.
+func (s *MilestonePatch) SetPosition(val OptInt) {
+	s.Position = val
+}
+
+// Ref: #/components/schemas/MilestoneRef
+type MilestoneRef struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
+}
+
+// GetID returns the value of ID.
+func (s *MilestoneRef) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetName returns the value of Name.
+func (s *MilestoneRef) GetName() string {
+	return s.Name
+}
+
+// SetID sets the value of ID.
+func (s *MilestoneRef) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetName sets the value of Name.
+func (s *MilestoneRef) SetName(val string) {
+	s.Name = val
+}
+
+// Ref: #/components/schemas/MilestoneStatus
+type MilestoneStatus string
+
+const (
+	MilestoneStatusOpen      MilestoneStatus = "open"
+	MilestoneStatusCompleted MilestoneStatus = "completed"
+	MilestoneStatusCancelled MilestoneStatus = "cancelled"
+)
+
+// AllValues returns all MilestoneStatus values.
+func (MilestoneStatus) AllValues() []MilestoneStatus {
+	return []MilestoneStatus{
+		MilestoneStatusOpen,
+		MilestoneStatusCompleted,
+		MilestoneStatusCancelled,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s MilestoneStatus) MarshalText() ([]byte, error) {
+	switch s {
+	case MilestoneStatusOpen:
+		return []byte(s), nil
+	case MilestoneStatusCompleted:
+		return []byte(s), nil
+	case MilestoneStatusCancelled:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *MilestoneStatus) UnmarshalText(data []byte) error {
+	switch MilestoneStatus(data) {
+	case MilestoneStatusOpen:
+		*s = MilestoneStatusOpen
+		return nil
+	case MilestoneStatusCompleted:
+		*s = MilestoneStatusCompleted
+		return nil
+	case MilestoneStatusCancelled:
+		*s = MilestoneStatusCancelled
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/responses/NoContent
+type NoContent struct {
+	IdempotencyReplayed OptBool
+	RatelimitLimit      OptInt
+	RatelimitRemaining  OptInt
+	RatelimitReset      OptInt
+	XRequestID          OptString
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *NoContent) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetRatelimitLimit returns the value of RatelimitLimit.
+func (s *NoContent) GetRatelimitLimit() OptInt {
+	return s.RatelimitLimit
+}
+
+// GetRatelimitRemaining returns the value of RatelimitRemaining.
+func (s *NoContent) GetRatelimitRemaining() OptInt {
+	return s.RatelimitRemaining
+}
+
+// GetRatelimitReset returns the value of RatelimitReset.
+func (s *NoContent) GetRatelimitReset() OptInt {
+	return s.RatelimitReset
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *NoContent) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *NoContent) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetRatelimitLimit sets the value of RatelimitLimit.
+func (s *NoContent) SetRatelimitLimit(val OptInt) {
+	s.RatelimitLimit = val
+}
+
+// SetRatelimitRemaining sets the value of RatelimitRemaining.
+func (s *NoContent) SetRatelimitRemaining(val OptInt) {
+	s.RatelimitRemaining = val
+}
+
+// SetRatelimitReset sets the value of RatelimitReset.
+func (s *NoContent) SetRatelimitReset(val OptInt) {
+	s.RatelimitReset = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *NoContent) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+func (*NoContent) deleteCriterionRes()   {}
+func (*NoContent) deleteLabelRes()       {}
+func (*NoContent) deleteTaskCommentRes() {}
+
+// NewOptAcceptanceCheck returns new OptAcceptanceCheck with value set to v.
+func NewOptAcceptanceCheck(v AcceptanceCheck) OptAcceptanceCheck {
+	return OptAcceptanceCheck{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptAcceptanceCheck is optional AcceptanceCheck.
+type OptAcceptanceCheck struct {
+	Value AcceptanceCheck
+	Set   bool
+}
+
+// IsSet returns true if OptAcceptanceCheck was set.
+func (o OptAcceptanceCheck) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptAcceptanceCheck) Reset() {
+	var v AcceptanceCheck
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptAcceptanceCheck) SetTo(v AcceptanceCheck) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptAcceptanceCheck) Get() (v AcceptanceCheck, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptAcceptanceCheck) Or(d AcceptanceCheck) AcceptanceCheck {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptBool returns new OptBool with value set to v.
 func NewOptBool(v bool) OptBool {
 	return OptBool{
@@ -217,6 +2612,747 @@ func (o OptBool) Get() (v bool, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptBool) Or(d bool) bool {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptDate returns new OptDate with value set to v.
+func NewOptDate(v time.Time) OptDate {
+	return OptDate{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptDate is optional time.Time.
+type OptDate struct {
+	Value time.Time
+	Set   bool
+}
+
+// IsSet returns true if OptDate was set.
+func (o OptDate) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptDate) Reset() {
+	var v time.Time
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptDate) SetTo(v time.Time) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptDate) Get() (v time.Time, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptDate) Or(d time.Time) time.Time {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptDateTime returns new OptDateTime with value set to v.
+func NewOptDateTime(v time.Time) OptDateTime {
+	return OptDateTime{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptDateTime is optional time.Time.
+type OptDateTime struct {
+	Value time.Time
+	Set   bool
+}
+
+// IsSet returns true if OptDateTime was set.
+func (o OptDateTime) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptDateTime) Reset() {
+	var v time.Time
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptDateTime) SetTo(v time.Time) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptDateTime) Get() (v time.Time, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptDateTime) Or(d time.Time) time.Time {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptInt returns new OptInt with value set to v.
+func NewOptInt(v int) OptInt {
+	return OptInt{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptInt is optional int.
+type OptInt struct {
+	Value int
+	Set   bool
+}
+
+// IsSet returns true if OptInt was set.
+func (o OptInt) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptInt) Reset() {
+	var v int
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptInt) SetTo(v int) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptInt) Get() (v int, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptInt) Or(d int) int {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptInt64 returns new OptInt64 with value set to v.
+func NewOptInt64(v int64) OptInt64 {
+	return OptInt64{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptInt64 is optional int64.
+type OptInt64 struct {
+	Value int64
+	Set   bool
+}
+
+// IsSet returns true if OptInt64 was set.
+func (o OptInt64) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptInt64) Reset() {
+	var v int64
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptInt64) SetTo(v int64) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptInt64) Get() (v int64, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptInt64) Or(d int64) int64 {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptLifecycleRequest returns new OptLifecycleRequest with value set to v.
+func NewOptLifecycleRequest(v LifecycleRequest) OptLifecycleRequest {
+	return OptLifecycleRequest{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptLifecycleRequest is optional LifecycleRequest.
+type OptLifecycleRequest struct {
+	Value LifecycleRequest
+	Set   bool
+}
+
+// IsSet returns true if OptLifecycleRequest was set.
+func (o OptLifecycleRequest) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptLifecycleRequest) Reset() {
+	var v LifecycleRequest
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptLifecycleRequest) SetTo(v LifecycleRequest) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptLifecycleRequest) Get() (v LifecycleRequest, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptLifecycleRequest) Or(d LifecycleRequest) LifecycleRequest {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptListProjectsArchived returns new OptListProjectsArchived with value set to v.
+func NewOptListProjectsArchived(v ListProjectsArchived) OptListProjectsArchived {
+	return OptListProjectsArchived{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptListProjectsArchived is optional ListProjectsArchived.
+type OptListProjectsArchived struct {
+	Value ListProjectsArchived
+	Set   bool
+}
+
+// IsSet returns true if OptListProjectsArchived was set.
+func (o OptListProjectsArchived) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptListProjectsArchived) Reset() {
+	var v ListProjectsArchived
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptListProjectsArchived) SetTo(v ListProjectsArchived) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptListProjectsArchived) Get() (v ListProjectsArchived, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptListProjectsArchived) Or(d ListProjectsArchived) ListProjectsArchived {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptListTasksArchived returns new OptListTasksArchived with value set to v.
+func NewOptListTasksArchived(v ListTasksArchived) OptListTasksArchived {
+	return OptListTasksArchived{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptListTasksArchived is optional ListTasksArchived.
+type OptListTasksArchived struct {
+	Value ListTasksArchived
+	Set   bool
+}
+
+// IsSet returns true if OptListTasksArchived was set.
+func (o OptListTasksArchived) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptListTasksArchived) Reset() {
+	var v ListTasksArchived
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptListTasksArchived) SetTo(v ListTasksArchived) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptListTasksArchived) Get() (v ListTasksArchived, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptListTasksArchived) Or(d ListTasksArchived) ListTasksArchived {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptListTasksOrder returns new OptListTasksOrder with value set to v.
+func NewOptListTasksOrder(v ListTasksOrder) OptListTasksOrder {
+	return OptListTasksOrder{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptListTasksOrder is optional ListTasksOrder.
+type OptListTasksOrder struct {
+	Value ListTasksOrder
+	Set   bool
+}
+
+// IsSet returns true if OptListTasksOrder was set.
+func (o OptListTasksOrder) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptListTasksOrder) Reset() {
+	var v ListTasksOrder
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptListTasksOrder) SetTo(v ListTasksOrder) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptListTasksOrder) Get() (v ListTasksOrder, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptListTasksOrder) Or(d ListTasksOrder) ListTasksOrder {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptListTasksSort returns new OptListTasksSort with value set to v.
+func NewOptListTasksSort(v ListTasksSort) OptListTasksSort {
+	return OptListTasksSort{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptListTasksSort is optional ListTasksSort.
+type OptListTasksSort struct {
+	Value ListTasksSort
+	Set   bool
+}
+
+// IsSet returns true if OptListTasksSort was set.
+func (o OptListTasksSort) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptListTasksSort) Reset() {
+	var v ListTasksSort
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptListTasksSort) SetTo(v ListTasksSort) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptListTasksSort) Get() (v ListTasksSort, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptListTasksSort) Or(d ListTasksSort) ListTasksSort {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptMilestoneRef returns new OptMilestoneRef with value set to v.
+func NewOptMilestoneRef(v MilestoneRef) OptMilestoneRef {
+	return OptMilestoneRef{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptMilestoneRef is optional MilestoneRef.
+type OptMilestoneRef struct {
+	Value MilestoneRef
+	Set   bool
+}
+
+// IsSet returns true if OptMilestoneRef was set.
+func (o OptMilestoneRef) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptMilestoneRef) Reset() {
+	var v MilestoneRef
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptMilestoneRef) SetTo(v MilestoneRef) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptMilestoneRef) Get() (v MilestoneRef, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptMilestoneRef) Or(d MilestoneRef) MilestoneRef {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptNilDate returns new OptNilDate with value set to v.
+func NewOptNilDate(v time.Time) OptNilDate {
+	return OptNilDate{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptNilDate is optional nullable time.Time.
+type OptNilDate struct {
+	Value time.Time
+	Set   bool
+	Null  bool
+}
+
+// IsSet returns true if OptNilDate was set.
+func (o OptNilDate) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptNilDate) Reset() {
+	var v time.Time
+	o.Value = v
+	o.Set = false
+	o.Null = false
+}
+
+// SetTo sets value to v.
+func (o *OptNilDate) SetTo(v time.Time) {
+	o.Set = true
+	o.Null = false
+	o.Value = v
+}
+
+// IsNull returns true if value is Null.
+func (o OptNilDate) IsNull() bool { return o.Null }
+
+// SetToNull sets value to null.
+func (o *OptNilDate) SetToNull() {
+	o.Set = true
+	o.Null = true
+	var v time.Time
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptNilDate) Get() (v time.Time, ok bool) {
+	if o.Null {
+		return v, false
+	}
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptNilDate) Or(d time.Time) time.Time {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptNilInt64 returns new OptNilInt64 with value set to v.
+func NewOptNilInt64(v int64) OptNilInt64 {
+	return OptNilInt64{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptNilInt64 is optional nullable int64.
+type OptNilInt64 struct {
+	Value int64
+	Set   bool
+	Null  bool
+}
+
+// IsSet returns true if OptNilInt64 was set.
+func (o OptNilInt64) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptNilInt64) Reset() {
+	var v int64
+	o.Value = v
+	o.Set = false
+	o.Null = false
+}
+
+// SetTo sets value to v.
+func (o *OptNilInt64) SetTo(v int64) {
+	o.Set = true
+	o.Null = false
+	o.Value = v
+}
+
+// IsNull returns true if value is Null.
+func (o OptNilInt64) IsNull() bool { return o.Null }
+
+// SetToNull sets value to null.
+func (o *OptNilInt64) SetToNull() {
+	o.Set = true
+	o.Null = true
+	var v int64
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptNilInt64) Get() (v int64, ok bool) {
+	if o.Null {
+		return v, false
+	}
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptNilInt64) Or(d int64) int64 {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptNilUUID returns new OptNilUUID with value set to v.
+func NewOptNilUUID(v uuid.UUID) OptNilUUID {
+	return OptNilUUID{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptNilUUID is optional nullable uuid.UUID.
+type OptNilUUID struct {
+	Value uuid.UUID
+	Set   bool
+	Null  bool
+}
+
+// IsSet returns true if OptNilUUID was set.
+func (o OptNilUUID) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptNilUUID) Reset() {
+	var v uuid.UUID
+	o.Value = v
+	o.Set = false
+	o.Null = false
+}
+
+// SetTo sets value to v.
+func (o *OptNilUUID) SetTo(v uuid.UUID) {
+	o.Set = true
+	o.Null = false
+	o.Value = v
+}
+
+// IsNull returns true if value is Null.
+func (o OptNilUUID) IsNull() bool { return o.Null }
+
+// SetToNull sets value to null.
+func (o *OptNilUUID) SetToNull() {
+	o.Set = true
+	o.Null = true
+	var v uuid.UUID
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptNilUUID) Get() (v uuid.UUID, ok bool) {
+	if o.Null {
+		return v, false
+	}
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptNilUUID) Or(d uuid.UUID) uuid.UUID {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptProjectActivityAuthenticationMethod returns new OptProjectActivityAuthenticationMethod with value set to v.
+func NewOptProjectActivityAuthenticationMethod(v ProjectActivityAuthenticationMethod) OptProjectActivityAuthenticationMethod {
+	return OptProjectActivityAuthenticationMethod{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptProjectActivityAuthenticationMethod is optional ProjectActivityAuthenticationMethod.
+type OptProjectActivityAuthenticationMethod struct {
+	Value ProjectActivityAuthenticationMethod
+	Set   bool
+}
+
+// IsSet returns true if OptProjectActivityAuthenticationMethod was set.
+func (o OptProjectActivityAuthenticationMethod) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptProjectActivityAuthenticationMethod) Reset() {
+	var v ProjectActivityAuthenticationMethod
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptProjectActivityAuthenticationMethod) SetTo(v ProjectActivityAuthenticationMethod) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptProjectActivityAuthenticationMethod) Get() (v ProjectActivityAuthenticationMethod, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptProjectActivityAuthenticationMethod) Or(d ProjectActivityAuthenticationMethod) ProjectActivityAuthenticationMethod {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptProjectRef returns new OptProjectRef with value set to v.
+func NewOptProjectRef(v ProjectRef) OptProjectRef {
+	return OptProjectRef{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptProjectRef is optional ProjectRef.
+type OptProjectRef struct {
+	Value ProjectRef
+	Set   bool
+}
+
+// IsSet returns true if OptProjectRef was set.
+func (o OptProjectRef) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptProjectRef) Reset() {
+	var v ProjectRef
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptProjectRef) SetTo(v ProjectRef) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptProjectRef) Get() (v ProjectRef, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptProjectRef) Or(d ProjectRef) ProjectRef {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -269,6 +3405,144 @@ func (o OptString) Or(d string) string {
 	return d
 }
 
+// NewOptTaskActivityAuthenticationMethod returns new OptTaskActivityAuthenticationMethod with value set to v.
+func NewOptTaskActivityAuthenticationMethod(v TaskActivityAuthenticationMethod) OptTaskActivityAuthenticationMethod {
+	return OptTaskActivityAuthenticationMethod{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptTaskActivityAuthenticationMethod is optional TaskActivityAuthenticationMethod.
+type OptTaskActivityAuthenticationMethod struct {
+	Value TaskActivityAuthenticationMethod
+	Set   bool
+}
+
+// IsSet returns true if OptTaskActivityAuthenticationMethod was set.
+func (o OptTaskActivityAuthenticationMethod) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptTaskActivityAuthenticationMethod) Reset() {
+	var v TaskActivityAuthenticationMethod
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptTaskActivityAuthenticationMethod) SetTo(v TaskActivityAuthenticationMethod) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptTaskActivityAuthenticationMethod) Get() (v TaskActivityAuthenticationMethod, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptTaskActivityAuthenticationMethod) Or(d TaskActivityAuthenticationMethod) TaskActivityAuthenticationMethod {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptTaskPriority returns new OptTaskPriority with value set to v.
+func NewOptTaskPriority(v TaskPriority) OptTaskPriority {
+	return OptTaskPriority{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptTaskPriority is optional TaskPriority.
+type OptTaskPriority struct {
+	Value TaskPriority
+	Set   bool
+}
+
+// IsSet returns true if OptTaskPriority was set.
+func (o OptTaskPriority) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptTaskPriority) Reset() {
+	var v TaskPriority
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptTaskPriority) SetTo(v TaskPriority) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptTaskPriority) Get() (v TaskPriority, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptTaskPriority) Or(d TaskPriority) TaskPriority {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptTaskStatus returns new OptTaskStatus with value set to v.
+func NewOptTaskStatus(v TaskStatus) OptTaskStatus {
+	return OptTaskStatus{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptTaskStatus is optional TaskStatus.
+type OptTaskStatus struct {
+	Value TaskStatus
+	Set   bool
+}
+
+// IsSet returns true if OptTaskStatus was set.
+func (o OptTaskStatus) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptTaskStatus) Reset() {
+	var v TaskStatus
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptTaskStatus) SetTo(v TaskStatus) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptTaskStatus) Get() (v TaskStatus, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptTaskStatus) Or(d TaskStatus) TaskStatus {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptURI returns new OptURI with value set to v.
 func NewOptURI(v url.URL) OptURI {
 	return OptURI{
@@ -315,15 +3589,110 @@ func (o OptURI) Or(d url.URL) url.URL {
 	return d
 }
 
+// NewOptUUID returns new OptUUID with value set to v.
+func NewOptUUID(v uuid.UUID) OptUUID {
+	return OptUUID{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptUUID is optional uuid.UUID.
+type OptUUID struct {
+	Value uuid.UUID
+	Set   bool
+}
+
+// IsSet returns true if OptUUID was set.
+func (o OptUUID) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptUUID) Reset() {
+	var v uuid.UUID
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptUUID) SetTo(v uuid.UUID) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptUUID) Get() (v uuid.UUID, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptUUID) Or(d uuid.UUID) uuid.UUID {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptUserRef returns new OptUserRef with value set to v.
+func NewOptUserRef(v UserRef) OptUserRef {
+	return OptUserRef{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptUserRef is optional UserRef.
+type OptUserRef struct {
+	Value UserRef
+	Set   bool
+}
+
+// IsSet returns true if OptUserRef was set.
+func (o OptUserRef) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptUserRef) Reset() {
+	var v UserRef
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptUserRef) SetTo(v UserRef) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptUserRef) Get() (v UserRef, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptUserRef) Or(d UserRef) UserRef {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // Ref: #/components/schemas/Problem
 type Problem struct {
-	Type      string  `json:"type"`
-	Title     string  `json:"title"`
-	Status    int     `json:"status"`
-	Detail    string  `json:"detail"`
-	Code      string  `json:"code"`
-	RequestID string  `json:"request_id"`
-	Retryable OptBool `json:"retryable"`
+	Type           string            `json:"type"`
+	Title          string            `json:"title"`
+	Status         int               `json:"status"`
+	Detail         string            `json:"detail"`
+	Instance       string            `json:"instance"`
+	Code           ProblemCode       `json:"code"`
+	RequestID      string            `json:"request_id"`
+	Errors         []ValidationError `json:"errors"`
+	CurrentVersion OptInt64          `json:"current_version"`
+	Retryable      OptBool           `json:"retryable"`
 }
 
 // GetType returns the value of Type.
@@ -346,14 +3715,29 @@ func (s *Problem) GetDetail() string {
 	return s.Detail
 }
 
+// GetInstance returns the value of Instance.
+func (s *Problem) GetInstance() string {
+	return s.Instance
+}
+
 // GetCode returns the value of Code.
-func (s *Problem) GetCode() string {
+func (s *Problem) GetCode() ProblemCode {
 	return s.Code
 }
 
 // GetRequestID returns the value of RequestID.
 func (s *Problem) GetRequestID() string {
 	return s.RequestID
+}
+
+// GetErrors returns the value of Errors.
+func (s *Problem) GetErrors() []ValidationError {
+	return s.Errors
+}
+
+// GetCurrentVersion returns the value of CurrentVersion.
+func (s *Problem) GetCurrentVersion() OptInt64 {
+	return s.CurrentVersion
 }
 
 // GetRetryable returns the value of Retryable.
@@ -381,8 +3765,13 @@ func (s *Problem) SetDetail(val string) {
 	s.Detail = val
 }
 
+// SetInstance sets the value of Instance.
+func (s *Problem) SetInstance(val string) {
+	s.Instance = val
+}
+
 // SetCode sets the value of Code.
-func (s *Problem) SetCode(val string) {
+func (s *Problem) SetCode(val ProblemCode) {
 	s.Code = val
 }
 
@@ -391,39 +3780,1298 @@ func (s *Problem) SetRequestID(val string) {
 	s.RequestID = val
 }
 
+// SetErrors sets the value of Errors.
+func (s *Problem) SetErrors(val []ValidationError) {
+	s.Errors = val
+}
+
+// SetCurrentVersion sets the value of CurrentVersion.
+func (s *Problem) SetCurrentVersion(val OptInt64) {
+	s.CurrentVersion = val
+}
+
 // SetRetryable sets the value of Retryable.
 func (s *Problem) SetRetryable(val OptBool) {
 	s.Retryable = val
 }
 
-// ProblemStatusCode wraps Problem with StatusCode.
-type ProblemStatusCode struct {
-	StatusCode int
-	Response   Problem
+// Ref: #/components/schemas/ProblemCode
+type ProblemCode string
+
+const (
+	ProblemCodeAUTHENTICATIONREQUIRED ProblemCode = "AUTHENTICATION_REQUIRED"
+	ProblemCodeTOKENINVALID           ProblemCode = "TOKEN_INVALID"
+	ProblemCodeTOKENEXPIRED           ProblemCode = "TOKEN_EXPIRED"
+	ProblemCodeTOKENREVOKED           ProblemCode = "TOKEN_REVOKED"
+	ProblemCodeUSERINACTIVE           ProblemCode = "USER_INACTIVE"
+	ProblemCodeINSUFFICIENTSCOPE      ProblemCode = "INSUFFICIENT_SCOPE"
+	ProblemCodeRATELIMITED            ProblemCode = "RATE_LIMITED"
+	ProblemCodeINVALIDREQUEST         ProblemCode = "INVALID_REQUEST"
+	ProblemCodeVALIDATIONFAILED       ProblemCode = "VALIDATION_FAILED"
+	ProblemCodeNOTFOUND               ProblemCode = "NOT_FOUND"
+	ProblemCodeFORBIDDEN              ProblemCode = "FORBIDDEN"
+	ProblemCodeCONFLICT               ProblemCode = "CONFLICT"
+	ProblemCodePRECONDITIONREQUIRED   ProblemCode = "PRECONDITION_REQUIRED"
+	ProblemCodeVERSIONCONFLICT        ProblemCode = "VERSION_CONFLICT"
+	ProblemCodeIDEMPOTENCYKEYREQUIRED ProblemCode = "IDEMPOTENCY_KEY_REQUIRED"
+	ProblemCodeIDEMPOTENCYKEYREUSED   ProblemCode = "IDEMPOTENCY_KEY_REUSED"
+	ProblemCodeIDEMPOTENCYINPROGRESS  ProblemCode = "IDEMPOTENCY_IN_PROGRESS"
+	ProblemCodeINTERNALERROR          ProblemCode = "INTERNAL_ERROR"
+)
+
+// AllValues returns all ProblemCode values.
+func (ProblemCode) AllValues() []ProblemCode {
+	return []ProblemCode{
+		ProblemCodeAUTHENTICATIONREQUIRED,
+		ProblemCodeTOKENINVALID,
+		ProblemCodeTOKENEXPIRED,
+		ProblemCodeTOKENREVOKED,
+		ProblemCodeUSERINACTIVE,
+		ProblemCodeINSUFFICIENTSCOPE,
+		ProblemCodeRATELIMITED,
+		ProblemCodeINVALIDREQUEST,
+		ProblemCodeVALIDATIONFAILED,
+		ProblemCodeNOTFOUND,
+		ProblemCodeFORBIDDEN,
+		ProblemCodeCONFLICT,
+		ProblemCodePRECONDITIONREQUIRED,
+		ProblemCodeVERSIONCONFLICT,
+		ProblemCodeIDEMPOTENCYKEYREQUIRED,
+		ProblemCodeIDEMPOTENCYKEYREUSED,
+		ProblemCodeIDEMPOTENCYINPROGRESS,
+		ProblemCodeINTERNALERROR,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s ProblemCode) MarshalText() ([]byte, error) {
+	switch s {
+	case ProblemCodeAUTHENTICATIONREQUIRED:
+		return []byte(s), nil
+	case ProblemCodeTOKENINVALID:
+		return []byte(s), nil
+	case ProblemCodeTOKENEXPIRED:
+		return []byte(s), nil
+	case ProblemCodeTOKENREVOKED:
+		return []byte(s), nil
+	case ProblemCodeUSERINACTIVE:
+		return []byte(s), nil
+	case ProblemCodeINSUFFICIENTSCOPE:
+		return []byte(s), nil
+	case ProblemCodeRATELIMITED:
+		return []byte(s), nil
+	case ProblemCodeINVALIDREQUEST:
+		return []byte(s), nil
+	case ProblemCodeVALIDATIONFAILED:
+		return []byte(s), nil
+	case ProblemCodeNOTFOUND:
+		return []byte(s), nil
+	case ProblemCodeFORBIDDEN:
+		return []byte(s), nil
+	case ProblemCodeCONFLICT:
+		return []byte(s), nil
+	case ProblemCodePRECONDITIONREQUIRED:
+		return []byte(s), nil
+	case ProblemCodeVERSIONCONFLICT:
+		return []byte(s), nil
+	case ProblemCodeIDEMPOTENCYKEYREQUIRED:
+		return []byte(s), nil
+	case ProblemCodeIDEMPOTENCYKEYREUSED:
+		return []byte(s), nil
+	case ProblemCodeIDEMPOTENCYINPROGRESS:
+		return []byte(s), nil
+	case ProblemCodeINTERNALERROR:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *ProblemCode) UnmarshalText(data []byte) error {
+	switch ProblemCode(data) {
+	case ProblemCodeAUTHENTICATIONREQUIRED:
+		*s = ProblemCodeAUTHENTICATIONREQUIRED
+		return nil
+	case ProblemCodeTOKENINVALID:
+		*s = ProblemCodeTOKENINVALID
+		return nil
+	case ProblemCodeTOKENEXPIRED:
+		*s = ProblemCodeTOKENEXPIRED
+		return nil
+	case ProblemCodeTOKENREVOKED:
+		*s = ProblemCodeTOKENREVOKED
+		return nil
+	case ProblemCodeUSERINACTIVE:
+		*s = ProblemCodeUSERINACTIVE
+		return nil
+	case ProblemCodeINSUFFICIENTSCOPE:
+		*s = ProblemCodeINSUFFICIENTSCOPE
+		return nil
+	case ProblemCodeRATELIMITED:
+		*s = ProblemCodeRATELIMITED
+		return nil
+	case ProblemCodeINVALIDREQUEST:
+		*s = ProblemCodeINVALIDREQUEST
+		return nil
+	case ProblemCodeVALIDATIONFAILED:
+		*s = ProblemCodeVALIDATIONFAILED
+		return nil
+	case ProblemCodeNOTFOUND:
+		*s = ProblemCodeNOTFOUND
+		return nil
+	case ProblemCodeFORBIDDEN:
+		*s = ProblemCodeFORBIDDEN
+		return nil
+	case ProblemCodeCONFLICT:
+		*s = ProblemCodeCONFLICT
+		return nil
+	case ProblemCodePRECONDITIONREQUIRED:
+		*s = ProblemCodePRECONDITIONREQUIRED
+		return nil
+	case ProblemCodeVERSIONCONFLICT:
+		*s = ProblemCodeVERSIONCONFLICT
+		return nil
+	case ProblemCodeIDEMPOTENCYKEYREQUIRED:
+		*s = ProblemCodeIDEMPOTENCYKEYREQUIRED
+		return nil
+	case ProblemCodeIDEMPOTENCYKEYREUSED:
+		*s = ProblemCodeIDEMPOTENCYKEYREUSED
+		return nil
+	case ProblemCodeIDEMPOTENCYINPROGRESS:
+		*s = ProblemCodeIDEMPOTENCYINPROGRESS
+		return nil
+	case ProblemCodeINTERNALERROR:
+		*s = ProblemCodeINTERNALERROR
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// ProblemStatusCodeWithHeaders wraps Problem with status code and response headers.
+type ProblemStatusCodeWithHeaders struct {
+	StatusCode         int
+	RatelimitLimit     OptInt
+	RatelimitRemaining OptInt
+	RatelimitReset     OptInt
+	RetryAfter         OptInt
+	XRequestID         OptString
+	Response           Problem
 }
 
 // GetStatusCode returns the value of StatusCode.
-func (s *ProblemStatusCode) GetStatusCode() int {
+func (s *ProblemStatusCodeWithHeaders) GetStatusCode() int {
 	return s.StatusCode
 }
 
+// GetRatelimitLimit returns the value of RatelimitLimit.
+func (s *ProblemStatusCodeWithHeaders) GetRatelimitLimit() OptInt {
+	return s.RatelimitLimit
+}
+
+// GetRatelimitRemaining returns the value of RatelimitRemaining.
+func (s *ProblemStatusCodeWithHeaders) GetRatelimitRemaining() OptInt {
+	return s.RatelimitRemaining
+}
+
+// GetRatelimitReset returns the value of RatelimitReset.
+func (s *ProblemStatusCodeWithHeaders) GetRatelimitReset() OptInt {
+	return s.RatelimitReset
+}
+
+// GetRetryAfter returns the value of RetryAfter.
+func (s *ProblemStatusCodeWithHeaders) GetRetryAfter() OptInt {
+	return s.RetryAfter
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *ProblemStatusCodeWithHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
 // GetResponse returns the value of Response.
-func (s *ProblemStatusCode) GetResponse() Problem {
+func (s *ProblemStatusCodeWithHeaders) GetResponse() Problem {
 	return s.Response
 }
 
 // SetStatusCode sets the value of StatusCode.
-func (s *ProblemStatusCode) SetStatusCode(val int) {
+func (s *ProblemStatusCodeWithHeaders) SetStatusCode(val int) {
 	s.StatusCode = val
 }
 
+// SetRatelimitLimit sets the value of RatelimitLimit.
+func (s *ProblemStatusCodeWithHeaders) SetRatelimitLimit(val OptInt) {
+	s.RatelimitLimit = val
+}
+
+// SetRatelimitRemaining sets the value of RatelimitRemaining.
+func (s *ProblemStatusCodeWithHeaders) SetRatelimitRemaining(val OptInt) {
+	s.RatelimitRemaining = val
+}
+
+// SetRatelimitReset sets the value of RatelimitReset.
+func (s *ProblemStatusCodeWithHeaders) SetRatelimitReset(val OptInt) {
+	s.RatelimitReset = val
+}
+
+// SetRetryAfter sets the value of RetryAfter.
+func (s *ProblemStatusCodeWithHeaders) SetRetryAfter(val OptInt) {
+	s.RetryAfter = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *ProblemStatusCodeWithHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
 // SetResponse sets the value of Response.
-func (s *ProblemStatusCode) SetResponse(val Problem) {
+func (s *ProblemStatusCodeWithHeaders) SetResponse(val Problem) {
 	s.Response = val
 }
 
-func (*ProblemStatusCode) getCurrentPrincipalRes() {}
-func (*ProblemStatusCode) listUsersRes()           {}
+func (*ProblemStatusCodeWithHeaders) activateProjectRes()          {}
+func (*ProblemStatusCodeWithHeaders) archiveProjectRes()           {}
+func (*ProblemStatusCodeWithHeaders) archiveTaskRes()              {}
+func (*ProblemStatusCodeWithHeaders) cancelMilestoneRes()          {}
+func (*ProblemStatusCodeWithHeaders) cancelProjectRes()            {}
+func (*ProblemStatusCodeWithHeaders) completeMilestoneRes()        {}
+func (*ProblemStatusCodeWithHeaders) completeProjectRes()          {}
+func (*ProblemStatusCodeWithHeaders) createAcceptanceCheckRes()    {}
+func (*ProblemStatusCodeWithHeaders) createLabelRes()              {}
+func (*ProblemStatusCodeWithHeaders) createMilestoneCriterionRes() {}
+func (*ProblemStatusCodeWithHeaders) createMilestoneRes()          {}
+func (*ProblemStatusCodeWithHeaders) createProjectCriterionRes()   {}
+func (*ProblemStatusCodeWithHeaders) createProjectRes()            {}
+func (*ProblemStatusCodeWithHeaders) createTaskCommentRes()        {}
+func (*ProblemStatusCodeWithHeaders) createTaskCriterionRes()      {}
+func (*ProblemStatusCodeWithHeaders) createTaskRes()               {}
+func (*ProblemStatusCodeWithHeaders) deleteCriterionRes()          {}
+func (*ProblemStatusCodeWithHeaders) deleteLabelRes()              {}
+func (*ProblemStatusCodeWithHeaders) deleteTaskCommentRes()        {}
+func (*ProblemStatusCodeWithHeaders) getCurrentPrincipalRes()      {}
+func (*ProblemStatusCodeWithHeaders) getProjectRes()               {}
+func (*ProblemStatusCodeWithHeaders) getTaskRes()                  {}
+func (*ProblemStatusCodeWithHeaders) listLabelsRes()               {}
+func (*ProblemStatusCodeWithHeaders) listMilestoneCriteriaRes()    {}
+func (*ProblemStatusCodeWithHeaders) listProjectCriteriaRes()      {}
+func (*ProblemStatusCodeWithHeaders) listProjectsRes()             {}
+func (*ProblemStatusCodeWithHeaders) listTaskActivityRes()         {}
+func (*ProblemStatusCodeWithHeaders) listTaskCommentsRes()         {}
+func (*ProblemStatusCodeWithHeaders) listTaskCriteriaRes()         {}
+func (*ProblemStatusCodeWithHeaders) listTasksRes()                {}
+func (*ProblemStatusCodeWithHeaders) listUsersRes()                {}
+func (*ProblemStatusCodeWithHeaders) pauseProjectRes()             {}
+func (*ProblemStatusCodeWithHeaders) reopenMilestoneRes()          {}
+func (*ProblemStatusCodeWithHeaders) reopenProjectRes()            {}
+func (*ProblemStatusCodeWithHeaders) restoreProjectRes()           {}
+func (*ProblemStatusCodeWithHeaders) restoreTaskRes()              {}
+func (*ProblemStatusCodeWithHeaders) updateCriterionRes()          {}
+func (*ProblemStatusCodeWithHeaders) updateLabelRes()              {}
+func (*ProblemStatusCodeWithHeaders) updateMilestoneRes()          {}
+func (*ProblemStatusCodeWithHeaders) updateProjectRes()            {}
+func (*ProblemStatusCodeWithHeaders) updateTaskCommentRes()        {}
+func (*ProblemStatusCodeWithHeaders) updateTaskRes()               {}
+
+// Ref: #/components/schemas/Project
+type Project struct {
+	ID                uuid.UUID     `json:"id"`
+	Number            int64         `json:"number"`
+	Version           int64         `json:"version"`
+	Name              string        `json:"name"`
+	Outcome           string        `json:"outcome"`
+	Description       string        `json:"description"`
+	Owner             UserRef       `json:"owner"`
+	Creator           UserRef       `json:"creator"`
+	Status            ProjectStatus `json:"status"`
+	TargetDate        OptDate       `json:"target_date"`
+	CompletedAt       OptDateTime   `json:"completed_at"`
+	CancelledAt       OptDateTime   `json:"cancelled_at"`
+	ArchivedAt        OptDateTime   `json:"archived_at"`
+	CreatedAt         time.Time     `json:"created_at"`
+	UpdatedAt         time.Time     `json:"updated_at"`
+	CompletedTasks    int           `json:"completed_tasks"`
+	EligibleTasks     int           `json:"eligible_tasks"`
+	ActiveCriteria    int           `json:"active_criteria"`
+	SatisfiedCriteria int           `json:"satisfied_criteria"`
+}
+
+// GetID returns the value of ID.
+func (s *Project) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetNumber returns the value of Number.
+func (s *Project) GetNumber() int64 {
+	return s.Number
+}
+
+// GetVersion returns the value of Version.
+func (s *Project) GetVersion() int64 {
+	return s.Version
+}
+
+// GetName returns the value of Name.
+func (s *Project) GetName() string {
+	return s.Name
+}
+
+// GetOutcome returns the value of Outcome.
+func (s *Project) GetOutcome() string {
+	return s.Outcome
+}
+
+// GetDescription returns the value of Description.
+func (s *Project) GetDescription() string {
+	return s.Description
+}
+
+// GetOwner returns the value of Owner.
+func (s *Project) GetOwner() UserRef {
+	return s.Owner
+}
+
+// GetCreator returns the value of Creator.
+func (s *Project) GetCreator() UserRef {
+	return s.Creator
+}
+
+// GetStatus returns the value of Status.
+func (s *Project) GetStatus() ProjectStatus {
+	return s.Status
+}
+
+// GetTargetDate returns the value of TargetDate.
+func (s *Project) GetTargetDate() OptDate {
+	return s.TargetDate
+}
+
+// GetCompletedAt returns the value of CompletedAt.
+func (s *Project) GetCompletedAt() OptDateTime {
+	return s.CompletedAt
+}
+
+// GetCancelledAt returns the value of CancelledAt.
+func (s *Project) GetCancelledAt() OptDateTime {
+	return s.CancelledAt
+}
+
+// GetArchivedAt returns the value of ArchivedAt.
+func (s *Project) GetArchivedAt() OptDateTime {
+	return s.ArchivedAt
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *Project) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *Project) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// GetCompletedTasks returns the value of CompletedTasks.
+func (s *Project) GetCompletedTasks() int {
+	return s.CompletedTasks
+}
+
+// GetEligibleTasks returns the value of EligibleTasks.
+func (s *Project) GetEligibleTasks() int {
+	return s.EligibleTasks
+}
+
+// GetActiveCriteria returns the value of ActiveCriteria.
+func (s *Project) GetActiveCriteria() int {
+	return s.ActiveCriteria
+}
+
+// GetSatisfiedCriteria returns the value of SatisfiedCriteria.
+func (s *Project) GetSatisfiedCriteria() int {
+	return s.SatisfiedCriteria
+}
+
+// SetID sets the value of ID.
+func (s *Project) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetNumber sets the value of Number.
+func (s *Project) SetNumber(val int64) {
+	s.Number = val
+}
+
+// SetVersion sets the value of Version.
+func (s *Project) SetVersion(val int64) {
+	s.Version = val
+}
+
+// SetName sets the value of Name.
+func (s *Project) SetName(val string) {
+	s.Name = val
+}
+
+// SetOutcome sets the value of Outcome.
+func (s *Project) SetOutcome(val string) {
+	s.Outcome = val
+}
+
+// SetDescription sets the value of Description.
+func (s *Project) SetDescription(val string) {
+	s.Description = val
+}
+
+// SetOwner sets the value of Owner.
+func (s *Project) SetOwner(val UserRef) {
+	s.Owner = val
+}
+
+// SetCreator sets the value of Creator.
+func (s *Project) SetCreator(val UserRef) {
+	s.Creator = val
+}
+
+// SetStatus sets the value of Status.
+func (s *Project) SetStatus(val ProjectStatus) {
+	s.Status = val
+}
+
+// SetTargetDate sets the value of TargetDate.
+func (s *Project) SetTargetDate(val OptDate) {
+	s.TargetDate = val
+}
+
+// SetCompletedAt sets the value of CompletedAt.
+func (s *Project) SetCompletedAt(val OptDateTime) {
+	s.CompletedAt = val
+}
+
+// SetCancelledAt sets the value of CancelledAt.
+func (s *Project) SetCancelledAt(val OptDateTime) {
+	s.CancelledAt = val
+}
+
+// SetArchivedAt sets the value of ArchivedAt.
+func (s *Project) SetArchivedAt(val OptDateTime) {
+	s.ArchivedAt = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *Project) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *Project) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// SetCompletedTasks sets the value of CompletedTasks.
+func (s *Project) SetCompletedTasks(val int) {
+	s.CompletedTasks = val
+}
+
+// SetEligibleTasks sets the value of EligibleTasks.
+func (s *Project) SetEligibleTasks(val int) {
+	s.EligibleTasks = val
+}
+
+// SetActiveCriteria sets the value of ActiveCriteria.
+func (s *Project) SetActiveCriteria(val int) {
+	s.ActiveCriteria = val
+}
+
+// SetSatisfiedCriteria sets the value of SatisfiedCriteria.
+func (s *Project) SetSatisfiedCriteria(val int) {
+	s.SatisfiedCriteria = val
+}
+
+// Ref: #/components/schemas/ProjectActivity
+type ProjectActivity struct {
+	ID                   uuid.UUID                              `json:"id"`
+	MilestoneID          OptUUID                                `json:"milestone_id"`
+	ActorID              uuid.UUID                              `json:"actor_id"`
+	Action               string                                 `json:"action"`
+	Reason               OptString                              `json:"reason"`
+	OldValue             OptString                              `json:"old_value"`
+	NewValue             OptString                              `json:"new_value"`
+	AuthenticationMethod OptProjectActivityAuthenticationMethod `json:"authentication_method"`
+	TokenName            OptString                              `json:"token_name"`
+	RequestID            OptString                              `json:"request_id"`
+	CreatedAt            time.Time                              `json:"created_at"`
+}
+
+// GetID returns the value of ID.
+func (s *ProjectActivity) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetMilestoneID returns the value of MilestoneID.
+func (s *ProjectActivity) GetMilestoneID() OptUUID {
+	return s.MilestoneID
+}
+
+// GetActorID returns the value of ActorID.
+func (s *ProjectActivity) GetActorID() uuid.UUID {
+	return s.ActorID
+}
+
+// GetAction returns the value of Action.
+func (s *ProjectActivity) GetAction() string {
+	return s.Action
+}
+
+// GetReason returns the value of Reason.
+func (s *ProjectActivity) GetReason() OptString {
+	return s.Reason
+}
+
+// GetOldValue returns the value of OldValue.
+func (s *ProjectActivity) GetOldValue() OptString {
+	return s.OldValue
+}
+
+// GetNewValue returns the value of NewValue.
+func (s *ProjectActivity) GetNewValue() OptString {
+	return s.NewValue
+}
+
+// GetAuthenticationMethod returns the value of AuthenticationMethod.
+func (s *ProjectActivity) GetAuthenticationMethod() OptProjectActivityAuthenticationMethod {
+	return s.AuthenticationMethod
+}
+
+// GetTokenName returns the value of TokenName.
+func (s *ProjectActivity) GetTokenName() OptString {
+	return s.TokenName
+}
+
+// GetRequestID returns the value of RequestID.
+func (s *ProjectActivity) GetRequestID() OptString {
+	return s.RequestID
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *ProjectActivity) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// SetID sets the value of ID.
+func (s *ProjectActivity) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetMilestoneID sets the value of MilestoneID.
+func (s *ProjectActivity) SetMilestoneID(val OptUUID) {
+	s.MilestoneID = val
+}
+
+// SetActorID sets the value of ActorID.
+func (s *ProjectActivity) SetActorID(val uuid.UUID) {
+	s.ActorID = val
+}
+
+// SetAction sets the value of Action.
+func (s *ProjectActivity) SetAction(val string) {
+	s.Action = val
+}
+
+// SetReason sets the value of Reason.
+func (s *ProjectActivity) SetReason(val OptString) {
+	s.Reason = val
+}
+
+// SetOldValue sets the value of OldValue.
+func (s *ProjectActivity) SetOldValue(val OptString) {
+	s.OldValue = val
+}
+
+// SetNewValue sets the value of NewValue.
+func (s *ProjectActivity) SetNewValue(val OptString) {
+	s.NewValue = val
+}
+
+// SetAuthenticationMethod sets the value of AuthenticationMethod.
+func (s *ProjectActivity) SetAuthenticationMethod(val OptProjectActivityAuthenticationMethod) {
+	s.AuthenticationMethod = val
+}
+
+// SetTokenName sets the value of TokenName.
+func (s *ProjectActivity) SetTokenName(val OptString) {
+	s.TokenName = val
+}
+
+// SetRequestID sets the value of RequestID.
+func (s *ProjectActivity) SetRequestID(val OptString) {
+	s.RequestID = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *ProjectActivity) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+type ProjectActivityAuthenticationMethod string
+
+const (
+	ProjectActivityAuthenticationMethodSession  ProjectActivityAuthenticationMethod = "session"
+	ProjectActivityAuthenticationMethodAPIToken ProjectActivityAuthenticationMethod = "api_token"
+)
+
+// AllValues returns all ProjectActivityAuthenticationMethod values.
+func (ProjectActivityAuthenticationMethod) AllValues() []ProjectActivityAuthenticationMethod {
+	return []ProjectActivityAuthenticationMethod{
+		ProjectActivityAuthenticationMethodSession,
+		ProjectActivityAuthenticationMethodAPIToken,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s ProjectActivityAuthenticationMethod) MarshalText() ([]byte, error) {
+	switch s {
+	case ProjectActivityAuthenticationMethodSession:
+		return []byte(s), nil
+	case ProjectActivityAuthenticationMethodAPIToken:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *ProjectActivityAuthenticationMethod) UnmarshalText(data []byte) error {
+	switch ProjectActivityAuthenticationMethod(data) {
+	case ProjectActivityAuthenticationMethodSession:
+		*s = ProjectActivityAuthenticationMethodSession
+		return nil
+	case ProjectActivityAuthenticationMethodAPIToken:
+		*s = ProjectActivityAuthenticationMethodAPIToken
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/ProjectCreate
+type ProjectCreate struct {
+	Name        string     `json:"name"`
+	Outcome     string     `json:"outcome"`
+	Description OptString  `json:"description"`
+	OwnerID     uuid.UUID  `json:"owner_id"`
+	TargetDate  OptNilDate `json:"target_date"`
+}
+
+// GetName returns the value of Name.
+func (s *ProjectCreate) GetName() string {
+	return s.Name
+}
+
+// GetOutcome returns the value of Outcome.
+func (s *ProjectCreate) GetOutcome() string {
+	return s.Outcome
+}
+
+// GetDescription returns the value of Description.
+func (s *ProjectCreate) GetDescription() OptString {
+	return s.Description
+}
+
+// GetOwnerID returns the value of OwnerID.
+func (s *ProjectCreate) GetOwnerID() uuid.UUID {
+	return s.OwnerID
+}
+
+// GetTargetDate returns the value of TargetDate.
+func (s *ProjectCreate) GetTargetDate() OptNilDate {
+	return s.TargetDate
+}
+
+// SetName sets the value of Name.
+func (s *ProjectCreate) SetName(val string) {
+	s.Name = val
+}
+
+// SetOutcome sets the value of Outcome.
+func (s *ProjectCreate) SetOutcome(val string) {
+	s.Outcome = val
+}
+
+// SetDescription sets the value of Description.
+func (s *ProjectCreate) SetDescription(val OptString) {
+	s.Description = val
+}
+
+// SetOwnerID sets the value of OwnerID.
+func (s *ProjectCreate) SetOwnerID(val uuid.UUID) {
+	s.OwnerID = val
+}
+
+// SetTargetDate sets the value of TargetDate.
+func (s *ProjectCreate) SetTargetDate(val OptNilDate) {
+	s.TargetDate = val
+}
+
+// ProjectCreatedHeaders wraps Project with response headers.
+type ProjectCreatedHeaders struct {
+	Etag                OptString
+	IdempotencyReplayed OptBool
+	Location            OptString
+	RatelimitLimit      OptInt
+	RatelimitRemaining  OptInt
+	RatelimitReset      OptInt
+	XRequestID          OptString
+	Response            Project
+}
+
+// GetEtag returns the value of Etag.
+func (s *ProjectCreatedHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *ProjectCreatedHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetLocation returns the value of Location.
+func (s *ProjectCreatedHeaders) GetLocation() OptString {
+	return s.Location
+}
+
+// GetRatelimitLimit returns the value of RatelimitLimit.
+func (s *ProjectCreatedHeaders) GetRatelimitLimit() OptInt {
+	return s.RatelimitLimit
+}
+
+// GetRatelimitRemaining returns the value of RatelimitRemaining.
+func (s *ProjectCreatedHeaders) GetRatelimitRemaining() OptInt {
+	return s.RatelimitRemaining
+}
+
+// GetRatelimitReset returns the value of RatelimitReset.
+func (s *ProjectCreatedHeaders) GetRatelimitReset() OptInt {
+	return s.RatelimitReset
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *ProjectCreatedHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *ProjectCreatedHeaders) GetResponse() Project {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *ProjectCreatedHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *ProjectCreatedHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetLocation sets the value of Location.
+func (s *ProjectCreatedHeaders) SetLocation(val OptString) {
+	s.Location = val
+}
+
+// SetRatelimitLimit sets the value of RatelimitLimit.
+func (s *ProjectCreatedHeaders) SetRatelimitLimit(val OptInt) {
+	s.RatelimitLimit = val
+}
+
+// SetRatelimitRemaining sets the value of RatelimitRemaining.
+func (s *ProjectCreatedHeaders) SetRatelimitRemaining(val OptInt) {
+	s.RatelimitRemaining = val
+}
+
+// SetRatelimitReset sets the value of RatelimitReset.
+func (s *ProjectCreatedHeaders) SetRatelimitReset(val OptInt) {
+	s.RatelimitReset = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *ProjectCreatedHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *ProjectCreatedHeaders) SetResponse(val Project) {
+	s.Response = val
+}
+
+func (*ProjectCreatedHeaders) createProjectRes() {}
+
+// Ref: #/components/schemas/ProjectDetail
+type ProjectDetail struct {
+	Project            Project               `json:"project"`
+	AcceptanceCriteria []AcceptanceCriterion `json:"acceptance_criteria"`
+	Milestones         []Milestone           `json:"milestones"`
+	Tasks              []Task                `json:"tasks"`
+	Activity           []ProjectActivity     `json:"activity"`
+}
+
+// GetProject returns the value of Project.
+func (s *ProjectDetail) GetProject() Project {
+	return s.Project
+}
+
+// GetAcceptanceCriteria returns the value of AcceptanceCriteria.
+func (s *ProjectDetail) GetAcceptanceCriteria() []AcceptanceCriterion {
+	return s.AcceptanceCriteria
+}
+
+// GetMilestones returns the value of Milestones.
+func (s *ProjectDetail) GetMilestones() []Milestone {
+	return s.Milestones
+}
+
+// GetTasks returns the value of Tasks.
+func (s *ProjectDetail) GetTasks() []Task {
+	return s.Tasks
+}
+
+// GetActivity returns the value of Activity.
+func (s *ProjectDetail) GetActivity() []ProjectActivity {
+	return s.Activity
+}
+
+// SetProject sets the value of Project.
+func (s *ProjectDetail) SetProject(val Project) {
+	s.Project = val
+}
+
+// SetAcceptanceCriteria sets the value of AcceptanceCriteria.
+func (s *ProjectDetail) SetAcceptanceCriteria(val []AcceptanceCriterion) {
+	s.AcceptanceCriteria = val
+}
+
+// SetMilestones sets the value of Milestones.
+func (s *ProjectDetail) SetMilestones(val []Milestone) {
+	s.Milestones = val
+}
+
+// SetTasks sets the value of Tasks.
+func (s *ProjectDetail) SetTasks(val []Task) {
+	s.Tasks = val
+}
+
+// SetActivity sets the value of Activity.
+func (s *ProjectDetail) SetActivity(val []ProjectActivity) {
+	s.Activity = val
+}
+
+// ProjectDetailHeaders wraps ProjectDetail with response headers.
+type ProjectDetailHeaders struct {
+	Etag               OptString
+	RatelimitLimit     OptInt
+	RatelimitRemaining OptInt
+	RatelimitReset     OptInt
+	XRequestID         OptString
+	Response           ProjectDetail
+}
+
+// GetEtag returns the value of Etag.
+func (s *ProjectDetailHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetRatelimitLimit returns the value of RatelimitLimit.
+func (s *ProjectDetailHeaders) GetRatelimitLimit() OptInt {
+	return s.RatelimitLimit
+}
+
+// GetRatelimitRemaining returns the value of RatelimitRemaining.
+func (s *ProjectDetailHeaders) GetRatelimitRemaining() OptInt {
+	return s.RatelimitRemaining
+}
+
+// GetRatelimitReset returns the value of RatelimitReset.
+func (s *ProjectDetailHeaders) GetRatelimitReset() OptInt {
+	return s.RatelimitReset
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *ProjectDetailHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *ProjectDetailHeaders) GetResponse() ProjectDetail {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *ProjectDetailHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetRatelimitLimit sets the value of RatelimitLimit.
+func (s *ProjectDetailHeaders) SetRatelimitLimit(val OptInt) {
+	s.RatelimitLimit = val
+}
+
+// SetRatelimitRemaining sets the value of RatelimitRemaining.
+func (s *ProjectDetailHeaders) SetRatelimitRemaining(val OptInt) {
+	s.RatelimitRemaining = val
+}
+
+// SetRatelimitReset sets the value of RatelimitReset.
+func (s *ProjectDetailHeaders) SetRatelimitReset(val OptInt) {
+	s.RatelimitReset = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *ProjectDetailHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *ProjectDetailHeaders) SetResponse(val ProjectDetail) {
+	s.Response = val
+}
+
+func (*ProjectDetailHeaders) getProjectRes() {}
+
+// ProjectHeaders wraps Project with response headers.
+type ProjectHeaders struct {
+	Etag                OptString
+	IdempotencyReplayed OptBool
+	RatelimitLimit      OptInt
+	RatelimitRemaining  OptInt
+	RatelimitReset      OptInt
+	XRequestID          OptString
+	Response            Project
+}
+
+// GetEtag returns the value of Etag.
+func (s *ProjectHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *ProjectHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetRatelimitLimit returns the value of RatelimitLimit.
+func (s *ProjectHeaders) GetRatelimitLimit() OptInt {
+	return s.RatelimitLimit
+}
+
+// GetRatelimitRemaining returns the value of RatelimitRemaining.
+func (s *ProjectHeaders) GetRatelimitRemaining() OptInt {
+	return s.RatelimitRemaining
+}
+
+// GetRatelimitReset returns the value of RatelimitReset.
+func (s *ProjectHeaders) GetRatelimitReset() OptInt {
+	return s.RatelimitReset
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *ProjectHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *ProjectHeaders) GetResponse() Project {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *ProjectHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *ProjectHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetRatelimitLimit sets the value of RatelimitLimit.
+func (s *ProjectHeaders) SetRatelimitLimit(val OptInt) {
+	s.RatelimitLimit = val
+}
+
+// SetRatelimitRemaining sets the value of RatelimitRemaining.
+func (s *ProjectHeaders) SetRatelimitRemaining(val OptInt) {
+	s.RatelimitRemaining = val
+}
+
+// SetRatelimitReset sets the value of RatelimitReset.
+func (s *ProjectHeaders) SetRatelimitReset(val OptInt) {
+	s.RatelimitReset = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *ProjectHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *ProjectHeaders) SetResponse(val Project) {
+	s.Response = val
+}
+
+func (*ProjectHeaders) activateProjectRes() {}
+func (*ProjectHeaders) archiveProjectRes()  {}
+func (*ProjectHeaders) cancelProjectRes()   {}
+func (*ProjectHeaders) completeProjectRes() {}
+func (*ProjectHeaders) pauseProjectRes()    {}
+func (*ProjectHeaders) reopenProjectRes()   {}
+func (*ProjectHeaders) restoreProjectRes()  {}
+func (*ProjectHeaders) updateProjectRes()   {}
+
+// Merged schema.
+// Ref: #/components/schemas/ProjectList
+type ProjectList struct {
+	NextCursor OptString `json:"next_cursor"`
+	Items      []Project `json:"items"`
+}
+
+// GetNextCursor returns the value of NextCursor.
+func (s *ProjectList) GetNextCursor() OptString {
+	return s.NextCursor
+}
+
+// GetItems returns the value of Items.
+func (s *ProjectList) GetItems() []Project {
+	return s.Items
+}
+
+// SetNextCursor sets the value of NextCursor.
+func (s *ProjectList) SetNextCursor(val OptString) {
+	s.NextCursor = val
+}
+
+// SetItems sets the value of Items.
+func (s *ProjectList) SetItems(val []Project) {
+	s.Items = val
+}
+
+// ProjectListHeaders wraps ProjectList with response headers.
+type ProjectListHeaders struct {
+	RatelimitLimit     OptInt
+	RatelimitRemaining OptInt
+	RatelimitReset     OptInt
+	XRequestID         OptString
+	Response           ProjectList
+}
+
+// GetRatelimitLimit returns the value of RatelimitLimit.
+func (s *ProjectListHeaders) GetRatelimitLimit() OptInt {
+	return s.RatelimitLimit
+}
+
+// GetRatelimitRemaining returns the value of RatelimitRemaining.
+func (s *ProjectListHeaders) GetRatelimitRemaining() OptInt {
+	return s.RatelimitRemaining
+}
+
+// GetRatelimitReset returns the value of RatelimitReset.
+func (s *ProjectListHeaders) GetRatelimitReset() OptInt {
+	return s.RatelimitReset
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *ProjectListHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *ProjectListHeaders) GetResponse() ProjectList {
+	return s.Response
+}
+
+// SetRatelimitLimit sets the value of RatelimitLimit.
+func (s *ProjectListHeaders) SetRatelimitLimit(val OptInt) {
+	s.RatelimitLimit = val
+}
+
+// SetRatelimitRemaining sets the value of RatelimitRemaining.
+func (s *ProjectListHeaders) SetRatelimitRemaining(val OptInt) {
+	s.RatelimitRemaining = val
+}
+
+// SetRatelimitReset sets the value of RatelimitReset.
+func (s *ProjectListHeaders) SetRatelimitReset(val OptInt) {
+	s.RatelimitReset = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *ProjectListHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *ProjectListHeaders) SetResponse(val ProjectList) {
+	s.Response = val
+}
+
+func (*ProjectListHeaders) listProjectsRes() {}
+
+// Ref: #/components/schemas/ProjectPatch
+type ProjectPatch struct {
+	Name        OptString  `json:"name"`
+	Outcome     OptString  `json:"outcome"`
+	Description OptString  `json:"description"`
+	OwnerID     OptUUID    `json:"owner_id"`
+	TargetDate  OptNilDate `json:"target_date"`
+}
+
+// GetName returns the value of Name.
+func (s *ProjectPatch) GetName() OptString {
+	return s.Name
+}
+
+// GetOutcome returns the value of Outcome.
+func (s *ProjectPatch) GetOutcome() OptString {
+	return s.Outcome
+}
+
+// GetDescription returns the value of Description.
+func (s *ProjectPatch) GetDescription() OptString {
+	return s.Description
+}
+
+// GetOwnerID returns the value of OwnerID.
+func (s *ProjectPatch) GetOwnerID() OptUUID {
+	return s.OwnerID
+}
+
+// GetTargetDate returns the value of TargetDate.
+func (s *ProjectPatch) GetTargetDate() OptNilDate {
+	return s.TargetDate
+}
+
+// SetName sets the value of Name.
+func (s *ProjectPatch) SetName(val OptString) {
+	s.Name = val
+}
+
+// SetOutcome sets the value of Outcome.
+func (s *ProjectPatch) SetOutcome(val OptString) {
+	s.Outcome = val
+}
+
+// SetDescription sets the value of Description.
+func (s *ProjectPatch) SetDescription(val OptString) {
+	s.Description = val
+}
+
+// SetOwnerID sets the value of OwnerID.
+func (s *ProjectPatch) SetOwnerID(val OptUUID) {
+	s.OwnerID = val
+}
+
+// SetTargetDate sets the value of TargetDate.
+func (s *ProjectPatch) SetTargetDate(val OptNilDate) {
+	s.TargetDate = val
+}
+
+// Ref: #/components/schemas/ProjectRef
+type ProjectRef struct {
+	ID     uuid.UUID `json:"id"`
+	Number int64     `json:"number"`
+	Name   string    `json:"name"`
+}
+
+// GetID returns the value of ID.
+func (s *ProjectRef) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetNumber returns the value of Number.
+func (s *ProjectRef) GetNumber() int64 {
+	return s.Number
+}
+
+// GetName returns the value of Name.
+func (s *ProjectRef) GetName() string {
+	return s.Name
+}
+
+// SetID sets the value of ID.
+func (s *ProjectRef) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetNumber sets the value of Number.
+func (s *ProjectRef) SetNumber(val int64) {
+	s.Number = val
+}
+
+// SetName sets the value of Name.
+func (s *ProjectRef) SetName(val string) {
+	s.Name = val
+}
+
+// Ref: #/components/schemas/ProjectStatus
+type ProjectStatus string
+
+const (
+	ProjectStatusPlanned   ProjectStatus = "planned"
+	ProjectStatusActive    ProjectStatus = "active"
+	ProjectStatusPaused    ProjectStatus = "paused"
+	ProjectStatusCompleted ProjectStatus = "completed"
+	ProjectStatusCancelled ProjectStatus = "cancelled"
+)
+
+// AllValues returns all ProjectStatus values.
+func (ProjectStatus) AllValues() []ProjectStatus {
+	return []ProjectStatus{
+		ProjectStatusPlanned,
+		ProjectStatusActive,
+		ProjectStatusPaused,
+		ProjectStatusCompleted,
+		ProjectStatusCancelled,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s ProjectStatus) MarshalText() ([]byte, error) {
+	switch s {
+	case ProjectStatusPlanned:
+		return []byte(s), nil
+	case ProjectStatusActive:
+		return []byte(s), nil
+	case ProjectStatusPaused:
+		return []byte(s), nil
+	case ProjectStatusCompleted:
+		return []byte(s), nil
+	case ProjectStatusCancelled:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *ProjectStatus) UnmarshalText(data []byte) error {
+	switch ProjectStatus(data) {
+	case ProjectStatusPlanned:
+		*s = ProjectStatusPlanned
+		return nil
+	case ProjectStatusActive:
+		*s = ProjectStatusActive
+		return nil
+	case ProjectStatusPaused:
+		*s = ProjectStatusPaused
+		return nil
+	case ProjectStatusCompleted:
+		*s = ProjectStatusCompleted
+		return nil
+	case ProjectStatusCancelled:
+		*s = ProjectStatusCancelled
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
 
 type SessionCookie struct {
 	APIKey string
@@ -448,6 +5096,1029 @@ func (s *SessionCookie) SetAPIKey(val string) {
 // SetRoles sets the value of Roles.
 func (s *SessionCookie) SetRoles(val []string) {
 	s.Roles = val
+}
+
+// Ref: #/components/schemas/Task
+type Task struct {
+	ID          uuid.UUID       `json:"id"`
+	Number      int64           `json:"number"`
+	Version     int64           `json:"version"`
+	Title       string          `json:"title"`
+	Description string          `json:"description"`
+	Status      TaskStatus      `json:"status"`
+	Priority    TaskPriority    `json:"priority"`
+	Assignee    OptUserRef      `json:"assignee"`
+	Creator     UserRef         `json:"creator"`
+	DueDate     OptDate         `json:"due_date"`
+	Project     OptProjectRef   `json:"project"`
+	Milestone   OptMilestoneRef `json:"milestone"`
+	Labels      []Label         `json:"labels"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+	CompletedAt OptDateTime     `json:"completed_at"`
+	ArchivedAt  OptDateTime     `json:"archived_at"`
+}
+
+// GetID returns the value of ID.
+func (s *Task) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetNumber returns the value of Number.
+func (s *Task) GetNumber() int64 {
+	return s.Number
+}
+
+// GetVersion returns the value of Version.
+func (s *Task) GetVersion() int64 {
+	return s.Version
+}
+
+// GetTitle returns the value of Title.
+func (s *Task) GetTitle() string {
+	return s.Title
+}
+
+// GetDescription returns the value of Description.
+func (s *Task) GetDescription() string {
+	return s.Description
+}
+
+// GetStatus returns the value of Status.
+func (s *Task) GetStatus() TaskStatus {
+	return s.Status
+}
+
+// GetPriority returns the value of Priority.
+func (s *Task) GetPriority() TaskPriority {
+	return s.Priority
+}
+
+// GetAssignee returns the value of Assignee.
+func (s *Task) GetAssignee() OptUserRef {
+	return s.Assignee
+}
+
+// GetCreator returns the value of Creator.
+func (s *Task) GetCreator() UserRef {
+	return s.Creator
+}
+
+// GetDueDate returns the value of DueDate.
+func (s *Task) GetDueDate() OptDate {
+	return s.DueDate
+}
+
+// GetProject returns the value of Project.
+func (s *Task) GetProject() OptProjectRef {
+	return s.Project
+}
+
+// GetMilestone returns the value of Milestone.
+func (s *Task) GetMilestone() OptMilestoneRef {
+	return s.Milestone
+}
+
+// GetLabels returns the value of Labels.
+func (s *Task) GetLabels() []Label {
+	return s.Labels
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *Task) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *Task) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// GetCompletedAt returns the value of CompletedAt.
+func (s *Task) GetCompletedAt() OptDateTime {
+	return s.CompletedAt
+}
+
+// GetArchivedAt returns the value of ArchivedAt.
+func (s *Task) GetArchivedAt() OptDateTime {
+	return s.ArchivedAt
+}
+
+// SetID sets the value of ID.
+func (s *Task) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetNumber sets the value of Number.
+func (s *Task) SetNumber(val int64) {
+	s.Number = val
+}
+
+// SetVersion sets the value of Version.
+func (s *Task) SetVersion(val int64) {
+	s.Version = val
+}
+
+// SetTitle sets the value of Title.
+func (s *Task) SetTitle(val string) {
+	s.Title = val
+}
+
+// SetDescription sets the value of Description.
+func (s *Task) SetDescription(val string) {
+	s.Description = val
+}
+
+// SetStatus sets the value of Status.
+func (s *Task) SetStatus(val TaskStatus) {
+	s.Status = val
+}
+
+// SetPriority sets the value of Priority.
+func (s *Task) SetPriority(val TaskPriority) {
+	s.Priority = val
+}
+
+// SetAssignee sets the value of Assignee.
+func (s *Task) SetAssignee(val OptUserRef) {
+	s.Assignee = val
+}
+
+// SetCreator sets the value of Creator.
+func (s *Task) SetCreator(val UserRef) {
+	s.Creator = val
+}
+
+// SetDueDate sets the value of DueDate.
+func (s *Task) SetDueDate(val OptDate) {
+	s.DueDate = val
+}
+
+// SetProject sets the value of Project.
+func (s *Task) SetProject(val OptProjectRef) {
+	s.Project = val
+}
+
+// SetMilestone sets the value of Milestone.
+func (s *Task) SetMilestone(val OptMilestoneRef) {
+	s.Milestone = val
+}
+
+// SetLabels sets the value of Labels.
+func (s *Task) SetLabels(val []Label) {
+	s.Labels = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *Task) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *Task) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// SetCompletedAt sets the value of CompletedAt.
+func (s *Task) SetCompletedAt(val OptDateTime) {
+	s.CompletedAt = val
+}
+
+// SetArchivedAt sets the value of ArchivedAt.
+func (s *Task) SetArchivedAt(val OptDateTime) {
+	s.ArchivedAt = val
+}
+
+// Ref: #/components/schemas/TaskActivity
+type TaskActivity struct {
+	ID                   uuid.UUID                           `json:"id"`
+	ActorID              uuid.UUID                           `json:"actor_id"`
+	Field                string                              `json:"field"`
+	OldValue             OptString                           `json:"old_value"`
+	NewValue             OptString                           `json:"new_value"`
+	AuthenticationMethod OptTaskActivityAuthenticationMethod `json:"authentication_method"`
+	TokenName            OptString                           `json:"token_name"`
+	RequestID            OptString                           `json:"request_id"`
+	CreatedAt            time.Time                           `json:"created_at"`
+}
+
+// GetID returns the value of ID.
+func (s *TaskActivity) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetActorID returns the value of ActorID.
+func (s *TaskActivity) GetActorID() uuid.UUID {
+	return s.ActorID
+}
+
+// GetField returns the value of Field.
+func (s *TaskActivity) GetField() string {
+	return s.Field
+}
+
+// GetOldValue returns the value of OldValue.
+func (s *TaskActivity) GetOldValue() OptString {
+	return s.OldValue
+}
+
+// GetNewValue returns the value of NewValue.
+func (s *TaskActivity) GetNewValue() OptString {
+	return s.NewValue
+}
+
+// GetAuthenticationMethod returns the value of AuthenticationMethod.
+func (s *TaskActivity) GetAuthenticationMethod() OptTaskActivityAuthenticationMethod {
+	return s.AuthenticationMethod
+}
+
+// GetTokenName returns the value of TokenName.
+func (s *TaskActivity) GetTokenName() OptString {
+	return s.TokenName
+}
+
+// GetRequestID returns the value of RequestID.
+func (s *TaskActivity) GetRequestID() OptString {
+	return s.RequestID
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *TaskActivity) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// SetID sets the value of ID.
+func (s *TaskActivity) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetActorID sets the value of ActorID.
+func (s *TaskActivity) SetActorID(val uuid.UUID) {
+	s.ActorID = val
+}
+
+// SetField sets the value of Field.
+func (s *TaskActivity) SetField(val string) {
+	s.Field = val
+}
+
+// SetOldValue sets the value of OldValue.
+func (s *TaskActivity) SetOldValue(val OptString) {
+	s.OldValue = val
+}
+
+// SetNewValue sets the value of NewValue.
+func (s *TaskActivity) SetNewValue(val OptString) {
+	s.NewValue = val
+}
+
+// SetAuthenticationMethod sets the value of AuthenticationMethod.
+func (s *TaskActivity) SetAuthenticationMethod(val OptTaskActivityAuthenticationMethod) {
+	s.AuthenticationMethod = val
+}
+
+// SetTokenName sets the value of TokenName.
+func (s *TaskActivity) SetTokenName(val OptString) {
+	s.TokenName = val
+}
+
+// SetRequestID sets the value of RequestID.
+func (s *TaskActivity) SetRequestID(val OptString) {
+	s.RequestID = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *TaskActivity) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+type TaskActivityAuthenticationMethod string
+
+const (
+	TaskActivityAuthenticationMethodSession  TaskActivityAuthenticationMethod = "session"
+	TaskActivityAuthenticationMethodAPIToken TaskActivityAuthenticationMethod = "api_token"
+)
+
+// AllValues returns all TaskActivityAuthenticationMethod values.
+func (TaskActivityAuthenticationMethod) AllValues() []TaskActivityAuthenticationMethod {
+	return []TaskActivityAuthenticationMethod{
+		TaskActivityAuthenticationMethodSession,
+		TaskActivityAuthenticationMethodAPIToken,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s TaskActivityAuthenticationMethod) MarshalText() ([]byte, error) {
+	switch s {
+	case TaskActivityAuthenticationMethodSession:
+		return []byte(s), nil
+	case TaskActivityAuthenticationMethodAPIToken:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *TaskActivityAuthenticationMethod) UnmarshalText(data []byte) error {
+	switch TaskActivityAuthenticationMethod(data) {
+	case TaskActivityAuthenticationMethodSession:
+		*s = TaskActivityAuthenticationMethodSession
+		return nil
+	case TaskActivityAuthenticationMethodAPIToken:
+		*s = TaskActivityAuthenticationMethodAPIToken
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Merged schema.
+// Ref: #/components/schemas/TaskActivityList
+type TaskActivityList struct {
+	NextCursor OptString      `json:"next_cursor"`
+	Items      []TaskActivity `json:"items"`
+}
+
+// GetNextCursor returns the value of NextCursor.
+func (s *TaskActivityList) GetNextCursor() OptString {
+	return s.NextCursor
+}
+
+// GetItems returns the value of Items.
+func (s *TaskActivityList) GetItems() []TaskActivity {
+	return s.Items
+}
+
+// SetNextCursor sets the value of NextCursor.
+func (s *TaskActivityList) SetNextCursor(val OptString) {
+	s.NextCursor = val
+}
+
+// SetItems sets the value of Items.
+func (s *TaskActivityList) SetItems(val []TaskActivity) {
+	s.Items = val
+}
+
+// TaskActivityListHeaders wraps TaskActivityList with response headers.
+type TaskActivityListHeaders struct {
+	RatelimitLimit     OptInt
+	RatelimitRemaining OptInt
+	RatelimitReset     OptInt
+	XRequestID         OptString
+	Response           TaskActivityList
+}
+
+// GetRatelimitLimit returns the value of RatelimitLimit.
+func (s *TaskActivityListHeaders) GetRatelimitLimit() OptInt {
+	return s.RatelimitLimit
+}
+
+// GetRatelimitRemaining returns the value of RatelimitRemaining.
+func (s *TaskActivityListHeaders) GetRatelimitRemaining() OptInt {
+	return s.RatelimitRemaining
+}
+
+// GetRatelimitReset returns the value of RatelimitReset.
+func (s *TaskActivityListHeaders) GetRatelimitReset() OptInt {
+	return s.RatelimitReset
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskActivityListHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskActivityListHeaders) GetResponse() TaskActivityList {
+	return s.Response
+}
+
+// SetRatelimitLimit sets the value of RatelimitLimit.
+func (s *TaskActivityListHeaders) SetRatelimitLimit(val OptInt) {
+	s.RatelimitLimit = val
+}
+
+// SetRatelimitRemaining sets the value of RatelimitRemaining.
+func (s *TaskActivityListHeaders) SetRatelimitRemaining(val OptInt) {
+	s.RatelimitRemaining = val
+}
+
+// SetRatelimitReset sets the value of RatelimitReset.
+func (s *TaskActivityListHeaders) SetRatelimitReset(val OptInt) {
+	s.RatelimitReset = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskActivityListHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskActivityListHeaders) SetResponse(val TaskActivityList) {
+	s.Response = val
+}
+
+func (*TaskActivityListHeaders) listTaskActivityRes() {}
+
+// Ref: #/components/schemas/TaskCreate
+type TaskCreate struct {
+	Title         string          `json:"title"`
+	Description   OptString       `json:"description"`
+	Status        OptTaskStatus   `json:"status"`
+	Priority      OptTaskPriority `json:"priority"`
+	AssigneeID    OptNilUUID      `json:"assignee_id"`
+	DueDate       OptNilDate      `json:"due_date"`
+	LabelIds      []uuid.UUID     `json:"label_ids"`
+	ProjectNumber OptInt64        `json:"project_number"`
+	MilestoneID   OptNilUUID      `json:"milestone_id"`
+}
+
+// GetTitle returns the value of Title.
+func (s *TaskCreate) GetTitle() string {
+	return s.Title
+}
+
+// GetDescription returns the value of Description.
+func (s *TaskCreate) GetDescription() OptString {
+	return s.Description
+}
+
+// GetStatus returns the value of Status.
+func (s *TaskCreate) GetStatus() OptTaskStatus {
+	return s.Status
+}
+
+// GetPriority returns the value of Priority.
+func (s *TaskCreate) GetPriority() OptTaskPriority {
+	return s.Priority
+}
+
+// GetAssigneeID returns the value of AssigneeID.
+func (s *TaskCreate) GetAssigneeID() OptNilUUID {
+	return s.AssigneeID
+}
+
+// GetDueDate returns the value of DueDate.
+func (s *TaskCreate) GetDueDate() OptNilDate {
+	return s.DueDate
+}
+
+// GetLabelIds returns the value of LabelIds.
+func (s *TaskCreate) GetLabelIds() []uuid.UUID {
+	return s.LabelIds
+}
+
+// GetProjectNumber returns the value of ProjectNumber.
+func (s *TaskCreate) GetProjectNumber() OptInt64 {
+	return s.ProjectNumber
+}
+
+// GetMilestoneID returns the value of MilestoneID.
+func (s *TaskCreate) GetMilestoneID() OptNilUUID {
+	return s.MilestoneID
+}
+
+// SetTitle sets the value of Title.
+func (s *TaskCreate) SetTitle(val string) {
+	s.Title = val
+}
+
+// SetDescription sets the value of Description.
+func (s *TaskCreate) SetDescription(val OptString) {
+	s.Description = val
+}
+
+// SetStatus sets the value of Status.
+func (s *TaskCreate) SetStatus(val OptTaskStatus) {
+	s.Status = val
+}
+
+// SetPriority sets the value of Priority.
+func (s *TaskCreate) SetPriority(val OptTaskPriority) {
+	s.Priority = val
+}
+
+// SetAssigneeID sets the value of AssigneeID.
+func (s *TaskCreate) SetAssigneeID(val OptNilUUID) {
+	s.AssigneeID = val
+}
+
+// SetDueDate sets the value of DueDate.
+func (s *TaskCreate) SetDueDate(val OptNilDate) {
+	s.DueDate = val
+}
+
+// SetLabelIds sets the value of LabelIds.
+func (s *TaskCreate) SetLabelIds(val []uuid.UUID) {
+	s.LabelIds = val
+}
+
+// SetProjectNumber sets the value of ProjectNumber.
+func (s *TaskCreate) SetProjectNumber(val OptInt64) {
+	s.ProjectNumber = val
+}
+
+// SetMilestoneID sets the value of MilestoneID.
+func (s *TaskCreate) SetMilestoneID(val OptNilUUID) {
+	s.MilestoneID = val
+}
+
+// TaskCreatedHeaders wraps Task with response headers.
+type TaskCreatedHeaders struct {
+	Etag                OptString
+	IdempotencyReplayed OptBool
+	Location            OptString
+	RatelimitLimit      OptInt
+	RatelimitRemaining  OptInt
+	RatelimitReset      OptInt
+	XRequestID          OptString
+	Response            Task
+}
+
+// GetEtag returns the value of Etag.
+func (s *TaskCreatedHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *TaskCreatedHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetLocation returns the value of Location.
+func (s *TaskCreatedHeaders) GetLocation() OptString {
+	return s.Location
+}
+
+// GetRatelimitLimit returns the value of RatelimitLimit.
+func (s *TaskCreatedHeaders) GetRatelimitLimit() OptInt {
+	return s.RatelimitLimit
+}
+
+// GetRatelimitRemaining returns the value of RatelimitRemaining.
+func (s *TaskCreatedHeaders) GetRatelimitRemaining() OptInt {
+	return s.RatelimitRemaining
+}
+
+// GetRatelimitReset returns the value of RatelimitReset.
+func (s *TaskCreatedHeaders) GetRatelimitReset() OptInt {
+	return s.RatelimitReset
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskCreatedHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskCreatedHeaders) GetResponse() Task {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *TaskCreatedHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *TaskCreatedHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetLocation sets the value of Location.
+func (s *TaskCreatedHeaders) SetLocation(val OptString) {
+	s.Location = val
+}
+
+// SetRatelimitLimit sets the value of RatelimitLimit.
+func (s *TaskCreatedHeaders) SetRatelimitLimit(val OptInt) {
+	s.RatelimitLimit = val
+}
+
+// SetRatelimitRemaining sets the value of RatelimitRemaining.
+func (s *TaskCreatedHeaders) SetRatelimitRemaining(val OptInt) {
+	s.RatelimitRemaining = val
+}
+
+// SetRatelimitReset sets the value of RatelimitReset.
+func (s *TaskCreatedHeaders) SetRatelimitReset(val OptInt) {
+	s.RatelimitReset = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskCreatedHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskCreatedHeaders) SetResponse(val Task) {
+	s.Response = val
+}
+
+func (*TaskCreatedHeaders) createTaskRes() {}
+
+// TaskHeaders wraps Task with response headers.
+type TaskHeaders struct {
+	Etag                OptString
+	IdempotencyReplayed OptBool
+	RatelimitLimit      OptInt
+	RatelimitRemaining  OptInt
+	RatelimitReset      OptInt
+	XRequestID          OptString
+	Response            Task
+}
+
+// GetEtag returns the value of Etag.
+func (s *TaskHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *TaskHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetRatelimitLimit returns the value of RatelimitLimit.
+func (s *TaskHeaders) GetRatelimitLimit() OptInt {
+	return s.RatelimitLimit
+}
+
+// GetRatelimitRemaining returns the value of RatelimitRemaining.
+func (s *TaskHeaders) GetRatelimitRemaining() OptInt {
+	return s.RatelimitRemaining
+}
+
+// GetRatelimitReset returns the value of RatelimitReset.
+func (s *TaskHeaders) GetRatelimitReset() OptInt {
+	return s.RatelimitReset
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskHeaders) GetResponse() Task {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *TaskHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *TaskHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetRatelimitLimit sets the value of RatelimitLimit.
+func (s *TaskHeaders) SetRatelimitLimit(val OptInt) {
+	s.RatelimitLimit = val
+}
+
+// SetRatelimitRemaining sets the value of RatelimitRemaining.
+func (s *TaskHeaders) SetRatelimitRemaining(val OptInt) {
+	s.RatelimitRemaining = val
+}
+
+// SetRatelimitReset sets the value of RatelimitReset.
+func (s *TaskHeaders) SetRatelimitReset(val OptInt) {
+	s.RatelimitReset = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskHeaders) SetResponse(val Task) {
+	s.Response = val
+}
+
+func (*TaskHeaders) archiveTaskRes() {}
+func (*TaskHeaders) getTaskRes()     {}
+func (*TaskHeaders) restoreTaskRes() {}
+func (*TaskHeaders) updateTaskRes()  {}
+
+// Merged schema.
+// Ref: #/components/schemas/TaskList
+type TaskList struct {
+	NextCursor OptString `json:"next_cursor"`
+	Items      []Task    `json:"items"`
+}
+
+// GetNextCursor returns the value of NextCursor.
+func (s *TaskList) GetNextCursor() OptString {
+	return s.NextCursor
+}
+
+// GetItems returns the value of Items.
+func (s *TaskList) GetItems() []Task {
+	return s.Items
+}
+
+// SetNextCursor sets the value of NextCursor.
+func (s *TaskList) SetNextCursor(val OptString) {
+	s.NextCursor = val
+}
+
+// SetItems sets the value of Items.
+func (s *TaskList) SetItems(val []Task) {
+	s.Items = val
+}
+
+// TaskListHeaders wraps TaskList with response headers.
+type TaskListHeaders struct {
+	RatelimitLimit     OptInt
+	RatelimitRemaining OptInt
+	RatelimitReset     OptInt
+	XRequestID         OptString
+	Response           TaskList
+}
+
+// GetRatelimitLimit returns the value of RatelimitLimit.
+func (s *TaskListHeaders) GetRatelimitLimit() OptInt {
+	return s.RatelimitLimit
+}
+
+// GetRatelimitRemaining returns the value of RatelimitRemaining.
+func (s *TaskListHeaders) GetRatelimitRemaining() OptInt {
+	return s.RatelimitRemaining
+}
+
+// GetRatelimitReset returns the value of RatelimitReset.
+func (s *TaskListHeaders) GetRatelimitReset() OptInt {
+	return s.RatelimitReset
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskListHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskListHeaders) GetResponse() TaskList {
+	return s.Response
+}
+
+// SetRatelimitLimit sets the value of RatelimitLimit.
+func (s *TaskListHeaders) SetRatelimitLimit(val OptInt) {
+	s.RatelimitLimit = val
+}
+
+// SetRatelimitRemaining sets the value of RatelimitRemaining.
+func (s *TaskListHeaders) SetRatelimitRemaining(val OptInt) {
+	s.RatelimitRemaining = val
+}
+
+// SetRatelimitReset sets the value of RatelimitReset.
+func (s *TaskListHeaders) SetRatelimitReset(val OptInt) {
+	s.RatelimitReset = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskListHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskListHeaders) SetResponse(val TaskList) {
+	s.Response = val
+}
+
+func (*TaskListHeaders) listTasksRes() {}
+
+// Ref: #/components/schemas/TaskPatch
+type TaskPatch struct {
+	Title         OptString       `json:"title"`
+	Description   OptString       `json:"description"`
+	Status        OptTaskStatus   `json:"status"`
+	Priority      OptTaskPriority `json:"priority"`
+	AssigneeID    OptNilUUID      `json:"assignee_id"`
+	DueDate       OptNilDate      `json:"due_date"`
+	LabelIds      []uuid.UUID     `json:"label_ids"`
+	ProjectNumber OptNilInt64     `json:"project_number"`
+	MilestoneID   OptNilUUID      `json:"milestone_id"`
+}
+
+// GetTitle returns the value of Title.
+func (s *TaskPatch) GetTitle() OptString {
+	return s.Title
+}
+
+// GetDescription returns the value of Description.
+func (s *TaskPatch) GetDescription() OptString {
+	return s.Description
+}
+
+// GetStatus returns the value of Status.
+func (s *TaskPatch) GetStatus() OptTaskStatus {
+	return s.Status
+}
+
+// GetPriority returns the value of Priority.
+func (s *TaskPatch) GetPriority() OptTaskPriority {
+	return s.Priority
+}
+
+// GetAssigneeID returns the value of AssigneeID.
+func (s *TaskPatch) GetAssigneeID() OptNilUUID {
+	return s.AssigneeID
+}
+
+// GetDueDate returns the value of DueDate.
+func (s *TaskPatch) GetDueDate() OptNilDate {
+	return s.DueDate
+}
+
+// GetLabelIds returns the value of LabelIds.
+func (s *TaskPatch) GetLabelIds() []uuid.UUID {
+	return s.LabelIds
+}
+
+// GetProjectNumber returns the value of ProjectNumber.
+func (s *TaskPatch) GetProjectNumber() OptNilInt64 {
+	return s.ProjectNumber
+}
+
+// GetMilestoneID returns the value of MilestoneID.
+func (s *TaskPatch) GetMilestoneID() OptNilUUID {
+	return s.MilestoneID
+}
+
+// SetTitle sets the value of Title.
+func (s *TaskPatch) SetTitle(val OptString) {
+	s.Title = val
+}
+
+// SetDescription sets the value of Description.
+func (s *TaskPatch) SetDescription(val OptString) {
+	s.Description = val
+}
+
+// SetStatus sets the value of Status.
+func (s *TaskPatch) SetStatus(val OptTaskStatus) {
+	s.Status = val
+}
+
+// SetPriority sets the value of Priority.
+func (s *TaskPatch) SetPriority(val OptTaskPriority) {
+	s.Priority = val
+}
+
+// SetAssigneeID sets the value of AssigneeID.
+func (s *TaskPatch) SetAssigneeID(val OptNilUUID) {
+	s.AssigneeID = val
+}
+
+// SetDueDate sets the value of DueDate.
+func (s *TaskPatch) SetDueDate(val OptNilDate) {
+	s.DueDate = val
+}
+
+// SetLabelIds sets the value of LabelIds.
+func (s *TaskPatch) SetLabelIds(val []uuid.UUID) {
+	s.LabelIds = val
+}
+
+// SetProjectNumber sets the value of ProjectNumber.
+func (s *TaskPatch) SetProjectNumber(val OptNilInt64) {
+	s.ProjectNumber = val
+}
+
+// SetMilestoneID sets the value of MilestoneID.
+func (s *TaskPatch) SetMilestoneID(val OptNilUUID) {
+	s.MilestoneID = val
+}
+
+// Ref: #/components/schemas/TaskPriority
+type TaskPriority string
+
+const (
+	TaskPriorityNone   TaskPriority = "none"
+	TaskPriorityLow    TaskPriority = "low"
+	TaskPriorityMedium TaskPriority = "medium"
+	TaskPriorityHigh   TaskPriority = "high"
+	TaskPriorityUrgent TaskPriority = "urgent"
+)
+
+// AllValues returns all TaskPriority values.
+func (TaskPriority) AllValues() []TaskPriority {
+	return []TaskPriority{
+		TaskPriorityNone,
+		TaskPriorityLow,
+		TaskPriorityMedium,
+		TaskPriorityHigh,
+		TaskPriorityUrgent,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s TaskPriority) MarshalText() ([]byte, error) {
+	switch s {
+	case TaskPriorityNone:
+		return []byte(s), nil
+	case TaskPriorityLow:
+		return []byte(s), nil
+	case TaskPriorityMedium:
+		return []byte(s), nil
+	case TaskPriorityHigh:
+		return []byte(s), nil
+	case TaskPriorityUrgent:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *TaskPriority) UnmarshalText(data []byte) error {
+	switch TaskPriority(data) {
+	case TaskPriorityNone:
+		*s = TaskPriorityNone
+		return nil
+	case TaskPriorityLow:
+		*s = TaskPriorityLow
+		return nil
+	case TaskPriorityMedium:
+		*s = TaskPriorityMedium
+		return nil
+	case TaskPriorityHigh:
+		*s = TaskPriorityHigh
+		return nil
+	case TaskPriorityUrgent:
+		*s = TaskPriorityUrgent
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/TaskStatus
+type TaskStatus string
+
+const (
+	TaskStatusTodo       TaskStatus = "todo"
+	TaskStatusInProgress TaskStatus = "in_progress"
+	TaskStatusInReview   TaskStatus = "in_review"
+	TaskStatusDone       TaskStatus = "done"
+	TaskStatusCancelled  TaskStatus = "cancelled"
+)
+
+// AllValues returns all TaskStatus values.
+func (TaskStatus) AllValues() []TaskStatus {
+	return []TaskStatus{
+		TaskStatusTodo,
+		TaskStatusInProgress,
+		TaskStatusInReview,
+		TaskStatusDone,
+		TaskStatusCancelled,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s TaskStatus) MarshalText() ([]byte, error) {
+	switch s {
+	case TaskStatusTodo:
+		return []byte(s), nil
+	case TaskStatusInProgress:
+		return []byte(s), nil
+	case TaskStatusInReview:
+		return []byte(s), nil
+	case TaskStatusDone:
+		return []byte(s), nil
+	case TaskStatusCancelled:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *TaskStatus) UnmarshalText(data []byte) error {
+	switch TaskStatus(data) {
+	case TaskStatusTodo:
+		*s = TaskStatusTodo
+		return nil
+	case TaskStatusInProgress:
+		*s = TaskStatusInProgress
+		return nil
+	case TaskStatusInReview:
+		*s = TaskStatusInReview
+		return nil
+	case TaskStatusDone:
+		*s = TaskStatusDone
+		return nil
+	case TaskStatusCancelled:
+		*s = TaskStatusCancelled
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
 }
 
 // Ref: #/components/schemas/User
@@ -520,15 +6191,11 @@ func (s *User) SetActive(val bool) {
 	s.Active = val
 }
 
+// Merged schema.
 // Ref: #/components/schemas/UserList
 type UserList struct {
-	Items      []User    `json:"items"`
 	NextCursor OptString `json:"next_cursor"`
-}
-
-// GetItems returns the value of Items.
-func (s *UserList) GetItems() []User {
-	return s.Items
+	Items      []User    `json:"items"`
 }
 
 // GetNextCursor returns the value of NextCursor.
@@ -536,9 +6203,9 @@ func (s *UserList) GetNextCursor() OptString {
 	return s.NextCursor
 }
 
-// SetItems sets the value of Items.
-func (s *UserList) SetItems(val []User) {
-	s.Items = val
+// GetItems returns the value of Items.
+func (s *UserList) GetItems() []User {
+	return s.Items
 }
 
 // SetNextCursor sets the value of NextCursor.
@@ -546,7 +6213,71 @@ func (s *UserList) SetNextCursor(val OptString) {
 	s.NextCursor = val
 }
 
-func (*UserList) listUsersRes() {}
+// SetItems sets the value of Items.
+func (s *UserList) SetItems(val []User) {
+	s.Items = val
+}
+
+// UserListHeaders wraps UserList with response headers.
+type UserListHeaders struct {
+	RatelimitLimit     OptInt
+	RatelimitRemaining OptInt
+	RatelimitReset     OptInt
+	XRequestID         OptString
+	Response           UserList
+}
+
+// GetRatelimitLimit returns the value of RatelimitLimit.
+func (s *UserListHeaders) GetRatelimitLimit() OptInt {
+	return s.RatelimitLimit
+}
+
+// GetRatelimitRemaining returns the value of RatelimitRemaining.
+func (s *UserListHeaders) GetRatelimitRemaining() OptInt {
+	return s.RatelimitRemaining
+}
+
+// GetRatelimitReset returns the value of RatelimitReset.
+func (s *UserListHeaders) GetRatelimitReset() OptInt {
+	return s.RatelimitReset
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *UserListHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *UserListHeaders) GetResponse() UserList {
+	return s.Response
+}
+
+// SetRatelimitLimit sets the value of RatelimitLimit.
+func (s *UserListHeaders) SetRatelimitLimit(val OptInt) {
+	s.RatelimitLimit = val
+}
+
+// SetRatelimitRemaining sets the value of RatelimitRemaining.
+func (s *UserListHeaders) SetRatelimitRemaining(val OptInt) {
+	s.RatelimitRemaining = val
+}
+
+// SetRatelimitReset sets the value of RatelimitReset.
+func (s *UserListHeaders) SetRatelimitReset(val OptInt) {
+	s.RatelimitReset = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *UserListHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *UserListHeaders) SetResponse(val UserList) {
+	s.Response = val
+}
+
+func (*UserListHeaders) listUsersRes() {}
 
 type UserPlatformRole string
 
@@ -587,4 +6318,67 @@ func (s *UserPlatformRole) UnmarshalText(data []byte) error {
 	default:
 		return errors.Errorf("invalid value: %q", data)
 	}
+}
+
+// Ref: #/components/schemas/UserRef
+type UserRef struct {
+	ID    uuid.UUID `json:"id"`
+	Name  string    `json:"name"`
+	Email OptString `json:"email"`
+}
+
+// GetID returns the value of ID.
+func (s *UserRef) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetName returns the value of Name.
+func (s *UserRef) GetName() string {
+	return s.Name
+}
+
+// GetEmail returns the value of Email.
+func (s *UserRef) GetEmail() OptString {
+	return s.Email
+}
+
+// SetID sets the value of ID.
+func (s *UserRef) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetName sets the value of Name.
+func (s *UserRef) SetName(val string) {
+	s.Name = val
+}
+
+// SetEmail sets the value of Email.
+func (s *UserRef) SetEmail(val OptString) {
+	s.Email = val
+}
+
+// Ref: #/components/schemas/ValidationError
+type ValidationError struct {
+	Detail  string `json:"detail"`
+	Pointer string `json:"pointer"`
+}
+
+// GetDetail returns the value of Detail.
+func (s *ValidationError) GetDetail() string {
+	return s.Detail
+}
+
+// GetPointer returns the value of Pointer.
+func (s *ValidationError) GetPointer() string {
+	return s.Pointer
+}
+
+// SetDetail sets the value of Detail.
+func (s *ValidationError) SetDetail(val string) {
+	s.Detail = val
+}
+
+// SetPointer sets the value of Pointer.
+func (s *ValidationError) SetPointer(val string) {
+	s.Pointer = val
 }

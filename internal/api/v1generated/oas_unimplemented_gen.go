@@ -13,6 +13,177 @@ type UnimplementedHandler struct{}
 
 var _ Handler = UnimplementedHandler{}
 
+// ActivateProject implements activateProject operation.
+//
+// Activate a project.
+//
+// POST /api/v1/projects/{number}/activate
+func (UnimplementedHandler) ActivateProject(ctx context.Context, req OptLifecycleRequest, params ActivateProjectParams) (r ActivateProjectRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ArchiveProject implements archiveProject operation.
+//
+// Archive a project.
+//
+// POST /api/v1/projects/{number}/archive
+func (UnimplementedHandler) ArchiveProject(ctx context.Context, params ArchiveProjectParams) (r ArchiveProjectRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ArchiveTask implements archiveTask operation.
+//
+// Archive a task.
+//
+// POST /api/v1/tasks/{number}/archive
+func (UnimplementedHandler) ArchiveTask(ctx context.Context, params ArchiveTaskParams) (r ArchiveTaskRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// CancelMilestone implements cancelMilestone operation.
+//
+// Cancel a milestone.
+//
+// POST /api/v1/projects/{number}/milestones/{id}/cancel
+func (UnimplementedHandler) CancelMilestone(ctx context.Context, req OptLifecycleRequest, params CancelMilestoneParams) (r CancelMilestoneRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// CancelProject implements cancelProject operation.
+//
+// Cancel a project.
+//
+// POST /api/v1/projects/{number}/cancel
+func (UnimplementedHandler) CancelProject(ctx context.Context, req OptLifecycleRequest, params CancelProjectParams) (r CancelProjectRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// CompleteMilestone implements completeMilestone operation.
+//
+// Complete a milestone.
+//
+// POST /api/v1/projects/{number}/milestones/{id}/complete
+func (UnimplementedHandler) CompleteMilestone(ctx context.Context, req OptLifecycleRequest, params CompleteMilestoneParams) (r CompleteMilestoneRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// CompleteProject implements completeProject operation.
+//
+// Complete a project.
+//
+// POST /api/v1/projects/{number}/complete
+func (UnimplementedHandler) CompleteProject(ctx context.Context, req OptLifecycleRequest, params CompleteProjectParams) (r CompleteProjectRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// CreateAcceptanceCheck implements createAcceptanceCheck operation.
+//
+// Record an immutable acceptance check.
+//
+// POST /api/v1/criteria/{id}/checks
+func (UnimplementedHandler) CreateAcceptanceCheck(ctx context.Context, req *AcceptanceCheckCreate, params CreateAcceptanceCheckParams) (r CreateAcceptanceCheckRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// CreateLabel implements createLabel operation.
+//
+// Create a label.
+//
+// POST /api/v1/labels
+func (UnimplementedHandler) CreateLabel(ctx context.Context, req *LabelWrite, params CreateLabelParams) (r CreateLabelRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// CreateMilestone implements createMilestone operation.
+//
+// Create a milestone.
+//
+// POST /api/v1/projects/{number}/milestones
+func (UnimplementedHandler) CreateMilestone(ctx context.Context, req *MilestoneCreate, params CreateMilestoneParams) (r CreateMilestoneRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// CreateMilestoneCriterion implements createMilestoneCriterion operation.
+//
+// Create a milestone acceptance criterion.
+//
+// POST /api/v1/projects/{number}/milestones/{id}/criteria
+func (UnimplementedHandler) CreateMilestoneCriterion(ctx context.Context, req *CriterionCreate, params CreateMilestoneCriterionParams) (r CreateMilestoneCriterionRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// CreateProject implements createProject operation.
+//
+// Create a project.
+//
+// POST /api/v1/projects
+func (UnimplementedHandler) CreateProject(ctx context.Context, req *ProjectCreate, params CreateProjectParams) (r CreateProjectRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// CreateProjectCriterion implements createProjectCriterion operation.
+//
+// Create a project acceptance criterion.
+//
+// POST /api/v1/projects/{number}/criteria
+func (UnimplementedHandler) CreateProjectCriterion(ctx context.Context, req *CriterionCreate, params CreateProjectCriterionParams) (r CreateProjectCriterionRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// CreateTask implements createTask operation.
+//
+// Create a task.
+//
+// POST /api/v1/tasks
+func (UnimplementedHandler) CreateTask(ctx context.Context, req *TaskCreate, params CreateTaskParams) (r CreateTaskRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// CreateTaskComment implements createTaskComment operation.
+//
+// Add a task comment.
+//
+// POST /api/v1/tasks/{number}/comments
+func (UnimplementedHandler) CreateTaskComment(ctx context.Context, req *CommentWrite, params CreateTaskCommentParams) (r CreateTaskCommentRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// CreateTaskCriterion implements createTaskCriterion operation.
+//
+// Create a task acceptance criterion.
+//
+// POST /api/v1/tasks/{number}/criteria
+func (UnimplementedHandler) CreateTaskCriterion(ctx context.Context, req *CriterionCreate, params CreateTaskCriterionParams) (r CreateTaskCriterionRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// DeleteCriterion implements deleteCriterion operation.
+//
+// Remove an acceptance criterion.
+//
+// DELETE /api/v1/criteria/{id}
+func (UnimplementedHandler) DeleteCriterion(ctx context.Context, req OptLifecycleRequest, params DeleteCriterionParams) (r DeleteCriterionRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// DeleteLabel implements deleteLabel operation.
+//
+// Delete a label.
+//
+// DELETE /api/v1/labels/{id}
+func (UnimplementedHandler) DeleteLabel(ctx context.Context, params DeleteLabelParams) (r DeleteLabelRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// DeleteTaskComment implements deleteTaskComment operation.
+//
+// Delete a task comment.
+//
+// DELETE /api/v1/tasks/{number}/comments/{id}
+func (UnimplementedHandler) DeleteTaskComment(ctx context.Context, params DeleteTaskCommentParams) (r DeleteTaskCommentRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetCurrentPrincipal implements getCurrentPrincipal operation.
 //
 // Get the authenticated principal.
@@ -22,11 +193,200 @@ func (UnimplementedHandler) GetCurrentPrincipal(ctx context.Context) (r GetCurre
 	return r, ht.ErrNotImplemented
 }
 
+// GetProject implements getProject operation.
+//
+// Get a project and its work aggregate.
+//
+// GET /api/v1/projects/{number}
+func (UnimplementedHandler) GetProject(ctx context.Context, params GetProjectParams) (r GetProjectRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetTask implements getTask operation.
+//
+// Get a task.
+//
+// GET /api/v1/tasks/{number}
+func (UnimplementedHandler) GetTask(ctx context.Context, params GetTaskParams) (r GetTaskRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListLabels implements listLabels operation.
+//
+// List labels.
+//
+// GET /api/v1/labels
+func (UnimplementedHandler) ListLabels(ctx context.Context, params ListLabelsParams) (r ListLabelsRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListMilestoneCriteria implements listMilestoneCriteria operation.
+//
+// List milestone acceptance criteria.
+//
+// GET /api/v1/projects/{number}/milestones/{id}/criteria
+func (UnimplementedHandler) ListMilestoneCriteria(ctx context.Context, params ListMilestoneCriteriaParams) (r ListMilestoneCriteriaRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListProjectCriteria implements listProjectCriteria operation.
+//
+// List project acceptance criteria.
+//
+// GET /api/v1/projects/{number}/criteria
+func (UnimplementedHandler) ListProjectCriteria(ctx context.Context, params ListProjectCriteriaParams) (r ListProjectCriteriaRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListProjects implements listProjects operation.
+//
+// List projects.
+//
+// GET /api/v1/projects
+func (UnimplementedHandler) ListProjects(ctx context.Context, params ListProjectsParams) (r ListProjectsRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListTaskActivity implements listTaskActivity operation.
+//
+// List task activity.
+//
+// GET /api/v1/tasks/{number}/activity
+func (UnimplementedHandler) ListTaskActivity(ctx context.Context, params ListTaskActivityParams) (r ListTaskActivityRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListTaskComments implements listTaskComments operation.
+//
+// List task comments.
+//
+// GET /api/v1/tasks/{number}/comments
+func (UnimplementedHandler) ListTaskComments(ctx context.Context, params ListTaskCommentsParams) (r ListTaskCommentsRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListTaskCriteria implements listTaskCriteria operation.
+//
+// List task acceptance criteria.
+//
+// GET /api/v1/tasks/{number}/criteria
+func (UnimplementedHandler) ListTaskCriteria(ctx context.Context, params ListTaskCriteriaParams) (r ListTaskCriteriaRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListTasks implements listTasks operation.
+//
+// List tasks.
+//
+// GET /api/v1/tasks
+func (UnimplementedHandler) ListTasks(ctx context.Context, params ListTasksParams) (r ListTasksRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // ListUsers implements listUsers operation.
 //
 // List users available for work assignment.
 //
 // GET /api/v1/users
-func (UnimplementedHandler) ListUsers(ctx context.Context) (r ListUsersRes, _ error) {
+func (UnimplementedHandler) ListUsers(ctx context.Context, params ListUsersParams) (r ListUsersRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// PauseProject implements pauseProject operation.
+//
+// Pause a project.
+//
+// POST /api/v1/projects/{number}/pause
+func (UnimplementedHandler) PauseProject(ctx context.Context, req OptLifecycleRequest, params PauseProjectParams) (r PauseProjectRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ReopenMilestone implements reopenMilestone operation.
+//
+// Reopen a milestone.
+//
+// POST /api/v1/projects/{number}/milestones/{id}/reopen
+func (UnimplementedHandler) ReopenMilestone(ctx context.Context, req *LifecycleRequest, params ReopenMilestoneParams) (r ReopenMilestoneRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ReopenProject implements reopenProject operation.
+//
+// Reopen a project.
+//
+// POST /api/v1/projects/{number}/reopen
+func (UnimplementedHandler) ReopenProject(ctx context.Context, req *LifecycleRequest, params ReopenProjectParams) (r ReopenProjectRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// RestoreProject implements restoreProject operation.
+//
+// Restore a project.
+//
+// POST /api/v1/projects/{number}/restore
+func (UnimplementedHandler) RestoreProject(ctx context.Context, params RestoreProjectParams) (r RestoreProjectRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// RestoreTask implements restoreTask operation.
+//
+// Restore a task.
+//
+// POST /api/v1/tasks/{number}/restore
+func (UnimplementedHandler) RestoreTask(ctx context.Context, params RestoreTaskParams) (r RestoreTaskRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateCriterion implements updateCriterion operation.
+//
+// Update an acceptance criterion.
+//
+// PATCH /api/v1/criteria/{id}
+func (UnimplementedHandler) UpdateCriterion(ctx context.Context, req *CriterionPatch, params UpdateCriterionParams) (r UpdateCriterionRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateLabel implements updateLabel operation.
+//
+// Rename a label.
+//
+// PATCH /api/v1/labels/{id}
+func (UnimplementedHandler) UpdateLabel(ctx context.Context, req *LabelWrite, params UpdateLabelParams) (r UpdateLabelRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateMilestone implements updateMilestone operation.
+//
+// Update a milestone.
+//
+// PATCH /api/v1/projects/{number}/milestones/{id}
+func (UnimplementedHandler) UpdateMilestone(ctx context.Context, req *MilestonePatch, params UpdateMilestoneParams) (r UpdateMilestoneRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateProject implements updateProject operation.
+//
+// Update a project.
+//
+// PATCH /api/v1/projects/{number}
+func (UnimplementedHandler) UpdateProject(ctx context.Context, req *ProjectPatch, params UpdateProjectParams) (r UpdateProjectRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateTask implements updateTask operation.
+//
+// Update a task.
+//
+// PATCH /api/v1/tasks/{number}
+func (UnimplementedHandler) UpdateTask(ctx context.Context, req *TaskPatch, params UpdateTaskParams) (r UpdateTaskRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateTaskComment implements updateTaskComment operation.
+//
+// Update a task comment.
+//
+// PATCH /api/v1/tasks/{number}/comments/{id}
+func (UnimplementedHandler) UpdateTaskComment(ctx context.Context, req *CommentWrite, params UpdateTaskCommentParams) (r UpdateTaskCommentRes, _ error) {
 	return r, ht.ErrNotImplemented
 }

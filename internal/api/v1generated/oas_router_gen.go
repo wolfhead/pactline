@@ -11,10 +11,106 @@ import (
 )
 
 var (
-	rn1AllowedHeaders = map[string]string{
+	rn20AllowedHeaders = map[string]string{
+		"DELETE": "Authorization,Content-Type,Idempotency-Key,If-Match",
+		"PATCH":  "Authorization,Content-Type,Idempotency-Key,If-Match",
+	}
+	rn21AllowedHeaders = map[string]string{
+		"POST": "Authorization,Content-Type,Idempotency-Key,If-Match",
+	}
+	rn22AllowedHeaders = map[string]string{
+		"GET":  "Authorization",
+		"POST": "Authorization,Content-Type,Idempotency-Key",
+	}
+	rn33AllowedHeaders = map[string]string{
+		"DELETE": "Authorization,Idempotency-Key,If-Match",
+		"PATCH":  "Authorization,Content-Type,Idempotency-Key,If-Match",
+	}
+	rn36AllowedHeaders = map[string]string{
 		"GET": "Authorization",
 	}
+	rn25AllowedHeaders = map[string]string{
+		"GET":  "Authorization",
+		"POST": "Authorization,Content-Type,Idempotency-Key",
+	}
+	rn2AllowedHeaders = map[string]string{
+		"GET":   "Authorization",
+		"PATCH": "Authorization,Content-Type,Idempotency-Key,If-Match",
+	}
 	rn3AllowedHeaders = map[string]string{
+		"POST": "Authorization,Content-Type,Idempotency-Key,If-Match",
+	}
+	rn5AllowedHeaders = map[string]string{
+		"POST": "Authorization,Idempotency-Key,If-Match",
+	}
+	rn14AllowedHeaders = map[string]string{
+		"POST": "Authorization,Content-Type,Idempotency-Key,If-Match",
+	}
+	rn18AllowedHeaders = map[string]string{
+		"POST": "Authorization,Content-Type,Idempotency-Key,If-Match",
+	}
+	rn26AllowedHeaders = map[string]string{
+		"GET":  "Authorization",
+		"POST": "Authorization,Content-Type,Idempotency-Key,If-Match",
+	}
+	rn23AllowedHeaders = map[string]string{
+		"POST": "Authorization,Content-Type,Idempotency-Key,If-Match",
+	}
+	rn12AllowedHeaders = map[string]string{
+		"PATCH": "Authorization,Content-Type,Idempotency-Key,If-Match,X-Project-If-Match",
+	}
+	rn13AllowedHeaders = map[string]string{
+		"POST": "Authorization,Content-Type,Idempotency-Key,If-Match,X-Project-If-Match",
+	}
+	rn16AllowedHeaders = map[string]string{
+		"POST": "Authorization,Content-Type,Idempotency-Key,If-Match,X-Project-If-Match",
+	}
+	rn24AllowedHeaders = map[string]string{
+		"GET":  "Authorization",
+		"POST": "Authorization,Content-Type,Idempotency-Key,If-Match,X-Project-If-Match",
+	}
+	rn42AllowedHeaders = map[string]string{
+		"POST": "Authorization,Content-Type,Idempotency-Key,If-Match,X-Project-If-Match",
+	}
+	rn40AllowedHeaders = map[string]string{
+		"POST": "Authorization,Content-Type,Idempotency-Key,If-Match",
+	}
+	rn43AllowedHeaders = map[string]string{
+		"POST": "Authorization,Content-Type,Idempotency-Key,If-Match",
+	}
+	rn45AllowedHeaders = map[string]string{
+		"POST": "Authorization,Idempotency-Key,If-Match",
+	}
+	rn27AllowedHeaders = map[string]string{
+		"GET":  "Authorization",
+		"POST": "Authorization,Content-Type,Idempotency-Key",
+	}
+	rn8AllowedHeaders = map[string]string{
+		"GET":   "Authorization",
+		"PATCH": "Authorization,Content-Type,Idempotency-Key,If-Match",
+	}
+	rn38AllowedHeaders = map[string]string{
+		"GET": "Authorization",
+	}
+	rn9AllowedHeaders = map[string]string{
+		"POST": "Authorization,Idempotency-Key,If-Match",
+	}
+	rn29AllowedHeaders = map[string]string{
+		"GET":  "Authorization",
+		"POST": "Authorization,Content-Type,Idempotency-Key,If-Match",
+	}
+	rn35AllowedHeaders = map[string]string{
+		"DELETE": "Authorization,Idempotency-Key,If-Match",
+		"PATCH":  "Authorization,Content-Type,Idempotency-Key,If-Match",
+	}
+	rn31AllowedHeaders = map[string]string{
+		"GET":  "Authorization",
+		"POST": "Authorization,Content-Type,Idempotency-Key,If-Match",
+	}
+	rn46AllowedHeaders = map[string]string{
+		"POST": "Authorization,Idempotency-Key,If-Match",
+	}
+	rn39AllowedHeaders = map[string]string{
 		"GET": "Authorization",
 	}
 )
@@ -49,6 +145,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.notFound(w, r)
 		return
 	}
+	args := [2]string{}
 
 	// Static code generated router with unwrapped path search.
 	switch {
@@ -69,6 +166,142 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 			switch elem[0] {
+			case 'c': // Prefix: "criteria/"
+
+				if l := len("criteria/"); len(elem) >= l && elem[0:l] == "criteria/" {
+					elem = elem[l:]
+				} else {
+					break
+				}
+
+				// Param: "id"
+				// Match until "/"
+				idx := strings.IndexByte(elem, '/')
+				if idx < 0 {
+					idx = len(elem)
+				}
+				args[0] = elem[:idx]
+				elem = elem[idx:]
+
+				if len(elem) == 0 {
+					switch r.Method {
+					case "DELETE":
+						s.handleDeleteCriterionRequest([1]string{
+							args[0],
+						}, elemIsEscaped, w, r)
+					case "PATCH":
+						s.handleUpdateCriterionRequest([1]string{
+							args[0],
+						}, elemIsEscaped, w, r)
+					default:
+						s.notAllowed(w, r, notAllowedParams{
+							allowedMethods: "DELETE,PATCH",
+							allowedHeaders: rn20AllowedHeaders,
+							acceptPost:     "",
+							acceptPatch:    "application/json",
+						})
+					}
+
+					return
+				}
+				switch elem[0] {
+				case '/': // Prefix: "/checks"
+
+					if l := len("/checks"); len(elem) >= l && elem[0:l] == "/checks" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					if len(elem) == 0 {
+						// Leaf node.
+						switch r.Method {
+						case "POST":
+							s.handleCreateAcceptanceCheckRequest([1]string{
+								args[0],
+							}, elemIsEscaped, w, r)
+						default:
+							s.notAllowed(w, r, notAllowedParams{
+								allowedMethods: "POST",
+								allowedHeaders: rn21AllowedHeaders,
+								acceptPost:     "application/json",
+								acceptPatch:    "",
+							})
+						}
+
+						return
+					}
+
+				}
+
+			case 'l': // Prefix: "labels"
+
+				if l := len("labels"); len(elem) >= l && elem[0:l] == "labels" {
+					elem = elem[l:]
+				} else {
+					break
+				}
+
+				if len(elem) == 0 {
+					switch r.Method {
+					case "GET":
+						s.handleListLabelsRequest([0]string{}, elemIsEscaped, w, r)
+					case "POST":
+						s.handleCreateLabelRequest([0]string{}, elemIsEscaped, w, r)
+					default:
+						s.notAllowed(w, r, notAllowedParams{
+							allowedMethods: "GET,POST",
+							allowedHeaders: rn22AllowedHeaders,
+							acceptPost:     "application/json",
+							acceptPatch:    "",
+						})
+					}
+
+					return
+				}
+				switch elem[0] {
+				case '/': // Prefix: "/"
+
+					if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					// Param: "id"
+					// Leaf parameter, slashes are prohibited
+					idx := strings.IndexByte(elem, '/')
+					if idx >= 0 {
+						break
+					}
+					args[0] = elem
+					elem = ""
+
+					if len(elem) == 0 {
+						// Leaf node.
+						switch r.Method {
+						case "DELETE":
+							s.handleDeleteLabelRequest([1]string{
+								args[0],
+							}, elemIsEscaped, w, r)
+						case "PATCH":
+							s.handleUpdateLabelRequest([1]string{
+								args[0],
+							}, elemIsEscaped, w, r)
+						default:
+							s.notAllowed(w, r, notAllowedParams{
+								allowedMethods: "DELETE,PATCH",
+								allowedHeaders: rn33AllowedHeaders,
+								acceptPost:     "",
+								acceptPatch:    "application/json",
+							})
+						}
+
+						return
+					}
+
+				}
+
 			case 'm': // Prefix: "me"
 
 				if l := len("me"); len(elem) >= l && elem[0:l] == "me" {
@@ -85,13 +318,866 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					default:
 						s.notAllowed(w, r, notAllowedParams{
 							allowedMethods: "GET",
-							allowedHeaders: rn1AllowedHeaders,
+							allowedHeaders: rn36AllowedHeaders,
 							acceptPost:     "",
 							acceptPatch:    "",
 						})
 					}
 
 					return
+				}
+
+			case 'p': // Prefix: "projects"
+
+				if l := len("projects"); len(elem) >= l && elem[0:l] == "projects" {
+					elem = elem[l:]
+				} else {
+					break
+				}
+
+				if len(elem) == 0 {
+					switch r.Method {
+					case "GET":
+						s.handleListProjectsRequest([0]string{}, elemIsEscaped, w, r)
+					case "POST":
+						s.handleCreateProjectRequest([0]string{}, elemIsEscaped, w, r)
+					default:
+						s.notAllowed(w, r, notAllowedParams{
+							allowedMethods: "GET,POST",
+							allowedHeaders: rn25AllowedHeaders,
+							acceptPost:     "application/json",
+							acceptPatch:    "",
+						})
+					}
+
+					return
+				}
+				switch elem[0] {
+				case '/': // Prefix: "/"
+
+					if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					// Param: "number"
+					// Match until "/"
+					idx := strings.IndexByte(elem, '/')
+					if idx < 0 {
+						idx = len(elem)
+					}
+					args[0] = elem[:idx]
+					elem = elem[idx:]
+
+					if len(elem) == 0 {
+						switch r.Method {
+						case "GET":
+							s.handleGetProjectRequest([1]string{
+								args[0],
+							}, elemIsEscaped, w, r)
+						case "PATCH":
+							s.handleUpdateProjectRequest([1]string{
+								args[0],
+							}, elemIsEscaped, w, r)
+						default:
+							s.notAllowed(w, r, notAllowedParams{
+								allowedMethods: "GET,PATCH",
+								allowedHeaders: rn2AllowedHeaders,
+								acceptPost:     "",
+								acceptPatch:    "application/json",
+							})
+						}
+
+						return
+					}
+					switch elem[0] {
+					case '/': // Prefix: "/"
+
+						if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+							elem = elem[l:]
+						} else {
+							break
+						}
+
+						if len(elem) == 0 {
+							break
+						}
+						switch elem[0] {
+						case 'a': // Prefix: "a"
+
+							if l := len("a"); len(elem) >= l && elem[0:l] == "a" {
+								elem = elem[l:]
+							} else {
+								break
+							}
+
+							if len(elem) == 0 {
+								break
+							}
+							switch elem[0] {
+							case 'c': // Prefix: "ctivate"
+
+								if l := len("ctivate"); len(elem) >= l && elem[0:l] == "ctivate" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								if len(elem) == 0 {
+									// Leaf node.
+									switch r.Method {
+									case "POST":
+										s.handleActivateProjectRequest([1]string{
+											args[0],
+										}, elemIsEscaped, w, r)
+									default:
+										s.notAllowed(w, r, notAllowedParams{
+											allowedMethods: "POST",
+											allowedHeaders: rn3AllowedHeaders,
+											acceptPost:     "application/json",
+											acceptPatch:    "",
+										})
+									}
+
+									return
+								}
+
+							case 'r': // Prefix: "rchive"
+
+								if l := len("rchive"); len(elem) >= l && elem[0:l] == "rchive" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								if len(elem) == 0 {
+									// Leaf node.
+									switch r.Method {
+									case "POST":
+										s.handleArchiveProjectRequest([1]string{
+											args[0],
+										}, elemIsEscaped, w, r)
+									default:
+										s.notAllowed(w, r, notAllowedParams{
+											allowedMethods: "POST",
+											allowedHeaders: rn5AllowedHeaders,
+											acceptPost:     "",
+											acceptPatch:    "",
+										})
+									}
+
+									return
+								}
+
+							}
+
+						case 'c': // Prefix: "c"
+
+							if l := len("c"); len(elem) >= l && elem[0:l] == "c" {
+								elem = elem[l:]
+							} else {
+								break
+							}
+
+							if len(elem) == 0 {
+								break
+							}
+							switch elem[0] {
+							case 'a': // Prefix: "ancel"
+
+								if l := len("ancel"); len(elem) >= l && elem[0:l] == "ancel" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								if len(elem) == 0 {
+									// Leaf node.
+									switch r.Method {
+									case "POST":
+										s.handleCancelProjectRequest([1]string{
+											args[0],
+										}, elemIsEscaped, w, r)
+									default:
+										s.notAllowed(w, r, notAllowedParams{
+											allowedMethods: "POST",
+											allowedHeaders: rn14AllowedHeaders,
+											acceptPost:     "application/json",
+											acceptPatch:    "",
+										})
+									}
+
+									return
+								}
+
+							case 'o': // Prefix: "omplete"
+
+								if l := len("omplete"); len(elem) >= l && elem[0:l] == "omplete" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								if len(elem) == 0 {
+									// Leaf node.
+									switch r.Method {
+									case "POST":
+										s.handleCompleteProjectRequest([1]string{
+											args[0],
+										}, elemIsEscaped, w, r)
+									default:
+										s.notAllowed(w, r, notAllowedParams{
+											allowedMethods: "POST",
+											allowedHeaders: rn18AllowedHeaders,
+											acceptPost:     "application/json",
+											acceptPatch:    "",
+										})
+									}
+
+									return
+								}
+
+							case 'r': // Prefix: "riteria"
+
+								if l := len("riteria"); len(elem) >= l && elem[0:l] == "riteria" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								if len(elem) == 0 {
+									// Leaf node.
+									switch r.Method {
+									case "GET":
+										s.handleListProjectCriteriaRequest([1]string{
+											args[0],
+										}, elemIsEscaped, w, r)
+									case "POST":
+										s.handleCreateProjectCriterionRequest([1]string{
+											args[0],
+										}, elemIsEscaped, w, r)
+									default:
+										s.notAllowed(w, r, notAllowedParams{
+											allowedMethods: "GET,POST",
+											allowedHeaders: rn26AllowedHeaders,
+											acceptPost:     "application/json",
+											acceptPatch:    "",
+										})
+									}
+
+									return
+								}
+
+							}
+
+						case 'm': // Prefix: "milestones"
+
+							if l := len("milestones"); len(elem) >= l && elem[0:l] == "milestones" {
+								elem = elem[l:]
+							} else {
+								break
+							}
+
+							if len(elem) == 0 {
+								switch r.Method {
+								case "POST":
+									s.handleCreateMilestoneRequest([1]string{
+										args[0],
+									}, elemIsEscaped, w, r)
+								default:
+									s.notAllowed(w, r, notAllowedParams{
+										allowedMethods: "POST",
+										allowedHeaders: rn23AllowedHeaders,
+										acceptPost:     "application/json",
+										acceptPatch:    "",
+									})
+								}
+
+								return
+							}
+							switch elem[0] {
+							case '/': // Prefix: "/"
+
+								if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								// Param: "id"
+								// Match until "/"
+								idx := strings.IndexByte(elem, '/')
+								if idx < 0 {
+									idx = len(elem)
+								}
+								args[1] = elem[:idx]
+								elem = elem[idx:]
+
+								if len(elem) == 0 {
+									switch r.Method {
+									case "PATCH":
+										s.handleUpdateMilestoneRequest([2]string{
+											args[0],
+											args[1],
+										}, elemIsEscaped, w, r)
+									default:
+										s.notAllowed(w, r, notAllowedParams{
+											allowedMethods: "PATCH",
+											allowedHeaders: rn12AllowedHeaders,
+											acceptPost:     "",
+											acceptPatch:    "application/json",
+										})
+									}
+
+									return
+								}
+								switch elem[0] {
+								case '/': // Prefix: "/"
+
+									if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+										elem = elem[l:]
+									} else {
+										break
+									}
+
+									if len(elem) == 0 {
+										break
+									}
+									switch elem[0] {
+									case 'c': // Prefix: "c"
+
+										if l := len("c"); len(elem) >= l && elem[0:l] == "c" {
+											elem = elem[l:]
+										} else {
+											break
+										}
+
+										if len(elem) == 0 {
+											break
+										}
+										switch elem[0] {
+										case 'a': // Prefix: "ancel"
+
+											if l := len("ancel"); len(elem) >= l && elem[0:l] == "ancel" {
+												elem = elem[l:]
+											} else {
+												break
+											}
+
+											if len(elem) == 0 {
+												// Leaf node.
+												switch r.Method {
+												case "POST":
+													s.handleCancelMilestoneRequest([2]string{
+														args[0],
+														args[1],
+													}, elemIsEscaped, w, r)
+												default:
+													s.notAllowed(w, r, notAllowedParams{
+														allowedMethods: "POST",
+														allowedHeaders: rn13AllowedHeaders,
+														acceptPost:     "application/json",
+														acceptPatch:    "",
+													})
+												}
+
+												return
+											}
+
+										case 'o': // Prefix: "omplete"
+
+											if l := len("omplete"); len(elem) >= l && elem[0:l] == "omplete" {
+												elem = elem[l:]
+											} else {
+												break
+											}
+
+											if len(elem) == 0 {
+												// Leaf node.
+												switch r.Method {
+												case "POST":
+													s.handleCompleteMilestoneRequest([2]string{
+														args[0],
+														args[1],
+													}, elemIsEscaped, w, r)
+												default:
+													s.notAllowed(w, r, notAllowedParams{
+														allowedMethods: "POST",
+														allowedHeaders: rn16AllowedHeaders,
+														acceptPost:     "application/json",
+														acceptPatch:    "",
+													})
+												}
+
+												return
+											}
+
+										case 'r': // Prefix: "riteria"
+
+											if l := len("riteria"); len(elem) >= l && elem[0:l] == "riteria" {
+												elem = elem[l:]
+											} else {
+												break
+											}
+
+											if len(elem) == 0 {
+												// Leaf node.
+												switch r.Method {
+												case "GET":
+													s.handleListMilestoneCriteriaRequest([2]string{
+														args[0],
+														args[1],
+													}, elemIsEscaped, w, r)
+												case "POST":
+													s.handleCreateMilestoneCriterionRequest([2]string{
+														args[0],
+														args[1],
+													}, elemIsEscaped, w, r)
+												default:
+													s.notAllowed(w, r, notAllowedParams{
+														allowedMethods: "GET,POST",
+														allowedHeaders: rn24AllowedHeaders,
+														acceptPost:     "application/json",
+														acceptPatch:    "",
+													})
+												}
+
+												return
+											}
+
+										}
+
+									case 'r': // Prefix: "reopen"
+
+										if l := len("reopen"); len(elem) >= l && elem[0:l] == "reopen" {
+											elem = elem[l:]
+										} else {
+											break
+										}
+
+										if len(elem) == 0 {
+											// Leaf node.
+											switch r.Method {
+											case "POST":
+												s.handleReopenMilestoneRequest([2]string{
+													args[0],
+													args[1],
+												}, elemIsEscaped, w, r)
+											default:
+												s.notAllowed(w, r, notAllowedParams{
+													allowedMethods: "POST",
+													allowedHeaders: rn42AllowedHeaders,
+													acceptPost:     "application/json",
+													acceptPatch:    "",
+												})
+											}
+
+											return
+										}
+
+									}
+
+								}
+
+							}
+
+						case 'p': // Prefix: "pause"
+
+							if l := len("pause"); len(elem) >= l && elem[0:l] == "pause" {
+								elem = elem[l:]
+							} else {
+								break
+							}
+
+							if len(elem) == 0 {
+								// Leaf node.
+								switch r.Method {
+								case "POST":
+									s.handlePauseProjectRequest([1]string{
+										args[0],
+									}, elemIsEscaped, w, r)
+								default:
+									s.notAllowed(w, r, notAllowedParams{
+										allowedMethods: "POST",
+										allowedHeaders: rn40AllowedHeaders,
+										acceptPost:     "application/json",
+										acceptPatch:    "",
+									})
+								}
+
+								return
+							}
+
+						case 'r': // Prefix: "re"
+
+							if l := len("re"); len(elem) >= l && elem[0:l] == "re" {
+								elem = elem[l:]
+							} else {
+								break
+							}
+
+							if len(elem) == 0 {
+								break
+							}
+							switch elem[0] {
+							case 'o': // Prefix: "open"
+
+								if l := len("open"); len(elem) >= l && elem[0:l] == "open" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								if len(elem) == 0 {
+									// Leaf node.
+									switch r.Method {
+									case "POST":
+										s.handleReopenProjectRequest([1]string{
+											args[0],
+										}, elemIsEscaped, w, r)
+									default:
+										s.notAllowed(w, r, notAllowedParams{
+											allowedMethods: "POST",
+											allowedHeaders: rn43AllowedHeaders,
+											acceptPost:     "application/json",
+											acceptPatch:    "",
+										})
+									}
+
+									return
+								}
+
+							case 's': // Prefix: "store"
+
+								if l := len("store"); len(elem) >= l && elem[0:l] == "store" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								if len(elem) == 0 {
+									// Leaf node.
+									switch r.Method {
+									case "POST":
+										s.handleRestoreProjectRequest([1]string{
+											args[0],
+										}, elemIsEscaped, w, r)
+									default:
+										s.notAllowed(w, r, notAllowedParams{
+											allowedMethods: "POST",
+											allowedHeaders: rn45AllowedHeaders,
+											acceptPost:     "",
+											acceptPatch:    "",
+										})
+									}
+
+									return
+								}
+
+							}
+
+						}
+
+					}
+
+				}
+
+			case 't': // Prefix: "tasks"
+
+				if l := len("tasks"); len(elem) >= l && elem[0:l] == "tasks" {
+					elem = elem[l:]
+				} else {
+					break
+				}
+
+				if len(elem) == 0 {
+					switch r.Method {
+					case "GET":
+						s.handleListTasksRequest([0]string{}, elemIsEscaped, w, r)
+					case "POST":
+						s.handleCreateTaskRequest([0]string{}, elemIsEscaped, w, r)
+					default:
+						s.notAllowed(w, r, notAllowedParams{
+							allowedMethods: "GET,POST",
+							allowedHeaders: rn27AllowedHeaders,
+							acceptPost:     "application/json",
+							acceptPatch:    "",
+						})
+					}
+
+					return
+				}
+				switch elem[0] {
+				case '/': // Prefix: "/"
+
+					if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					// Param: "number"
+					// Match until "/"
+					idx := strings.IndexByte(elem, '/')
+					if idx < 0 {
+						idx = len(elem)
+					}
+					args[0] = elem[:idx]
+					elem = elem[idx:]
+
+					if len(elem) == 0 {
+						switch r.Method {
+						case "GET":
+							s.handleGetTaskRequest([1]string{
+								args[0],
+							}, elemIsEscaped, w, r)
+						case "PATCH":
+							s.handleUpdateTaskRequest([1]string{
+								args[0],
+							}, elemIsEscaped, w, r)
+						default:
+							s.notAllowed(w, r, notAllowedParams{
+								allowedMethods: "GET,PATCH",
+								allowedHeaders: rn8AllowedHeaders,
+								acceptPost:     "",
+								acceptPatch:    "application/json",
+							})
+						}
+
+						return
+					}
+					switch elem[0] {
+					case '/': // Prefix: "/"
+
+						if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+							elem = elem[l:]
+						} else {
+							break
+						}
+
+						if len(elem) == 0 {
+							break
+						}
+						switch elem[0] {
+						case 'a': // Prefix: "a"
+
+							if l := len("a"); len(elem) >= l && elem[0:l] == "a" {
+								elem = elem[l:]
+							} else {
+								break
+							}
+
+							if len(elem) == 0 {
+								break
+							}
+							switch elem[0] {
+							case 'c': // Prefix: "ctivity"
+
+								if l := len("ctivity"); len(elem) >= l && elem[0:l] == "ctivity" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								if len(elem) == 0 {
+									// Leaf node.
+									switch r.Method {
+									case "GET":
+										s.handleListTaskActivityRequest([1]string{
+											args[0],
+										}, elemIsEscaped, w, r)
+									default:
+										s.notAllowed(w, r, notAllowedParams{
+											allowedMethods: "GET",
+											allowedHeaders: rn38AllowedHeaders,
+											acceptPost:     "",
+											acceptPatch:    "",
+										})
+									}
+
+									return
+								}
+
+							case 'r': // Prefix: "rchive"
+
+								if l := len("rchive"); len(elem) >= l && elem[0:l] == "rchive" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								if len(elem) == 0 {
+									// Leaf node.
+									switch r.Method {
+									case "POST":
+										s.handleArchiveTaskRequest([1]string{
+											args[0],
+										}, elemIsEscaped, w, r)
+									default:
+										s.notAllowed(w, r, notAllowedParams{
+											allowedMethods: "POST",
+											allowedHeaders: rn9AllowedHeaders,
+											acceptPost:     "",
+											acceptPatch:    "",
+										})
+									}
+
+									return
+								}
+
+							}
+
+						case 'c': // Prefix: "c"
+
+							if l := len("c"); len(elem) >= l && elem[0:l] == "c" {
+								elem = elem[l:]
+							} else {
+								break
+							}
+
+							if len(elem) == 0 {
+								break
+							}
+							switch elem[0] {
+							case 'o': // Prefix: "omments"
+
+								if l := len("omments"); len(elem) >= l && elem[0:l] == "omments" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								if len(elem) == 0 {
+									switch r.Method {
+									case "GET":
+										s.handleListTaskCommentsRequest([1]string{
+											args[0],
+										}, elemIsEscaped, w, r)
+									case "POST":
+										s.handleCreateTaskCommentRequest([1]string{
+											args[0],
+										}, elemIsEscaped, w, r)
+									default:
+										s.notAllowed(w, r, notAllowedParams{
+											allowedMethods: "GET,POST",
+											allowedHeaders: rn29AllowedHeaders,
+											acceptPost:     "application/json",
+											acceptPatch:    "",
+										})
+									}
+
+									return
+								}
+								switch elem[0] {
+								case '/': // Prefix: "/"
+
+									if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+										elem = elem[l:]
+									} else {
+										break
+									}
+
+									// Param: "id"
+									// Leaf parameter, slashes are prohibited
+									idx := strings.IndexByte(elem, '/')
+									if idx >= 0 {
+										break
+									}
+									args[1] = elem
+									elem = ""
+
+									if len(elem) == 0 {
+										// Leaf node.
+										switch r.Method {
+										case "DELETE":
+											s.handleDeleteTaskCommentRequest([2]string{
+												args[0],
+												args[1],
+											}, elemIsEscaped, w, r)
+										case "PATCH":
+											s.handleUpdateTaskCommentRequest([2]string{
+												args[0],
+												args[1],
+											}, elemIsEscaped, w, r)
+										default:
+											s.notAllowed(w, r, notAllowedParams{
+												allowedMethods: "DELETE,PATCH",
+												allowedHeaders: rn35AllowedHeaders,
+												acceptPost:     "",
+												acceptPatch:    "application/json",
+											})
+										}
+
+										return
+									}
+
+								}
+
+							case 'r': // Prefix: "riteria"
+
+								if l := len("riteria"); len(elem) >= l && elem[0:l] == "riteria" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								if len(elem) == 0 {
+									// Leaf node.
+									switch r.Method {
+									case "GET":
+										s.handleListTaskCriteriaRequest([1]string{
+											args[0],
+										}, elemIsEscaped, w, r)
+									case "POST":
+										s.handleCreateTaskCriterionRequest([1]string{
+											args[0],
+										}, elemIsEscaped, w, r)
+									default:
+										s.notAllowed(w, r, notAllowedParams{
+											allowedMethods: "GET,POST",
+											allowedHeaders: rn31AllowedHeaders,
+											acceptPost:     "application/json",
+											acceptPatch:    "",
+										})
+									}
+
+									return
+								}
+
+							}
+
+						case 'r': // Prefix: "restore"
+
+							if l := len("restore"); len(elem) >= l && elem[0:l] == "restore" {
+								elem = elem[l:]
+							} else {
+								break
+							}
+
+							if len(elem) == 0 {
+								// Leaf node.
+								switch r.Method {
+								case "POST":
+									s.handleRestoreTaskRequest([1]string{
+										args[0],
+									}, elemIsEscaped, w, r)
+								default:
+									s.notAllowed(w, r, notAllowedParams{
+										allowedMethods: "POST",
+										allowedHeaders: rn46AllowedHeaders,
+										acceptPost:     "",
+										acceptPatch:    "",
+									})
+								}
+
+								return
+							}
+
+						}
+
+					}
+
 				}
 
 			case 'u': // Prefix: "users"
@@ -110,7 +1196,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					default:
 						s.notAllowed(w, r, notAllowedParams{
 							allowedMethods: "GET",
-							allowedHeaders: rn3AllowedHeaders,
+							allowedHeaders: rn39AllowedHeaders,
 							acceptPost:     "",
 							acceptPatch:    "",
 						})
@@ -134,7 +1220,7 @@ type Route struct {
 	operationGroup string
 	pathPattern    string
 	count          int
-	args           [0]string
+	args           [2]string
 }
 
 // Name returns ogen operation name.
@@ -219,6 +1305,153 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 				break
 			}
 			switch elem[0] {
+			case 'c': // Prefix: "criteria/"
+
+				if l := len("criteria/"); len(elem) >= l && elem[0:l] == "criteria/" {
+					elem = elem[l:]
+				} else {
+					break
+				}
+
+				// Param: "id"
+				// Match until "/"
+				idx := strings.IndexByte(elem, '/')
+				if idx < 0 {
+					idx = len(elem)
+				}
+				args[0] = elem[:idx]
+				elem = elem[idx:]
+
+				if len(elem) == 0 {
+					switch method {
+					case "DELETE":
+						r.name = DeleteCriterionOperation
+						r.summary = "Remove an acceptance criterion"
+						r.operationID = "deleteCriterion"
+						r.operationGroup = ""
+						r.pathPattern = "/api/v1/criteria/{id}"
+						r.args = args
+						r.count = 1
+						return r, true
+					case "PATCH":
+						r.name = UpdateCriterionOperation
+						r.summary = "Update an acceptance criterion"
+						r.operationID = "updateCriterion"
+						r.operationGroup = ""
+						r.pathPattern = "/api/v1/criteria/{id}"
+						r.args = args
+						r.count = 1
+						return r, true
+					default:
+						return
+					}
+				}
+				switch elem[0] {
+				case '/': // Prefix: "/checks"
+
+					if l := len("/checks"); len(elem) >= l && elem[0:l] == "/checks" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					if len(elem) == 0 {
+						// Leaf node.
+						switch method {
+						case "POST":
+							r.name = CreateAcceptanceCheckOperation
+							r.summary = "Record an immutable acceptance check"
+							r.operationID = "createAcceptanceCheck"
+							r.operationGroup = ""
+							r.pathPattern = "/api/v1/criteria/{id}/checks"
+							r.args = args
+							r.count = 1
+							return r, true
+						default:
+							return
+						}
+					}
+
+				}
+
+			case 'l': // Prefix: "labels"
+
+				if l := len("labels"); len(elem) >= l && elem[0:l] == "labels" {
+					elem = elem[l:]
+				} else {
+					break
+				}
+
+				if len(elem) == 0 {
+					switch method {
+					case "GET":
+						r.name = ListLabelsOperation
+						r.summary = "List labels"
+						r.operationID = "listLabels"
+						r.operationGroup = ""
+						r.pathPattern = "/api/v1/labels"
+						r.args = args
+						r.count = 0
+						return r, true
+					case "POST":
+						r.name = CreateLabelOperation
+						r.summary = "Create a label"
+						r.operationID = "createLabel"
+						r.operationGroup = ""
+						r.pathPattern = "/api/v1/labels"
+						r.args = args
+						r.count = 0
+						return r, true
+					default:
+						return
+					}
+				}
+				switch elem[0] {
+				case '/': // Prefix: "/"
+
+					if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					// Param: "id"
+					// Leaf parameter, slashes are prohibited
+					idx := strings.IndexByte(elem, '/')
+					if idx >= 0 {
+						break
+					}
+					args[0] = elem
+					elem = ""
+
+					if len(elem) == 0 {
+						// Leaf node.
+						switch method {
+						case "DELETE":
+							r.name = DeleteLabelOperation
+							r.summary = "Delete a label"
+							r.operationID = "deleteLabel"
+							r.operationGroup = ""
+							r.pathPattern = "/api/v1/labels/{id}"
+							r.args = args
+							r.count = 1
+							return r, true
+						case "PATCH":
+							r.name = UpdateLabelOperation
+							r.summary = "Rename a label"
+							r.operationID = "updateLabel"
+							r.operationGroup = ""
+							r.pathPattern = "/api/v1/labels/{id}"
+							r.args = args
+							r.count = 1
+							return r, true
+						default:
+							return
+						}
+					}
+
+				}
+
 			case 'm': // Prefix: "me"
 
 				if l := len("me"); len(elem) >= l && elem[0:l] == "me" {
@@ -242,6 +1475,856 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 					default:
 						return
 					}
+				}
+
+			case 'p': // Prefix: "projects"
+
+				if l := len("projects"); len(elem) >= l && elem[0:l] == "projects" {
+					elem = elem[l:]
+				} else {
+					break
+				}
+
+				if len(elem) == 0 {
+					switch method {
+					case "GET":
+						r.name = ListProjectsOperation
+						r.summary = "List projects"
+						r.operationID = "listProjects"
+						r.operationGroup = ""
+						r.pathPattern = "/api/v1/projects"
+						r.args = args
+						r.count = 0
+						return r, true
+					case "POST":
+						r.name = CreateProjectOperation
+						r.summary = "Create a project"
+						r.operationID = "createProject"
+						r.operationGroup = ""
+						r.pathPattern = "/api/v1/projects"
+						r.args = args
+						r.count = 0
+						return r, true
+					default:
+						return
+					}
+				}
+				switch elem[0] {
+				case '/': // Prefix: "/"
+
+					if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					// Param: "number"
+					// Match until "/"
+					idx := strings.IndexByte(elem, '/')
+					if idx < 0 {
+						idx = len(elem)
+					}
+					args[0] = elem[:idx]
+					elem = elem[idx:]
+
+					if len(elem) == 0 {
+						switch method {
+						case "GET":
+							r.name = GetProjectOperation
+							r.summary = "Get a project and its work aggregate"
+							r.operationID = "getProject"
+							r.operationGroup = ""
+							r.pathPattern = "/api/v1/projects/{number}"
+							r.args = args
+							r.count = 1
+							return r, true
+						case "PATCH":
+							r.name = UpdateProjectOperation
+							r.summary = "Update a project"
+							r.operationID = "updateProject"
+							r.operationGroup = ""
+							r.pathPattern = "/api/v1/projects/{number}"
+							r.args = args
+							r.count = 1
+							return r, true
+						default:
+							return
+						}
+					}
+					switch elem[0] {
+					case '/': // Prefix: "/"
+
+						if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+							elem = elem[l:]
+						} else {
+							break
+						}
+
+						if len(elem) == 0 {
+							break
+						}
+						switch elem[0] {
+						case 'a': // Prefix: "a"
+
+							if l := len("a"); len(elem) >= l && elem[0:l] == "a" {
+								elem = elem[l:]
+							} else {
+								break
+							}
+
+							if len(elem) == 0 {
+								break
+							}
+							switch elem[0] {
+							case 'c': // Prefix: "ctivate"
+
+								if l := len("ctivate"); len(elem) >= l && elem[0:l] == "ctivate" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								if len(elem) == 0 {
+									// Leaf node.
+									switch method {
+									case "POST":
+										r.name = ActivateProjectOperation
+										r.summary = "Activate a project"
+										r.operationID = "activateProject"
+										r.operationGroup = ""
+										r.pathPattern = "/api/v1/projects/{number}/activate"
+										r.args = args
+										r.count = 1
+										return r, true
+									default:
+										return
+									}
+								}
+
+							case 'r': // Prefix: "rchive"
+
+								if l := len("rchive"); len(elem) >= l && elem[0:l] == "rchive" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								if len(elem) == 0 {
+									// Leaf node.
+									switch method {
+									case "POST":
+										r.name = ArchiveProjectOperation
+										r.summary = "Archive a project"
+										r.operationID = "archiveProject"
+										r.operationGroup = ""
+										r.pathPattern = "/api/v1/projects/{number}/archive"
+										r.args = args
+										r.count = 1
+										return r, true
+									default:
+										return
+									}
+								}
+
+							}
+
+						case 'c': // Prefix: "c"
+
+							if l := len("c"); len(elem) >= l && elem[0:l] == "c" {
+								elem = elem[l:]
+							} else {
+								break
+							}
+
+							if len(elem) == 0 {
+								break
+							}
+							switch elem[0] {
+							case 'a': // Prefix: "ancel"
+
+								if l := len("ancel"); len(elem) >= l && elem[0:l] == "ancel" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								if len(elem) == 0 {
+									// Leaf node.
+									switch method {
+									case "POST":
+										r.name = CancelProjectOperation
+										r.summary = "Cancel a project"
+										r.operationID = "cancelProject"
+										r.operationGroup = ""
+										r.pathPattern = "/api/v1/projects/{number}/cancel"
+										r.args = args
+										r.count = 1
+										return r, true
+									default:
+										return
+									}
+								}
+
+							case 'o': // Prefix: "omplete"
+
+								if l := len("omplete"); len(elem) >= l && elem[0:l] == "omplete" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								if len(elem) == 0 {
+									// Leaf node.
+									switch method {
+									case "POST":
+										r.name = CompleteProjectOperation
+										r.summary = "Complete a project"
+										r.operationID = "completeProject"
+										r.operationGroup = ""
+										r.pathPattern = "/api/v1/projects/{number}/complete"
+										r.args = args
+										r.count = 1
+										return r, true
+									default:
+										return
+									}
+								}
+
+							case 'r': // Prefix: "riteria"
+
+								if l := len("riteria"); len(elem) >= l && elem[0:l] == "riteria" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								if len(elem) == 0 {
+									// Leaf node.
+									switch method {
+									case "GET":
+										r.name = ListProjectCriteriaOperation
+										r.summary = "List project acceptance criteria"
+										r.operationID = "listProjectCriteria"
+										r.operationGroup = ""
+										r.pathPattern = "/api/v1/projects/{number}/criteria"
+										r.args = args
+										r.count = 1
+										return r, true
+									case "POST":
+										r.name = CreateProjectCriterionOperation
+										r.summary = "Create a project acceptance criterion"
+										r.operationID = "createProjectCriterion"
+										r.operationGroup = ""
+										r.pathPattern = "/api/v1/projects/{number}/criteria"
+										r.args = args
+										r.count = 1
+										return r, true
+									default:
+										return
+									}
+								}
+
+							}
+
+						case 'm': // Prefix: "milestones"
+
+							if l := len("milestones"); len(elem) >= l && elem[0:l] == "milestones" {
+								elem = elem[l:]
+							} else {
+								break
+							}
+
+							if len(elem) == 0 {
+								switch method {
+								case "POST":
+									r.name = CreateMilestoneOperation
+									r.summary = "Create a milestone"
+									r.operationID = "createMilestone"
+									r.operationGroup = ""
+									r.pathPattern = "/api/v1/projects/{number}/milestones"
+									r.args = args
+									r.count = 1
+									return r, true
+								default:
+									return
+								}
+							}
+							switch elem[0] {
+							case '/': // Prefix: "/"
+
+								if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								// Param: "id"
+								// Match until "/"
+								idx := strings.IndexByte(elem, '/')
+								if idx < 0 {
+									idx = len(elem)
+								}
+								args[1] = elem[:idx]
+								elem = elem[idx:]
+
+								if len(elem) == 0 {
+									switch method {
+									case "PATCH":
+										r.name = UpdateMilestoneOperation
+										r.summary = "Update a milestone"
+										r.operationID = "updateMilestone"
+										r.operationGroup = ""
+										r.pathPattern = "/api/v1/projects/{number}/milestones/{id}"
+										r.args = args
+										r.count = 2
+										return r, true
+									default:
+										return
+									}
+								}
+								switch elem[0] {
+								case '/': // Prefix: "/"
+
+									if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+										elem = elem[l:]
+									} else {
+										break
+									}
+
+									if len(elem) == 0 {
+										break
+									}
+									switch elem[0] {
+									case 'c': // Prefix: "c"
+
+										if l := len("c"); len(elem) >= l && elem[0:l] == "c" {
+											elem = elem[l:]
+										} else {
+											break
+										}
+
+										if len(elem) == 0 {
+											break
+										}
+										switch elem[0] {
+										case 'a': // Prefix: "ancel"
+
+											if l := len("ancel"); len(elem) >= l && elem[0:l] == "ancel" {
+												elem = elem[l:]
+											} else {
+												break
+											}
+
+											if len(elem) == 0 {
+												// Leaf node.
+												switch method {
+												case "POST":
+													r.name = CancelMilestoneOperation
+													r.summary = "Cancel a milestone"
+													r.operationID = "cancelMilestone"
+													r.operationGroup = ""
+													r.pathPattern = "/api/v1/projects/{number}/milestones/{id}/cancel"
+													r.args = args
+													r.count = 2
+													return r, true
+												default:
+													return
+												}
+											}
+
+										case 'o': // Prefix: "omplete"
+
+											if l := len("omplete"); len(elem) >= l && elem[0:l] == "omplete" {
+												elem = elem[l:]
+											} else {
+												break
+											}
+
+											if len(elem) == 0 {
+												// Leaf node.
+												switch method {
+												case "POST":
+													r.name = CompleteMilestoneOperation
+													r.summary = "Complete a milestone"
+													r.operationID = "completeMilestone"
+													r.operationGroup = ""
+													r.pathPattern = "/api/v1/projects/{number}/milestones/{id}/complete"
+													r.args = args
+													r.count = 2
+													return r, true
+												default:
+													return
+												}
+											}
+
+										case 'r': // Prefix: "riteria"
+
+											if l := len("riteria"); len(elem) >= l && elem[0:l] == "riteria" {
+												elem = elem[l:]
+											} else {
+												break
+											}
+
+											if len(elem) == 0 {
+												// Leaf node.
+												switch method {
+												case "GET":
+													r.name = ListMilestoneCriteriaOperation
+													r.summary = "List milestone acceptance criteria"
+													r.operationID = "listMilestoneCriteria"
+													r.operationGroup = ""
+													r.pathPattern = "/api/v1/projects/{number}/milestones/{id}/criteria"
+													r.args = args
+													r.count = 2
+													return r, true
+												case "POST":
+													r.name = CreateMilestoneCriterionOperation
+													r.summary = "Create a milestone acceptance criterion"
+													r.operationID = "createMilestoneCriterion"
+													r.operationGroup = ""
+													r.pathPattern = "/api/v1/projects/{number}/milestones/{id}/criteria"
+													r.args = args
+													r.count = 2
+													return r, true
+												default:
+													return
+												}
+											}
+
+										}
+
+									case 'r': // Prefix: "reopen"
+
+										if l := len("reopen"); len(elem) >= l && elem[0:l] == "reopen" {
+											elem = elem[l:]
+										} else {
+											break
+										}
+
+										if len(elem) == 0 {
+											// Leaf node.
+											switch method {
+											case "POST":
+												r.name = ReopenMilestoneOperation
+												r.summary = "Reopen a milestone"
+												r.operationID = "reopenMilestone"
+												r.operationGroup = ""
+												r.pathPattern = "/api/v1/projects/{number}/milestones/{id}/reopen"
+												r.args = args
+												r.count = 2
+												return r, true
+											default:
+												return
+											}
+										}
+
+									}
+
+								}
+
+							}
+
+						case 'p': // Prefix: "pause"
+
+							if l := len("pause"); len(elem) >= l && elem[0:l] == "pause" {
+								elem = elem[l:]
+							} else {
+								break
+							}
+
+							if len(elem) == 0 {
+								// Leaf node.
+								switch method {
+								case "POST":
+									r.name = PauseProjectOperation
+									r.summary = "Pause a project"
+									r.operationID = "pauseProject"
+									r.operationGroup = ""
+									r.pathPattern = "/api/v1/projects/{number}/pause"
+									r.args = args
+									r.count = 1
+									return r, true
+								default:
+									return
+								}
+							}
+
+						case 'r': // Prefix: "re"
+
+							if l := len("re"); len(elem) >= l && elem[0:l] == "re" {
+								elem = elem[l:]
+							} else {
+								break
+							}
+
+							if len(elem) == 0 {
+								break
+							}
+							switch elem[0] {
+							case 'o': // Prefix: "open"
+
+								if l := len("open"); len(elem) >= l && elem[0:l] == "open" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								if len(elem) == 0 {
+									// Leaf node.
+									switch method {
+									case "POST":
+										r.name = ReopenProjectOperation
+										r.summary = "Reopen a project"
+										r.operationID = "reopenProject"
+										r.operationGroup = ""
+										r.pathPattern = "/api/v1/projects/{number}/reopen"
+										r.args = args
+										r.count = 1
+										return r, true
+									default:
+										return
+									}
+								}
+
+							case 's': // Prefix: "store"
+
+								if l := len("store"); len(elem) >= l && elem[0:l] == "store" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								if len(elem) == 0 {
+									// Leaf node.
+									switch method {
+									case "POST":
+										r.name = RestoreProjectOperation
+										r.summary = "Restore a project"
+										r.operationID = "restoreProject"
+										r.operationGroup = ""
+										r.pathPattern = "/api/v1/projects/{number}/restore"
+										r.args = args
+										r.count = 1
+										return r, true
+									default:
+										return
+									}
+								}
+
+							}
+
+						}
+
+					}
+
+				}
+
+			case 't': // Prefix: "tasks"
+
+				if l := len("tasks"); len(elem) >= l && elem[0:l] == "tasks" {
+					elem = elem[l:]
+				} else {
+					break
+				}
+
+				if len(elem) == 0 {
+					switch method {
+					case "GET":
+						r.name = ListTasksOperation
+						r.summary = "List tasks"
+						r.operationID = "listTasks"
+						r.operationGroup = ""
+						r.pathPattern = "/api/v1/tasks"
+						r.args = args
+						r.count = 0
+						return r, true
+					case "POST":
+						r.name = CreateTaskOperation
+						r.summary = "Create a task"
+						r.operationID = "createTask"
+						r.operationGroup = ""
+						r.pathPattern = "/api/v1/tasks"
+						r.args = args
+						r.count = 0
+						return r, true
+					default:
+						return
+					}
+				}
+				switch elem[0] {
+				case '/': // Prefix: "/"
+
+					if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					// Param: "number"
+					// Match until "/"
+					idx := strings.IndexByte(elem, '/')
+					if idx < 0 {
+						idx = len(elem)
+					}
+					args[0] = elem[:idx]
+					elem = elem[idx:]
+
+					if len(elem) == 0 {
+						switch method {
+						case "GET":
+							r.name = GetTaskOperation
+							r.summary = "Get a task"
+							r.operationID = "getTask"
+							r.operationGroup = ""
+							r.pathPattern = "/api/v1/tasks/{number}"
+							r.args = args
+							r.count = 1
+							return r, true
+						case "PATCH":
+							r.name = UpdateTaskOperation
+							r.summary = "Update a task"
+							r.operationID = "updateTask"
+							r.operationGroup = ""
+							r.pathPattern = "/api/v1/tasks/{number}"
+							r.args = args
+							r.count = 1
+							return r, true
+						default:
+							return
+						}
+					}
+					switch elem[0] {
+					case '/': // Prefix: "/"
+
+						if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+							elem = elem[l:]
+						} else {
+							break
+						}
+
+						if len(elem) == 0 {
+							break
+						}
+						switch elem[0] {
+						case 'a': // Prefix: "a"
+
+							if l := len("a"); len(elem) >= l && elem[0:l] == "a" {
+								elem = elem[l:]
+							} else {
+								break
+							}
+
+							if len(elem) == 0 {
+								break
+							}
+							switch elem[0] {
+							case 'c': // Prefix: "ctivity"
+
+								if l := len("ctivity"); len(elem) >= l && elem[0:l] == "ctivity" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								if len(elem) == 0 {
+									// Leaf node.
+									switch method {
+									case "GET":
+										r.name = ListTaskActivityOperation
+										r.summary = "List task activity"
+										r.operationID = "listTaskActivity"
+										r.operationGroup = ""
+										r.pathPattern = "/api/v1/tasks/{number}/activity"
+										r.args = args
+										r.count = 1
+										return r, true
+									default:
+										return
+									}
+								}
+
+							case 'r': // Prefix: "rchive"
+
+								if l := len("rchive"); len(elem) >= l && elem[0:l] == "rchive" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								if len(elem) == 0 {
+									// Leaf node.
+									switch method {
+									case "POST":
+										r.name = ArchiveTaskOperation
+										r.summary = "Archive a task"
+										r.operationID = "archiveTask"
+										r.operationGroup = ""
+										r.pathPattern = "/api/v1/tasks/{number}/archive"
+										r.args = args
+										r.count = 1
+										return r, true
+									default:
+										return
+									}
+								}
+
+							}
+
+						case 'c': // Prefix: "c"
+
+							if l := len("c"); len(elem) >= l && elem[0:l] == "c" {
+								elem = elem[l:]
+							} else {
+								break
+							}
+
+							if len(elem) == 0 {
+								break
+							}
+							switch elem[0] {
+							case 'o': // Prefix: "omments"
+
+								if l := len("omments"); len(elem) >= l && elem[0:l] == "omments" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								if len(elem) == 0 {
+									switch method {
+									case "GET":
+										r.name = ListTaskCommentsOperation
+										r.summary = "List task comments"
+										r.operationID = "listTaskComments"
+										r.operationGroup = ""
+										r.pathPattern = "/api/v1/tasks/{number}/comments"
+										r.args = args
+										r.count = 1
+										return r, true
+									case "POST":
+										r.name = CreateTaskCommentOperation
+										r.summary = "Add a task comment"
+										r.operationID = "createTaskComment"
+										r.operationGroup = ""
+										r.pathPattern = "/api/v1/tasks/{number}/comments"
+										r.args = args
+										r.count = 1
+										return r, true
+									default:
+										return
+									}
+								}
+								switch elem[0] {
+								case '/': // Prefix: "/"
+
+									if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+										elem = elem[l:]
+									} else {
+										break
+									}
+
+									// Param: "id"
+									// Leaf parameter, slashes are prohibited
+									idx := strings.IndexByte(elem, '/')
+									if idx >= 0 {
+										break
+									}
+									args[1] = elem
+									elem = ""
+
+									if len(elem) == 0 {
+										// Leaf node.
+										switch method {
+										case "DELETE":
+											r.name = DeleteTaskCommentOperation
+											r.summary = "Delete a task comment"
+											r.operationID = "deleteTaskComment"
+											r.operationGroup = ""
+											r.pathPattern = "/api/v1/tasks/{number}/comments/{id}"
+											r.args = args
+											r.count = 2
+											return r, true
+										case "PATCH":
+											r.name = UpdateTaskCommentOperation
+											r.summary = "Update a task comment"
+											r.operationID = "updateTaskComment"
+											r.operationGroup = ""
+											r.pathPattern = "/api/v1/tasks/{number}/comments/{id}"
+											r.args = args
+											r.count = 2
+											return r, true
+										default:
+											return
+										}
+									}
+
+								}
+
+							case 'r': // Prefix: "riteria"
+
+								if l := len("riteria"); len(elem) >= l && elem[0:l] == "riteria" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								if len(elem) == 0 {
+									// Leaf node.
+									switch method {
+									case "GET":
+										r.name = ListTaskCriteriaOperation
+										r.summary = "List task acceptance criteria"
+										r.operationID = "listTaskCriteria"
+										r.operationGroup = ""
+										r.pathPattern = "/api/v1/tasks/{number}/criteria"
+										r.args = args
+										r.count = 1
+										return r, true
+									case "POST":
+										r.name = CreateTaskCriterionOperation
+										r.summary = "Create a task acceptance criterion"
+										r.operationID = "createTaskCriterion"
+										r.operationGroup = ""
+										r.pathPattern = "/api/v1/tasks/{number}/criteria"
+										r.args = args
+										r.count = 1
+										return r, true
+									default:
+										return
+									}
+								}
+
+							}
+
+						case 'r': // Prefix: "restore"
+
+							if l := len("restore"); len(elem) >= l && elem[0:l] == "restore" {
+								elem = elem[l:]
+							} else {
+								break
+							}
+
+							if len(elem) == 0 {
+								// Leaf node.
+								switch method {
+								case "POST":
+									r.name = RestoreTaskOperation
+									r.summary = "Restore a task"
+									r.operationID = "restoreTask"
+									r.operationGroup = ""
+									r.pathPattern = "/api/v1/tasks/{number}/restore"
+									r.args = args
+									r.count = 1
+									return r, true
+								default:
+									return
+								}
+							}
+
+						}
+
+					}
+
 				}
 
 			case 'u': // Prefix: "users"

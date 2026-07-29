@@ -8,18 +8,258 @@ import (
 
 // Handler handles operations described by OpenAPI v3 specification.
 type Handler interface {
+	// ActivateProject implements activateProject operation.
+	//
+	// Activate a project.
+	//
+	// POST /api/v1/projects/{number}/activate
+	ActivateProject(ctx context.Context, req OptLifecycleRequest, params ActivateProjectParams) (ActivateProjectRes, error)
+	// ArchiveProject implements archiveProject operation.
+	//
+	// Archive a project.
+	//
+	// POST /api/v1/projects/{number}/archive
+	ArchiveProject(ctx context.Context, params ArchiveProjectParams) (ArchiveProjectRes, error)
+	// ArchiveTask implements archiveTask operation.
+	//
+	// Archive a task.
+	//
+	// POST /api/v1/tasks/{number}/archive
+	ArchiveTask(ctx context.Context, params ArchiveTaskParams) (ArchiveTaskRes, error)
+	// CancelMilestone implements cancelMilestone operation.
+	//
+	// Cancel a milestone.
+	//
+	// POST /api/v1/projects/{number}/milestones/{id}/cancel
+	CancelMilestone(ctx context.Context, req OptLifecycleRequest, params CancelMilestoneParams) (CancelMilestoneRes, error)
+	// CancelProject implements cancelProject operation.
+	//
+	// Cancel a project.
+	//
+	// POST /api/v1/projects/{number}/cancel
+	CancelProject(ctx context.Context, req OptLifecycleRequest, params CancelProjectParams) (CancelProjectRes, error)
+	// CompleteMilestone implements completeMilestone operation.
+	//
+	// Complete a milestone.
+	//
+	// POST /api/v1/projects/{number}/milestones/{id}/complete
+	CompleteMilestone(ctx context.Context, req OptLifecycleRequest, params CompleteMilestoneParams) (CompleteMilestoneRes, error)
+	// CompleteProject implements completeProject operation.
+	//
+	// Complete a project.
+	//
+	// POST /api/v1/projects/{number}/complete
+	CompleteProject(ctx context.Context, req OptLifecycleRequest, params CompleteProjectParams) (CompleteProjectRes, error)
+	// CreateAcceptanceCheck implements createAcceptanceCheck operation.
+	//
+	// Record an immutable acceptance check.
+	//
+	// POST /api/v1/criteria/{id}/checks
+	CreateAcceptanceCheck(ctx context.Context, req *AcceptanceCheckCreate, params CreateAcceptanceCheckParams) (CreateAcceptanceCheckRes, error)
+	// CreateLabel implements createLabel operation.
+	//
+	// Create a label.
+	//
+	// POST /api/v1/labels
+	CreateLabel(ctx context.Context, req *LabelWrite, params CreateLabelParams) (CreateLabelRes, error)
+	// CreateMilestone implements createMilestone operation.
+	//
+	// Create a milestone.
+	//
+	// POST /api/v1/projects/{number}/milestones
+	CreateMilestone(ctx context.Context, req *MilestoneCreate, params CreateMilestoneParams) (CreateMilestoneRes, error)
+	// CreateMilestoneCriterion implements createMilestoneCriterion operation.
+	//
+	// Create a milestone acceptance criterion.
+	//
+	// POST /api/v1/projects/{number}/milestones/{id}/criteria
+	CreateMilestoneCriterion(ctx context.Context, req *CriterionCreate, params CreateMilestoneCriterionParams) (CreateMilestoneCriterionRes, error)
+	// CreateProject implements createProject operation.
+	//
+	// Create a project.
+	//
+	// POST /api/v1/projects
+	CreateProject(ctx context.Context, req *ProjectCreate, params CreateProjectParams) (CreateProjectRes, error)
+	// CreateProjectCriterion implements createProjectCriterion operation.
+	//
+	// Create a project acceptance criterion.
+	//
+	// POST /api/v1/projects/{number}/criteria
+	CreateProjectCriterion(ctx context.Context, req *CriterionCreate, params CreateProjectCriterionParams) (CreateProjectCriterionRes, error)
+	// CreateTask implements createTask operation.
+	//
+	// Create a task.
+	//
+	// POST /api/v1/tasks
+	CreateTask(ctx context.Context, req *TaskCreate, params CreateTaskParams) (CreateTaskRes, error)
+	// CreateTaskComment implements createTaskComment operation.
+	//
+	// Add a task comment.
+	//
+	// POST /api/v1/tasks/{number}/comments
+	CreateTaskComment(ctx context.Context, req *CommentWrite, params CreateTaskCommentParams) (CreateTaskCommentRes, error)
+	// CreateTaskCriterion implements createTaskCriterion operation.
+	//
+	// Create a task acceptance criterion.
+	//
+	// POST /api/v1/tasks/{number}/criteria
+	CreateTaskCriterion(ctx context.Context, req *CriterionCreate, params CreateTaskCriterionParams) (CreateTaskCriterionRes, error)
+	// DeleteCriterion implements deleteCriterion operation.
+	//
+	// Remove an acceptance criterion.
+	//
+	// DELETE /api/v1/criteria/{id}
+	DeleteCriterion(ctx context.Context, req OptLifecycleRequest, params DeleteCriterionParams) (DeleteCriterionRes, error)
+	// DeleteLabel implements deleteLabel operation.
+	//
+	// Delete a label.
+	//
+	// DELETE /api/v1/labels/{id}
+	DeleteLabel(ctx context.Context, params DeleteLabelParams) (DeleteLabelRes, error)
+	// DeleteTaskComment implements deleteTaskComment operation.
+	//
+	// Delete a task comment.
+	//
+	// DELETE /api/v1/tasks/{number}/comments/{id}
+	DeleteTaskComment(ctx context.Context, params DeleteTaskCommentParams) (DeleteTaskCommentRes, error)
 	// GetCurrentPrincipal implements getCurrentPrincipal operation.
 	//
 	// Get the authenticated principal.
 	//
 	// GET /api/v1/me
 	GetCurrentPrincipal(ctx context.Context) (GetCurrentPrincipalRes, error)
+	// GetProject implements getProject operation.
+	//
+	// Get a project and its work aggregate.
+	//
+	// GET /api/v1/projects/{number}
+	GetProject(ctx context.Context, params GetProjectParams) (GetProjectRes, error)
+	// GetTask implements getTask operation.
+	//
+	// Get a task.
+	//
+	// GET /api/v1/tasks/{number}
+	GetTask(ctx context.Context, params GetTaskParams) (GetTaskRes, error)
+	// ListLabels implements listLabels operation.
+	//
+	// List labels.
+	//
+	// GET /api/v1/labels
+	ListLabels(ctx context.Context, params ListLabelsParams) (ListLabelsRes, error)
+	// ListMilestoneCriteria implements listMilestoneCriteria operation.
+	//
+	// List milestone acceptance criteria.
+	//
+	// GET /api/v1/projects/{number}/milestones/{id}/criteria
+	ListMilestoneCriteria(ctx context.Context, params ListMilestoneCriteriaParams) (ListMilestoneCriteriaRes, error)
+	// ListProjectCriteria implements listProjectCriteria operation.
+	//
+	// List project acceptance criteria.
+	//
+	// GET /api/v1/projects/{number}/criteria
+	ListProjectCriteria(ctx context.Context, params ListProjectCriteriaParams) (ListProjectCriteriaRes, error)
+	// ListProjects implements listProjects operation.
+	//
+	// List projects.
+	//
+	// GET /api/v1/projects
+	ListProjects(ctx context.Context, params ListProjectsParams) (ListProjectsRes, error)
+	// ListTaskActivity implements listTaskActivity operation.
+	//
+	// List task activity.
+	//
+	// GET /api/v1/tasks/{number}/activity
+	ListTaskActivity(ctx context.Context, params ListTaskActivityParams) (ListTaskActivityRes, error)
+	// ListTaskComments implements listTaskComments operation.
+	//
+	// List task comments.
+	//
+	// GET /api/v1/tasks/{number}/comments
+	ListTaskComments(ctx context.Context, params ListTaskCommentsParams) (ListTaskCommentsRes, error)
+	// ListTaskCriteria implements listTaskCriteria operation.
+	//
+	// List task acceptance criteria.
+	//
+	// GET /api/v1/tasks/{number}/criteria
+	ListTaskCriteria(ctx context.Context, params ListTaskCriteriaParams) (ListTaskCriteriaRes, error)
+	// ListTasks implements listTasks operation.
+	//
+	// List tasks.
+	//
+	// GET /api/v1/tasks
+	ListTasks(ctx context.Context, params ListTasksParams) (ListTasksRes, error)
 	// ListUsers implements listUsers operation.
 	//
 	// List users available for work assignment.
 	//
 	// GET /api/v1/users
-	ListUsers(ctx context.Context) (ListUsersRes, error)
+	ListUsers(ctx context.Context, params ListUsersParams) (ListUsersRes, error)
+	// PauseProject implements pauseProject operation.
+	//
+	// Pause a project.
+	//
+	// POST /api/v1/projects/{number}/pause
+	PauseProject(ctx context.Context, req OptLifecycleRequest, params PauseProjectParams) (PauseProjectRes, error)
+	// ReopenMilestone implements reopenMilestone operation.
+	//
+	// Reopen a milestone.
+	//
+	// POST /api/v1/projects/{number}/milestones/{id}/reopen
+	ReopenMilestone(ctx context.Context, req *LifecycleRequest, params ReopenMilestoneParams) (ReopenMilestoneRes, error)
+	// ReopenProject implements reopenProject operation.
+	//
+	// Reopen a project.
+	//
+	// POST /api/v1/projects/{number}/reopen
+	ReopenProject(ctx context.Context, req *LifecycleRequest, params ReopenProjectParams) (ReopenProjectRes, error)
+	// RestoreProject implements restoreProject operation.
+	//
+	// Restore a project.
+	//
+	// POST /api/v1/projects/{number}/restore
+	RestoreProject(ctx context.Context, params RestoreProjectParams) (RestoreProjectRes, error)
+	// RestoreTask implements restoreTask operation.
+	//
+	// Restore a task.
+	//
+	// POST /api/v1/tasks/{number}/restore
+	RestoreTask(ctx context.Context, params RestoreTaskParams) (RestoreTaskRes, error)
+	// UpdateCriterion implements updateCriterion operation.
+	//
+	// Update an acceptance criterion.
+	//
+	// PATCH /api/v1/criteria/{id}
+	UpdateCriterion(ctx context.Context, req *CriterionPatch, params UpdateCriterionParams) (UpdateCriterionRes, error)
+	// UpdateLabel implements updateLabel operation.
+	//
+	// Rename a label.
+	//
+	// PATCH /api/v1/labels/{id}
+	UpdateLabel(ctx context.Context, req *LabelWrite, params UpdateLabelParams) (UpdateLabelRes, error)
+	// UpdateMilestone implements updateMilestone operation.
+	//
+	// Update a milestone.
+	//
+	// PATCH /api/v1/projects/{number}/milestones/{id}
+	UpdateMilestone(ctx context.Context, req *MilestonePatch, params UpdateMilestoneParams) (UpdateMilestoneRes, error)
+	// UpdateProject implements updateProject operation.
+	//
+	// Update a project.
+	//
+	// PATCH /api/v1/projects/{number}
+	UpdateProject(ctx context.Context, req *ProjectPatch, params UpdateProjectParams) (UpdateProjectRes, error)
+	// UpdateTask implements updateTask operation.
+	//
+	// Update a task.
+	//
+	// PATCH /api/v1/tasks/{number}
+	UpdateTask(ctx context.Context, req *TaskPatch, params UpdateTaskParams) (UpdateTaskRes, error)
+	// UpdateTaskComment implements updateTaskComment operation.
+	//
+	// Update a task comment.
+	//
+	// PATCH /api/v1/tasks/{number}/comments/{id}
+	UpdateTaskComment(ctx context.Context, req *CommentWrite, params UpdateTaskCommentParams) (UpdateTaskCommentRes, error)
 }
 
 // Server implements http server based on OpenAPI v3 specification and

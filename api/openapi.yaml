@@ -3,37 +3,577 @@ info:
   title: Bounty Board Work API
   version: 1.0.0
   description: Versioned work-management API for authenticated people and agents.
+security:
+  - bearerAuth: []
+  - sessionCookie: []
 paths:
   /api/v1/me:
     get:
       operationId: getCurrentPrincipal
       summary: Get the authenticated principal
-      security:
-        - bearerAuth: []
-        - sessionCookie: []
       responses:
         "200":
-          description: Current principal
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CurrentPrincipal"
+          $ref: "#/components/responses/CurrentPrincipal"
         default:
           $ref: "#/components/responses/Problem"
   /api/v1/users:
     get:
       operationId: listUsers
       summary: List users available for work assignment
-      security:
-        - bearerAuth: []
-        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
       responses:
         "200":
-          description: User collection
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/UserList"
+          $ref: "#/components/responses/UserList"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks:
+    get:
+      operationId: listTasks
+      summary: List tasks
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - name: q
+          in: query
+          schema:
+            type: string
+            maxLength: 200
+        - name: status
+          in: query
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/TaskStatus"
+        - name: priority
+          in: query
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/TaskPriority"
+        - name: assignee
+          in: query
+          description: User UUID or `none`.
+          schema:
+            type: string
+        - name: label
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+              format: uuid
+        - name: project_number
+          in: query
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: archived
+          in: query
+          schema:
+            type: string
+            enum: [exclude, only, all]
+            default: exclude
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [number, updated_at, due_date, priority]
+            default: updated_at
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskList"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      operationId: createTask
+      summary: Create a task
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskCreate"
+      responses:
+        "201":
+          $ref: "#/components/responses/TaskCreated"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+    get:
+      operationId: getTask
+      summary: Get a task
+      responses:
+        "200":
+          $ref: "#/components/responses/Task"
+        default:
+          $ref: "#/components/responses/Problem"
+    patch:
+      operationId: updateTask
+      summary: Update a task
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskPatch"
+      responses:
+        "200":
+          $ref: "#/components/responses/Task"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/archive:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+    post:
+      operationId: archiveTask
+      summary: Archive a task
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          $ref: "#/components/responses/Task"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/restore:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+    post:
+      operationId: restoreTask
+      summary: Restore a task
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          $ref: "#/components/responses/Task"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/comments:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+    get:
+      operationId: listTaskComments
+      summary: List task comments
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          $ref: "#/components/responses/CommentList"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      operationId: createTaskComment
+      summary: Add a task comment
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommentWrite"
+      responses:
+        "201":
+          $ref: "#/components/responses/CommentCreated"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/comments/{id}:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+      - $ref: "#/components/parameters/ResourceID"
+    patch:
+      operationId: updateTaskComment
+      summary: Update a task comment
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommentWrite"
+      responses:
+        "200":
+          $ref: "#/components/responses/Comment"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      operationId: deleteTaskComment
+      summary: Delete a task comment
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/activity:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+    get:
+      operationId: listTaskActivity
+      summary: List task activity
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskActivityList"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/labels:
+    get:
+      operationId: listLabels
+      summary: List labels
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          $ref: "#/components/responses/LabelList"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      operationId: createLabel
+      summary: Create a label
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LabelWrite"
+      responses:
+        "201":
+          $ref: "#/components/responses/LabelCreated"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/labels/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ResourceID"
+    patch:
+      operationId: updateLabel
+      summary: Rename a label
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LabelWrite"
+      responses:
+        "200":
+          $ref: "#/components/responses/Label"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      operationId: deleteLabel
+      summary: Delete a label
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/projects:
+    get:
+      operationId: listProjects
+      summary: List projects
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - name: archived
+          in: query
+          schema:
+            type: string
+            enum: [exclude, all]
+            default: exclude
+      responses:
+        "200":
+          $ref: "#/components/responses/ProjectList"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      operationId: createProject
+      summary: Create a project
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectCreate"
+      responses:
+        "201":
+          $ref: "#/components/responses/ProjectCreated"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/projects/{number}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectNumber"
+    get:
+      operationId: getProject
+      summary: Get a project and its work aggregate
+      responses:
+        "200":
+          $ref: "#/components/responses/ProjectDetail"
+        default:
+          $ref: "#/components/responses/Problem"
+    patch:
+      operationId: updateProject
+      summary: Update a project
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectPatch"
+      responses:
+        "200":
+          $ref: "#/components/responses/Project"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/projects/{number}/activate:
+    $ref: "#/components/pathItems/ProjectActivate"
+  /api/v1/projects/{number}/pause:
+    $ref: "#/components/pathItems/ProjectPause"
+  /api/v1/projects/{number}/complete:
+    $ref: "#/components/pathItems/ProjectComplete"
+  /api/v1/projects/{number}/cancel:
+    $ref: "#/components/pathItems/ProjectCancel"
+  /api/v1/projects/{number}/reopen:
+    $ref: "#/components/pathItems/ProjectReopen"
+  /api/v1/projects/{number}/archive:
+    $ref: "#/components/pathItems/ProjectArchive"
+  /api/v1/projects/{number}/restore:
+    $ref: "#/components/pathItems/ProjectRestore"
+  /api/v1/projects/{number}/milestones:
+    parameters:
+      - $ref: "#/components/parameters/ProjectNumber"
+    post:
+      operationId: createMilestone
+      summary: Create a milestone
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MilestoneCreate"
+      responses:
+        "201":
+          $ref: "#/components/responses/MilestoneCreated"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/projects/{number}/milestones/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectNumber"
+      - $ref: "#/components/parameters/ResourceID"
+    patch:
+      operationId: updateMilestone
+      summary: Update a milestone
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/ProjectIfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MilestonePatch"
+      responses:
+        "200":
+          $ref: "#/components/responses/Milestone"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/projects/{number}/milestones/{id}/complete:
+    $ref: "#/components/pathItems/MilestoneComplete"
+  /api/v1/projects/{number}/milestones/{id}/cancel:
+    $ref: "#/components/pathItems/MilestoneCancel"
+  /api/v1/projects/{number}/milestones/{id}/reopen:
+    $ref: "#/components/pathItems/MilestoneReopen"
+  /api/v1/tasks/{number}/criteria:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+    get:
+      operationId: listTaskCriteria
+      summary: List task acceptance criteria
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          $ref: "#/components/responses/CriterionList"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      operationId: createTaskCriterion
+      summary: Create a task acceptance criterion
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CriterionCreate"
+      responses:
+        "201":
+          $ref: "#/components/responses/CriterionCreated"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/projects/{number}/criteria:
+    parameters:
+      - $ref: "#/components/parameters/ProjectNumber"
+    get:
+      operationId: listProjectCriteria
+      summary: List project acceptance criteria
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          $ref: "#/components/responses/CriterionList"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      operationId: createProjectCriterion
+      summary: Create a project acceptance criterion
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CriterionCreate"
+      responses:
+        "201":
+          $ref: "#/components/responses/CriterionCreated"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/projects/{number}/milestones/{id}/criteria:
+    parameters:
+      - $ref: "#/components/parameters/ProjectNumber"
+      - $ref: "#/components/parameters/ResourceID"
+    get:
+      operationId: listMilestoneCriteria
+      summary: List milestone acceptance criteria
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          $ref: "#/components/responses/CriterionList"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      operationId: createMilestoneCriterion
+      summary: Create a milestone acceptance criterion
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/ProjectIfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CriterionCreate"
+      responses:
+        "201":
+          $ref: "#/components/responses/CriterionCreated"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/criteria/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ResourceID"
+    patch:
+      operationId: updateCriterion
+      summary: Update an acceptance criterion
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CriterionPatch"
+      responses:
+        "200":
+          $ref: "#/components/responses/Criterion"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      operationId: deleteCriterion
+      summary: Remove an acceptance criterion
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LifecycleRequest"
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/criteria/{id}/checks:
+    parameters:
+      - $ref: "#/components/parameters/ResourceID"
+    post:
+      operationId: createAcceptanceCheck
+      summary: Record an immutable acceptance check
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcceptanceCheckCreate"
+      responses:
+        "201":
+          $ref: "#/components/responses/AcceptanceCheckCreated"
         default:
           $ref: "#/components/responses/Problem"
 components:
@@ -45,9 +585,723 @@ components:
       type: apiKey
       in: cookie
       name: bb_session
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque cursor returned by the previous page.
+      schema:
+        type: string
+        maxLength: 2048
+    Limit:
+      name: limit
+      in: query
+      description: Page size. Defaults to 50 and is capped at 200.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    TaskNumber:
+      name: number
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    ProjectNumber:
+      name: number
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    ResourceID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: One quoted positive integer resource version, for example `"3"`.
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
+    ProjectIfMatch:
+      name: X-Project-If-Match
+      in: header
+      required: true
+      description: Current project Etag when an operation changes a milestone and its project.
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Required for bearer-authenticated mutations; optional for browser sessions.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: '^[\x21-\x7E]+$'
+  headers:
+    Etag:
+      description: Quoted positive integer resource version.
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
+    Location:
+      description: Canonical URL of the created resource.
+      schema:
+        type: string
+        format: uri-reference
+    RequestID:
+      description: Server-owned request correlation ID.
+      schema:
+        type: string
+    IdempotencyReplayed:
+      description: Present and true when a stored response was replayed.
+      schema:
+        type: boolean
+    RateLimitLimit:
+      description: Sustained per-token request limit per minute.
+      schema:
+        type: integer
+        minimum: 1
+    RateLimitRemaining:
+      description: Requests currently available in the token bucket.
+      schema:
+        type: integer
+        minimum: 0
+    RateLimitReset:
+      description: Seconds until the token bucket is full, or until one request is available.
+      schema:
+        type: integer
+        minimum: 0
+    RetryAfter:
+      description: Seconds before a retry is recommended.
+      schema:
+        type: integer
+        minimum: 1
+  pathItems:
+    ProjectActivate:
+      parameters:
+        - $ref: "#/components/parameters/ProjectNumber"
+      post:
+        operationId: activateProject
+        summary: Activate a project
+        parameters:
+          - $ref: "#/components/parameters/IfMatch"
+          - $ref: "#/components/parameters/IdempotencyKey"
+        requestBody:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LifecycleRequest"
+        responses:
+          "200":
+            $ref: "#/components/responses/Project"
+          default:
+            $ref: "#/components/responses/Problem"
+    ProjectPause:
+      parameters:
+        - $ref: "#/components/parameters/ProjectNumber"
+      post:
+        operationId: pauseProject
+        summary: Pause a project
+        parameters:
+          - $ref: "#/components/parameters/IfMatch"
+          - $ref: "#/components/parameters/IdempotencyKey"
+        requestBody:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LifecycleRequest"
+        responses:
+          "200":
+            $ref: "#/components/responses/Project"
+          default:
+            $ref: "#/components/responses/Problem"
+    ProjectComplete:
+      parameters:
+        - $ref: "#/components/parameters/ProjectNumber"
+      post:
+        operationId: completeProject
+        summary: Complete a project
+        parameters:
+          - $ref: "#/components/parameters/IfMatch"
+          - $ref: "#/components/parameters/IdempotencyKey"
+        requestBody:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LifecycleRequest"
+        responses:
+          "200":
+            $ref: "#/components/responses/Project"
+          default:
+            $ref: "#/components/responses/Problem"
+    ProjectCancel:
+      parameters:
+        - $ref: "#/components/parameters/ProjectNumber"
+      post:
+        operationId: cancelProject
+        summary: Cancel a project
+        parameters:
+          - $ref: "#/components/parameters/IfMatch"
+          - $ref: "#/components/parameters/IdempotencyKey"
+        requestBody:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LifecycleRequest"
+        responses:
+          "200":
+            $ref: "#/components/responses/Project"
+          default:
+            $ref: "#/components/responses/Problem"
+    ProjectReopen:
+      parameters:
+        - $ref: "#/components/parameters/ProjectNumber"
+      post:
+        operationId: reopenProject
+        summary: Reopen a project
+        parameters:
+          - $ref: "#/components/parameters/IfMatch"
+          - $ref: "#/components/parameters/IdempotencyKey"
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LifecycleRequest"
+        responses:
+          "200":
+            $ref: "#/components/responses/Project"
+          default:
+            $ref: "#/components/responses/Problem"
+    ProjectArchive:
+      parameters:
+        - $ref: "#/components/parameters/ProjectNumber"
+      post:
+        operationId: archiveProject
+        summary: Archive a project
+        parameters:
+          - $ref: "#/components/parameters/IfMatch"
+          - $ref: "#/components/parameters/IdempotencyKey"
+        responses:
+          "200":
+            $ref: "#/components/responses/Project"
+          default:
+            $ref: "#/components/responses/Problem"
+    ProjectRestore:
+      parameters:
+        - $ref: "#/components/parameters/ProjectNumber"
+      post:
+        operationId: restoreProject
+        summary: Restore a project
+        parameters:
+          - $ref: "#/components/parameters/IfMatch"
+          - $ref: "#/components/parameters/IdempotencyKey"
+        responses:
+          "200":
+            $ref: "#/components/responses/Project"
+          default:
+            $ref: "#/components/responses/Problem"
+    MilestoneComplete:
+      parameters:
+        - $ref: "#/components/parameters/ProjectNumber"
+        - $ref: "#/components/parameters/ResourceID"
+      post:
+        operationId: completeMilestone
+        summary: Complete a milestone
+        parameters:
+          - $ref: "#/components/parameters/IfMatch"
+          - $ref: "#/components/parameters/ProjectIfMatch"
+          - $ref: "#/components/parameters/IdempotencyKey"
+        requestBody:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LifecycleRequest"
+        responses:
+          "200":
+            $ref: "#/components/responses/Milestone"
+          default:
+            $ref: "#/components/responses/Problem"
+    MilestoneCancel:
+      parameters:
+        - $ref: "#/components/parameters/ProjectNumber"
+        - $ref: "#/components/parameters/ResourceID"
+      post:
+        operationId: cancelMilestone
+        summary: Cancel a milestone
+        parameters:
+          - $ref: "#/components/parameters/IfMatch"
+          - $ref: "#/components/parameters/ProjectIfMatch"
+          - $ref: "#/components/parameters/IdempotencyKey"
+        requestBody:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LifecycleRequest"
+        responses:
+          "200":
+            $ref: "#/components/responses/Milestone"
+          default:
+            $ref: "#/components/responses/Problem"
+    MilestoneReopen:
+      parameters:
+        - $ref: "#/components/parameters/ProjectNumber"
+        - $ref: "#/components/parameters/ResourceID"
+      post:
+        operationId: reopenMilestone
+        summary: Reopen a milestone
+        parameters:
+          - $ref: "#/components/parameters/IfMatch"
+          - $ref: "#/components/parameters/ProjectIfMatch"
+          - $ref: "#/components/parameters/IdempotencyKey"
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LifecycleRequest"
+        responses:
+          "200":
+            $ref: "#/components/responses/Milestone"
+          default:
+            $ref: "#/components/responses/Problem"
   responses:
+    CurrentPrincipal:
+      description: Current principal
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Ratelimit-Limit:
+          $ref: "#/components/headers/RateLimitLimit"
+        Ratelimit-Remaining:
+          $ref: "#/components/headers/RateLimitRemaining"
+        Ratelimit-Reset:
+          $ref: "#/components/headers/RateLimitReset"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CurrentPrincipal"
+    UserList:
+      description: User collection
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Ratelimit-Limit:
+          $ref: "#/components/headers/RateLimitLimit"
+        Ratelimit-Remaining:
+          $ref: "#/components/headers/RateLimitRemaining"
+        Ratelimit-Reset:
+          $ref: "#/components/headers/RateLimitReset"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UserList"
+    TaskList:
+      description: Task collection
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Ratelimit-Limit:
+          $ref: "#/components/headers/RateLimitLimit"
+        Ratelimit-Remaining:
+          $ref: "#/components/headers/RateLimitRemaining"
+        Ratelimit-Reset:
+          $ref: "#/components/headers/RateLimitReset"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TaskList"
+    Task:
+      description: Task
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Ratelimit-Limit:
+          $ref: "#/components/headers/RateLimitLimit"
+        Ratelimit-Remaining:
+          $ref: "#/components/headers/RateLimitRemaining"
+        Ratelimit-Reset:
+          $ref: "#/components/headers/RateLimitReset"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Task"
+    TaskCreated:
+      description: Task created
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        Location:
+          $ref: "#/components/headers/Location"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Ratelimit-Limit:
+          $ref: "#/components/headers/RateLimitLimit"
+        Ratelimit-Remaining:
+          $ref: "#/components/headers/RateLimitRemaining"
+        Ratelimit-Reset:
+          $ref: "#/components/headers/RateLimitReset"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Task"
+    CommentList:
+      description: Comment collection
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Ratelimit-Limit:
+          $ref: "#/components/headers/RateLimitLimit"
+        Ratelimit-Remaining:
+          $ref: "#/components/headers/RateLimitRemaining"
+        Ratelimit-Reset:
+          $ref: "#/components/headers/RateLimitReset"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CommentList"
+    Comment:
+      description: Comment
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Ratelimit-Limit:
+          $ref: "#/components/headers/RateLimitLimit"
+        Ratelimit-Remaining:
+          $ref: "#/components/headers/RateLimitRemaining"
+        Ratelimit-Reset:
+          $ref: "#/components/headers/RateLimitReset"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Comment"
+    CommentCreated:
+      description: Comment created
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        Location:
+          $ref: "#/components/headers/Location"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Ratelimit-Limit:
+          $ref: "#/components/headers/RateLimitLimit"
+        Ratelimit-Remaining:
+          $ref: "#/components/headers/RateLimitRemaining"
+        Ratelimit-Reset:
+          $ref: "#/components/headers/RateLimitReset"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Comment"
+    TaskActivityList:
+      description: Task activity collection
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Ratelimit-Limit:
+          $ref: "#/components/headers/RateLimitLimit"
+        Ratelimit-Remaining:
+          $ref: "#/components/headers/RateLimitRemaining"
+        Ratelimit-Reset:
+          $ref: "#/components/headers/RateLimitReset"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TaskActivityList"
+    LabelList:
+      description: Label collection
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Ratelimit-Limit:
+          $ref: "#/components/headers/RateLimitLimit"
+        Ratelimit-Remaining:
+          $ref: "#/components/headers/RateLimitRemaining"
+        Ratelimit-Reset:
+          $ref: "#/components/headers/RateLimitReset"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/LabelList"
+    Label:
+      description: Label
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Ratelimit-Limit:
+          $ref: "#/components/headers/RateLimitLimit"
+        Ratelimit-Remaining:
+          $ref: "#/components/headers/RateLimitRemaining"
+        Ratelimit-Reset:
+          $ref: "#/components/headers/RateLimitReset"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Label"
+    LabelCreated:
+      description: Label created
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        Location:
+          $ref: "#/components/headers/Location"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Ratelimit-Limit:
+          $ref: "#/components/headers/RateLimitLimit"
+        Ratelimit-Remaining:
+          $ref: "#/components/headers/RateLimitRemaining"
+        Ratelimit-Reset:
+          $ref: "#/components/headers/RateLimitReset"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Label"
+    ProjectList:
+      description: Project collection
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Ratelimit-Limit:
+          $ref: "#/components/headers/RateLimitLimit"
+        Ratelimit-Remaining:
+          $ref: "#/components/headers/RateLimitRemaining"
+        Ratelimit-Reset:
+          $ref: "#/components/headers/RateLimitReset"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProjectList"
+    Project:
+      description: Project
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Ratelimit-Limit:
+          $ref: "#/components/headers/RateLimitLimit"
+        Ratelimit-Remaining:
+          $ref: "#/components/headers/RateLimitRemaining"
+        Ratelimit-Reset:
+          $ref: "#/components/headers/RateLimitReset"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Project"
+    ProjectDetail:
+      description: Project aggregate
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Ratelimit-Limit:
+          $ref: "#/components/headers/RateLimitLimit"
+        Ratelimit-Remaining:
+          $ref: "#/components/headers/RateLimitRemaining"
+        Ratelimit-Reset:
+          $ref: "#/components/headers/RateLimitReset"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProjectDetail"
+    ProjectCreated:
+      description: Project created
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        Location:
+          $ref: "#/components/headers/Location"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Ratelimit-Limit:
+          $ref: "#/components/headers/RateLimitLimit"
+        Ratelimit-Remaining:
+          $ref: "#/components/headers/RateLimitRemaining"
+        Ratelimit-Reset:
+          $ref: "#/components/headers/RateLimitReset"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Project"
+    Milestone:
+      description: Milestone
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Ratelimit-Limit:
+          $ref: "#/components/headers/RateLimitLimit"
+        Ratelimit-Remaining:
+          $ref: "#/components/headers/RateLimitRemaining"
+        Ratelimit-Reset:
+          $ref: "#/components/headers/RateLimitReset"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Milestone"
+    MilestoneCreated:
+      description: Milestone created
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        Location:
+          $ref: "#/components/headers/Location"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Ratelimit-Limit:
+          $ref: "#/components/headers/RateLimitLimit"
+        Ratelimit-Remaining:
+          $ref: "#/components/headers/RateLimitRemaining"
+        Ratelimit-Reset:
+          $ref: "#/components/headers/RateLimitReset"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Milestone"
+    CriterionList:
+      description: Acceptance criterion collection
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Ratelimit-Limit:
+          $ref: "#/components/headers/RateLimitLimit"
+        Ratelimit-Remaining:
+          $ref: "#/components/headers/RateLimitRemaining"
+        Ratelimit-Reset:
+          $ref: "#/components/headers/RateLimitReset"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CriterionList"
+    Criterion:
+      description: Acceptance criterion
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Ratelimit-Limit:
+          $ref: "#/components/headers/RateLimitLimit"
+        Ratelimit-Remaining:
+          $ref: "#/components/headers/RateLimitRemaining"
+        Ratelimit-Reset:
+          $ref: "#/components/headers/RateLimitReset"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AcceptanceCriterion"
+    CriterionCreated:
+      description: Acceptance criterion created
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        Location:
+          $ref: "#/components/headers/Location"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Ratelimit-Limit:
+          $ref: "#/components/headers/RateLimitLimit"
+        Ratelimit-Remaining:
+          $ref: "#/components/headers/RateLimitRemaining"
+        Ratelimit-Reset:
+          $ref: "#/components/headers/RateLimitReset"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AcceptanceCriterion"
+    AcceptanceCheckCreated:
+      description: Acceptance check created
+      headers:
+        Location:
+          $ref: "#/components/headers/Location"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Ratelimit-Limit:
+          $ref: "#/components/headers/RateLimitLimit"
+        Ratelimit-Remaining:
+          $ref: "#/components/headers/RateLimitRemaining"
+        Ratelimit-Reset:
+          $ref: "#/components/headers/RateLimitReset"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AcceptanceCheck"
+    NoContent:
+      description: Mutation completed without a response body
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Ratelimit-Limit:
+          $ref: "#/components/headers/RateLimitLimit"
+        Ratelimit-Remaining:
+          $ref: "#/components/headers/RateLimitRemaining"
+        Ratelimit-Reset:
+          $ref: "#/components/headers/RateLimitReset"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
     Problem:
       description: Request failed
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Ratelimit-Limit:
+          $ref: "#/components/headers/RateLimitLimit"
+        Ratelimit-Remaining:
+          $ref: "#/components/headers/RateLimitRemaining"
+        Ratelimit-Reset:
+          $ref: "#/components/headers/RateLimitReset"
+        Retry-After:
+          $ref: "#/components/headers/RetryAfter"
       content:
         application/problem+json:
           schema:
@@ -56,11 +1310,7 @@ components:
     User:
       type: object
       additionalProperties: false
-      required:
-        - id
-        - name
-        - platform_role
-        - active
+      required: [id, name, platform_role, active]
       properties:
         id:
           type: string
@@ -75,20 +1325,26 @@ components:
           format: uri
         platform_role:
           type: string
-          enum:
-            - ADMIN
-            - MEMBER
+          enum: [ADMIN, MEMBER]
         active:
           type: boolean
+    UserRef:
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
     CurrentPrincipal:
       type: object
       additionalProperties: false
-      required:
-        - actor
-        - subject
-        - authentication_method
-        - scopes
-        - impersonating
+      required: [actor, subject, authentication_method, scopes, impersonating]
       properties:
         actor:
           $ref: "#/components/schemas/User"
@@ -96,40 +1352,781 @@ components:
           $ref: "#/components/schemas/User"
         authentication_method:
           type: string
-          enum:
-            - session
-            - api_token
+          enum: [session, api_token]
         scopes:
           type: array
           items:
             type: string
-            enum:
-              - work:read
-              - work:write
+            enum: ["work:read", "work:write"]
         impersonating:
           type: boolean
     UserList:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          additionalProperties: false
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/User"
+    Page:
+      type: object
+      additionalProperties: false
+      properties:
+        next_cursor:
+          type: string
+    TaskStatus:
+      type: string
+      enum: [todo, in_progress, in_review, done, cancelled]
+    TaskPriority:
+      type: string
+      enum: [none, low, medium, high, urgent]
+    ProjectStatus:
+      type: string
+      enum: [planned, active, paused, completed, cancelled]
+    MilestoneStatus:
+      type: string
+      enum: [open, completed, cancelled]
+    AcceptanceOutcome:
+      type: string
+      enum: [passed, failed, unable, waived]
+    NullableUUID:
+      oneOf:
+        - type: string
+          format: uuid
+        - type: "null"
+    NullableDate:
+      oneOf:
+        - type: string
+          format: date
+        - type: "null"
+    TaskCreate:
+      type: object
+      additionalProperties: false
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 500
+        description:
+          type: string
+        status:
+          $ref: "#/components/schemas/TaskStatus"
+        priority:
+          $ref: "#/components/schemas/TaskPriority"
+        assignee_id:
+          $ref: "#/components/schemas/NullableUUID"
+        due_date:
+          $ref: "#/components/schemas/NullableDate"
+        label_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        project_number:
+          type: integer
+          format: int64
+          minimum: 1
+        milestone_id:
+          $ref: "#/components/schemas/NullableUUID"
+    TaskPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 500
+        description:
+          type: string
+        status:
+          $ref: "#/components/schemas/TaskStatus"
+        priority:
+          $ref: "#/components/schemas/TaskPriority"
+        assignee_id:
+          $ref: "#/components/schemas/NullableUUID"
+        due_date:
+          $ref: "#/components/schemas/NullableDate"
+        label_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        project_number:
+          oneOf:
+            - type: integer
+              format: int64
+              minimum: 1
+            - type: "null"
+        milestone_id:
+          $ref: "#/components/schemas/NullableUUID"
+    ProjectRef:
+      type: object
+      additionalProperties: false
+      required: [id, number, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        number:
+          type: integer
+          format: int64
+          minimum: 1
+        name:
+          type: string
+    MilestoneRef:
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+    Task:
       type: object
       additionalProperties: false
       required:
-        - items
+        - id
+        - number
+        - version
+        - title
+        - description
+        - status
+        - priority
+        - creator
+        - labels
+        - created_at
+        - updated_at
       properties:
-        items:
+        id:
+          type: string
+          format: uuid
+        number:
+          type: integer
+          format: int64
+          minimum: 1
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          $ref: "#/components/schemas/TaskStatus"
+        priority:
+          $ref: "#/components/schemas/TaskPriority"
+        assignee:
+          $ref: "#/components/schemas/UserRef"
+        creator:
+          $ref: "#/components/schemas/UserRef"
+        due_date:
+          type: string
+          format: date
+        project:
+          $ref: "#/components/schemas/ProjectRef"
+        milestone:
+          $ref: "#/components/schemas/MilestoneRef"
+        labels:
           type: array
           items:
-            $ref: "#/components/schemas/User"
-        next_cursor:
+            $ref: "#/components/schemas/Label"
+        created_at:
           type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        archived_at:
+          type: string
+          format: date-time
+    TaskList:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          additionalProperties: false
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/Task"
+    CommentWrite:
+      type: object
+      additionalProperties: false
+      required: [body]
+      properties:
+        body:
+          type: string
+          minLength: 1
+    Comment:
+      type: object
+      additionalProperties: false
+      required: [id, task_id, author_id, body, version, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        task_id:
+          type: string
+          format: uuid
+        author_id:
+          type: string
+          format: uuid
+        body:
+          type: string
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    CommentList:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          additionalProperties: false
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/Comment"
+    TaskActivity:
+      type: object
+      additionalProperties: false
+      required: [id, actor_id, field, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        actor_id:
+          type: string
+          format: uuid
+        field:
+          type: string
+        old_value:
+          type: string
+        new_value:
+          type: string
+        authentication_method:
+          type: string
+          enum: [session, api_token]
+        token_name:
+          type: string
+        request_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    TaskActivityList:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          additionalProperties: false
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/TaskActivity"
+    LabelWrite:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+    Label:
+      type: object
+      additionalProperties: false
+      required: [id, name, version, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+    LabelList:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          additionalProperties: false
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/Label"
+    ProjectCreate:
+      type: object
+      additionalProperties: false
+      required: [name, outcome, owner_id]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 500
+        outcome:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        owner_id:
+          type: string
+          format: uuid
+        target_date:
+          $ref: "#/components/schemas/NullableDate"
+    ProjectPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 500
+        outcome:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        owner_id:
+          type: string
+          format: uuid
+        target_date:
+          $ref: "#/components/schemas/NullableDate"
+    Project:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - number
+        - version
+        - name
+        - outcome
+        - description
+        - owner
+        - creator
+        - status
+        - created_at
+        - updated_at
+        - completed_tasks
+        - eligible_tasks
+        - active_criteria
+        - satisfied_criteria
+      properties:
+        id:
+          type: string
+          format: uuid
+        number:
+          type: integer
+          format: int64
+          minimum: 1
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        name:
+          type: string
+        outcome:
+          type: string
+        description:
+          type: string
+        owner:
+          $ref: "#/components/schemas/UserRef"
+        creator:
+          $ref: "#/components/schemas/UserRef"
+        status:
+          $ref: "#/components/schemas/ProjectStatus"
+        target_date:
+          type: string
+          format: date
+        completed_at:
+          type: string
+          format: date-time
+        cancelled_at:
+          type: string
+          format: date-time
+        archived_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        completed_tasks:
+          type: integer
+          minimum: 0
+        eligible_tasks:
+          type: integer
+          minimum: 0
+        active_criteria:
+          type: integer
+          minimum: 0
+        satisfied_criteria:
+          type: integer
+          minimum: 0
+    ProjectList:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          additionalProperties: false
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/Project"
+    MilestoneCreate:
+      type: object
+      additionalProperties: false
+      required: [name, outcome, position]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        outcome:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        target_date:
+          $ref: "#/components/schemas/NullableDate"
+        position:
+          type: integer
+          minimum: 0
+    MilestonePatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+        outcome:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        target_date:
+          $ref: "#/components/schemas/NullableDate"
+        position:
+          type: integer
+          minimum: 0
+    Milestone:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - project_id
+        - version
+        - name
+        - outcome
+        - description
+        - status
+        - position
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        name:
+          type: string
+        outcome:
+          type: string
+        description:
+          type: string
+        status:
+          $ref: "#/components/schemas/MilestoneStatus"
+        target_date:
+          type: string
+          format: date
+        position:
+          type: integer
+          minimum: 0
+        completed_at:
+          type: string
+          format: date-time
+        cancelled_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        acceptance_criteria:
+          type: array
+          items:
+            $ref: "#/components/schemas/AcceptanceCriterion"
+    CriterionCreate:
+      type: object
+      additionalProperties: false
+      required: [criterion, verification_instructions, position]
+      properties:
+        criterion:
+          type: string
+          minLength: 1
+        verification_instructions:
+          type: string
+          minLength: 1
+        position:
+          type: integer
+          minimum: 0
+    CriterionPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        criterion:
+          type: string
+          minLength: 1
+        verification_instructions:
+          type: string
+          minLength: 1
+        position:
+          type: integer
+          minimum: 0
+    AcceptanceCriterion:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - version
+        - criterion
+        - verification_instructions
+        - revision
+        - position
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        project_id:
+          type: string
+          format: uuid
+        milestone_id:
+          type: string
+          format: uuid
+        task_id:
+          type: string
+          format: uuid
+        criterion:
+          type: string
+        verification_instructions:
+          type: string
+        revision:
+          type: integer
+          minimum: 1
+        position:
+          type: integer
+          minimum: 0
+        current_check:
+          $ref: "#/components/schemas/AcceptanceCheck"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    CriterionList:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          additionalProperties: false
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/AcceptanceCriterion"
+    AcceptanceCheckCreate:
+      type: object
+      additionalProperties: false
+      required: [criterion_revision, outcome, evidence]
+      properties:
+        criterion_revision:
+          type: integer
+          minimum: 1
+        outcome:
+          $ref: "#/components/schemas/AcceptanceOutcome"
+        evidence:
+          type: string
+          minLength: 1
+    AcceptanceCheck:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - criterion_id
+        - criterion_revision
+        - outcome
+        - evidence
+        - checker_type
+        - checked_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        criterion_id:
+          type: string
+          format: uuid
+        criterion_revision:
+          type: integer
+          minimum: 1
+        outcome:
+          $ref: "#/components/schemas/AcceptanceOutcome"
+        evidence:
+          type: string
+        checker_type:
+          type: string
+          enum: [user, agent, system]
+        checked_by_user_id:
+          type: string
+          format: uuid
+        checker_ref:
+          type: string
+        checked_at:
+          type: string
+          format: date-time
+    ProjectActivity:
+      type: object
+      additionalProperties: false
+      required: [id, actor_id, action, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        milestone_id:
+          type: string
+          format: uuid
+        actor_id:
+          type: string
+          format: uuid
+        action:
+          type: string
+        reason:
+          type: string
+        old_value:
+          type: string
+        new_value:
+          type: string
+        authentication_method:
+          type: string
+          enum: [session, api_token]
+        token_name:
+          type: string
+        request_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    ProjectDetail:
+      type: object
+      additionalProperties: false
+      required: [project, acceptance_criteria, milestones, tasks, activity]
+      properties:
+        project:
+          $ref: "#/components/schemas/Project"
+        acceptance_criteria:
+          type: array
+          items:
+            $ref: "#/components/schemas/AcceptanceCriterion"
+        milestones:
+          type: array
+          items:
+            $ref: "#/components/schemas/Milestone"
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Task"
+        activity:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectActivity"
+    LifecycleRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          maxLength: 2000
+    ValidationError:
+      type: object
+      additionalProperties: false
+      required: [detail, pointer]
+      properties:
+        detail:
+          type: string
+        pointer:
+          type: string
+    ProblemCode:
+      type: string
+      enum:
+        - AUTHENTICATION_REQUIRED
+        - TOKEN_INVALID
+        - TOKEN_EXPIRED
+        - TOKEN_REVOKED
+        - USER_INACTIVE
+        - INSUFFICIENT_SCOPE
+        - RATE_LIMITED
+        - INVALID_REQUEST
+        - VALIDATION_FAILED
+        - NOT_FOUND
+        - FORBIDDEN
+        - CONFLICT
+        - PRECONDITION_REQUIRED
+        - VERSION_CONFLICT
+        - IDEMPOTENCY_KEY_REQUIRED
+        - IDEMPOTENCY_KEY_REUSED
+        - IDEMPOTENCY_IN_PROGRESS
+        - INTERNAL_ERROR
     Problem:
       type: object
       additionalProperties: false
-      required:
-        - type
-        - title
-        - status
-        - detail
-        - code
-        - request_id
+      required: [type, title, status, detail, instance, code, request_id]
       properties:
         type:
           type: string
@@ -142,9 +2139,20 @@ components:
           maximum: 599
         detail:
           type: string
-        code:
+        instance:
           type: string
+          format: uri-reference
+        code:
+          $ref: "#/components/schemas/ProblemCode"
         request_id:
           type: string
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationError"
+        current_version:
+          type: integer
+          format: int64
+          minimum: 1
         retryable:
           type: boolean
