@@ -23,6 +23,13 @@ web-dev:
 web-test:
 	cd web && npm test
 
+openapi-generate:
+	go generate ./api
+
+openapi-check:
+	go generate ./api
+	git diff --exit-code -- api/openapi.yaml internal/api/v1generated
+
 # e2e drives a real browser against the whole stack. Playwright's own
 # webServer config brings up Postgres (via docker compose), the Go backend
 # and the Vite dev server as needed, and reuses them if a developer already
@@ -30,4 +37,4 @@ web-test:
 e2e:
 	cd web && npx playwright test
 
-.PHONY: up down test run web-install web-dev web-test e2e
+.PHONY: up down test run web-install web-dev web-test openapi-generate openapi-check e2e

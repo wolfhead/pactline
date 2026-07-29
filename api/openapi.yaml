@@ -1,0 +1,150 @@
+openapi: 3.1.1
+info:
+  title: Bounty Board Work API
+  version: 1.0.0
+  description: Versioned work-management API for authenticated people and agents.
+paths:
+  /api/v1/me:
+    get:
+      operationId: getCurrentPrincipal
+      summary: Get the authenticated principal
+      security:
+        - bearerAuth: []
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Current principal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentPrincipal"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/users:
+    get:
+      operationId: listUsers
+      summary: List users available for work assignment
+      security:
+        - bearerAuth: []
+        - sessionCookie: []
+      responses:
+        "200":
+          description: User collection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserList"
+        default:
+          $ref: "#/components/responses/Problem"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: bb_session
+  responses:
+    Problem:
+      description: Request failed
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+  schemas:
+    User:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - platform_role
+        - active
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        avatar_url:
+          type: string
+          format: uri
+        platform_role:
+          type: string
+          enum:
+            - ADMIN
+            - MEMBER
+        active:
+          type: boolean
+    CurrentPrincipal:
+      type: object
+      additionalProperties: false
+      required:
+        - actor
+        - subject
+        - authentication_method
+        - scopes
+        - impersonating
+      properties:
+        actor:
+          $ref: "#/components/schemas/User"
+        subject:
+          $ref: "#/components/schemas/User"
+        authentication_method:
+          type: string
+          enum:
+            - session
+            - api_token
+        scopes:
+          type: array
+          items:
+            type: string
+            enum:
+              - work:read
+              - work:write
+        impersonating:
+          type: boolean
+    UserList:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+        next_cursor:
+          type: string
+    Problem:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - code
+        - request_id
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          type: string
+        code:
+          type: string
+        request_id:
+          type: string
+        retryable:
+          type: boolean
