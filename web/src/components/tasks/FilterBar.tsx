@@ -105,7 +105,7 @@ export default function FilterBar({ filters, onChange, labels, onLabelsChanged, 
   const priorityActive = filters.priorities.length > 0
   const assigneeActive = filters.assignee !== ''
   const labelActive = filters.labelId !== ''
-  const selectedLabel = labelActive ? labels.find((l) => l.ID === filters.labelId) : undefined
+  const selectedLabel = labelActive ? labels.find((l) => l.id === filters.labelId) : undefined
 
   return (
     <div data-read-only-allowed="true" className="mt-2 flex flex-wrap items-center gap-2">
@@ -184,19 +184,19 @@ export default function FilterBar({ filters, onChange, labels, onLabelsChanged, 
 
       <Popover>
         <PopoverTrigger aria-pressed={labelActive} className={filterTriggerClass(labelActive)}>
-          {selectedLabel ? selectedLabel.Name : '标签'}
+          {selectedLabel ? selectedLabel.name : '标签'}
         </PopoverTrigger>
         <PopoverContent className="w-56 p-2">
           <ul className="flex list-none flex-col gap-1 pl-0" role="group" aria-label="按标签筛选">
             {labels.map((l) => (
-              <li key={l.ID}>
+              <li key={l.id}>
                 <label className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent-subtle">
                   <Checkbox
-                    aria-label={l.Name}
-                    checked={filters.labelId === l.ID}
-                    onCheckedChange={() => toggleLabel(l.ID)}
+                    aria-label={l.name}
+                    checked={filters.labelId === l.id}
+                    onCheckedChange={() => toggleLabel(l.id)}
                   />
-                  {l.Name}
+                  {l.name}
                 </label>
               </li>
             ))}

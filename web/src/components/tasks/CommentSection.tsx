@@ -6,12 +6,18 @@ import InlineEditable from './InlineEditable'
 
 interface CommentSectionProps {
   taskNumber: number
+  taskVersion: number
+  onTaskChanged: () => Promise<void>
 }
 
 /** Comments: add, and edit/delete of one's own — enforced by the store, but
  * the controls are hidden for anyone else's comment too so there is no
  * button to click that would just 403. */
-export default function CommentSection({ taskNumber }: CommentSectionProps) {
+export default function CommentSection({
+  taskNumber,
+  taskVersion,
+  onTaskChanged,
+}: CommentSectionProps) {
   const { me } = useIdentity()
   const [comments, setComments] = useState<Comment[]>([])
   const [body, setBody] = useState('')
@@ -45,9 +51,10 @@ export default function CommentSection({ taskNumber }: CommentSectionProps) {
     setPosting(true)
     setError('')
     try {
-      const created = await createComment(taskNumber, trimmed)
+      const created = await createComment(taskNumber, taskVersion, trimmed)
       setComments((cs) => [...cs, created])
       setBody('')
+      await onTaskChanged()
     } catch (err) {
       setError(String((err as Error).message))
     } finally {
@@ -57,9 +64,11 @@ export default function CommentSection({ taskNumber }: CommentSectionProps) {
 
   function editComment(id: string, next: string) {
     if (!next.trim()) return
+    const current = comments.find((comment) => comment.id === id)
+    if (!current) return
     const previous = comments
     setComments((cs) => cs.map((c) => (c.id === id ? { ...c, body: next } : c)))
-    updateComment(taskNumber, id, next)
+    updateComment(taskNumber, id, current.version, next)
       .then((updated) => setComments((cs) => cs.map((c) => (c.id === id ? updated : c))))
       .catch((err) => {
         setComments(previous)
@@ -68,9 +77,11 @@ export default function CommentSection({ taskNumber }: CommentSectionProps) {
   }
 
   function removeComment(id: string) {
+    const current = comments.find((comment) => comment.id === id)
+    if (!current) return
     const previous = comments
     setComments((cs) => cs.filter((c) => c.id !== id))
-    deleteComment(taskNumber, id).catch((err) => {
+    deleteComment(taskNumber, id, current.version).catch((err) => {
       setComments(previous)
       setRowErrors((r) => ({ ...r, [id]: `删除失败：${(err as Error).message}` }))
     })

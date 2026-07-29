@@ -13,7 +13,7 @@ afterEach(() => {
 beforeEach(() => {
   vi.mocked(projectsApi.listProjects).mockResolvedValue([
     {
-      id: 'p1', number: 12, name: 'Launch', outcome: 'Released', description: '',
+      id: 'p1', number: 12, version: 1, name: 'Launch', outcome: 'Released', description: '',
       owner: { id: 'u1', name: 'Alex', email: 'a@example.com' },
       creator: { id: 'u1', name: 'Alex', email: 'a@example.com' },
       status: 'active', target_date: null, completed_at: null, cancelled_at: null,
@@ -25,7 +25,8 @@ beforeEach(() => {
     project: (awaitProject()),
     acceptance_criteria: [],
     milestones: [{
-      id: 'm1', name: 'API ready', outcome: 'Ready', description: '', status: 'open',
+      id: 'm1', project_id: 'p1', version: 1,
+      name: 'API ready', outcome: 'Ready', description: '', status: 'open',
       target_date: null, position: 0, completed_at: null, cancelled_at: null,
       created_at: '', updated_at: '', acceptance_criteria: [],
     }],
@@ -36,7 +37,7 @@ beforeEach(() => {
 
 function awaitProject() {
   return {
-    id: 'p1', number: 12, name: 'Launch', outcome: 'Released', description: '',
+    id: 'p1', number: 12, version: 1, name: 'Launch', outcome: 'Released', description: '',
     owner: { id: 'u1', name: 'Alex', email: 'a@example.com' },
     creator: { id: 'u1', name: 'Alex', email: 'a@example.com' },
     status: 'active' as const, target_date: null, completed_at: null, cancelled_at: null,

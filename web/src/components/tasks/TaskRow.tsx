@@ -97,8 +97,8 @@ export default function TaskRow({ task, selected, tier, users, error, onPatch, o
   const labelChips = task.labels.length > 0 && (
     <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-1">
       {task.labels.map((l) => (
-        <span key={l.ID} className="rounded-full bg-surface-subtle px-2 py-0.5 text-[11px] text-fg-muted">
-          {l.Name}
+        <span key={l.id} className="rounded-full bg-surface-subtle px-2 py-0.5 text-[11px] text-fg-muted">
+          {l.name}
         </span>
       ))}
     </div>

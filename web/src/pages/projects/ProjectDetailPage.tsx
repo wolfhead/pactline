@@ -18,6 +18,7 @@ import {
   type AcceptanceCriterion,
   type AcceptanceOutcome,
 } from '@/api/acceptance'
+import { ProblemError } from '@/api/v1/client'
 import { useIdentity } from '@/identity'
 import AcceptanceChecklist from '@/components/projects/AcceptanceChecklist'
 
@@ -78,8 +79,18 @@ export default function ProjectDetailPage() {
     void reload()
   }, [reload, me?.id])
 
+  async function handleMutationError(reason: unknown) {
+    if (reason instanceof ProblemError && reason.code === 'VERSION_CONFLICT') {
+      await reload()
+      setError('内容已被其他用户或 Agent 更新，已加载最新版本。')
+      return
+    }
+    setError((reason as Error).message)
+  }
+
   async function addProjectCriterion(criterion: string, instructions: string) {
-    await createProjectCriterion(number, {
+    if (!detail) return
+    await createProjectCriterion(number, detail.project.version, {
       criterion,
       verification_instructions: instructions,
       position: detail?.acceptance_criteria.length ?? 0,
@@ -92,7 +103,9 @@ export default function ProjectDetailPage() {
     outcome: AcceptanceOutcome,
     evidence: string,
   ) {
-    await checkCriterion(criterion.id, criterion.revision, outcome, evidence)
+    await checkCriterion(
+      criterion.id, criterion.version, criterion.revision, outcome, evidence,
+    )
     await reload()
   }
 
@@ -101,7 +114,7 @@ export default function ProjectDetailPage() {
     text: string,
     instructions: string,
   ) {
-    await updateCriterion(criterion.id, {
+    await updateCriterion(criterion.id, criterion.version, {
       criterion: text,
       verification_instructions: instructions,
     })
@@ -112,7 +125,7 @@ export default function ProjectDetailPage() {
     const needsReason = detail?.project.status === 'active' || detail?.project.status === 'paused'
     const reason = needsReason ? window.prompt('请输入调整验收范围的原因') : undefined
     if (needsReason && !reason) return
-    await removeCriterion(criterion.id, reason ?? undefined)
+    await removeCriterion(criterion.id, criterion.version, reason ?? undefined)
     await reload()
   }
 
@@ -122,10 +135,13 @@ export default function ProjectDetailPage() {
       const requiresReason = action === 'reopen'
       const reason = requiresReason ? window.prompt('请输入重新开启原因') : undefined
       if (requiresReason && !reason) return
-      await applyProjectLifecycle(number, action, reason ?? undefined)
+      if (!detail) return
+      await applyProjectLifecycle(
+        number, detail.project.version, action, reason ?? undefined,
+      )
       await reload()
     } catch (reason) {
-      setError((reason as Error).message)
+      await handleMutationError(reason)
     }
   }
 
@@ -135,7 +151,8 @@ export default function ProjectDetailPage() {
     const data = new FormData(form)
     setError('')
     try {
-      await createMilestone(number, {
+      if (!detail) return
+      await createMilestone(number, detail.project.version, {
         name: String(data.get('name') ?? ''),
         outcome: String(data.get('outcome') ?? ''),
         target_date: String(data.get('target_date') ?? '') || null,
@@ -144,7 +161,7 @@ export default function ProjectDetailPage() {
       setAddingMilestone(false)
       await reload()
     } catch (reason) {
-      setError((reason as Error).message)
+      await handleMutationError(reason)
     }
   }
 
@@ -153,7 +170,8 @@ export default function ProjectDetailPage() {
     const data = new FormData(event.currentTarget)
     setError('')
     try {
-      await updateProject(number, {
+      if (!detail) return
+      await updateProject(number, detail.project.version, {
         name: String(data.get('name') ?? ''),
         outcome: String(data.get('outcome') ?? ''),
         description: String(data.get('description') ?? ''),
@@ -163,7 +181,7 @@ export default function ProjectDetailPage() {
       setEditingProject(false)
       await reload()
     } catch (reason) {
-      setError((reason as Error).message)
+      await handleMutationError(reason)
     }
   }
 
@@ -175,16 +193,25 @@ export default function ProjectDetailPage() {
     const data = new FormData(event.currentTarget)
     setError('')
     try {
-      await updateMilestone(number, milestoneID, {
+      if (!detail) return
+      const milestone = detail.milestones.find((item) => item.id === milestoneID)
+      if (!milestone) return
+      await updateMilestone(
+        number,
+        detail.project.version,
+        milestoneID,
+        milestone.version,
+        {
         name: String(data.get('name') ?? ''),
         outcome: String(data.get('outcome') ?? ''),
         description: String(data.get('description') ?? ''),
         target_date: String(data.get('target_date') ?? '') || null,
-      })
+        },
+      )
       setEditingMilestoneID(null)
       await reload()
     } catch (reason) {
-      setError((reason as Error).message)
+      await handleMutationError(reason)
     }
   }
 
@@ -335,18 +362,22 @@ export default function ProjectDetailPage() {
                 <>
                   <ActionButton onClick={async () => {
                     try {
-                      await applyMilestoneLifecycle(number, milestone.id, 'complete')
+                      await applyMilestoneLifecycle(
+                        number, project.version, milestone.id, milestone.version, 'complete',
+                      )
                       await reload()
                     } catch (reason) {
-                      setError((reason as Error).message)
+                      await handleMutationError(reason)
                     }
                   }}>完成里程碑</ActionButton>
                   <ActionButton onClick={async () => {
                     try {
-                      await applyMilestoneLifecycle(number, milestone.id, 'cancel')
+                      await applyMilestoneLifecycle(
+                        number, project.version, milestone.id, milestone.version, 'cancel',
+                      )
                       await reload()
                     } catch (reason) {
-                      setError((reason as Error).message)
+                      await handleMutationError(reason)
                     }
                   }}>取消里程碑</ActionButton>
                 </>
@@ -356,10 +387,13 @@ export default function ProjectDetailPage() {
                   const reason = window.prompt('请输入重新开启原因')
                   if (!reason) return
                   try {
-                    await applyMilestoneLifecycle(number, milestone.id, 'reopen', reason)
+                    await applyMilestoneLifecycle(
+                      number, project.version, milestone.id, milestone.version,
+                      'reopen', reason,
+                    )
                     await reload()
                   } catch (cause) {
-                    setError((cause as Error).message)
+                    await handleMutationError(cause)
                   }
                 }}>重新开启里程碑</ActionButton>
               )}
@@ -395,11 +429,13 @@ export default function ProjectDetailPage() {
                 title="里程碑验收标准"
                 criteria={milestone.acceptance_criteria}
                 onAdd={async (criterion, instructions) => {
-                  await createMilestoneCriterion(number, milestone.id, {
+                  await createMilestoneCriterion(
+                    number, project.version, milestone.id, milestone.version, {
                     criterion,
                     verification_instructions: instructions,
                     position: milestone.acceptance_criteria.length,
-                  })
+                    },
+                  )
                   await reload()
                 }}
                 onCheck={recordCheck}

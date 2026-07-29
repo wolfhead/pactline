@@ -20,6 +20,7 @@ import {
   type AcceptanceCriterion,
   type AcceptanceOutcome,
 } from '@/api/acceptance'
+import { ProblemError } from '@/api/v1/client'
 import { useIdentity } from '@/identity'
 import type { Label, Task, TaskPatchBody, UserRef } from '@/task-types'
 
@@ -183,7 +184,7 @@ export default function TaskDetail({
     const forNumber = current.number
     setTask({ ...current, ...optimistic })
     setFieldError('')
-    updateTask(forNumber, patch)
+    updateTask(forNumber, current.version, patch)
       .then((updated) => {
         // Still the task on screen? See activeNumberRef above. onPatched is
         // called either way — the list wants this change regardless of what
@@ -191,8 +192,20 @@ export default function TaskDetail({
         if (!isStale(forNumber)) setTask(updated)
         onPatched(updated)
       })
-      .catch((err) => {
+      .catch(async (err) => {
         if (isStale(forNumber)) return
+        if (err instanceof ProblemError && err.code === 'VERSION_CONFLICT') {
+          try {
+            const latest = await getTask(forNumber)
+            if (isStale(forNumber)) return
+            setTask(latest)
+            onPatched(latest)
+            setFieldError('内容已被其他用户或 Agent 更新，已加载最新版本。')
+            return
+          } catch {
+            // Fall through to the ordinary rollback when refresh also fails.
+          }
+        }
         setTask((t) => (t ? { ...t, ...previous } : t))
         setFieldError(`更新失败：${(err as Error).message}，已恢复原状态`)
       })
@@ -211,13 +224,13 @@ export default function TaskDetail({
   function handleArchive() {
     if (!task) return
     const taskNumber = task.number
-    archiveTask(taskNumber)
+    archiveTask(taskNumber, task.version)
       .then((updated) => {
         onPatched(updated)
         if (isStale(taskNumber)) return
         setTask(updated)
         showUndo('已归档任务。', () => {
-          restoreTask(taskNumber)
+          restoreTask(taskNumber, updated.version)
             .then((restored) => {
               onPatched(restored)
               if (isStale(taskNumber)) return
@@ -238,7 +251,7 @@ export default function TaskDetail({
   function handleRestore() {
     if (!task) return
     const taskNumber = task.number
-    restoreTask(taskNumber)
+    restoreTask(taskNumber, task.version)
       .then((updated) => {
         onPatched(updated)
         if (isStale(taskNumber)) return
@@ -252,26 +265,32 @@ export default function TaskDetail({
 
   function toggleLabels(nextIds: string[]) {
     if (!task) return
-    const nextLabels = allLabels.filter((l) => nextIds.includes(l.ID))
+    const nextLabels = allLabels.filter((l) => nextIds.includes(l.id))
     patchOptimistic({ label_ids: nextIds }, { labels: nextLabels })
   }
 
-  async function reloadAcceptance(forNumber: number) {
-    const criteria = await listTaskCriteria(forNumber)
+  async function reloadTaskAndAcceptance(forNumber: number) {
+    const [latest, criteria] = await Promise.all([
+      getTask(forNumber),
+      listTaskCriteria(forNumber),
+    ])
     if (!isStale(forNumber)) {
+      setTask(latest)
+      onPatched(latest)
       setAcceptanceCriteria(criteria)
       setFieldError('')
     }
   }
 
   async function addAcceptanceCriterion(criterion: string, instructions: string) {
+    if (!task) return
     const forNumber = number
-    await createTaskCriterion(forNumber, {
+    await createTaskCriterion(forNumber, task.version, {
       criterion,
       verification_instructions: instructions,
       position: acceptanceCriteria.length,
     })
-    await reloadAcceptance(forNumber)
+    await reloadTaskAndAcceptance(forNumber)
   }
 
   async function recordAcceptanceCheck(
@@ -280,8 +299,10 @@ export default function TaskDetail({
     evidence: string,
   ) {
     const forNumber = number
-    await checkCriterion(criterion.id, criterion.revision, outcome, evidence)
-    await reloadAcceptance(forNumber)
+    await checkCriterion(
+      criterion.id, criterion.version, criterion.revision, outcome, evidence,
+    )
+    await reloadTaskAndAcceptance(forNumber)
   }
 
   async function editAcceptanceCriterion(
@@ -290,17 +311,17 @@ export default function TaskDetail({
     instructions: string,
   ) {
     const forNumber = number
-    await updateCriterion(criterion.id, {
+    await updateCriterion(criterion.id, criterion.version, {
       criterion: text,
       verification_instructions: instructions,
     })
-    await reloadAcceptance(forNumber)
+    await reloadTaskAndAcceptance(forNumber)
   }
 
   async function removeAcceptanceCriterion(criterion: AcceptanceCriterion) {
     const forNumber = number
-    await removeCriterion(criterion.id)
-    await reloadAcceptance(forNumber)
+    await removeCriterion(criterion.id, criterion.version)
+    await reloadTaskAndAcceptance(forNumber)
   }
 
   if (error) {
@@ -469,7 +490,11 @@ export default function TaskDetail({
         创建者：{task.creator.name} · 创建于 {new Date(task.created_at).toLocaleString()}
       </p>
 
-      <CommentSection taskNumber={task.number} />
+      <CommentSection
+        taskNumber={task.number}
+        taskVersion={task.version}
+        onTaskChanged={() => reloadTaskAndAcceptance(task.number)}
+      />
       <ActivityLog task={task} />
     </div>
   )

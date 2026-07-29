@@ -27,7 +27,7 @@ export default function LabelManager({ labels, onChanged }: LabelManagerProps) {
     setError('')
     try {
       const created = await createLabel(trimmed)
-      onChanged([...labels, created].sort((a, b) => a.Name.localeCompare(b.Name)))
+      onChanged([...labels, created].sort((a, b) => a.name.localeCompare(b.name)))
       setName('')
     } catch (err) {
       setError(String((err as Error).message))
@@ -38,18 +38,26 @@ export default function LabelManager({ labels, onChanged }: LabelManagerProps) {
 
   function rename(id: string, next: string) {
     if (!next.trim()) return
+    const current = labels.find((label) => label.id === id)
+    if (!current) return
     const previous = labels
-    onChanged(labels.map((l) => (l.ID === id ? { ...l, Name: next } : l)))
-    renameLabel(id, next).catch((err) => {
-      onChanged(previous)
-      setError(String((err as Error).message))
-    })
+    onChanged(labels.map((l) => (l.id === id ? { ...l, name: next } : l)))
+    renameLabel(id, current.version, next)
+      .then((updated) => {
+        onChanged(labels.map((label) => (label.id === id ? updated : label)))
+      })
+      .catch((err) => {
+        onChanged(previous)
+        setError(String((err as Error).message))
+      })
   }
 
   function remove(id: string) {
+    const current = labels.find((label) => label.id === id)
+    if (!current) return
     const previous = labels
-    onChanged(labels.filter((l) => l.ID !== id))
-    deleteLabel(id).catch((err) => {
+    onChanged(labels.filter((l) => l.id !== id))
+    deleteLabel(id, current.version).catch((err) => {
       onChanged(previous)
       setError(String((err as Error).message))
     })
@@ -69,16 +77,16 @@ export default function LabelManager({ labels, onChanged }: LabelManagerProps) {
       </summary>
       <ul className="my-2 flex list-none flex-col gap-1 pl-0">
         {labels.map((l) => (
-          <li key={l.ID} className="flex items-center justify-between gap-2">
+          <li key={l.id} className="flex items-center justify-between gap-2">
             <InlineEditable
-              value={l.Name}
-              onCommit={(next) => rename(l.ID, next)}
-              ariaLabel={`重命名标签 ${l.Name}`}
+              value={l.name}
+              onCommit={(next) => rename(l.id, next)}
+              ariaLabel={`重命名标签 ${l.name}`}
               className="min-w-0 flex-1 rounded border-0 bg-transparent px-1 py-0.5 text-sm text-fg"
             />
             <button
               type="button"
-              onClick={() => remove(l.ID)}
+              onClick={() => remove(l.id)}
               className="shrink-0 text-xs text-fg-muted hover:text-danger"
             >
               删除

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
-import { ApiError, apiGet } from './api/client'
+import { ApiError } from './api/client'
+import { v1Get } from './api/v1/client'
 import {
   createDevelopmentSession,
   endImpersonation as endImpersonationRequest,
@@ -84,7 +85,18 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
       setIdentity(current)
       setStatus('authenticated')
       try {
-        setUsers(await apiGet<User[]>('/api/users'))
+        const response = await v1Get<{
+          items: Array<Pick<
+            User,
+            'id' | 'name' | 'email' | 'avatar_url' | 'platform_role' | 'active'
+          >>
+        }>('/api/v1/users')
+        setUsers(response.value.items.map((user) => ({
+          ...user,
+          roles: [],
+          created_at: '',
+          updated_at: '',
+        })))
       } catch (usersError) {
         console.error('load user references failed', usersError)
         setUsers([current.subject])

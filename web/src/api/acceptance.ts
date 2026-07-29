@@ -1,9 +1,17 @@
-import { apiDelete, apiGet, apiPatch, apiPost } from './client'
+import {
+  etagForVersion,
+  requireVersioned,
+  v1Delete,
+  v1Get,
+  v1Patch,
+  v1Post,
+} from './v1/client'
 
 export type AcceptanceOutcome = 'passed' | 'failed' | 'unable' | 'waived'
 
 export interface AcceptanceCheck {
   id: string
+  criterion_id: string
   criterion_revision: number
   outcome: AcceptanceOutcome
   evidence: string
@@ -15,6 +23,10 @@ export interface AcceptanceCheck {
 
 export interface AcceptanceCriterion {
   id: string
+  version: number
+  project_id?: string
+  milestone_id?: string
+  task_id?: string
   criterion: string
   verification_instructions: string
   revision: number
@@ -29,36 +41,54 @@ export interface CreateCriterionBody {
 }
 
 export function listTaskCriteria(number: number): Promise<AcceptanceCriterion[]> {
-  return apiGet<AcceptanceCriterion[]>(`/api/tasks/${number}/acceptance-criteria`)
+  return v1Get<{ items: AcceptanceCriterion[] }>(`/api/v1/tasks/${number}/criteria`)
+    .then(({ value }) => value.items)
 }
 
 export function createTaskCriterion(
   number: number,
+  taskVersion: number,
   body: CreateCriterionBody,
 ): Promise<AcceptanceCriterion> {
-  return apiPost<AcceptanceCriterion>(`/api/tasks/${number}/acceptance-criteria`, body)
+  return v1Post<AcceptanceCriterion>(`/api/v1/tasks/${number}/criteria`, {
+    ifMatch: etagForVersion(taskVersion), body,
+  }).then((response) => requireVersioned(response).value)
 }
 
 export function checkCriterion(
   criterionID: string,
+  criterionVersion: number,
   criterionRevision: number,
   outcome: AcceptanceOutcome,
   evidence: string,
 ): Promise<AcceptanceCheck> {
-  return apiPost<AcceptanceCheck>(`/api/acceptance-criteria/${criterionID}/checks`, {
-    criterion_revision: criterionRevision,
-    outcome,
-    evidence,
-  })
+  return v1Post<AcceptanceCheck>(`/api/v1/criteria/${criterionID}/checks`, {
+    ifMatch: etagForVersion(criterionVersion),
+    body: {
+      criterion_revision: criterionRevision,
+      outcome,
+      evidence,
+    },
+  }).then(({ value }) => value)
 }
 
 export function updateCriterion(
   criterionID: string,
+  criterionVersion: number,
   body: Partial<CreateCriterionBody>,
 ): Promise<AcceptanceCriterion> {
-  return apiPatch<AcceptanceCriterion>(`/api/acceptance-criteria/${criterionID}`, body)
+  return v1Patch<AcceptanceCriterion>(`/api/v1/criteria/${criterionID}`, {
+    ifMatch: etagForVersion(criterionVersion), body,
+  }).then((response) => requireVersioned(response).value)
 }
 
-export function removeCriterion(criterionID: string, reason?: string): Promise<void> {
-  return apiDelete<void>(`/api/acceptance-criteria/${criterionID}`, reason ? { reason } : undefined)
+export function removeCriterion(
+  criterionID: string,
+  criterionVersion: number,
+  reason?: string,
+): Promise<void> {
+  return v1Delete(`/api/v1/criteria/${criterionID}`, {
+    ifMatch: etagForVersion(criterionVersion),
+    body: reason ? { reason } : undefined,
+  }).then(() => undefined)
 }

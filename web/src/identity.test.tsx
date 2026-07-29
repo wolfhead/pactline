@@ -29,14 +29,14 @@ describe('IdentityProvider', () => {
   it('loads the server-owned current identity and user references', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify(ME), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify([USER]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [USER] }), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
 
     render(<IdentityProvider><Probe /></IdentityProvider>)
 
     await waitFor(() => expect(screen.getByText('authenticated:Alice:false')).toBeInTheDocument())
     expect(fetchMock.mock.calls[0][0]).toBe('/api/me')
-    expect(fetchMock.mock.calls[1][0]).toBe('/api/users')
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/v1/users')
   })
 
   it('exposes an unauthenticated state for a 401', async () => {
@@ -68,7 +68,7 @@ describe('IdentityProvider', () => {
       'fetch',
       vi.fn()
         .mockResolvedValueOnce(new Response(JSON.stringify(impersonated), { status: 200 }))
-        .mockResolvedValueOnce(new Response(JSON.stringify([USER]), { status: 200 })),
+        .mockResolvedValueOnce(new Response(JSON.stringify({ items: [USER] }), { status: 200 })),
     )
 
     render(<IdentityProvider><Probe /></IdentityProvider>)

@@ -1,15 +1,4 @@
-// Types for the task-management surface: internal/domain/task.go (and
-// neighbours) and its JSON views in internal/api/task_view.go,
-// task_comment_handler.go, task_activity_handler.go, label_handler.go.
-//
-// One shape here is not a typo: domain.Label (internal/domain/label.go)
-// carries no `json` struct tags, so encoding/json falls back to the bare Go
-// field names — ID, Name, CreatedAt — instead of the lowercase/snake_case
-// convention every *tagged* type in this API uses (UserRef, taskView,
-// commentView, activityView all do carry tags). That applies both to
-// GET/POST/PATCH /api/labels and to the labels embedded inside a task's
-// `labels` array. The Label type below matches the real wire shape, not the
-// house style, on purpose.
+// Contract types for the versioned /api/v1 work surface.
 
 export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancelled'
 export type TaskPriority = 'none' | 'low' | 'medium' | 'high' | 'urgent'
@@ -42,9 +31,10 @@ export interface UserRef {
 // See the file-level comment: this is domain.Label's real, untagged wire
 // shape (ID/Name/CreatedAt), not id/name/created_at.
 export interface Label {
-  ID: string
-  Name: string
-  CreatedAt: string
+  id: string
+  version: number
+  name: string
+  created_at: string
 }
 
 export interface TaskProjectRef {
@@ -61,6 +51,7 @@ export interface TaskMilestoneRef {
 export interface Task {
   id: string
   number: number
+  version: number
   title: string
   description: string
   status: TaskStatus
@@ -87,6 +78,7 @@ export interface Comment {
   id: string
   task_id: string
   author_id: string
+  version: number
   body: string
   created_at: string
   updated_at: string
@@ -111,6 +103,9 @@ export interface Activity {
   field: ActivityField
   old_value: string | null
   new_value: string | null
+  authentication_method?: 'session' | 'api_token'
+  token_name?: string
+  request_id?: string
   created_at: string
 }
 

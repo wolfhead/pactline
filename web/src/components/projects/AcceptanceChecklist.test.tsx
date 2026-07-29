@@ -12,6 +12,7 @@ describe('AcceptanceChecklist', () => {
         title="Project acceptance"
         criteria={[{
           id: 'criterion-1',
+          version: 1,
           criterion: 'The release test passes',
           verification_instructions: 'Run make e2e',
           revision: 3,
@@ -43,6 +44,7 @@ describe('AcceptanceChecklist', () => {
     const onRemove = vi.fn().mockResolvedValue(undefined)
     const criterion = {
       id: 'criterion-1',
+      version: 1,
       criterion: 'Old proposition',
       verification_instructions: 'Old procedure',
       revision: 1,

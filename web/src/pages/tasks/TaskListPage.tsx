@@ -6,7 +6,8 @@ import TaskDetail from '@/components/tasks/TaskDetail'
 import TaskList from '@/components/tasks/TaskList'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
-import { archiveTask, listLabels, listTasks, restoreTask, updateTask } from '@/api/tasks'
+import { archiveTask, getTask, listLabels, listTasks, restoreTask, updateTask } from '@/api/tasks'
+import { ProblemError } from '@/api/v1/client'
 import { useIdentity } from '@/identity'
 import type { Label, Task, TaskPatchBody } from '@/task-types'
 
@@ -190,11 +191,24 @@ export default function TaskListPage() {
     }
     setTasks((ts) => ts.map((t) => (t.number === task.number ? { ...t, ...optimistic } : t)))
     setRowErrors((e) => ({ ...e, [task.number]: '' }))
-    updateTask(task.number, patch)
+    updateTask(task.number, task.version, patch)
       .then((updated) => {
         setTasks((ts) => ts.map((t) => (t.number === task.number ? updated : t)))
       })
-      .catch((err) => {
+      .catch(async (err) => {
+        if (err instanceof ProblemError && err.code === 'VERSION_CONFLICT') {
+          try {
+            const latest = await getTask(task.number)
+            setTasks((ts) => ts.map((t) => (t.number === task.number ? latest : t)))
+            setRowErrors((errors) => ({
+              ...errors,
+              [task.number]: '内容已被其他用户或 Agent 更新，已加载最新版本。',
+            }))
+            return
+          } catch {
+            // Fall through to the ordinary rollback when refresh also fails.
+          }
+        }
         setTasks((ts) => ts.map((t) => (t.number === task.number ? { ...t, ...previous } : t)))
         setRowErrors((e) => ({ ...e, [task.number]: `更新失败：${(err as Error).message}，已恢复原状态` }))
       })
@@ -204,13 +218,13 @@ export default function TaskListPage() {
   // the task's lifecycle, not one of its properties, so the row just waits
   // for the server's answer and reports a row error if it refuses.
   function handleArchive(task: Task) {
-    archiveTask(task.number)
+    archiveTask(task.number, task.version)
       .then((updated) => setTasks((ts) => ts.map((t) => (t.number === task.number ? updated : t))))
       .catch((err) => setRowErrors((e) => ({ ...e, [task.number]: `归档失败：${(err as Error).message}` })))
   }
 
   function handleRestore(task: Task) {
-    restoreTask(task.number)
+    restoreTask(task.number, task.version)
       .then((updated) => setTasks((ts) => ts.map((t) => (t.number === task.number ? updated : t))))
       .catch((err) => setRowErrors((e) => ({ ...e, [task.number]: `恢复失败：${(err as Error).message}` })))
   }

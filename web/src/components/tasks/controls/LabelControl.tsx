@@ -22,7 +22,7 @@ export default function LabelControl({
   ariaLabel: string
 }) {
   function toggle(id: string) {
-    const current = value.map((l) => l.ID)
+    const current = value.map((l) => l.id)
     const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id]
     onChange(next)
   }
@@ -35,7 +35,7 @@ export default function LabelControl({
         className={cn(CONTROL_TRIGGER_CLASS, value.length === 0 && 'text-fg-muted')}
       >
         <span className={PROPERTY_ICON_SLOT_CLASS} aria-hidden="true" />
-        <span>{value.length > 0 ? value.map((l) => l.Name).join(', ') : '无标签'}</span>
+        <span>{value.length > 0 ? value.map((l) => l.name).join(', ') : '无标签'}</span>
       </PopoverTrigger>
       <PopoverContent className="w-56 p-2">
         {/* list-none/pl-0, matching FilterBar's near-identical popover list:
@@ -44,16 +44,16 @@ export default function LabelControl({
             ever moves. */}
         <ul className="flex list-none flex-col gap-1 pl-0">
           {all.map((label) => {
-            const checked = value.some((l) => l.ID === label.ID)
+            const checked = value.some((l) => l.id === label.id)
             return (
-              <li key={label.ID}>
+              <li key={label.id}>
                 <label className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent-subtle">
                   <Checkbox
-                    aria-label={label.Name}
+                    aria-label={label.name}
                     checked={checked}
-                    onCheckedChange={() => toggle(label.ID)}
+                    onCheckedChange={() => toggle(label.id)}
                   />
-                  {label.Name}
+                  {label.name}
                 </label>
               </li>
             )

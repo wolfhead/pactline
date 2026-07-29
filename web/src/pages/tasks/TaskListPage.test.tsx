@@ -5,6 +5,7 @@ import TaskListPage from './TaskListPage'
 import * as acceptanceApi from '@/api/acceptance'
 import * as tasksApi from '@/api/tasks'
 import * as projectsApi from '@/api/projects'
+import { ProblemError } from '@/api/v1/client'
 
 vi.mock('@/api/tasks')
 vi.mock('@/api/projects')
@@ -24,7 +25,7 @@ function setWidth(px: number) {
 }
 
 const TASK = {
-  id: 'id-142', number: 142, title: '修复竞价超时', description: '',
+  id: 'id-142', number: 142, version: 1, title: '修复竞价超时', description: '',
   status: 'todo' as const, priority: 'none' as const, assignee: null,
   creator: { id: 'u1', name: '张沁', email: 'a@x.com' },
   due_date: null, project: null, milestone: null, labels: [], created_at: '', updated_at: '',
@@ -172,7 +173,9 @@ describe('TaskListPage', () => {
     // The optimistic value is on the row immediately, before the server has
     // answered at all.
     await waitFor(() => expect(statusTrigger()).toHaveTextContent('已完成'))
-    expect(vi.mocked(tasksApi.updateTask)).toHaveBeenCalledWith(142, { status: 'done' })
+    expect(vi.mocked(tasksApi.updateTask)).toHaveBeenCalledWith(
+      142, 1, { status: 'done' },
+    )
     expect(screen.queryByText(/已恢复原状态/)).not.toBeInTheDocument()
 
     rejectPatch(new Error('cannot skip directly to done'))
@@ -183,5 +186,26 @@ describe('TaskListPage', () => {
     await waitFor(() => expect(statusTrigger()).toHaveTextContent('待办'))
     expect(await screen.findByText(/cannot skip directly to done/)).toBeInTheDocument()
     expect(screen.getByText(/已恢复原状态/)).toBeInTheDocument()
+  })
+
+  it('loads the latest task after an Agent wins an optimistic-write race', async () => {
+    setWidth(1440)
+    const latest = { ...TASK, version: 2, status: 'in_progress' as const }
+    vi.mocked(tasksApi.updateTask).mockRejectedValue(
+      new ProblemError(412, 'VERSION_CONFLICT', 'req-conflict', 2),
+    )
+    vi.mocked(tasksApi.getTask).mockResolvedValue(latest)
+    renderAt('/tasks')
+
+    const status = await screen.findByRole('combobox', { name: '任务 #142 状态' })
+    fireEvent.click(status)
+    fireEvent.click(await screen.findByRole('option', { name: '已完成' }))
+
+    await waitFor(() => expect(tasksApi.getTask).toHaveBeenCalledWith(142))
+    expect(await screen.findByText('内容已被其他用户或 Agent 更新，已加载最新版本。'))
+      .toBeVisible()
+    expect(screen.getByRole('combobox', { name: '任务 #142 状态' }))
+      .toHaveTextContent('进行中')
+    expect(tasksApi.updateTask).toHaveBeenCalledWith(142, 1, { status: 'done' })
   })
 })

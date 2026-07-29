@@ -20,7 +20,7 @@ afterEach(() => {
 
 beforeEach(() => {
   vi.mocked(projectsApi.listProjects).mockResolvedValue([{
-    id: 'p1', number: 12, name: 'Launch project surface',
+    id: 'p1', number: 12, version: 1, name: 'Launch project surface',
     outcome: 'Teams can manage delivery outcomes', description: '',
     owner: { id: 'u1', name: 'Alex', email: 'a@example.com' },
     creator: { id: 'u1', name: 'Alex', email: 'a@example.com' },

@@ -1,4 +1,10 @@
-import { apiGet, apiPatch, apiPost } from './client'
+import {
+  etagForVersion,
+  requireVersioned,
+  v1Get,
+  v1Patch,
+  v1Post,
+} from './v1/client'
 import type { AcceptanceCriterion, CreateCriterionBody } from './acceptance'
 import type { Task, UserRef } from '@/task-types'
 
@@ -7,6 +13,8 @@ export type MilestoneStatus = 'open' | 'completed' | 'cancelled'
 
 export interface Milestone {
   id: string
+  project_id: string
+  version: number
   name: string
   outcome: string
   description: string
@@ -23,6 +31,7 @@ export interface Milestone {
 export interface Project {
   id: string
   number: number
+  version: number
   name: string
   outcome: string
   description: string
@@ -57,6 +66,9 @@ export interface ProjectActivity {
   reason: string | null
   old_value: string | null
   new_value: string | null
+  authentication_method?: 'session' | 'api_token'
+  token_name?: string
+  request_id?: string
   created_at: string
 }
 
@@ -77,60 +89,111 @@ export interface CreateMilestoneBody {
 }
 
 export function listProjects(includeArchived = false): Promise<Project[]> {
-  return apiGet<Project[]>(`/api/projects${includeArchived ? '?archived=all' : ''}`)
+  return v1Get<{ items: Project[] }>(
+    `/api/v1/projects${includeArchived ? '?archived=all' : ''}`,
+  ).then(({ value }) => value.items)
 }
 
 export function getProject(number: number): Promise<ProjectDetail> {
-  return apiGet<ProjectDetail>(`/api/projects/${number}`)
+  return v1Get<ProjectDetail>(`/api/v1/projects/${number}`)
+    .then((response) => requireVersioned(response).value)
 }
 
 export function createProject(body: CreateProjectBody): Promise<Project> {
-  return apiPost<Project>('/api/projects', body)
+  return v1Post<Project>('/api/v1/projects', { body })
+    .then((response) => requireVersioned(response).value)
 }
 
-export function updateProject(number: number, body: Partial<CreateProjectBody>): Promise<Project> {
-  return apiPatch<Project>(`/api/projects/${number}`, body)
+export function updateProject(
+  number: number,
+  version: number,
+  body: Partial<CreateProjectBody>,
+): Promise<Project> {
+  return v1Patch<Project>(`/api/v1/projects/${number}`, {
+    ifMatch: etagForVersion(version), body,
+  }).then((response) => requireVersioned(response).value)
 }
 
-export function applyProjectLifecycle(number: number, action: string, reason?: string): Promise<Project> {
-  return apiPost<Project>(`/api/projects/${number}/${action}`, reason ? { reason } : undefined)
+export function applyProjectLifecycle(
+  number: number,
+  version: number,
+  action: string,
+  reason?: string,
+): Promise<Project> {
+  return v1Post<Project>(`/api/v1/projects/${number}/${action}`, {
+    ifMatch: etagForVersion(version),
+    body: reason ? { reason } : undefined,
+  }).then((response) => requireVersioned(response).value)
 }
 
-export function createMilestone(number: number, body: CreateMilestoneBody): Promise<Milestone> {
-  return apiPost<Milestone>(`/api/projects/${number}/milestones`, body)
+export function createMilestone(
+  number: number,
+  projectVersion: number,
+  body: CreateMilestoneBody,
+): Promise<Milestone> {
+  return v1Post<Milestone>(`/api/v1/projects/${number}/milestones`, {
+    ifMatch: etagForVersion(projectVersion), body,
+  }).then((response) => requireVersioned(response).value)
 }
 
 export function updateMilestone(
   projectNumber: number,
+  projectVersion: number,
   milestoneID: string,
+  milestoneVersion: number,
   body: Partial<CreateMilestoneBody>,
 ): Promise<Milestone> {
-  return apiPatch<Milestone>(`/api/projects/${projectNumber}/milestones/${milestoneID}`, body)
+  return v1Patch<Milestone>(
+    `/api/v1/projects/${projectNumber}/milestones/${milestoneID}`,
+    {
+      ifMatch: etagForVersion(milestoneVersion),
+      projectIfMatch: etagForVersion(projectVersion),
+      body,
+    },
+  ).then((response) => requireVersioned(response).value)
 }
 
 export function applyMilestoneLifecycle(
   projectNumber: number,
+  projectVersion: number,
   milestoneID: string,
+  milestoneVersion: number,
   action: string,
   reason?: string,
 ): Promise<Milestone> {
-  return apiPost<Milestone>(
-    `/api/projects/${projectNumber}/milestones/${milestoneID}/${action}`,
-    reason ? { reason } : undefined,
-  )
+  return v1Post<Milestone>(
+    `/api/v1/projects/${projectNumber}/milestones/${milestoneID}/${action}`,
+    {
+      ifMatch: etagForVersion(milestoneVersion),
+      projectIfMatch: etagForVersion(projectVersion),
+      body: reason ? { reason } : undefined,
+    },
+  ).then((response) => requireVersioned(response).value)
 }
 
-export function createProjectCriterion(number: number, body: CreateCriterionBody): Promise<AcceptanceCriterion> {
-  return apiPost<AcceptanceCriterion>(`/api/projects/${number}/acceptance-criteria`, body)
+export function createProjectCriterion(
+  number: number,
+  projectVersion: number,
+  body: CreateCriterionBody,
+): Promise<AcceptanceCriterion> {
+  return v1Post<AcceptanceCriterion>(`/api/v1/projects/${number}/criteria`, {
+    ifMatch: etagForVersion(projectVersion), body,
+  }).then((response) => requireVersioned(response).value)
 }
 
 export function createMilestoneCriterion(
   projectNumber: number,
+  projectVersion: number,
   milestoneID: string,
+  milestoneVersion: number,
   body: CreateCriterionBody,
 ): Promise<AcceptanceCriterion> {
-  return apiPost<AcceptanceCriterion>(
-    `/api/projects/${projectNumber}/milestones/${milestoneID}/acceptance-criteria`,
-    body,
-  )
+  return v1Post<AcceptanceCriterion>(
+    `/api/v1/projects/${projectNumber}/milestones/${milestoneID}/criteria`,
+    {
+      ifMatch: etagForVersion(milestoneVersion),
+      projectIfMatch: etagForVersion(projectVersion),
+      body,
+    },
+  ).then((response) => requireVersioned(response).value)
 }

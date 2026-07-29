@@ -6,6 +6,7 @@ import * as acceptanceApi from '@/api/acceptance'
 import * as tasksApi from '@/api/tasks'
 import * as projectsApi from '@/api/projects'
 import type { Task } from '@/task-types'
+import { ProblemError } from '@/api/v1/client'
 
 vi.mock('@/api/tasks')
 vi.mock('@/api/projects')
@@ -21,7 +22,7 @@ afterEach(() => {
 
 const USERS = [{ id: 'u1', name: '张沁', email: 'a@x.com' }]
 const TASK = {
-  id: 'id-142', number: 142, title: '修复竞价超时导致的丢量',
+  id: 'id-142', number: 142, version: 1, title: '修复竞价超时导致的丢量',
   description: '丢量比例升到 4.2%', status: 'in_progress' as const,
   priority: 'high' as const, assignee: USERS[0], creator: USERS[0],
   due_date: '2026-07-30', project: null, milestone: null, labels: [], created_at: '', updated_at: '',
@@ -71,6 +72,7 @@ describe('TaskDetail', () => {
   it('renders the shared acceptance checklist for tasks', async () => {
     vi.mocked(acceptanceApi.listTaskCriteria).mockResolvedValue([{
       id: 'criterion-1',
+      version: 1,
       criterion: '结果可被观察',
       verification_instructions: '运行任务工作流测试',
       revision: 1,
@@ -106,6 +108,28 @@ describe('TaskDetail', () => {
     renderDetail({ onClose: () => {} })
     await screen.findByText('修复竞价超时导致的丢量')
     expect(screen.getByRole('button', { name: '关闭' })).toBeVisible()
+  })
+
+  it('refreshes the task and warns when a concurrent Agent changed it', async () => {
+    const latest = { ...TASK, version: 2, status: 'todo' as const }
+    vi.mocked(tasksApi.updateTask).mockRejectedValue(
+      new ProblemError(412, 'VERSION_CONFLICT', 'req-conflict', 2),
+    )
+    vi.mocked(tasksApi.getTask)
+      .mockResolvedValueOnce(TASK)
+      .mockResolvedValueOnce(latest)
+    const onPatched = vi.fn()
+    renderDetail({ onPatched })
+    await screen.findByText('修复竞价超时导致的丢量')
+
+    fireEvent.click(screen.getByRole('combobox', { name: '状态' }))
+    fireEvent.click(await screen.findByRole('option', { name: '已完成' }))
+
+    expect(await screen.findByText('内容已被其他用户或 Agent 更新，已加载最新版本。'))
+      .toBeVisible()
+    expect(screen.getByRole('combobox', { name: '状态' })).toHaveTextContent('待办')
+    expect(onPatched).toHaveBeenCalledWith(latest)
+    expect(tasksApi.updateTask).toHaveBeenCalledWith(142, 1, { status: 'done' })
   })
 
   // At xl the `number` prop changes in place — clicking another row in the
@@ -145,7 +169,9 @@ describe('TaskDetail', () => {
       // Commit a change on #142, leaving the request in flight.
       fireEvent.click(screen.getByRole('combobox', { name: '状态' }))
       fireEvent.click(await screen.findByRole('option', { name: '已完成' }))
-      expect(vi.mocked(tasksApi.updateTask)).toHaveBeenCalledWith(142, { status: 'done' })
+      expect(vi.mocked(tasksApi.updateTask)).toHaveBeenCalledWith(
+        142, 1, { status: 'done' },
+      )
 
       // Now #143 is selected and loads — same component instance.
       rerender(

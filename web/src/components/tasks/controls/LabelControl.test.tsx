@@ -2,12 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import LabelControl from './LabelControl'
 
-// Label's wire shape is ID/Name/CreatedAt — capitalised — because
-// domain.Label carries no json struct tags. See task-types.ts.
 const ALL = [
-  { ID: 'l1', Name: 'DSP', CreatedAt: '' },
-  { ID: 'l2', Name: 'ADX', CreatedAt: '' },
-  { ID: 'l3', Name: '降延迟', CreatedAt: '' },
+  { id: 'l1', version: 1, name: 'DSP', created_at: '' },
+  { id: 'l2', version: 1, name: 'ADX', created_at: '' },
+  { id: 'l3', version: 1, name: '降延迟', created_at: '' },
 ]
 
 describe('LabelControl', () => {

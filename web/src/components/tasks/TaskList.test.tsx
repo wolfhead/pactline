@@ -13,6 +13,7 @@ function task(n: number, over: Partial<Task> = {}): Task {
     creator: USERS[0], due_date: null, labels: [],
     created_at: '', updated_at: '', completed_at: null, archived_at: null,
     ...over,
+    version: over.version ?? 1,
     project: over.project ?? null,
     milestone: over.milestone ?? null,
   }
