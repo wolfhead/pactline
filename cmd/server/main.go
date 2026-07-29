@@ -127,7 +127,8 @@ func main() {
 		Tasks: &application.TaskService{
 			Tasks: tasks, Comments: comments, Projects: projectService,
 		},
-		Labels: &application.LabelService{Labels: labels},
+		Labels:   &application.LabelService{Labels: labels},
+		Projects: projectService,
 	})
 	if err != nil {
 		slog.Error("configure OpenAPI v1 server", "error", err)

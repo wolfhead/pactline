@@ -24,8 +24,8 @@ func NewServer(handler *Handler) (*Server, error) {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if route, ok := s.generated.FindPath(r.Method, r.URL); ok &&
-		operationRequiresIfMatch(route.OperationID()) {
+	route, routeFound := s.generated.FindPath(r.Method, r.URL)
+	if routeFound && operationRequiresIfMatch(route.OperationID()) {
 		values := r.Header.Values("If-Match")
 		if len(values) == 0 || values[0] == "" {
 			baseapi.WriteProblem(w, r, baseapi.Problem{
@@ -47,6 +47,33 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			baseapi.WriteProblem(w, r, baseapi.Problem{
 				Title: "Invalid request", Status: http.StatusBadRequest,
 				Detail: "If-Match must contain one quoted positive integer.",
+				Code:   "INVALID_REQUEST",
+			})
+			return
+		}
+	}
+	if routeFound && operationRequiresProjectIfMatch(route.OperationID()) {
+		values := r.Header.Values("X-Project-If-Match")
+		if len(values) == 0 || values[0] == "" {
+			baseapi.WriteProblem(w, r, baseapi.Problem{
+				Title: "Precondition required", Status: http.StatusPreconditionRequired,
+				Detail: "The current project ETag is required in X-Project-If-Match.",
+				Code:   "PRECONDITION_REQUIRED",
+			})
+			return
+		}
+		if len(values) != 1 {
+			baseapi.WriteProblem(w, r, baseapi.Problem{
+				Title: "Invalid request", Status: http.StatusBadRequest,
+				Detail: "X-Project-If-Match must contain one quoted positive integer.",
+				Code:   "INVALID_REQUEST",
+			})
+			return
+		}
+		if _, err := parseIfMatch(values[0]); err != nil {
+			baseapi.WriteProblem(w, r, baseapi.Problem{
+				Title: "Invalid request", Status: http.StatusBadRequest,
+				Detail: "X-Project-If-Match must contain one quoted positive integer.",
 				Code:   "INVALID_REQUEST",
 			})
 			return
@@ -94,6 +121,19 @@ func operationRequiresIfMatch(operationID string) bool {
 		"updateProject",
 		"updateTask",
 		"updateTaskComment":
+		return true
+	default:
+		return false
+	}
+}
+
+func operationRequiresProjectIfMatch(operationID string) bool {
+	switch operationID {
+	case "cancelMilestone",
+		"completeMilestone",
+		"createMilestoneCriterion",
+		"reopenMilestone",
+		"updateMilestone":
 		return true
 	default:
 		return false

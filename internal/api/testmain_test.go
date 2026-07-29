@@ -107,7 +107,8 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 		Tasks: &application.TaskService{
 			Tasks: tasks, Comments: comments, Projects: projectService,
 		},
-		Labels: &application.LabelService{Labels: labels},
+		Labels:   &application.LabelService{Labels: labels},
+		Projects: projectService,
 	})
 	require.NoError(t, err)
 	h := api.NewRouter(users, legacyHandler, api.RouterOptions{

@@ -20,7 +20,8 @@ func NewMilestoneStore(db *DB) *MilestoneStore { return &MilestoneStore{db: db} 
 func scanMilestone(s scanner) (domain.Milestone, error) {
 	var milestone domain.Milestone
 	err := s.Scan(
-		&milestone.ID, &milestone.ProjectID, &milestone.Name, &milestone.Outcome,
+		&milestone.ID, &milestone.ProjectID, &milestone.Version,
+		&milestone.Name, &milestone.Outcome,
 		&milestone.Description, &milestone.Status, &milestone.TargetDate,
 		&milestone.Position, &milestone.CompletedAt, &milestone.CancelledAt,
 		&milestone.CreatedAt, &milestone.UpdatedAt,
@@ -31,7 +32,7 @@ func scanMilestone(s scanner) (domain.Milestone, error) {
 	return milestone, nil
 }
 
-const milestoneColumns = `id, project_id, name, outcome, description, status,
+const milestoneColumns = `id, project_id, version, name, outcome, description, status,
 	target_date, position, completed_at, cancelled_at, created_at, updated_at`
 
 func (s *MilestoneStore) Create(ctx context.Context, milestone domain.Milestone) (domain.Milestone, error) {

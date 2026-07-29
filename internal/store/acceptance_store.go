@@ -23,17 +23,18 @@ type CriterionWithCurrentCheck struct {
 	CurrentCheck *domain.AcceptanceCheck
 }
 
-const criterionColumns = `ac.id, ac.project_id, ac.milestone_id, ac.task_id, ac.criterion,
+const criterionColumns = `ac.id, ac.version, ac.project_id, ac.milestone_id, ac.task_id, ac.criterion,
 	ac.verification_instructions, ac.revision, ac.position, ac.archived_at,
 	ac.created_at, ac.updated_at`
 
-const criterionReturnColumns = `id, project_id, milestone_id, task_id, criterion,
+const criterionReturnColumns = `id, version, project_id, milestone_id, task_id, criterion,
 	verification_instructions, revision, position, archived_at, created_at, updated_at`
 
 func scanCriterion(s scanner) (domain.AcceptanceCriterion, error) {
 	var criterion domain.AcceptanceCriterion
 	err := s.Scan(
-		&criterion.ID, &criterion.ProjectID, &criterion.MilestoneID, &criterion.TaskID,
+		&criterion.ID, &criterion.Version,
+		&criterion.ProjectID, &criterion.MilestoneID, &criterion.TaskID,
 		&criterion.Criterion, &criterion.VerificationInstructions,
 		&criterion.Revision, &criterion.Position, &criterion.ArchivedAt,
 		&criterion.CreatedAt, &criterion.UpdatedAt,
@@ -172,7 +173,8 @@ func (s *AcceptanceStore) list(ctx context.Context, predicate string, ownerID uu
 			checkedAt     *time.Time
 		)
 		err := rows.Scan(
-			&item.Criterion.ID, &item.Criterion.ProjectID, &item.Criterion.MilestoneID, &item.Criterion.TaskID,
+			&item.Criterion.ID, &item.Criterion.Version,
+			&item.Criterion.ProjectID, &item.Criterion.MilestoneID, &item.Criterion.TaskID,
 			&item.Criterion.Criterion, &item.Criterion.VerificationInstructions,
 			&item.Criterion.Revision, &item.Criterion.Position, &item.Criterion.ArchivedAt,
 			&item.Criterion.CreatedAt, &item.Criterion.UpdatedAt,

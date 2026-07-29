@@ -37,7 +37,7 @@ type ProjectPatch struct {
 	TargetDate    *time.Time
 }
 
-const projectSelectColumns = `p.id, p.number, p.name, p.outcome, p.description,
+const projectSelectColumns = `p.id, p.number, p.version, p.name, p.outcome, p.description,
 	p.owner_id, p.creator_id, p.status, p.target_date, p.completed_at,
 	p.cancelled_at, p.archived_at, p.created_at, p.updated_at,
 	ou.id, ou.name, ou.email, cu.id, cu.name, cu.email,
@@ -57,7 +57,8 @@ const projectFromJoins = `FROM projects p
 func scanProject(s scanner) (ProjectWithRelations, error) {
 	var out ProjectWithRelations
 	if err := s.Scan(
-		&out.Project.ID, &out.Project.Number, &out.Project.Name, &out.Project.Outcome, &out.Project.Description,
+		&out.Project.ID, &out.Project.Number, &out.Project.Version,
+		&out.Project.Name, &out.Project.Outcome, &out.Project.Description,
 		&out.Project.OwnerID, &out.Project.CreatorID, &out.Project.Status, &out.Project.TargetDate,
 		&out.Project.CompletedAt, &out.Project.CancelledAt, &out.Project.ArchivedAt,
 		&out.Project.CreatedAt, &out.Project.UpdatedAt,
@@ -190,6 +191,25 @@ func (s *ProjectStore) UpdateWithOperation(
 	patch ProjectPatch,
 	actor domain.OperationActor,
 ) (ProjectWithRelations, error) {
+	return s.updateWithExpectedVersion(ctx, number, nil, patch, actor)
+}
+
+func (s *ProjectStore) UpdateVersionedWithOperation(
+	ctx context.Context,
+	number, expectedVersion int64,
+	patch ProjectPatch,
+	actor domain.OperationActor,
+) (ProjectWithRelations, error) {
+	return s.updateWithExpectedVersion(ctx, number, &expectedVersion, patch, actor)
+}
+
+func (s *ProjectStore) updateWithExpectedVersion(
+	ctx context.Context,
+	number int64,
+	expectedVersion *int64,
+	patch ProjectPatch,
+	actor domain.OperationActor,
+) (ProjectWithRelations, error) {
 	if err := actor.Validate(); err != nil {
 		return ProjectWithRelations{}, err
 	}
@@ -200,10 +220,10 @@ func (s *ProjectStore) UpdateWithOperation(
 	defer tx.Rollback(ctx) //nolint:errcheck
 	var project domain.Project
 	err = tx.QueryRow(ctx, `
-		SELECT id, number, name, outcome, description, owner_id, creator_id, status,
+		SELECT id, number, version, name, outcome, description, owner_id, creator_id, status,
 			target_date, completed_at, cancelled_at, archived_at, created_at, updated_at
 		FROM projects WHERE number=$1 FOR UPDATE`, number).
-		Scan(&project.ID, &project.Number, &project.Name, &project.Outcome,
+		Scan(&project.ID, &project.Number, &project.Version, &project.Name, &project.Outcome,
 			&project.Description, &project.OwnerID, &project.CreatorID, &project.Status,
 			&project.TargetDate, &project.CompletedAt, &project.CancelledAt,
 			&project.ArchivedAt, &project.CreatedAt, &project.UpdatedAt)
@@ -212,6 +232,9 @@ func (s *ProjectStore) UpdateWithOperation(
 	}
 	if err != nil {
 		return ProjectWithRelations{}, fmt.Errorf("lock project %d: %w", number, err)
+	}
+	if expectedVersion != nil && project.Version != *expectedVersion {
+		return ProjectWithRelations{}, domain.VersionConflictError{CurrentVersion: project.Version}
 	}
 	old := project
 	if patch.Name != nil {
@@ -232,11 +255,14 @@ func (s *ProjectStore) UpdateWithOperation(
 	if err := project.Validate(); err != nil {
 		return ProjectWithRelations{}, err
 	}
-	_, err = tx.Exec(ctx, `
+	err = tx.QueryRow(ctx, `
 		UPDATE projects SET name=$2, outcome=$3, description=$4, owner_id=$5,
-			target_date=$6, updated_at=now()
-		WHERE id=$1`,
-		project.ID, project.Name, project.Outcome, project.Description, project.OwnerID, project.TargetDate)
+			target_date=$6, version=version+1, updated_at=now()
+		WHERE id=$1 AND version=$7
+		RETURNING version`,
+		project.ID, project.Name, project.Outcome, project.Description, project.OwnerID,
+		project.TargetDate, project.Version,
+	).Scan(&project.Version)
 	if err != nil {
 		return ProjectWithRelations{}, mapPgError(err)
 	}
@@ -326,6 +352,33 @@ func (s *ProjectStore) ApplyLifecycleWithOperation(
 	reason string,
 	operation domain.OperationActor,
 ) (ProjectWithRelations, error) {
+	return s.applyLifecycleWithExpectedVersion(
+		ctx, number, nil, action, actor, reason, operation,
+	)
+}
+
+func (s *ProjectStore) ApplyLifecycleVersionedWithOperation(
+	ctx context.Context,
+	number, expectedVersion int64,
+	action ProjectLifecycleAction,
+	actor domain.Actor,
+	reason string,
+	operation domain.OperationActor,
+) (ProjectWithRelations, error) {
+	return s.applyLifecycleWithExpectedVersion(
+		ctx, number, &expectedVersion, action, actor, reason, operation,
+	)
+}
+
+func (s *ProjectStore) applyLifecycleWithExpectedVersion(
+	ctx context.Context,
+	number int64,
+	expectedVersion *int64,
+	action ProjectLifecycleAction,
+	actor domain.Actor,
+	reason string,
+	operation domain.OperationActor,
+) (ProjectWithRelations, error) {
 	if !actor.IsHuman() {
 		return ProjectWithRelations{}, fmt.Errorf("%w: project lifecycle actions require a human user", domain.ErrForbidden)
 	}
@@ -343,10 +396,11 @@ func (s *ProjectStore) ApplyLifecycleWithOperation(
 
 	var project domain.Project
 	err = tx.QueryRow(ctx, `
-		SELECT id, number, name, outcome, description, owner_id, creator_id, status,
+		SELECT id, number, version, name, outcome, description, owner_id, creator_id, status,
 			target_date, completed_at, cancelled_at, archived_at, created_at, updated_at
 		FROM projects WHERE number=$1 FOR UPDATE`, number).
-		Scan(&project.ID, &project.Number, &project.Name, &project.Outcome, &project.Description,
+		Scan(&project.ID, &project.Number, &project.Version,
+			&project.Name, &project.Outcome, &project.Description,
 			&project.OwnerID, &project.CreatorID, &project.Status, &project.TargetDate,
 			&project.CompletedAt, &project.CancelledAt, &project.ArchivedAt,
 			&project.CreatedAt, &project.UpdatedAt)
@@ -355,6 +409,9 @@ func (s *ProjectStore) ApplyLifecycleWithOperation(
 	}
 	if err != nil {
 		return ProjectWithRelations{}, fmt.Errorf("lock project %d: %w", number, err)
+	}
+	if expectedVersion != nil && project.Version != *expectedVersion {
+		return ProjectWithRelations{}, domain.VersionConflictError{CurrentVersion: project.Version}
 	}
 	oldStatus := project.Status
 	readiness, err := projectReadiness(ctx, tx, project.ID)
@@ -382,10 +439,14 @@ func (s *ProjectStore) ApplyLifecycleWithOperation(
 	if err != nil {
 		return ProjectWithRelations{}, err
 	}
-	_, err = tx.Exec(ctx, `
+	err = tx.QueryRow(ctx, `
 		UPDATE projects SET status=$2, completed_at=$3, cancelled_at=$4,
-			archived_at=$5, updated_at=$6 WHERE id=$1`,
-		project.ID, project.Status, project.CompletedAt, project.CancelledAt, project.ArchivedAt, project.UpdatedAt)
+			archived_at=$5, version=version+1, updated_at=$6
+		WHERE id=$1 AND version=$7
+		RETURNING version`,
+		project.ID, project.Status, project.CompletedAt, project.CancelledAt,
+		project.ArchivedAt, project.UpdatedAt, project.Version,
+	).Scan(&project.Version)
 	if err != nil {
 		return ProjectWithRelations{}, fmt.Errorf("update project lifecycle: %w", err)
 	}

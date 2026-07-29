@@ -28,6 +28,7 @@ func (a Actor) IsHuman() bool {
 
 type AcceptanceCriterion struct {
 	ID                       uuid.UUID
+	Version                  int64
 	ProjectID                *uuid.UUID
 	MilestoneID              *uuid.UUID
 	TaskID                   *uuid.UUID

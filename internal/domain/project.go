@@ -29,6 +29,7 @@ func (s ProjectStatus) Valid() bool {
 type Project struct {
 	ID          uuid.UUID
 	Number      int64
+	Version     int64
 	Name        string
 	Outcome     string
 	Description string
@@ -196,6 +197,7 @@ func (s MilestoneStatus) Valid() bool {
 type Milestone struct {
 	ID          uuid.UUID
 	ProjectID   uuid.UUID
+	Version     int64
 	Name        string
 	Outcome     string
 	Description string

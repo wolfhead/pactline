@@ -18,9 +18,10 @@ import (
 
 type Handler struct {
 	generated.UnimplementedHandler
-	Users  *store.UserStore
-	Tasks  *application.TaskService
-	Labels *application.LabelService
+	Users    *store.UserStore
+	Tasks    *application.TaskService
+	Labels   *application.LabelService
+	Projects *application.ProjectService
 }
 
 func (h *Handler) GetCurrentPrincipal(ctx context.Context) (generated.GetCurrentPrincipalRes, error) {
