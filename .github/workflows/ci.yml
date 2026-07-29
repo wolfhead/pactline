@@ -37,7 +37,7 @@ jobs:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/pactline_test?sslmode=disable
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
