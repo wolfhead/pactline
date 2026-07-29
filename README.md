@@ -13,12 +13,17 @@ surface includes:
 - task-to-project and task-to-milestone association; and
 - audited project and milestone lifecycle transitions;
 - invite-only Lark authentication for one company; and
-- single-Administrator user management with read-only impersonation.
+- single-Administrator user management with read-only impersonation; and
+- personal API access foundations with scoped tokens, rate limiting,
+  idempotency, request audit, and transactional business provenance.
 
 Project and milestone semantics are defined in
 [`docs/superpowers/specs/2026-07-27-projects-and-milestones-design.md`](docs/superpowers/specs/2026-07-27-projects-and-milestones-design.md).
 The identity model and operating procedure are documented in
 [`docs/operations/lark-identity.md`](docs/operations/lark-identity.md).
+The supported Agent work API will be introduced under `/api/v1` by the next
+implementation phase. The current foundation does not expose the existing
+unversioned task routes to bearer tokens.
 
 作品制研发任务管理系统。机制设计见 [`docs/mechanism-design.md`](docs/mechanism-design.md),
 系统规格见 [`docs/superpowers/specs/2026-07-26-bounty-board-design.md`](docs/superpowers/specs/2026-07-26-bounty-board-design.md)。

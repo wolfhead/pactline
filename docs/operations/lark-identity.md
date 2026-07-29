@@ -125,6 +125,81 @@ During impersonation:
 Use impersonation for support and diagnosis only. Exit it before performing
 administrative or product changes.
 
+## Personal API access
+
+Each active user may issue personal API tokens for their own Agent or
+integration. Tokens support `work:read` and `work:write`; write scope also
+includes read access. Supported lifetimes are 30, 90, and 365 days, with 90
+days as the product default.
+
+The raw token is returned once from creation and is never stored or
+recoverable. The database stores only its SHA-256 digest and a safe display
+prefix. Store the raw value in an approved secret manager. Do not put it in
+source control, logs, task descriptions, or chat messages.
+
+Users can list and revoke only their own tokens. The Administrator can list
+and revoke any token, but cannot create a token for another user or retrieve
+its secret. Revocation is effective on the next request. Expired tokens and
+tokens owned by inactive users are also rejected.
+
+Bearer authentication exists only for `/api/v1`. The versioned work contract
+is delivered by the following implementation plan; until it is mounted, a
+valid bearer token has no supported work-resource endpoint. Existing
+unversioned task and project routes remain session-only.
+
+### Token rotation
+
+1. Issue a replacement token with the minimum required scope and an
+   appropriate lifetime.
+2. Save the new raw token before leaving the creation response.
+3. Update the Agent's secret configuration and make one authenticated request.
+4. Confirm the new token appears in the user's API activity.
+5. Revoke the old token and verify subsequent use receives `TOKEN_REVOKED`.
+
+If a raw token may have been disclosed, skip the overlap period: revoke it
+immediately, inspect API activity by token and request ID, and then issue a
+replacement.
+
+### Lark status and API tokens
+
+API tokens do not bypass company identity policy. A token request reuses the
+same Lark principal verification policy as an application session. Explicitly
+invalid or departed principals are deactivated and all their application
+sessions and API tokens become unusable. Transient Lark failures receive the
+same one-hour grace behavior described above.
+
+## API traffic controls and audit
+
+Bearer traffic is limited independently per token using a 30-request burst
+bucket that refills at two requests per second, equivalent to 120 requests per
+minute. Responses include `RateLimit-Limit`, `RateLimit-Remaining`, and
+`RateLimit-Reset`. A rejected request returns `429` with `Retry-After`; clients
+must wait rather than retry immediately.
+
+Bearer mutations require an `Idempotency-Key` between 1 and 128 characters.
+Reuse the same key only for an exact retry of the same method, route, and body.
+Completed responses are replayable for 24 hours. Reusing a key for different
+content is rejected, and concurrent duplicates report that the original
+request is still processing.
+
+Every `/api/v1` request records a request ID, authentication outcome, user and
+token identifiers, token-name snapshot, method, route pattern, status,
+duration, response size, replay state, user agent, and network address. Access
+audit deliberately excludes request and response bodies, bearer values,
+session secrets, and OAuth credentials. Access events are retained for 90 days
+and expired records are deleted by maintenance at startup and every 24 hours.
+
+Business mutations write a separate permanent audit event in the same database
+transaction as the resource change. Task and project activity also preserve
+the request ID, authentication method, token ID, and token-name snapshot. A
+business change rolls back if its audit event cannot be stored. Business audit
+events are not removed by the 90-day access-log maintenance.
+
+Users can inspect their own API activity. The Administrator can filter all API
+activity by user, token, method, route, status, request ID, and a time range of
+at most 90 days. Use the request ID to correlate the UI, structured logs,
+access audit, product activity, and business audit without exposing secrets.
+
 ## Diagnostics
 
 Search structured logs by request ID, session ID, actor user ID, invitation
