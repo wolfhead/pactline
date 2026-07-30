@@ -21,6 +21,8 @@ import (
 
 var ErrAgentChannelNotConfigured = errors.New("Lark Agent channel is not configured")
 
+const acknowledgementEmojiType = "OnIt"
+
 func (c *Client) AgentChannelReady() bool {
 	if c == nil {
 		return false
@@ -282,6 +284,49 @@ func (c *Client) Reply(
 	return channel.ProviderMessageID(response.Data.MessageID), nil
 }
 
+func (c *Client) Acknowledge(
+	ctx context.Context,
+	request channel.AcknowledgeRequest,
+) error {
+	if !c.AgentChannelReady() ||
+		request.TenantID != c.TenantKey() ||
+		request.TargetMessageID == "" {
+		return channel.ErrInvalidEvent
+	}
+	tenantToken, err := c.tenantAccessToken(ctx)
+	if err != nil {
+		return err
+	}
+	var response providerEnvelope[reactionData]
+	requestID, err := c.doJSON(
+		ctx,
+		"acknowledge_agent_message",
+		http.MethodPost,
+		"/open-apis/im/v1/messages/"+
+			url.PathEscape(request.TargetMessageID)+
+			"/reactions",
+		tenantToken,
+		map[string]any{
+			"reaction_type": map[string]string{
+				"emoji_type": acknowledgementEmojiType,
+			},
+		},
+		&response,
+	)
+	if err != nil {
+		return err
+	}
+	if response.Code != 0 || strings.TrimSpace(response.Data.ReactionID) == "" {
+		return providerError(
+			"acknowledge_agent_message",
+			classifyProviderCode(response.Code),
+			firstNonEmpty(requestID, response.Error.LogID),
+			fmt.Errorf("provider code %d or incomplete reaction", response.Code),
+		)
+	}
+	return nil
+}
+
 type larkMessage struct {
 	MessageID   string `json:"message_id"`
 	RootID      string `json:"root_id"`
@@ -297,6 +342,10 @@ type messageListData struct {
 	Items     []larkMessage `json:"items"`
 	HasMore   bool          `json:"has_more"`
 	PageToken string        `json:"page_token"`
+}
+
+type reactionData struct {
+	ReactionID string `json:"reaction_id"`
 }
 
 func providerMillis(value string) (time.Time, error) {
@@ -315,4 +364,5 @@ func stringValue(value *string) string {
 }
 
 var _ channel.ChannelAdapter = (*Client)(nil)
+var _ channel.Acknowledger = (*Client)(nil)
 var _ identity.NotificationSender = (*Client)(nil)

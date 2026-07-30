@@ -3,6 +3,7 @@ package ingress
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -33,6 +34,29 @@ type repositoryStub struct {
 	saveN     int
 	createErr error
 	resumeErr error
+}
+
+type acknowledgerStub struct {
+	mu       sync.Mutex
+	requests []channel.AcknowledgeRequest
+	called   chan struct{}
+	err      error
+}
+
+func (s *acknowledgerStub) Acknowledge(
+	_ context.Context,
+	request channel.AcknowledgeRequest,
+) error {
+	s.mu.Lock()
+	s.requests = append(s.requests, request)
+	s.mu.Unlock()
+	if s.called != nil {
+		select {
+		case s.called <- struct{}{}:
+		default:
+		}
+	}
+	return s.err
 }
 
 func (s *repositoryStub) CreateRunWithInput(
@@ -84,6 +108,7 @@ func TestServiceQueuesMentionOnceAndEncryptsCommand(t *testing.T) {
 	now := time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
 	userID := uuid.New()
 	repository := &repositoryStub{}
+	acknowledger := &acknowledgerStub{called: make(chan struct{}, 1)}
 	cipher, err := pactagent.NewInputCipher(
 		"input-key",
 		[]byte("0123456789abcdef0123456789abcdef"),
@@ -95,6 +120,7 @@ func TestServiceQueuesMentionOnceAndEncryptsCommand(t *testing.T) {
 		},
 		Runs:          repository,
 		Inputs:        cipher,
+		Acknowledgers: map[string]channel.Acknowledger{"lark": acknowledger},
 		Model:         "deepseek-v4-pro",
 		PromptVersion: "first-party-task-v1",
 		Now:           func() time.Time { return now },
@@ -109,6 +135,11 @@ func TestServiceQueuesMentionOnceAndEncryptsCommand(t *testing.T) {
 
 	require.NoError(t, service.Accept(context.Background(), incoming))
 	require.NoError(t, service.Accept(context.Background(), incoming))
+	select {
+	case <-acknowledger.called:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for Agent acknowledgement")
+	}
 
 	require.Equal(t, 2, repository.createN)
 	require.Equal(t, 1, repository.saveN)
@@ -120,6 +151,12 @@ func TestServiceQueuesMentionOnceAndEncryptsCommand(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Equal(t, "帮我创建一个 Task", string(plaintext))
+	acknowledger.mu.Lock()
+	defer acknowledger.mu.Unlock()
+	require.Equal(t, []channel.AcknowledgeRequest{{
+		TenantID:        "tenant",
+		TargetMessageID: "message-1",
+	}}, acknowledger.requests)
 }
 
 func TestServiceReturnsPersistenceFailureForLarkRetry(t *testing.T) {

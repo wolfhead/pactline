@@ -68,6 +68,8 @@ it, publish a Lark application version that:
 - selects **Use long connection to receive events** and subscribes
   `im.message.receive_v1`;
 - allows receiving group mentions and replying as the bot; and
+- grants `im:message.reactions:write_only` so the bot can acknowledge accepted
+  commands with an `OnIt` reaction; and
 - allows reading messages from groups in which the bot participates.
 
 The API uses Lark's official Go SDK to establish the WebSocket connection with
@@ -96,11 +98,13 @@ Operational smoke test:
 
 1. Enable the Agent with one worker and restart the API.
 2. Mention the bot in a dedicated test group with one clear Task request.
-3. Confirm exactly one Task is created and the fixed reply contains its link
+3. Confirm the trigger message receives an `OnIt` reaction promptly.
+4. Confirm exactly one Task is created and the fixed reply contains its link
    and an eight-character Run reference.
-4. Send a deliberately ambiguous two-topic discussion request; confirm no Task
+5. Send a deliberately ambiguous two-topic discussion request; confirm no Task
    is created until the initiating user replies with one specific Task.
-5. Repeat the original Lark message and confirm no second Task appears.
+6. Repeat the original Lark message and confirm no second Task or duplicate
+   acknowledgement appears.
 
 If event delivery fails, check the startup bot-initialization log and the
 administrator-only `GET /api/admin/agent/status` endpoint. The status reports

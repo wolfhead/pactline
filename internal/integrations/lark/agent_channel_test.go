@@ -55,6 +55,7 @@ func TestAgentChannelDiscoversBotAndNormalizesExplicitMention(t *testing.T) {
 func TestAgentChannelFetchesBoundedContextAndReplies(t *testing.T) {
 	trigger := time.Date(2026, 7, 30, 8, 0, 0, 0, time.UTC)
 	var replyBody map[string]string
+	var reactionBody map[string]map[string]string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -86,6 +87,13 @@ func TestAgentChannelFetchesBoundedContextAndReplies(t *testing.T) {
 			require.NotEmpty(t, r.URL.Query().Get("uuid"))
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&replyBody))
 			_, _ = io.WriteString(w, `{"code":0,"data":{"message_id":"reply-1"}}`)
+		case r.URL.Path == "/open-apis/im/v1/messages/message-1/reactions":
+			require.Equal(t, http.MethodPost, r.Method)
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&reactionBody))
+			_, _ = io.WriteString(w, `{
+				"code":0,
+				"data":{"reaction_id":"reaction-1"}
+			}`)
 		default:
 			http.NotFound(w, r)
 		}
@@ -110,6 +118,12 @@ func TestAgentChannelFetchesBoundedContextAndReplies(t *testing.T) {
 	require.Equal(t, channel.ProviderMessageID("reply-1"), providerID)
 	require.Equal(t, "text", replyBody["msg_type"])
 	require.JSONEq(t, `{"text":"created"}`, replyBody["content"])
+
+	require.NoError(t, client.Acknowledge(context.Background(), channel.AcknowledgeRequest{
+		TenantID:        "tenant",
+		TargetMessageID: "message-1",
+	}))
+	require.Equal(t, "OnIt", reactionBody["reaction_type"]["emoji_type"])
 }
 
 func newAgentChannelTestClient(

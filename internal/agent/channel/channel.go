@@ -112,6 +112,15 @@ type ReplyRequest struct {
 	IdempotencyKey  string
 }
 
+type AcknowledgeRequest struct {
+	TenantID        string
+	TargetMessageID string
+}
+
+type Acknowledger interface {
+	Acknowledge(ctx context.Context, request AcknowledgeRequest) error
+}
+
 type ChannelAdapter interface {
 	FetchContext(ctx context.Context, request ContextRequest) ([]ChannelMessage, error)
 	Reply(ctx context.Context, request ReplyRequest) (ProviderMessageID, error)

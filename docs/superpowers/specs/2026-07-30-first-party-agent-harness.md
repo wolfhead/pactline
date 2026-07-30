@@ -74,6 +74,7 @@ Lark SDK WebSocket connection
     -> typed event normalization
     -> Channel ingress
     -> durable Agent Run
+    -> immediate best-effort processing reaction
     -> PostgreSQL work queue
     -> built-in Agent worker
     -> bounded conversation context
@@ -155,6 +156,10 @@ type ChannelAdapter interface {
 	FetchContext(ctx context.Context, request ContextRequest) ([]ChannelMessage, error)
 	Reply(ctx context.Context, request ReplyRequest) (ProviderMessageID, error)
 }
+
+type Acknowledger interface {
+	Acknowledge(ctx context.Context, request AcknowledgeRequest) error
+}
 ```
 
 `IncomingMessage` includes provider, tenant, conversation, message, thread/root,
@@ -173,14 +178,16 @@ The Lark implementation:
 - accepts group commands only when the Pactline bot is explicitly mentioned;
 - uses the existing Lark external identity mapping to resolve the sender to an
   active Pactline user;
+- adds an `OnIt` reaction to the trigger message immediately after the Run and
+  encrypted input are durably persisted;
 - uses application credentials for Lark reads and replies; and
 - keeps Lark application authority separate from Pactline task-product
   delegated authority.
 
 Required Lark capabilities include receiving group mentions, sending as the
-bot, and reading messages in associated groups. Enabling history retrieval may
-require approval of Lark's sensitive group-message scope and publication of a
-new application version.
+bot, adding message reactions, and reading messages in associated groups.
+Enabling history retrieval may require approval of Lark's sensitive
+group-message scope and publication of a new application version.
 
 WebSocket long-connection delivery is the production transport. It does not
 require a public event URL, Verification Token, or Encrypt Key. The SDK handler
@@ -209,7 +216,10 @@ application; the SDK reconnects while Agent status is degraded.
 
 The handler returns within Lark's delivery deadline after normalization,
 identity resolution, deduplication, encrypted command persistence, and queueing.
-It never calls DeepSeek or the task OpenAPI inline.
+It schedules the reaction as non-blocking best-effort work and never calls
+DeepSeek or the task OpenAPI inline. A reaction failure is logged but does not
+reject or cancel the durable Run. Duplicate provider delivery does not schedule
+another reaction for the same Run.
 
 ## Conversation Context
 
@@ -244,8 +254,11 @@ references.
 ### `search_projects`
 
 Calls `/api/v1` and returns a small set of active project candidates with
-numbers and names. A single exact candidate may be used. Multiple plausible
-candidates require clarification.
+numbers and names. An empty query lists active Projects. When exactly one active
+Project exists, the tool also identifies it independently from the query so a
+command that omitted Project can use it. An explicitly named Project still
+requires a matching candidate. Missing or multiple plausible candidates require
+clarification.
 
 ### `search_users`
 
@@ -261,6 +274,9 @@ Produces an Eino interrupt. It:
 2. moves the Run to `waiting_user`;
 3. enqueues a fixed-format clarification reply; and
 4. binds the resulting provider message ID to the waiting Run.
+
+Every concrete clarification info and state type stored behind Eino's
+interface-typed interrupt fields is registered for checkpoint serialization.
 
 The question may list concise candidate directions but must ask the user to
 state one specific Task.

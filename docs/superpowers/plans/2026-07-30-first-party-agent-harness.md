@@ -90,13 +90,13 @@ go test ./internal/api -run 'Test.*Delegat|TestBearer|TestScope|Test.*Audit' -co
 
 - [ ] Add the official Lark Go SDK and its WebSocket event transport.
 - [ ] Extend `internal/integrations/lark` with typed message normalization,
-  bot Open ID discovery, history retrieval, reply sending, provider error
-  translation, and structured diagnostics.
+  bot Open ID discovery, history retrieval, reply sending, processing
+  reactions, provider error translation, and structured diagnostics.
 - [ ] Define provider-neutral channel types and the `ChannelAdapter` boundary
   under `internal/agent/channel`.
 - [ ] Add a provider-neutral ingress service that resolves the sender, enforces
-  explicit bot mention, persists a Run, and returns without invoking the model
-  inline.
+  explicit bot mention, persists a Run, schedules one best-effort processing
+  reaction, and returns without invoking the model inline.
 - [ ] Add a managed Lark connection lifecycle with initialization, graceful
   stop, official SDK reconnect callbacks, structured transition logs, and an
   administrator-only status endpoint.
@@ -117,8 +117,8 @@ go test ./internal/api -run 'Test.*Delegat|TestBearer|TestScope|Test.*Audit' -co
 
 **Operational prerequisite:** enable the Lark bot, subscribe to
 `im.message.receive_v1`, approve receiving group mentions, sending as the bot,
-and reading associated group history, then publish the new Lark application
-version.
+adding message reactions, and reading associated group history, then publish
+the new Lark application version.
 
 ## Phase 5: OpenAPI Business Tools
 
@@ -132,6 +132,9 @@ version.
   packages from importing task stores or task application services.
 - [ ] Validate all tool arguments locally before external effects.
 - [ ] Return small typed results rather than raw OpenAPI response bodies.
+- [ ] Allow `search_projects` to list active Projects when the command omits a
+  Project and identify the only active Project without overriding an explicitly
+  named non-match.
 - [ ] Persist Tool Calls before execution and persist results before returning
   them to Eino.
 - [ ] Implement the stable create idempotency key
@@ -157,6 +160,9 @@ version.
   format/version metadata.
 - [ ] Implement `ask_user` as an interrupt and valid clarification replies as a
   resume of the same Run.
+- [ ] Register every clarification interrupt info and state type used behind
+  Eino interface fields and cover checkpoint persistence through the production
+  Tool Call middleware.
 - [ ] Delete the checkpoint on every terminal transition and on clarification
   expiry.
 - [ ] Ensure model output cannot directly become a user-visible final response;

@@ -209,6 +209,7 @@ func main() {
 			Identities:    identityStore,
 			Runs:          agentStore,
 			Inputs:        inputCipher,
+			Acknowledgers: map[string]channel.Acknowledger{"lark": larkClient},
 			Model:         cfg.DeepSeekModel,
 			PromptVersion: agentruntime.PromptVersion,
 			Now:           time.Now,

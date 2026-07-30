@@ -198,9 +198,12 @@ func (w *Worker) executeRun(parent context.Context, workerID string, run pactage
 	}
 	now := w.config.Now().UTC()
 	if err != nil {
+		category, _ := classifyRunError(err)
 		slog.Warn("Agent model execution ended",
 			"run_id", run.ID, "duration_ms", time.Since(startedAt).Milliseconds(),
-			"outcome", "error")
+			"outcome", "error",
+			"error_category", category,
+			"error", err)
 		w.handleRunError(parent, workerID, run, err, now)
 		return
 	}
@@ -410,7 +413,7 @@ Hard rules:
 1. This Run may create zero or one Task. Never create more than one.
 2. If the input or discussion contains multiple plausible Tasks, do not choose, merge, or create. Call ask_user and require the initiating user to state one specific Task.
 3. A clear request for one Task should execute without asking for confirmation.
-4. Resolve the Project with search_projects before create_task. Missing or ambiguous Project requires ask_user.
+4. Resolve the Project with search_projects before create_task. If the user did not name a Project, search with an empty query and use only_active_project when present. If the user explicitly named a Project, require a matching candidate. Missing or ambiguous Project requires ask_user.
 5. Resolve an assignee only when requested. Multiple plausible users require ask_user. Otherwise leave assignee null.
 6. Do not invent a due date, assignee, milestone, or acceptance criteria.
 7. create_task is the only mutation. Call it at most once and only after title, context, expected_result, and Project are clear.
@@ -534,7 +537,8 @@ func (w *Worker) handleRunError(
 		}
 		slog.Warn("Agent run requeued",
 			"run_id", run.ID, "attempt", run.AttemptCount,
-			"error_category", category, "available_at", availableAt)
+			"error_category", category, "available_at", availableAt,
+			"error", runErr)
 		return
 	}
 	kind := pactagent.OutboxTerminalFailure
@@ -559,7 +563,9 @@ func (w *Worker) handleRunError(
 		return
 	}
 	slog.Warn("Agent run failed",
-		"run_id", run.ID, "attempt", run.AttemptCount, "error_category", category)
+		"run_id", run.ID, "attempt", run.AttemptCount,
+		"error_category", category,
+		"error", runErr)
 }
 
 func classifyRunError(err error) (string, bool) {

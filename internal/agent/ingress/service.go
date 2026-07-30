@@ -17,6 +17,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const acknowledgementTimeout = 5 * time.Second
+
 type IdentityResolver interface {
 	FindExternalIdentity(
 		context.Context,
@@ -52,6 +54,7 @@ type Config struct {
 	Identities    IdentityResolver
 	Runs          RunRepository
 	Inputs        *pactagent.InputCipher
+	Acknowledgers map[string]channel.Acknowledger
 	Model         string
 	PromptVersion string
 	Now           func() time.Time
@@ -61,6 +64,7 @@ type Service struct {
 	identities    IdentityResolver
 	runs          RunRepository
 	inputs        *pactagent.InputCipher
+	acknowledgers map[string]channel.Acknowledger
 	model         string
 	promptVersion string
 	now           func() time.Time
@@ -79,6 +83,7 @@ func New(config Config) (*Service, error) {
 		identities:    config.Identities,
 		runs:          config.Runs,
 		inputs:        config.Inputs,
+		acknowledgers: config.Acknowledgers,
 		model:         strings.TrimSpace(config.Model),
 		promptVersion: strings.TrimSpace(config.PromptVersion),
 		now:           config.Now,
@@ -156,7 +161,34 @@ func (s *Service) Accept(ctx context.Context, incoming channel.IncomingMessage) 
 		"run_id", stored.ID,
 		"provider", stored.Provider,
 		"event_id", stored.ProviderEventID)
+	if acknowledger := s.acknowledgers[stored.Provider]; acknowledger != nil {
+		go s.acknowledge(context.WithoutCancel(ctx), acknowledger, stored)
+	}
 	return nil
+}
+
+func (s *Service) acknowledge(
+	parent context.Context,
+	acknowledger channel.Acknowledger,
+	run pactagent.Run,
+) {
+	ctx, cancel := context.WithTimeout(parent, acknowledgementTimeout)
+	defer cancel()
+	err := acknowledger.Acknowledge(ctx, channel.AcknowledgeRequest{
+		TenantID:        run.TenantID,
+		TargetMessageID: run.TriggerMessageID,
+	})
+	if err != nil {
+		slog.Warn("Agent command acknowledgement failed",
+			"run_id", run.ID,
+			"provider", run.Provider,
+			"error_category", "provider",
+			"error", err)
+		return
+	}
+	slog.Info("Agent command acknowledged",
+		"run_id", run.ID,
+		"provider", run.Provider)
 }
 
 func (s *Service) tryResume(

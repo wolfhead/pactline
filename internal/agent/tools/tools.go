@@ -97,7 +97,7 @@ func NewSet(config Config) (Set, error) {
 	}
 	projectTool, err := toolutils.InferTool(
 		ToolSearchProjects,
-		"Search active Pactline Projects. Use an exact single result; ask the user when multiple results are plausible.",
+		"Search active Pactline Projects. Use an empty query to list active Projects when the user did not name one. The result identifies the only active Project when one exists. Use a matching result for an explicitly named Project; otherwise use the only active Project. Ask the user when resolution is missing or ambiguous.",
 		func(ctx context.Context, input SearchInput) (ProjectSearchResult, error) {
 			return searchProjects(ctx, config.Client, input)
 		},
@@ -129,7 +129,7 @@ func NewSet(config Config) (Set, error) {
 }
 
 type SearchInput struct {
-	Query string `json:"query" jsonschema:"required,description=Exact or partial name to search"`
+	Query string `json:"query" jsonschema:"description=Exact or partial Project name; omit or use an empty string when the user did not name a Project"`
 }
 
 type ProjectCandidate struct {
@@ -138,7 +138,8 @@ type ProjectCandidate struct {
 }
 
 type ProjectSearchResult struct {
-	Candidates []ProjectCandidate `json:"candidates"`
+	Candidates        []ProjectCandidate `json:"candidates"`
+	OnlyActiveProject *ProjectCandidate  `json:"only_active_project,omitempty"`
 }
 
 func searchProjects(
@@ -147,9 +148,6 @@ func searchProjects(
 	input SearchInput,
 ) (ProjectSearchResult, error) {
 	query := strings.TrimSpace(input.Query)
-	if query == "" {
-		return ProjectSearchResult{}, fmt.Errorf("%w: project query is required", ErrToolInput)
-	}
 	response, err := client.ListProjects(ctx, generated.ListProjectsParams{
 		Limit:    generated.NewOptInt(200),
 		Archived: generated.NewOptListProjectsArchived(generated.ListProjectsArchivedExclude),
@@ -161,10 +159,18 @@ func searchProjects(
 	if !ok {
 		return ProjectSearchResult{}, openAPIResponseError(response)
 	}
+	var onlyActiveProject *ProjectCandidate
+	if len(list.Response.Items) == 1 {
+		onlyActiveProject = &ProjectCandidate{
+			Number: list.Response.Items[0].Number,
+			Name:   list.Response.Items[0].Name,
+		}
+	}
 	normalized := strings.ToLower(query)
-	var candidates []ProjectCandidate
+	candidates := make([]ProjectCandidate, 0, len(list.Response.Items))
 	for _, project := range list.Response.Items {
-		if strings.Contains(strings.ToLower(project.Name), normalized) {
+		if normalized == "" ||
+			strings.Contains(strings.ToLower(project.Name), normalized) {
 			candidates = append(candidates, ProjectCandidate{
 				Number: project.Number,
 				Name:   project.Name,
@@ -185,7 +191,10 @@ func searchProjects(
 	if len(candidates) > 5 {
 		candidates = candidates[:5]
 	}
-	return ProjectSearchResult{Candidates: candidates}, nil
+	return ProjectSearchResult{
+		Candidates:        candidates,
+		OnlyActiveProject: onlyActiveProject,
+	}, nil
 }
 
 type UserCandidate struct {
@@ -310,12 +319,18 @@ type ClarificationState struct {
 	Question string
 }
 
+type ClarificationInfo struct {
+	Question   string   `json:"question"`
+	Candidates []string `json:"candidates,omitempty"`
+}
+
 type AskUserResult struct {
 	Answer string `json:"answer"`
 }
 
 func init() {
 	schema.RegisterName[ClarificationState]("pactline_agent_clarification_state_v1")
+	schema.RegisterName[ClarificationInfo]("pactline_agent_clarification_info_v1")
 }
 
 func askUser(ctx context.Context, input AskUserInput) (AskUserResult, error) {
@@ -327,9 +342,9 @@ func askUser(ctx context.Context, input AskUserInput) (AskUserResult, error) {
 	if !wasInterrupted {
 		return AskUserResult{}, tool.StatefulInterrupt(
 			ctx,
-			map[string]any{
-				"question":   question,
-				"candidates": input.Candidates,
+			ClarificationInfo{
+				Question:   question,
+				Candidates: input.Candidates,
 			},
 			ClarificationState{Question: question},
 		)
@@ -341,7 +356,7 @@ func askUser(ctx context.Context, input AskUserInput) (AskUserResult, error) {
 	if !isTarget {
 		return AskUserResult{}, tool.StatefulInterrupt(
 			ctx,
-			map[string]any{"question": state.Question},
+			ClarificationInfo{Question: state.Question},
 			state,
 		)
 	}
