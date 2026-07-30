@@ -39,7 +39,7 @@ func newBounty(sponsor uuid.UUID) domain.Bounty {
 // cleanupBounties deletes the given bounty rows once the test finishes.
 //
 // The suite runs against a shared, already-migrated database (see
-// docker-compose.yml: the postgres container is not recreated between
+// compose.test.yaml: the postgres container is not recreated between
 // `make test` invocations, so rows left behind by one run are still present
 // on the next). Several tests below assert exact result counts from List,
 // which would become flaky across repeated runs without this: this helper

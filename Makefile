@@ -1,6 +1,6 @@
 DSN ?= postgres://bounty:bounty@localhost:5433/bountyboard?sslmode=disable
 COMPOSE_PROJECT_NAME ?= task_manager
-TEST_COMPOSE_FILE ?= docker-compose.yml
+TEST_COMPOSE_FILE ?= compose.test.yaml
 STACK_COMPOSE_FILE ?= compose.yaml
 
 up:

@@ -71,7 +71,7 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: `sh -c "docker compose -f '${path.join(repoRoot, 'docker-compose.yml')}' up -d --wait && sleep infinity"`,
+      command: `sh -c "docker compose -f '${path.join(repoRoot, 'compose.test.yaml')}' up -d --wait && sleep infinity"`,
       port: 5433,
       reuseExistingServer: true,
       timeout: 60_000,
