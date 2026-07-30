@@ -13,7 +13,9 @@ at most one Task.
 
 The Agent runs inside the existing Go server as a built-in PostgreSQL-backed
 worker. CloudWeGo Eino provides the single-agent tool loop and checkpoint/resume
-mechanism. DeepSeek V4 Pro is the initial model. Pactline continues to own
+mechanism. DeepSeek V4 Flash in non-thinking mode is the initial model.
+Pactline uses Pro or thinking only after evidence that a more complex Agent
+workflow needs it. Pactline continues to own
 channel integration, durable Run state, authorization, idempotency, audit,
 business tools, and user-visible replies.
 
@@ -79,7 +81,7 @@ Lark SDK WebSocket connection
     -> built-in Agent worker
     -> bounded conversation context
     -> Eino ChatModelAgent
-       -> DeepSeek V4 Pro
+       -> DeepSeek V4 Flash (non-thinking)
        -> read-only channel and work tools
        -> ask_user interrupt
        -> create_task mutation tool
@@ -128,18 +130,20 @@ AgentTransfer, or `agenticdeepseek` in the first release.
 
 Initial runtime limits:
 
-- model: `deepseek-v4-pro`;
-- thinking: enabled;
-- reasoning effort: high;
+- model: `deepseek-v4-flash`;
+- thinking: disabled;
+- reasoning effort: omitted;
 - maximum model steps: 8;
 - execution timeout excluding user wait: 5 minutes;
 - clarification rounds: 3;
 - clarification lifetime: 24 hours.
 
-The model adapter must preserve `reasoning_content` for every assistant tool
-call because DeepSeek V4 requires it on subsequent requests. The compatibility
-suite must exercise non-streaming and streaming conversion, multiple sequential
-tools, checkpoint serialization, and resume.
+The default non-thinking mode does not emit `reasoning_content`. The model
+adapter retains thinking-mode compatibility for future explicit use and must
+preserve `reasoning_content` for every assistant tool call when thinking is
+enabled because DeepSeek V4 requires it on subsequent requests. The default
+compatibility suite must exercise V4 Flash non-thinking tool calls, multiple
+sequential tools, checkpoint serialization, and resume.
 
 The system prompt is versioned. A Run records the model and prompt version so a
 failure can be reproduced against the same contract. Conversation history is

@@ -94,7 +94,7 @@ func LoadConfig() (Config, error) {
 		AgentTenantTimezone:            strings.TrimSpace(os.Getenv("AGENT_TENANT_TIMEZONE")),
 	}
 	if cfg.DeepSeekModel == "" {
-		cfg.DeepSeekModel = "deepseek-v4-pro"
+		cfg.DeepSeekModel = "deepseek-v4-flash"
 	}
 	if cfg.AgentTenantTimezone == "" {
 		cfg.AgentTenantTimezone = "Asia/Shanghai"

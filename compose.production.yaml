@@ -45,7 +45,7 @@ services:
       AGENT_ENABLED: ${AGENT_ENABLED:-false}
       DEEPSEEK_API_KEY_FILE: /run/secrets/deepseek_api_key
       DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
-      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-pro}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
       AGENT_DELEGATION_SIGNING_KEY_FILE: /run/secrets/agent_delegation_signing_key
       AGENT_DELEGATION_SIGNING_KEY_ID: ${AGENT_DELEGATION_SIGNING_KEY_ID:-agent-delegate-primary}
       AGENT_CHECKPOINT_ENCRYPTION_KEY_FILE: /run/secrets/agent_checkpoint_encryption_key

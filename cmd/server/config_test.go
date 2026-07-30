@@ -72,6 +72,7 @@ func TestLoadConfigDecodesEncryptionKey(t *testing.T) {
 	cfg, err := LoadConfig()
 	require.NoError(t, err)
 	require.Len(t, cfg.TokenEncryptionKey, 32)
+	require.Equal(t, "deepseek-v4-flash", cfg.DeepSeekModel)
 
 	t.Setenv("OAUTH_TOKEN_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(make([]byte, 31)))
 	_, err = LoadConfig()

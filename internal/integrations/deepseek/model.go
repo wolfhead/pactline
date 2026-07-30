@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	DefaultModel           = "deepseek-v4-pro"
+	DefaultModel           = "deepseek-v4-flash"
 	DefaultReasoningEffort = "high"
 	DefaultTimeout         = 5 * time.Minute
 
@@ -40,8 +40,8 @@ type Config struct {
 	Timeout         time.Duration
 }
 
-// NewChatModel creates a concurrency-safe Eino ToolCallingChatModel with
-// Pactline's required DeepSeek V4 thinking defaults.
+// NewChatModel creates a concurrency-safe Eino ToolCallingChatModel. Pactline
+// defaults to the Flash model without thinking for low-latency task capture.
 func NewChatModel(ctx context.Context, config Config) (einomodel.ToolCallingChatModel, error) {
 	normalized, err := normalizeConfig(config)
 	if err != nil {
@@ -62,13 +62,17 @@ func NewChatModel(ctx context.Context, config Config) (einomodel.ToolCallingChat
 		return nil, fmt.Errorf("configure DeepSeek chat model: %w", err)
 	}
 
-	return &chatModel{
-		inner: inner,
-		requestOptions: []einomodel.Option{
+	requestOptions := make([]einomodel.Option, 0, 1)
+	if normalized.ThinkingMode == ThinkingEnabled {
+		requestOptions = append(requestOptions,
 			einodeepseek.WithExtraFields(map[string]interface{}{
 				"reasoning_effort": normalized.ReasoningEffort,
 			}),
-		},
+		)
+	}
+	return &chatModel{
+		inner:          inner,
+		requestOptions: requestOptions,
 	}, nil
 }
 
@@ -127,16 +131,19 @@ func normalizeConfig(config Config) (Config, error) {
 	}
 	config.ThinkingMode = strings.TrimSpace(config.ThinkingMode)
 	if config.ThinkingMode == "" {
-		config.ThinkingMode = ThinkingEnabled
+		config.ThinkingMode = ThinkingDisabled
 	}
 	if config.ThinkingMode != ThinkingEnabled && config.ThinkingMode != ThinkingDisabled {
 		return Config{}, ErrInvalidThinkingMode
 	}
 	config.ReasoningEffort = strings.TrimSpace(config.ReasoningEffort)
-	if config.ReasoningEffort == "" {
+	if config.ThinkingMode == ThinkingDisabled {
+		if config.ReasoningEffort != "" {
+			return Config{}, ErrInvalidReasoningEffort
+		}
+	} else if config.ReasoningEffort == "" {
 		config.ReasoningEffort = DefaultReasoningEffort
-	}
-	if config.ReasoningEffort != "high" && config.ReasoningEffort != "max" {
+	} else if config.ReasoningEffort != "high" && config.ReasoningEffort != "max" {
 		return Config{}, ErrInvalidReasoningEffort
 	}
 	if config.Timeout <= 0 {

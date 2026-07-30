@@ -20,13 +20,14 @@ been implemented; verify code, migrations, and tests directly.
   - malformed and unknown tool calls;
   - streaming message concatenation; and
   - checkpoint serialization and restoration.
-- [ ] Add opt-in live tests gated by `DEEPSEEK_API_KEY` for V4 Pro thinking mode,
-  multiple tools, and a resumed tool-call conversation.
+- [ ] Add opt-in live tests gated by `DEEPSEEK_API_KEY` for V4 Flash
+  non-thinking mode, multiple tools, and a resumed tool-call conversation.
 - [ ] Record latency, token-usage, and provider request identifiers without
   recording prompts or reasoning.
 
-**Gate:** do not proceed to Lark production wiring until the live V4 Pro
-thinking/tool/resume test succeeds against the configured DeepSeek endpoint.
+**Gate:** do not proceed to Lark production wiring until the live V4 Flash
+non-thinking tool/resume test succeeds against the configured DeepSeek
+endpoint.
 
 ## Phase 2: Agent Domain and Persistence
 

@@ -98,19 +98,6 @@ After both tools succeed, answer exactly LIVE_TOOL_GATE_OK.`,
 	require.Equal(t, []string{"resolve_project", "dry_run_create_task"}, gotCallOrder)
 	require.Contains(t, finalAssistantContent(t, events), "LIVE_TOOL_GATE_OK")
 
-	var reasoningMessages int
-	for _, event := range events {
-		if event.Output == nil || event.Output.MessageOutput == nil {
-			continue
-		}
-		message, getErr := event.Output.MessageOutput.GetMessage()
-		require.NoError(t, getErr)
-		if message != nil && message.Role == schema.Assistant &&
-			len(message.ToolCalls) > 0 && strings.TrimSpace(message.ReasoningContent) != "" {
-			reasoningMessages++
-		}
-	}
-	require.GreaterOrEqual(t, reasoningMessages, 2, "each sequential tool decision must retain reasoning")
 }
 
 func TestLiveDeepSeekCheckpointResumeAfterRunnerReconstruction(t *testing.T) {

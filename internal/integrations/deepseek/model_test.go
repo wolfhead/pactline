@@ -25,7 +25,15 @@ func TestNewChatModelValidatesAndDefaultsConfiguration(t *testing.T) {
 
 	_, err = NewChatModel(context.Background(), Config{
 		APIKey:          "test",
+		ThinkingMode:    ThinkingEnabled,
 		ReasoningEffort: "medium",
+	})
+	require.ErrorIs(t, err, ErrInvalidReasoningEffort)
+
+	_, err = NewChatModel(context.Background(), Config{
+		APIKey:          "test",
+		ThinkingMode:    ThinkingDisabled,
+		ReasoningEffort: "high",
 	})
 	require.ErrorIs(t, err, ErrInvalidReasoningEffort)
 }
@@ -88,9 +96,12 @@ func TestChatModelPreservesReasoningAcrossToolCalls(t *testing.T) {
 	defer server.Close()
 
 	model, err := NewChatModel(context.Background(), Config{
-		APIKey:  "test-key",
-		BaseURL: server.URL,
-		Timeout: time.Second,
+		APIKey:          "test-key",
+		BaseURL:         server.URL,
+		Model:           "deepseek-v4-pro",
+		ThinkingMode:    ThinkingEnabled,
+		ReasoningEffort: "high",
+		Timeout:         time.Second,
 	})
 	require.NoError(t, err)
 	withTools, err := model.WithTools([]*schema.ToolInfo{{
@@ -148,10 +159,8 @@ func TestChatModelWithToolsRetainsRequiredRequestOptions(t *testing.T) {
 	defer server.Close()
 
 	model, err := NewChatModel(context.Background(), Config{
-		APIKey:          "test-key",
-		BaseURL:         server.URL,
-		ThinkingMode:    ThinkingDisabled,
-		ReasoningEffort: "max",
+		APIKey:  "test-key",
+		BaseURL: server.URL,
 	})
 	require.NoError(t, err)
 	withTools, err := model.WithTools([]*schema.ToolInfo{{
@@ -164,7 +173,8 @@ func TestChatModelWithToolsRetainsRequiredRequestOptions(t *testing.T) {
 		schema.UserMessage("hello"),
 	})
 	require.NoError(t, err)
-	require.Equal(t, "max", request["reasoning_effort"])
+	require.Equal(t, "deepseek-v4-flash", request["model"])
+	require.NotContains(t, request, "reasoning_effort")
 	require.Equal(t, map[string]interface{}{"type": "disabled"}, request["thinking"])
 }
 
