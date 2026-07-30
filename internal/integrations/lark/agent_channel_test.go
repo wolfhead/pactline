@@ -2,8 +2,6 @@ package lark
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -14,19 +12,21 @@ import (
 	"github.com/wolfhead/pactline/internal/agent/channel"
 	"github.com/wolfhead/pactline/internal/identity"
 
+	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	"github.com/stretchr/testify/require"
 )
 
-func TestAgentChannelVerifiesAndNormalizesExplicitMention(t *testing.T) {
-	client := newAgentChannelTestClient(t, "https://example.invalid", nil)
+func TestAgentChannelDiscoversBotAndNormalizesExplicitMention(t *testing.T) {
+	server := newAgentChannelInitializationServer(t)
+	defer server.Close()
+	client := newAgentChannelTestClient(t, server.URL, server.Client())
 	payload := []byte(`{
 		"schema":"2.0",
 		"header":{
 			"event_id":"event-1",
 			"event_type":"im.message.receive_v1",
 			"app_id":"app-id",
-			"tenant_key":"tenant",
-			"token":"verification-token"
+			"tenant_key":"tenant"
 		},
 		"event":{
 			"sender":{"sender_id":{"open_id":"ou_user"},"tenant_key":"tenant"},
@@ -42,26 +42,14 @@ func TestAgentChannelVerifiesAndNormalizesExplicitMention(t *testing.T) {
 			}
 		}
 	}`)
-	timestamp, nonce := "1785398400", "nonce"
-	digest := sha256.Sum256(append(
-		[]byte(timestamp+nonce+"event-encrypt-key"),
-		payload...,
-	))
-	headers := http.Header{}
-	headers.Set("X-Lark-Request-Timestamp", timestamp)
-	headers.Set("X-Lark-Request-Nonce", nonce)
-	headers.Set("X-Lark-Signature", hex.EncodeToString(digest[:]))
-
-	require.NoError(t, client.VerifyCallback(headers, payload))
-	incoming, err := client.NormalizeEvent(context.Background(), payload)
+	var event larkim.P2MessageReceiveV1
+	require.NoError(t, json.Unmarshal(payload, &event))
+	incoming, err := client.NormalizeMessageEvent(&event)
 	require.NoError(t, err)
 	require.True(t, incoming.BotMentioned)
 	require.Equal(t, "帮我创建一个任务", incoming.Text)
 	require.Equal(t, "ou_user", incoming.SenderSubjectID)
 	require.Equal(t, "parent-1", incoming.ReplyParentMessageID)
-
-	headers.Set("X-Lark-Signature", "bad")
-	require.ErrorIs(t, client.VerifyCallback(headers, payload), channel.ErrInvalidEvent)
 }
 
 func TestAgentChannelFetchesBoundedContextAndReplies(t *testing.T) {
@@ -72,6 +60,9 @@ func TestAgentChannelFetchesBoundedContextAndReplies(t *testing.T) {
 		switch {
 		case r.URL.Path == "/open-apis/auth/v3/tenant_access_token/internal":
 			_, _ = io.WriteString(w, `{"code":0,"tenant_access_token":"tenant-token","expire":7200}`)
+		case r.URL.Path == "/open-apis/bot/v3/info":
+			require.Equal(t, "Bearer tenant-token", r.Header.Get("Authorization"))
+			_, _ = io.WriteString(w, `{"code":0,"msg":"ok","bot":{"activate_status":2,"open_id":"ou_bot"}}`)
 		case r.URL.Path == "/open-apis/im/v1/messages" && r.Method == http.MethodGet:
 			require.Equal(t, "Bearer tenant-token", r.Header.Get("Authorization"))
 			require.Equal(t, "chat-1", r.URL.Query().Get("container_id"))
@@ -132,10 +123,24 @@ func newAgentChannelTestClient(
 		AppID: "app-id", AppSecret: "app-secret", TenantKey: "tenant",
 		BaseURL: baseURL, RedirectURI: "https://tasks.example.test/callback",
 		Cipher: cipher, EncryptionKeyID: "key-1", HTTPClient: httpClient,
-		EventVerificationToken: "verification-token",
-		EventEncryptKey:        "event-encrypt-key",
-		BotOpenID:              "ou_bot",
 	})
 	require.NoError(t, err)
+	require.NoError(t, client.InitializeAgentChannel(context.Background()))
 	return client
+}
+
+func newAgentChannelInitializationServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/open-apis/auth/v3/tenant_access_token/internal":
+			_, _ = io.WriteString(w, `{"code":0,"tenant_access_token":"tenant-token","expire":7200}`)
+		case "/open-apis/bot/v3/info":
+			require.Equal(t, "Bearer tenant-token", r.Header.Get("Authorization"))
+			_, _ = io.WriteString(w, `{"code":0,"msg":"ok","bot":{"activate_status":2,"open_id":"ou_bot"}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
 }

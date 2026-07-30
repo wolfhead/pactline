@@ -5,6 +5,7 @@ import (
 	"net/url"
 
 	"github.com/wolfhead/pactline/internal/access"
+	"github.com/wolfhead/pactline/internal/agent/channel"
 	"github.com/wolfhead/pactline/internal/identity"
 )
 
@@ -21,10 +22,10 @@ type AuthSurface struct {
 }
 
 type RouterOptions struct {
-	Auth         AuthSurface
-	V1           http.Handler
-	OpenAPI      http.Handler
-	AgentIngress http.Handler
+	Auth        AuthSurface
+	V1          http.Handler
+	OpenAPI     http.Handler
+	AgentStatus channel.StatusProvider
 }
 
 type accessAuditStore interface {
@@ -74,6 +75,10 @@ func NewRouter(
 	protected.HandleFunc("GET /api/admin/api-tokens", adminAccess.listTokens)
 	protected.HandleFunc("DELETE /api/admin/api-tokens/{id}", adminAccess.revokeToken)
 	protected.HandleFunc("GET /api/admin/api-activity", adminAccess.activity)
+	if options.AgentStatus != nil {
+		agentStatus := &agentStatusHandler{status: options.AgentStatus}
+		protected.HandleFunc("GET /api/admin/agent/status", agentStatus.get)
+	}
 
 	root := http.NewServeMux()
 	if options.Auth.Development != nil {
@@ -83,9 +88,6 @@ func NewRouter(
 		root.HandleFunc("GET /api/auth/lark/start", auth.larkStart)
 		root.HandleFunc("GET /api/auth/lark/callback", auth.larkCallback)
 		root.HandleFunc("POST /api/invitations/accept", adminIdentity.acceptInvitation)
-	}
-	if options.AgentIngress != nil {
-		root.Handle("POST /api/integrations/lark/events", options.AgentIngress)
 	}
 	middleware := identityMiddleware{
 		sessions: options.Auth.Sessions, appBaseURL: options.Auth.AppBaseURL, cookies: cookies,

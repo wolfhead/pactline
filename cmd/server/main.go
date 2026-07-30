@@ -16,6 +16,7 @@ import (
 	"github.com/wolfhead/pactline/internal/access"
 	pactagent "github.com/wolfhead/pactline/internal/agent"
 	"github.com/wolfhead/pactline/internal/agent/channel"
+	"github.com/wolfhead/pactline/internal/agent/ingress"
 	agentopenapi "github.com/wolfhead/pactline/internal/agent/openapi"
 	"github.com/wolfhead/pactline/internal/agent/reply"
 	agentruntime "github.com/wolfhead/pactline/internal/agent/runtime"
@@ -103,10 +104,7 @@ func main() {
 		configuredLarkClient, clientErr := lark.NewClient(lark.Config{
 			AppID: cfg.LarkAppID, AppSecret: cfg.LarkAppSecret, TenantKey: cfg.LarkTenantKey,
 			Cipher: cipher, EncryptionKeyID: cfg.TokenEncryptionKeyID,
-			RedirectURI:            cfg.LarkRedirectURI.String(),
-			EventVerificationToken: cfg.LarkEventVerificationToken,
-			EventEncryptKey:        cfg.LarkEventEncryptKey,
-			BotOpenID:              cfg.LarkBotOpenID,
+			RedirectURI: cfg.LarkRedirectURI.String(),
 		})
 		if clientErr != nil {
 			slog.Error("configure Lark client", "error", clientErr)
@@ -154,7 +152,7 @@ func main() {
 	}
 	var (
 		delegateService *access.DelegateService
-		agentIngress    http.Handler
+		agentConnection *lark.LongConnection
 		inputCipher     *pactagent.InputCipher
 		checkpointStore *pactagent.EncryptedCheckpointStore
 		agentTimezone   *time.Location
@@ -194,19 +192,41 @@ func main() {
 			slog.Error("configure Agent tenant timezone", "error", err)
 			os.Exit(1)
 		}
-		ingress, ingressErr := api.NewAgentChannelHandler(
-			larkClient,
-			identityStore,
-			agentStore,
-			inputCipher,
-			cfg.DeepSeekModel,
-			time.Now,
-		)
+		agentIngress, ingressErr := ingress.New(ingress.Config{
+			Identities:    identityStore,
+			Runs:          agentStore,
+			Inputs:        inputCipher,
+			Model:         cfg.DeepSeekModel,
+			PromptVersion: agentruntime.PromptVersion,
+			Now:           time.Now,
+		})
 		if ingressErr != nil {
 			slog.Error("configure Agent channel ingress", "error", ingressErr)
 			os.Exit(1)
 		}
-		agentIngress = ingress
+		initializationContext, cancelInitialization := context.WithTimeout(
+			context.Background(),
+			15*time.Second,
+		)
+		initializationErr := larkClient.InitializeAgentChannel(initializationContext)
+		cancelInitialization()
+		if initializationErr != nil {
+			slog.Error("initialize Lark Agent channel",
+				"error_category", "bot_initialization",
+				"error", initializationErr)
+			os.Exit(1)
+		}
+		agentConnection, err = lark.NewLongConnection(
+			cfg.LarkAppID,
+			cfg.LarkAppSecret,
+			larkClient,
+			agentIngress,
+		)
+		if err != nil {
+			slog.Error("configure Lark Agent long connection", "error", err)
+			os.Exit(1)
+		}
+		slog.Info("Lark Agent channel initialized", "transport", "websocket")
 	}
 	applicationHandler := api.NewRouter(legacyHandler, api.RouterOptions{
 		Auth: api.AuthSurface{
@@ -218,9 +238,9 @@ func main() {
 			LarkEnabled:   cfg.AuthProvider == AuthProviderLark,
 			SecureCookies: cfg.AppEnv != EnvironmentDevelopment && cfg.AppEnv != EnvironmentTest,
 		},
-		V1:           v1Handler,
-		OpenAPI:      apiv1.OpenAPIHandler(contract.OpenAPIDocument),
-		AgentIngress: agentIngress,
+		V1:          v1Handler,
+		OpenAPI:     apiv1.OpenAPIHandler(contract.OpenAPIDocument),
+		AgentStatus: agentConnection,
 	})
 	var agentWorker *agentruntime.Worker
 	if cfg.AgentEnabled {
@@ -271,6 +291,7 @@ func main() {
 	runContext, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopSignals()
 	if agentWorker != nil {
+		go agentConnection.Run(runContext)
 		go agentWorker.Run(runContext)
 		slog.Info("Agent worker started",
 			"concurrency", cfg.AgentWorkerConcurrency,

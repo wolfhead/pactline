@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/wolfhead/pactline/internal/identity"
@@ -24,29 +25,27 @@ const (
 )
 
 type Config struct {
-	AppID                  string
-	AppSecret              string
-	TenantKey              string
-	BaseURL                string
-	AuthorizationURL       string
-	RedirectURI            string
-	Cipher                 *identity.CredentialCipher
-	EncryptionKeyID        string
-	HTTPClient             *http.Client
-	EventVerificationToken string
-	EventEncryptKey        string
-	BotOpenID              string
+	AppID            string
+	AppSecret        string
+	TenantKey        string
+	BaseURL          string
+	AuthorizationURL string
+	RedirectURI      string
+	Cipher           *identity.CredentialCipher
+	EncryptionKeyID  string
+	HTTPClient       *http.Client
 }
 
 type Client struct {
-	appID, appSecret, tenantKey                        string
-	baseURL, authorizationURL                          string
-	redirectURI                                        string
-	cipher                                             *identity.CredentialCipher
-	encryptionKeyID                                    string
-	httpClient                                         *http.Client
-	now                                                func() time.Time
-	eventVerificationToken, eventEncryptKey, botOpenID string
+	appID, appSecret, tenantKey string
+	baseURL, authorizationURL   string
+	redirectURI                 string
+	cipher                      *identity.CredentialCipher
+	encryptionKeyID             string
+	httpClient                  *http.Client
+	now                         func() time.Time
+	botMu                       sync.RWMutex
+	botOpenID                   string
 }
 
 func NewClient(config Config) (*Client, error) {
@@ -79,11 +78,9 @@ func NewClient(config Config) (*Client, error) {
 		appID: config.AppID, appSecret: config.AppSecret, tenantKey: config.TenantKey,
 		baseURL: strings.TrimRight(config.BaseURL, "/"), authorizationURL: config.AuthorizationURL,
 		redirectURI: config.RedirectURI,
-		cipher:      config.Cipher, encryptionKeyID: config.EncryptionKeyID, httpClient: config.HTTPClient,
-		eventVerificationToken: strings.TrimSpace(config.EventVerificationToken),
-		eventEncryptKey:        strings.TrimSpace(config.EventEncryptKey),
-		botOpenID:              strings.TrimSpace(config.BotOpenID),
-		now:                    func() time.Time { return time.Now().UTC() },
+		cipher:      config.Cipher, encryptionKeyID: config.EncryptionKeyID,
+		httpClient: config.HTTPClient,
+		now:        func() time.Time { return time.Now().UTC() },
 	}, nil
 }
 

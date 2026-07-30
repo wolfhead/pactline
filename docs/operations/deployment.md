@@ -80,9 +80,10 @@ Images contain no runtime credentials. Lark, session, encryption, and database
 secrets are injected only on the deployment host.
 
 The built-in Agent additionally requires independent DeepSeek, delegation
-signing, checkpoint encryption, and Lark event callback secrets. Keep
-`AGENT_ENABLED=false` until the Lark bot application version and permissions
-described in `docs/operations/lark-identity.md` are published.
+signing, and checkpoint encryption secrets. Its Lark WebSocket connection
+reuses the application ID and secret; it does not require callback secrets.
+Keep `AGENT_ENABLED=false` until the Lark bot application version and
+permissions described in `docs/operations/lark-identity.md` are published.
 
 ## Host preparation
 
@@ -150,7 +151,7 @@ tasks.example.com {
 An Nginx, Traefik, load balancer, or ingress installation is equally valid.
 Preserve the original `Host` and HTTPS forwarding information. Do not split
 frontend and API onto different public origins; browser sessions, CSRF
-protection, and Lark callbacks intentionally use one origin.
+protection, and the Lark OAuth callback intentionally use one origin.
 
 Set these values to that exact HTTPS origin:
 
@@ -204,7 +205,9 @@ one API replica because there is no current availability need for more.
 
 Both endpoints return only plain status text and no infrastructure details.
 Container health checks use `/readyz`; the gateway exposes both endpoints for
-the edge monitor.
+the edge monitor. A temporary Lark WebSocket disconnect does not fail either
+endpoint. Administrators can inspect the built-in Agent connection separately
+through `GET /api/admin/agent/status`.
 
 The API handles `SIGTERM` and `SIGINT`, stops accepting new work, and allows up
 to 15 seconds for active HTTP requests to finish. Compose grants a 20-second

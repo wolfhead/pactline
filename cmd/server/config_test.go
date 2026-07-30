@@ -176,8 +176,6 @@ func TestAgentConfigRequiresLarkAndDedicatedSecrets(t *testing.T) {
 		AgentDelegationSigningKey: make([]byte, 32), AgentDelegationSigningKeyID: "delegate-key",
 		AgentCheckpointEncryptionKey: make([]byte, 32), AgentCheckpointEncryptionKeyID: "checkpoint-key",
 		AgentWorkerConcurrency: 1, AgentTenantTimezone: "Asia/Shanghai",
-		LarkEventVerificationToken: "verification-token",
-		LarkEventEncryptKey:        "encrypt-key", LarkBotOpenID: "ou_bot",
 	}
 	require.NoError(t, config.Validate())
 

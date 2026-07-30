@@ -41,9 +41,6 @@ type Config struct {
 	AgentCheckpointEncryptionKeyID string
 	AgentWorkerConcurrency         int
 	AgentTenantTimezone            string
-	LarkEventVerificationToken     string
-	LarkEventEncryptKey            string
-	LarkBotOpenID                  string
 }
 
 func LoadConfig() (Config, error) {
@@ -68,14 +65,6 @@ func LoadConfig() (Config, error) {
 		return Config{}, err
 	}
 	checkpointEncryptionKey, err := readConfigurationValue("AGENT_CHECKPOINT_ENCRYPTION_KEY")
-	if err != nil {
-		return Config{}, err
-	}
-	larkEventVerificationToken, err := readConfigurationValue("LARK_EVENT_VERIFICATION_TOKEN")
-	if err != nil {
-		return Config{}, err
-	}
-	larkEventEncryptKey, err := readConfigurationValue("LARK_EVENT_ENCRYPT_KEY")
 	if err != nil {
 		return Config{}, err
 	}
@@ -105,9 +94,6 @@ func LoadConfig() (Config, error) {
 		AgentCheckpointEncryptionKeyID: strings.TrimSpace(os.Getenv("AGENT_CHECKPOINT_ENCRYPTION_KEY_ID")),
 		AgentWorkerConcurrency:         agentConcurrency,
 		AgentTenantTimezone:            strings.TrimSpace(os.Getenv("AGENT_TENANT_TIMEZONE")),
-		LarkEventVerificationToken:     strings.TrimSpace(larkEventVerificationToken),
-		LarkEventEncryptKey:            strings.TrimSpace(larkEventEncryptKey),
-		LarkBotOpenID:                  strings.TrimSpace(os.Getenv("LARK_BOT_OPEN_ID")),
 	}
 	if cfg.DeepSeekModel == "" {
 		cfg.DeepSeekModel = "deepseek-v4-pro"
@@ -234,11 +220,6 @@ func (c Config) Validate() error {
 		if len(c.AgentCheckpointEncryptionKey) != 32 ||
 			c.AgentCheckpointEncryptionKeyID == "" {
 			return errors.New("AGENT_CHECKPOINT_ENCRYPTION_KEY and AGENT_CHECKPOINT_ENCRYPTION_KEY_ID are required")
-		}
-		if c.LarkEventVerificationToken == "" ||
-			c.LarkEventEncryptKey == "" ||
-			c.LarkBotOpenID == "" {
-			return errors.New("LARK_EVENT_VERIFICATION_TOKEN, LARK_EVENT_ENCRYPT_KEY, and LARK_BOT_OPEN_ID are required")
 		}
 		if c.AgentWorkerConcurrency < 1 || c.AgentWorkerConcurrency > 8 {
 			return errors.New("AGENT_WORKER_CONCURRENCY must be between 1 and 8")

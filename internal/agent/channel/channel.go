@@ -24,6 +24,30 @@ var (
 
 type ProviderMessageID string
 
+type ConnectionState string
+
+const (
+	ConnectionInitializing ConnectionState = "initializing"
+	ConnectionConnecting   ConnectionState = "connecting"
+	ConnectionReady        ConnectionState = "ready"
+	ConnectionReconnecting ConnectionState = "reconnecting"
+	ConnectionDegraded     ConnectionState = "degraded"
+	ConnectionStopped      ConnectionState = "stopped"
+)
+
+type ConnectionStatus struct {
+	Enabled           bool            `json:"enabled"`
+	State             ConnectionState `json:"state"`
+	LastConnectedAt   *time.Time      `json:"last_connected_at,omitempty"`
+	LastTransitionAt  time.Time       `json:"last_transition_at"`
+	ReconnectCount    int64           `json:"reconnect_count"`
+	LastErrorCategory string          `json:"last_error_category,omitempty"`
+}
+
+type StatusProvider interface {
+	Snapshot() ConnectionStatus
+}
+
 type Mention struct {
 	SubjectID string
 	Name      string
@@ -89,7 +113,6 @@ type ReplyRequest struct {
 }
 
 type ChannelAdapter interface {
-	NormalizeEvent(ctx context.Context, payload []byte) (IncomingMessage, error)
 	FetchContext(ctx context.Context, request ContextRequest) ([]ChannelMessage, error)
 	Reply(ctx context.Context, request ReplyRequest) (ProviderMessageID, error)
 }

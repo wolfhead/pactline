@@ -88,14 +88,18 @@ go test ./internal/api -run 'Test.*Delegat|TestBearer|TestScope|Test.*Audit' -co
 
 ## Phase 4: Lark Bot Channel Adapter
 
-- [ ] Extend `internal/integrations/lark` with message event DTOs, callback
-  verification, history retrieval, reply sending, provider error translation,
-  and structured diagnostics.
+- [ ] Add the official Lark Go SDK and its WebSocket event transport.
+- [ ] Extend `internal/integrations/lark` with typed message normalization,
+  bot Open ID discovery, history retrieval, reply sending, provider error
+  translation, and structured diagnostics.
 - [ ] Define provider-neutral channel types and the `ChannelAdapter` boundary
   under `internal/agent/channel`.
-- [ ] Add an HTTP event handler under `internal/api` that validates, normalizes,
-  resolves the sender, enforces explicit bot mention, persists a Run, and
-  acknowledges without invoking the model inline.
+- [ ] Add a provider-neutral ingress service that resolves the sender, enforces
+  explicit bot mention, persists a Run, and returns without invoking the model
+  inline.
+- [ ] Add a managed Lark connection lifecycle with initialization, graceful
+  stop, official SDK reconnect callbacks, structured transition logs, and an
+  administrator-only status endpoint.
 - [ ] Deduplicate using both Lark event ID and trigger message ID.
 - [ ] Reject unsupported message types visibly without creating a Run.
 - [ ] Add bounded context retrieval that cannot cross tenant, conversation,
@@ -103,11 +107,13 @@ go test ./internal/api -run 'Test.*Delegat|TestBearer|TestScope|Test.*Audit' -co
 - [ ] Implement clarification reply correlation using the provider reply/root
   identifiers.
 - [ ] Enforce that only the original initiating user resumes a Run.
-- [ ] Add the Lark bot event route and required dependencies in
-  `cmd/server/main.go`.
-- [ ] Add unit and HTTP tests using recorded sanitized Lark fixtures for
-  signatures, mentions, threads, replies, duplicates, unknown users, inactive
-  users, and context boundaries.
+- [ ] Wire bot discovery, the WebSocket dispatcher, ingress, and lifecycle
+  supervision in `cmd/server/main.go`.
+- [ ] Remove the HTTP event route, Verification Token, Encrypt Key, and
+  configured Bot Open ID.
+- [ ] Add unit tests using recorded sanitized Lark fixtures for bot discovery,
+  typed mentions, threads, replies, duplicates, unknown users, inactive users,
+  lifecycle transitions, reconnects, and context boundaries.
 
 **Operational prerequisite:** enable the Lark bot, subscribe to
 `im.message.receive_v1`, approve receiving group mentions, sending as the bot,
@@ -210,8 +216,9 @@ first release.
 - [ ] Add DeepSeek, delegation-signing, checkpoint-encryption, worker,
   concurrency, timezone, retry, and Lark bot configuration to
   `docs/operations/deployment.md`.
-- [ ] Add Lark bot scopes, event subscription, app publication, webhook
-  verification, and troubleshooting to `docs/operations/lark-identity.md`.
+- [ ] Add Lark bot scopes, WebSocket event subscription, app publication,
+  connection-state inspection, and troubleshooting to
+  `docs/operations/lark-identity.md`.
 - [ ] Extend `docs/operations/agent-api.md` with first-party delegation audit
   semantics while preserving external personal-token instructions.
 - [ ] Add dashboards or queries for queued/running/waiting Runs, lease expiry,

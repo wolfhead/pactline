@@ -3,7 +3,6 @@ package lark
 import (
 	"context"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -16,132 +15,142 @@ import (
 
 	"github.com/wolfhead/pactline/internal/agent/channel"
 	"github.com/wolfhead/pactline/internal/identity"
+
+	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 )
 
 var ErrAgentChannelNotConfigured = errors.New("Lark Agent channel is not configured")
 
 func (c *Client) AgentChannelReady() bool {
-	return c != nil &&
-		c.eventVerificationToken != "" &&
-		c.botOpenID != ""
+	if c == nil {
+		return false
+	}
+	c.botMu.RLock()
+	defer c.botMu.RUnlock()
+	return c.botOpenID != ""
 }
 
-func (c *Client) VerifyCallback(headers http.Header, payload []byte) error {
-	if !c.AgentChannelReady() {
+func (c *Client) InitializeAgentChannel(ctx context.Context) error {
+	if c == nil {
 		return ErrAgentChannelNotConfigured
 	}
-	if len(payload) == 0 || len(payload) > 2<<20 {
-		return channel.ErrInvalidEvent
+	tenantToken, err := c.tenantAccessToken(ctx)
+	if err != nil {
+		return fmt.Errorf("initialize Lark Agent channel: %w", err)
 	}
-	if c.eventEncryptKey == "" {
-		return nil
+	var response struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+		Bot  struct {
+			ActivateStatus int    `json:"activate_status"`
+			OpenID         string `json:"open_id"`
+		} `json:"bot"`
 	}
-	timestamp := strings.TrimSpace(headers.Get("X-Lark-Request-Timestamp"))
-	nonce := strings.TrimSpace(headers.Get("X-Lark-Request-Nonce"))
-	signature := strings.TrimSpace(headers.Get("X-Lark-Signature"))
-	if timestamp == "" || nonce == "" || signature == "" {
-		return channel.ErrInvalidEvent
+	requestID, err := c.doJSON(
+		ctx,
+		"get_bot_info",
+		http.MethodGet,
+		"/open-apis/bot/v3/info",
+		tenantToken,
+		nil,
+		&response,
+	)
+	if err != nil {
+		return fmt.Errorf("initialize Lark Agent channel: %w", err)
 	}
-	digest := sha256.Sum256(append(
-		[]byte(timestamp+nonce+c.eventEncryptKey),
-		payload...,
-	))
-	expected := hex.EncodeToString(digest[:])
-	if len(expected) != len(signature) ||
-		subtle.ConstantTimeCompare([]byte(expected), []byte(strings.ToLower(signature))) != 1 {
-		return channel.ErrInvalidEvent
+	if response.Code != 0 || strings.TrimSpace(response.Bot.OpenID) == "" {
+		return providerError(
+			"get_bot_info",
+			classifyProviderCode(response.Code),
+			requestID,
+			fmt.Errorf("provider code %d or incomplete bot identity", response.Code),
+		)
 	}
+	if response.Bot.ActivateStatus != 2 {
+		return providerError(
+			"get_bot_info",
+			identity.ProviderContract,
+			requestID,
+			fmt.Errorf("bot is not activated (status %d)", response.Bot.ActivateStatus),
+		)
+	}
+	c.botMu.Lock()
+	c.botOpenID = strings.TrimSpace(response.Bot.OpenID)
+	c.botMu.Unlock()
 	return nil
 }
 
-func (c *Client) CallbackChallenge(payload []byte) (string, bool, error) {
-	var request struct {
-		Type      string `json:"type"`
-		Token     string `json:"token"`
-		Challenge string `json:"challenge"`
-	}
-	if err := json.Unmarshal(payload, &request); err != nil {
-		return "", false, channel.ErrInvalidEvent
-	}
-	if request.Type != "url_verification" {
-		return "", false, nil
-	}
-	if request.Token != c.eventVerificationToken || request.Challenge == "" {
-		return "", true, channel.ErrInvalidEvent
-	}
-	return request.Challenge, true, nil
-}
-
-func (c *Client) NormalizeEvent(
-	_ context.Context,
-	payload []byte,
+func (c *Client) NormalizeMessageEvent(
+	event *larkim.P2MessageReceiveV1,
 ) (channel.IncomingMessage, error) {
 	if !c.AgentChannelReady() {
 		return channel.IncomingMessage{}, ErrAgentChannelNotConfigured
 	}
-	var envelope messageEventEnvelope
-	if err := json.Unmarshal(payload, &envelope); err != nil {
+	if event == nil || event.EventV2Base == nil ||
+		event.EventV2Base.Header == nil || event.Event == nil ||
+		event.Event.Sender == nil || event.Event.Message == nil {
 		return channel.IncomingMessage{}, channel.ErrInvalidEvent
 	}
-	if envelope.Encrypt != "" {
-		return channel.IncomingMessage{}, fmt.Errorf(
-			"%w: encrypted callbacks are unsupported; callback signature verification is required",
-			channel.ErrInvalidEvent,
-		)
-	}
-	if envelope.Schema != "2.0" ||
-		envelope.Header.EventType != "im.message.receive_v1" ||
-		envelope.Header.EventID == "" ||
-		envelope.Header.Token != c.eventVerificationToken ||
-		envelope.Header.AppID != c.appID ||
-		envelope.Header.TenantKey != c.tenantKey {
+	header := event.EventV2Base.Header
+	message := event.Event.Message
+	sender := event.Event.Sender
+	if event.Schema != "2.0" ||
+		header.EventType != "im.message.receive_v1" ||
+		header.EventID == "" ||
+		header.AppID != c.appID ||
+		header.TenantKey != c.tenantKey ||
+		sender.SenderId == nil ||
+		stringValue(sender.SenderId.OpenId) == "" ||
+		stringValue(sender.TenantKey) != c.tenantKey ||
+		stringValue(message.MessageId) == "" ||
+		stringValue(message.ChatId) == "" {
 		return channel.IncomingMessage{}, channel.ErrInvalidEvent
 	}
-	message := envelope.Event.Message
-	sender := envelope.Event.Sender
-	if message.MessageID == "" || message.ChatID == "" ||
-		sender.SenderID.OpenID == "" ||
-		sender.TenantKey != c.tenantKey {
-		return channel.IncomingMessage{}, channel.ErrInvalidEvent
-	}
-	if message.MessageType != "text" {
+	if stringValue(message.MessageType) != "text" {
 		return channel.IncomingMessage{}, channel.ErrUnsupportedMessage
 	}
 	var content struct {
 		Text string `json:"text"`
 	}
-	if err := json.Unmarshal([]byte(message.Content), &content); err != nil {
+	if err := json.Unmarshal([]byte(stringValue(message.Content)), &content); err != nil {
 		return channel.IncomingMessage{}, channel.ErrInvalidEvent
 	}
+	c.botMu.RLock()
+	botOpenID := c.botOpenID
+	c.botMu.RUnlock()
 	var mentions []channel.Mention
 	botMentioned := false
 	text := content.Text
 	for _, mention := range message.Mentions {
-		isBot := mention.ID.OpenID == c.botOpenID
+		if mention == nil || mention.Id == nil {
+			continue
+		}
+		subjectID := stringValue(mention.Id.OpenId)
+		isBot := subjectID == botOpenID
 		if isBot {
 			botMentioned = true
-			text = strings.ReplaceAll(text, mention.Key, "")
+			text = strings.ReplaceAll(text, stringValue(mention.Key), "")
 		}
 		mentions = append(mentions, channel.Mention{
-			SubjectID: mention.ID.OpenID,
-			Name:      mention.Name,
+			SubjectID: subjectID,
+			Name:      stringValue(mention.Name),
 			IsBot:     isBot,
 		})
 	}
-	createdAt, err := providerMillis(message.CreateTime)
+	createdAt, err := providerMillis(stringValue(message.CreateTime))
 	if err != nil {
 		return channel.IncomingMessage{}, channel.ErrInvalidEvent
 	}
 	return channel.IncomingMessage{
 		Provider:             "lark",
-		TenantID:             envelope.Header.TenantKey,
-		EventID:              envelope.Header.EventID,
-		ConversationID:       message.ChatID,
-		MessageID:            message.MessageID,
-		ThreadRootMessageID:  message.RootID,
-		ReplyParentMessageID: message.ParentID,
-		SenderSubjectID:      sender.SenderID.OpenID,
-		MessageType:          message.MessageType,
+		TenantID:             header.TenantKey,
+		EventID:              header.EventID,
+		ConversationID:       stringValue(message.ChatId),
+		MessageID:            stringValue(message.MessageId),
+		ThreadRootMessageID:  stringValue(message.RootId),
+		ReplyParentMessageID: stringValue(message.ParentId),
+		SenderSubjectID:      stringValue(sender.SenderId.OpenId),
+		MessageType:          stringValue(message.MessageType),
 		Text:                 strings.TrimSpace(text),
 		Mentions:             mentions,
 		CreatedAt:            createdAt,
@@ -272,47 +281,15 @@ func (c *Client) Reply(
 	return channel.ProviderMessageID(response.Data.MessageID), nil
 }
 
-type messageEventEnvelope struct {
-	Schema  string `json:"schema"`
-	Encrypt string `json:"encrypt"`
-	Header  struct {
-		EventID   string `json:"event_id"`
-		EventType string `json:"event_type"`
-		AppID     string `json:"app_id"`
-		TenantKey string `json:"tenant_key"`
-		Token     string `json:"token"`
-	} `json:"header"`
-	Event struct {
-		Sender  larkMessageSender `json:"sender"`
-		Message larkMessage       `json:"message"`
-	} `json:"event"`
-}
-
-type larkMessageSender struct {
-	SenderID struct {
-		OpenID string `json:"open_id"`
-	} `json:"sender_id"`
-	TenantKey string `json:"tenant_key"`
-}
-
-type larkMention struct {
-	Key string `json:"key"`
-	ID  struct {
-		OpenID string `json:"open_id"`
-	} `json:"id"`
-	Name string `json:"name"`
-}
-
 type larkMessage struct {
-	MessageID   string        `json:"message_id"`
-	RootID      string        `json:"root_id"`
-	ParentID    string        `json:"parent_id"`
-	CreateTime  string        `json:"create_time"`
-	ChatID      string        `json:"chat_id"`
-	MessageType string        `json:"message_type"`
-	Content     string        `json:"content"`
-	Mentions    []larkMention `json:"mentions"`
-	SenderID    string        `json:"sender_id"`
+	MessageID   string `json:"message_id"`
+	RootID      string `json:"root_id"`
+	ParentID    string `json:"parent_id"`
+	CreateTime  string `json:"create_time"`
+	ChatID      string `json:"chat_id"`
+	MessageType string `json:"message_type"`
+	Content     string `json:"content"`
+	SenderID    string `json:"sender_id"`
 }
 
 type messageListData struct {
@@ -327,6 +304,13 @@ func providerMillis(value string) (time.Time, error) {
 		return time.Time{}, channel.ErrInvalidEvent
 	}
 	return time.UnixMilli(milliseconds).UTC(), nil
+}
+
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 var _ channel.ChannelAdapter = (*Client)(nil)

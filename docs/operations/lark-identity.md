@@ -63,17 +63,17 @@ The first-party Agent is opt-in through `AGENT_ENABLED=true`. Before enabling
 it, publish a Lark application version that:
 
 - enables the bot capability;
-- subscribes an HTTP callback at
-  `https://<application-origin>/api/integrations/lark/events` to
+- selects **Use long connection to receive events** and subscribes
   `im.message.receive_v1`;
 - allows receiving group mentions and replying as the bot; and
 - allows reading messages from groups in which the bot participates.
 
-Configure the callback for plaintext event payloads and signature
-verification. Encrypted callback payloads are deliberately rejected; HTTPS,
-the Lark signature, the application ID, tenant key, and verification token are
-all validated. Set `LARK_BOT_OPEN_ID` to the application's bot Open ID so an
-ordinary mention cannot be mistaken for an Agent trigger.
+The API uses Lark's official Go SDK to establish the WebSocket connection with
+`LARK_APP_ID` and `LARK_APP_SECRET`. No public event callback URL,
+Verification Token, Encrypt Key, or configured Bot Open ID is required. During
+startup the API obtains the bot identity from Lark's Bot Info API and refuses
+to enable the Agent if the bot is missing or inactive. Every received event is
+still checked against the configured application ID and `LARK_TENANT_KEY`.
 
 The group-history permission can be sensitive and may require tenant
 administrator approval plus publication of a new application version. This is
@@ -81,7 +81,7 @@ an external rollout prerequisite; the server can remain deployed with
 `AGENT_ENABLED=false` until it is granted.
 
 Generate independent delegation and checkpoint keys with
-`openssl rand -base64 32`. Keep the DeepSeek key and all Lark callback values
+`openssl rand -base64 32`. Keep the DeepSeek key and Lark application secret
 in secret files. Never reuse the OAuth credential-encryption key.
 
 The Agent reacts only to an explicit bot mention. It may read at most 100
@@ -97,12 +97,16 @@ Operational smoke test:
    and an eight-character Run reference.
 4. Send a deliberately ambiguous two-topic discussion request; confirm no Task
    is created until the initiating user replies with one specific Task.
-5. Repeat the original Lark event payload and confirm no second Task appears.
+5. Repeat the original Lark message and confirm no second Task appears.
 
-If callback delivery fails, check signature/token/app/tenant rejection logs
-without logging the payload. If a Run remains queued, inspect worker and lease
-state. If a Task exists but no group reply arrived, inspect the Agent Outbox;
-delivery retries do not repeat the Task mutation.
+If event delivery fails, check the startup bot-initialization log and the
+administrator-only `GET /api/admin/agent/status` endpoint. The status reports
+connection state, transition time, reconnect count, and a safe error category;
+it never returns credentials or raw provider errors. Temporary Lark
+disconnects do not fail `/readyz`; the official SDK reconnects while the main
+application remains available. If a Run remains queued, inspect worker and
+lease state. If a Task exists but no group reply arrived, inspect the Agent
+Outbox; delivery retries do not repeat the Task mutation.
 
 For the production frontend build, leave `VITE_AUTH_PROVIDER` unset or set it
 to `lark`. Only local Development builds may use

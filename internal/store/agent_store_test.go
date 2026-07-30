@@ -137,6 +137,50 @@ func TestAgentStoreDurableRunToolCheckpointClarificationAndOutbox(t *testing.T) 
 	require.Equal(t, []byte("encrypted-answer"), input.PendingResumeCiphertext)
 }
 
+func TestAgentStoreCreatesRunAndEncryptedInputAtomically(t *testing.T) {
+	db := newTestDB(t)
+	repository := store.NewAgentStore(db)
+	ctx := context.Background()
+	now := time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
+	run := newStoredAgentRun(t, now)
+	t.Cleanup(func() {
+		_, err := db.Pool.Exec(context.Background(), `DELETE FROM agent_runs WHERE id=$1`, run.ID)
+		require.NoError(t, err)
+	})
+	input := pactagent.RunInput{
+		RunID: run.ID, EncryptionKeyID: "input-key",
+		CommandCiphertext: []byte("encrypted-command"),
+	}
+
+	stored, created, err := repository.CreateRunWithInput(ctx, run, input, now)
+	require.NoError(t, err)
+	require.True(t, created)
+	require.Equal(t, run.ID, stored.ID)
+	persisted, err := repository.GetRunInput(ctx, run.ID)
+	require.NoError(t, err)
+	require.Equal(t, input.CommandCiphertext, persisted.CommandCiphertext)
+
+	duplicate := run
+	duplicate.ID = uuid.New()
+	duplicateInput := pactagent.RunInput{
+		RunID: duplicate.ID, EncryptionKeyID: "different-key",
+		CommandCiphertext: []byte("different-command"),
+	}
+	stored, created, err = repository.CreateRunWithInput(
+		ctx,
+		duplicate,
+		duplicateInput,
+		now.Add(time.Minute),
+	)
+	require.NoError(t, err)
+	require.False(t, created)
+	require.Equal(t, run.ID, stored.ID)
+	persisted, err = repository.GetRunInput(ctx, run.ID)
+	require.NoError(t, err)
+	require.Equal(t, input.CommandCiphertext, persisted.CommandCiphertext)
+	require.Equal(t, input.EncryptionKeyID, persisted.EncryptionKeyID)
+}
+
 func TestAgentStoreClaimsOnlyOneWorkerAndTerminalDeletesSensitiveState(t *testing.T) {
 	db := newTestDB(t)
 	repository := store.NewAgentStore(db)

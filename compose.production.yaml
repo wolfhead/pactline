@@ -53,9 +53,6 @@ services:
       AGENT_CHECKPOINT_ENCRYPTION_KEY_ID: ${AGENT_CHECKPOINT_ENCRYPTION_KEY_ID:-agent-checkpoint-primary}
       AGENT_WORKER_CONCURRENCY: ${AGENT_WORKER_CONCURRENCY:-1}
       AGENT_TENANT_TIMEZONE: ${AGENT_TENANT_TIMEZONE:-Asia/Shanghai}
-      LARK_EVENT_VERIFICATION_TOKEN_FILE: /run/secrets/lark_event_verification_token
-      LARK_EVENT_ENCRYPT_KEY_FILE: /run/secrets/lark_event_encrypt_key
-      LARK_BOT_OPEN_ID: ${LARK_BOT_OPEN_ID:-}
     secrets:
       - database_url
       - lark_app_secret
@@ -64,8 +61,6 @@ services:
       - deepseek_api_key
       - agent_delegation_signing_key
       - agent_checkpoint_encryption_key
-      - lark_event_verification_token
-      - lark_event_encrypt_key
     depends_on:
       postgres:
         condition: service_healthy
@@ -141,10 +136,6 @@ secrets:
     file: ${PACTLINE_SECRETS_DIR:-./deploy/secrets}/agent_delegation_signing_key
   agent_checkpoint_encryption_key:
     file: ${PACTLINE_SECRETS_DIR:-./deploy/secrets}/agent_checkpoint_encryption_key
-  lark_event_verification_token:
-    file: ${PACTLINE_SECRETS_DIR:-./deploy/secrets}/lark_event_verification_token
-  lark_event_encrypt_key:
-    file: ${PACTLINE_SECRETS_DIR:-./deploy/secrets}/lark_event_encrypt_key
 
 volumes:
   postgres_data:

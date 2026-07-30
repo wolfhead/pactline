@@ -61,6 +61,79 @@ func (s *AgentStore) CreateRun(
 	return stored, false, nil
 }
 
+func (s *AgentStore) CreateRunWithInput(
+	ctx context.Context,
+	run pactagent.Run,
+	input pactagent.RunInput,
+	now time.Time,
+) (stored pactagent.Run, created bool, err error) {
+	if err := run.Validate(); err != nil {
+		return pactagent.Run{}, false, err
+	}
+	if input.RunID != run.ID || input.EncryptionKeyID == "" ||
+		len(input.CommandCiphertext) == 0 {
+		return pactagent.Run{}, false, pactagent.ErrInvalidRun
+	}
+	tx, err := s.db.Pool.Begin(ctx)
+	if err != nil {
+		return pactagent.Run{}, false, fmt.Errorf("begin Agent run transaction: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+	tag, err := tx.Exec(ctx, `
+		INSERT INTO agent_runs (
+			id, provider, tenant_id, conversation_id, trigger_message_id,
+			provider_event_id, thread_root_message_id, reply_parent_message_id,
+			trigger_occurred_at, initiating_user_id, initiating_subject_id,
+			status, command_kind,
+			model, prompt_version, attempt_count, clarification_rounds,
+			context_messages_used, available_at, created_at, updated_at
+		) VALUES (
+			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21
+		)
+		ON CONFLICT DO NOTHING`,
+		run.ID, run.Provider, run.TenantID, run.ConversationID,
+		run.TriggerMessageID, run.ProviderEventID,
+		nullIfEmpty(run.ThreadRootMessageID), nullIfEmpty(run.ReplyParentMessageID),
+		run.TriggerOccurredAt, run.InitiatingUserID, run.InitiatingSubjectID,
+		run.Status, run.CommandKind,
+		run.Model, run.PromptVersion, run.AttemptCount, run.ClarificationRounds,
+		run.ContextMessagesUsed, run.AvailableAt, run.CreatedAt, run.UpdatedAt,
+	)
+	if err != nil {
+		return pactagent.Run{}, false, fmt.Errorf("insert Agent run: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		if err := tx.Commit(ctx); err != nil {
+			return pactagent.Run{}, false, fmt.Errorf("commit Agent run deduplication: %w", err)
+		}
+		stored, err := s.findRunByProviderIdentity(
+			ctx,
+			run.Provider,
+			run.TenantID,
+			run.ProviderEventID,
+			run.TriggerMessageID,
+		)
+		return stored, false, err
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO agent_run_inputs (
+			run_id, encryption_key_id, command_ciphertext, updated_at
+		) VALUES ($1,$2,$3,$4)`,
+		input.RunID,
+		input.EncryptionKeyID,
+		input.CommandCiphertext,
+		now.UTC(),
+	); err != nil {
+		return pactagent.Run{}, false, fmt.Errorf("insert Agent run input: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return pactagent.Run{}, false, fmt.Errorf("commit Agent run: %w", err)
+	}
+	return run, true, nil
+}
+
 func (s *AgentStore) GetRun(ctx context.Context, id uuid.UUID) (pactagent.Run, error) {
 	row := s.db.Pool.QueryRow(ctx, agentRunSelect+` WHERE id=$1`, id)
 	return scanAgentRun(row)

@@ -30,7 +30,7 @@ continue to use user-created personal API tokens.
   Task is ambiguous.
 - Execute with the initiating user's current Pactline authority.
 - Preserve the `/api/v1` boundary, idempotency behavior, and business audit.
-- Survive webhook retries, worker crashes, model retries, and delayed
+- Survive event redelivery, worker crashes, model retries, and delayed
   clarification replies without creating duplicate Tasks.
 - Keep the channel boundary reusable for future WeCom or DingTalk adapters.
 - Keep the model boundary replaceable even though only DeepSeek is implemented
@@ -70,8 +70,9 @@ continue to use user-created personal API tokens.
 ## Architecture
 
 ```text
-Lark event webhook
-    -> Channel ingress and normalization
+Lark SDK WebSocket connection
+    -> typed event normalization
+    -> Channel ingress
     -> durable Agent Run
     -> PostgreSQL work queue
     -> built-in Agent worker
@@ -151,7 +152,6 @@ SDK types:
 
 ```go
 type ChannelAdapter interface {
-	NormalizeEvent(ctx context.Context, payload []byte) (IncomingMessage, error)
 	FetchContext(ctx context.Context, request ContextRequest) ([]ChannelMessage, error)
 	Reply(ctx context.Context, request ReplyRequest) (ProviderMessageID, error)
 }
@@ -159,11 +159,16 @@ type ChannelAdapter interface {
 
 `IncomingMessage` includes provider, tenant, conversation, message, thread/root,
 reply parent, sender identity, message type, normalized text, mentions, and
-event ID.
+event ID. A provider transport normalizes its SDK event into this type before
+calling the provider-neutral ingress service.
 
 The Lark implementation:
 
-- verifies the callback signature, application, and tenant;
+- uses the official Go SDK WebSocket client authenticated by application ID and
+  application secret;
+- discovers the bot Open ID from Lark during Agent initialization rather than
+  requiring operator configuration;
+- validates the application and configured tenant on every normalized event;
 - subscribes to `im.message.receive_v1`;
 - accepts group commands only when the Pactline bot is explicitly mentioned;
 - uses the existing Lark external identity mapping to resolve the sender to an
@@ -177,9 +182,34 @@ bot, and reading messages in associated groups. Enabling history retrieval may
 require approval of Lark's sensitive group-message scope and publication of a
 new application version.
 
-HTTP event delivery is the production default. The handler validates and
-durably records the event before acknowledging it, while all model and OpenAPI
-work is asynchronous.
+WebSocket long-connection delivery is the production transport. It does not
+require a public event URL, Verification Token, or Encrypt Key. The SDK handler
+validates and durably records the event before acknowledging it, while all
+model and OpenAPI work is asynchronous.
+
+### Lark connection lifecycle
+
+When `AGENT_ENABLED=true`, startup performs these steps before accepting Agent
+events:
+
+1. validate the Lark application credentials through the existing tenant-token
+   flow;
+2. fetch and cache the application's bot Open ID;
+3. register the typed `im.message.receive_v1` dispatcher;
+4. start the official SDK WebSocket client; and
+5. start the built-in Agent and Outbox worker.
+
+The connection is supervised as `initializing`, `connecting`, `ready`,
+`reconnecting`, `degraded`, or `stopped`. Structured transition logs and an
+administrator-only status endpoint expose the current state, last successful
+connection time, sanitized last-error category, and reconnect count. Invalid
+credentials or an unavailable bot fail Agent initialization. After a
+successful startup, transient disconnects do not take down the Pactline HTTP
+application; the SDK reconnects while Agent status is degraded.
+
+The handler returns within Lark's delivery deadline after normalization,
+identity resolution, deduplication, encrypted command persistence, and queueing.
+It never calls DeepSeek or the task OpenAPI inline.
 
 ## Conversation Context
 
@@ -403,7 +433,7 @@ message rather than guessing.
 Structured logs and metrics include non-sensitive identifiers and:
 
 - Run status transitions and lease changes;
-- provider event deduplication;
+- provider event deduplication and Lark connection state transitions;
 - model name, prompt version, latency, token usage, and error category;
 - tool name, latency, replay state, and sanitized failure category;
 - OpenAPI request ID and idempotency replay state;
@@ -447,7 +477,7 @@ requeued. Terminal failures state that no Task was created.
 4. Only the original initiating user can resume a waiting Run.
 5. A resumed Run survives a process restart and preserves the DeepSeek tool
    message protocol.
-6. Duplicate webhooks, repeated model Tool Calls, worker crashes, and Outbox
+6. Duplicate Lark deliveries, repeated model Tool Calls, worker crashes, and Outbox
    retries do not create duplicate Tasks.
 7. A permission or inactive-user failure creates no Task and cannot elevate
    authority.
