@@ -109,31 +109,28 @@ func (c *Client) NormalizeMessageEvent(
 		stringValue(message.ChatId) == "" {
 		return channel.IncomingMessage{}, channel.ErrInvalidEvent
 	}
-	if stringValue(message.MessageType) != "text" {
-		return channel.IncomingMessage{}, channel.ErrUnsupportedMessage
-	}
-	var content struct {
-		Text string `json:"text"`
-	}
-	if err := json.Unmarshal([]byte(stringValue(message.Content)), &content); err != nil {
-		return channel.IncomingMessage{}, channel.ErrInvalidEvent
+	messageType := stringValue(message.MessageType)
+	text, err := extractMessageText(messageType, stringValue(message.Content))
+	if err != nil {
+		return channel.IncomingMessage{}, err
 	}
 	c.botMu.RLock()
 	botOpenID := c.botOpenID
 	c.botMu.RUnlock()
 	var mentions []channel.Mention
 	botMentioned := false
-	text := content.Text
 	for _, mention := range message.Mentions {
 		if mention == nil || mention.Id == nil {
 			continue
 		}
 		subjectID := stringValue(mention.Id.OpenId)
 		isBot := subjectID == botOpenID
+		replacement := "@" + strings.TrimSpace(stringValue(mention.Name))
 		if isBot {
 			botMentioned = true
-			text = strings.ReplaceAll(text, stringValue(mention.Key), "")
+			replacement = ""
 		}
+		text = strings.ReplaceAll(text, stringValue(mention.Key), replacement)
 		mentions = append(mentions, channel.Mention{
 			SubjectID: subjectID,
 			Name:      stringValue(mention.Name),
@@ -153,7 +150,7 @@ func (c *Client) NormalizeMessageEvent(
 		ThreadRootMessageID:  stringValue(message.RootId),
 		ReplyParentMessageID: stringValue(message.ParentId),
 		SenderSubjectID:      stringValue(sender.SenderId.OpenId),
-		MessageType:          stringValue(message.MessageType),
+		MessageType:          messageType,
 		Text:                 strings.TrimSpace(text),
 		Mentions:             mentions,
 		CreatedAt:            createdAt,
@@ -208,7 +205,7 @@ func (c *Client) FetchContext(
 	}
 	messages := make([]channel.ChannelMessage, 0, len(response.Data.Items))
 	for _, item := range response.Data.Items {
-		if item.ChatID != request.ConversationID || item.MessageType != "text" {
+		if item.ChatID != request.ConversationID {
 			continue
 		}
 		createdAt, parseErr := providerMillis(item.CreateTime)
@@ -217,16 +214,21 @@ func (c *Client) FetchContext(
 			!createdAt.Before(request.NotAfter) {
 			continue
 		}
-		var content struct {
-			Text string `json:"text"`
-		}
-		if json.Unmarshal([]byte(item.Content), &content) != nil {
+		text, parseErr := extractMessageText(item.MessageType, item.Body.Content)
+		if parseErr != nil {
 			continue
+		}
+		for _, mention := range item.Mentions {
+			text = strings.ReplaceAll(
+				text,
+				mention.Key,
+				"@"+strings.TrimSpace(mention.Name),
+			)
 		}
 		messages = append(messages, channel.ChannelMessage{
 			MessageID:       item.MessageID,
-			SenderSubjectID: item.SenderID,
-			Text:            strings.TrimSpace(content.Text),
+			SenderSubjectID: item.Sender.ID,
+			Text:            strings.TrimSpace(text),
 			CreatedAt:       createdAt,
 		})
 		if len(messages) == request.PageSize {
@@ -333,9 +335,17 @@ type larkMessage struct {
 	ParentID    string `json:"parent_id"`
 	CreateTime  string `json:"create_time"`
 	ChatID      string `json:"chat_id"`
-	MessageType string `json:"message_type"`
-	Content     string `json:"content"`
-	SenderID    string `json:"sender_id"`
+	MessageType string `json:"msg_type"`
+	Body        struct {
+		Content string `json:"content"`
+	} `json:"body"`
+	Sender struct {
+		ID string `json:"id"`
+	} `json:"sender"`
+	Mentions []struct {
+		Key  string `json:"key"`
+		Name string `json:"name"`
+	} `json:"mentions"`
 }
 
 type messageListData struct {
@@ -354,6 +364,59 @@ func providerMillis(value string) (time.Time, error) {
 		return time.Time{}, channel.ErrInvalidEvent
 	}
 	return time.UnixMilli(milliseconds).UTC(), nil
+}
+
+func extractMessageText(messageType string, rawContent string) (string, error) {
+	switch messageType {
+	case "text":
+		var content struct {
+			Text string `json:"text"`
+		}
+		if json.Unmarshal([]byte(rawContent), &content) != nil {
+			return "", channel.ErrInvalidEvent
+		}
+		return content.Text, nil
+	case "post":
+		var content struct {
+			Title     string              `json:"title"`
+			Content   [][]larkPostElement `json:"content"`
+			ContentV2 [][]larkPostElement `json:"content_v2"`
+		}
+		if json.Unmarshal([]byte(rawContent), &content) != nil {
+			return "", channel.ErrInvalidEvent
+		}
+		paragraphs := content.ContentV2
+		if len(paragraphs) == 0 {
+			paragraphs = content.Content
+		}
+		lines := make([]string, 0, len(paragraphs)+1)
+		if title := strings.TrimSpace(content.Title); title != "" {
+			lines = append(lines, title)
+		}
+		for _, paragraph := range paragraphs {
+			var line strings.Builder
+			for _, element := range paragraph {
+				switch element.Tag {
+				case "text", "a", "code_block":
+					line.WriteString(element.Text)
+				case "at":
+					line.WriteString(element.UserID)
+				}
+			}
+			if value := strings.TrimSpace(line.String()); value != "" {
+				lines = append(lines, value)
+			}
+		}
+		return strings.Join(lines, "\n"), nil
+	default:
+		return "", channel.ErrUnsupportedMessage
+	}
+}
+
+type larkPostElement struct {
+	Tag    string `json:"tag"`
+	Text   string `json:"text"`
+	UserID string `json:"user_id"`
 }
 
 func stringValue(value *string) string {

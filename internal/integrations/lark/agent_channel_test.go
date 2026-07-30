@@ -52,6 +52,72 @@ func TestAgentChannelDiscoversBotAndNormalizesExplicitMention(t *testing.T) {
 	require.Equal(t, "parent-1", incoming.ReplyParentMessageID)
 }
 
+func TestAgentChannelNormalizesLarkPostAsPlainText(t *testing.T) {
+	server := newAgentChannelInitializationServer(t)
+	defer server.Close()
+	client := newAgentChannelTestClient(t, server.URL, server.Client())
+	payload := []byte(`{
+		"schema":"2.0",
+		"header":{
+			"event_id":"event-post",
+			"event_type":"im.message.receive_v1",
+			"app_id":"app-id",
+			"tenant_key":"tenant"
+		},
+		"event":{
+			"sender":{"sender_id":{"open_id":"ou_user"},"tenant_key":"tenant"},
+			"message":{
+				"message_id":"message-post",
+				"create_time":"1785420486741",
+				"chat_id":"chat-1",
+				"message_type":"post",
+				"content":"{\"title\":\"\",\"content\":[[{\"tag\":\"at\",\"user_id\":\"@_user_1\",\"user_name\":\"Pactline\",\"style\":[]},{\"tag\":\"text\",\"text\":\"  \",\"style\":[]},{\"tag\":\"text\",\"text\":\"查看 Task #1 的状态\",\"style\":[]}]],\"content_v2\":[[{\"tag\":\"at\",\"user_id\":\"@_user_1\",\"user_name\":\"Pactline\",\"style\":[]},{\"tag\":\"text\",\"text\":\"  \",\"style\":[]},{\"tag\":\"text\",\"text\":\"查看 Task #1 的状态\",\"style\":[]}]]}",
+				"mentions":[{"key":"@_user_1","id":{"open_id":"ou_bot"},"name":"Pactline"}]
+			}
+		}
+	}`)
+	var event larkim.P2MessageReceiveV1
+	require.NoError(t, json.Unmarshal(payload, &event))
+
+	incoming, err := client.NormalizeMessageEvent(&event)
+
+	require.NoError(t, err)
+	require.True(t, incoming.BotMentioned)
+	require.Equal(t, "post", incoming.MessageType)
+	require.Equal(t, "查看 Task #1 的状态", incoming.Text)
+}
+
+func TestAgentChannelRejectsUnsupportedMessageType(t *testing.T) {
+	server := newAgentChannelInitializationServer(t)
+	defer server.Close()
+	client := newAgentChannelTestClient(t, server.URL, server.Client())
+	payload := []byte(`{
+		"schema":"2.0",
+		"header":{
+			"event_id":"event-image",
+			"event_type":"im.message.receive_v1",
+			"app_id":"app-id",
+			"tenant_key":"tenant"
+		},
+		"event":{
+			"sender":{"sender_id":{"open_id":"ou_user"},"tenant_key":"tenant"},
+			"message":{
+				"message_id":"message-image",
+				"create_time":"1785420486741",
+				"chat_id":"chat-1",
+				"message_type":"image",
+				"content":"{\"image_key\":\"img-key\"}"
+			}
+		}
+	}`)
+	var event larkim.P2MessageReceiveV1
+	require.NoError(t, json.Unmarshal(payload, &event))
+
+	_, err := client.NormalizeMessageEvent(&event)
+
+	require.ErrorIs(t, err, channel.ErrUnsupportedMessage)
+}
+
 func TestAgentChannelFetchesBoundedContextAndReplies(t *testing.T) {
 	trigger := time.Date(2026, 7, 30, 8, 0, 0, 0, time.UTC)
 	var replyBody map[string]string
@@ -77,8 +143,22 @@ func TestAgentChannelFetchesBoundedContextAndReplies(t *testing.T) {
 					"has_more":true,
 					"page_token":"next-page",
 					"items":[
-						{"message_id":"m1","chat_id":"chat-1","message_type":"text","create_time":"1785398340000","content":"{\"text\":\"first\"}"},
-						{"message_id":"m2","chat_id":"chat-1","message_type":"text","create_time":"1785398280000","content":"{\"text\":\"second\"}"}
+						{
+							"message_id":"m1",
+							"chat_id":"chat-1",
+							"msg_type":"text",
+							"create_time":"1785398340000",
+							"sender":{"id":"ou_first"},
+							"body":{"content":"{\"text\":\"first\"}"}
+						},
+						{
+							"message_id":"m2",
+							"chat_id":"chat-1",
+							"msg_type":"post",
+							"create_time":"1785398280000",
+							"sender":{"id":"ou_second"},
+							"body":{"content":"{\"title\":\"\",\"content\":[[{\"tag\":\"text\",\"text\":\"second\"}]]}"}
+						}
 					]
 				}
 			}`)
@@ -108,6 +188,9 @@ func TestAgentChannelFetchesBoundedContextAndReplies(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, messages, 2)
 	require.Equal(t, "first", messages[0].Text)
+	require.Equal(t, "ou_first", messages[0].SenderSubjectID)
+	require.Equal(t, "second", messages[1].Text)
+	require.Equal(t, "ou_second", messages[1].SenderSubjectID)
 	require.Equal(t, "next-page", messages[1].Cursor)
 
 	providerID, err := client.Reply(context.Background(), channel.ReplyRequest{

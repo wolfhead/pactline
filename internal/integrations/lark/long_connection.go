@@ -120,7 +120,13 @@ func (c *LongConnection) handleMessage(
 ) error {
 	incoming, err := c.lark.NormalizeMessageEvent(event)
 	if errors.Is(err, channel.ErrUnsupportedMessage) {
-		slog.Debug("Lark Agent message ignored", "reason", "unsupported_message_type")
+		messageType := ""
+		if event != nil && event.Event != nil && event.Event.Message != nil {
+			messageType = stringValue(event.Event.Message.MessageType)
+		}
+		slog.Info("Lark Agent message ignored",
+			"reason", "unsupported_message_type",
+			"message_type", messageType)
 		return nil
 	}
 	if err != nil {

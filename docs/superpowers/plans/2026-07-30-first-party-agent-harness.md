@@ -93,6 +93,8 @@ go test ./internal/api -run 'Test.*Delegat|TestBearer|TestScope|Test.*Audit' -co
 - [ ] Extend `internal/integrations/lark` with typed message normalization,
   bot Open ID discovery, history retrieval, reply sending, processing
   reactions, provider error translation, and structured diagnostics.
+- [ ] Normalize both Lark `text` and `post` payloads, including rich-text
+  history returned in the OpenAPI `body.content` envelope.
 - [ ] Define provider-neutral channel types and the `ChannelAdapter` boundary
   under `internal/agent/channel`.
 - [ ] Add a provider-neutral ingress service that resolves the sender, enforces

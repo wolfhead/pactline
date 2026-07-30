@@ -181,6 +181,9 @@ The Lark implementation:
   requiring operator configuration;
 - validates the application and configured tenant on every normalized event;
 - subscribes to `im.message.receive_v1`;
+- accepts Lark `text` and `post` messages, flattening rich-text paragraphs,
+  links, code blocks, and typed mentions into bounded plain text before the
+  provider-neutral ingress boundary;
 - accepts group commands only when the Pactline bot is explicitly mentioned;
 - uses the existing Lark external identity mapping to resolve the sender to an
   active Pactline user;
