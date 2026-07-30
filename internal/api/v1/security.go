@@ -31,7 +31,8 @@ func (Security) HandleBearerAuth(
 	if !ok {
 		return ctx, ErrAuthenticationRequired
 	}
-	if current.AuthenticationMethod != access.AuthenticationMethodAPIToken {
+	if current.AuthenticationMethod != access.AuthenticationMethodAPIToken &&
+		current.AuthenticationMethod != access.AuthenticationMethodAgentDelegate {
 		return ctx, ogenerrors.ErrSkipServerSecurity
 	}
 	principal := access.Principal{Scopes: current.Scopes}

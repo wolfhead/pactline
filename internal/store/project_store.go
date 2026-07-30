@@ -256,11 +256,12 @@ func (s *ProjectStore) updateWithExpectedVersion(
 		_, err := tx.Exec(ctx, `
 			INSERT INTO project_activity
 				(id, project_id, actor_id, action, old_value, new_value,
-				 request_id, auth_method, api_token_id, token_name_snapshot)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+				 request_id, auth_method, api_token_id, token_name_snapshot, agent_run_id)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
 			uuid.New(), project.ID, actor.UserID, change.action,
 			strPtrOrNil(change.old), strPtrOrNil(change.new),
-			actor.RequestID, actor.AuthMethod, actor.TokenID, nullIfEmpty(actor.TokenName))
+			actor.RequestID, actor.AuthMethod, actor.TokenID, nullIfEmpty(actor.TokenName),
+			actor.AgentRunID)
 		if err != nil {
 			return ProjectWithRelations{}, fmt.Errorf("record project change: %w", err)
 		}
@@ -405,11 +406,12 @@ func (s *ProjectStore) applyLifecycleWithExpectedVersion(
 	_, err = tx.Exec(ctx, `
 		INSERT INTO project_activity
 			(id, project_id, actor_id, action, reason, old_value, new_value,
-			 request_id, auth_method, api_token_id, token_name_snapshot)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+			 request_id, auth_method, api_token_id, token_name_snapshot, agent_run_id)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
 		uuid.New(), project.ID, operation.UserID, action, nullIfEmpty(reason),
 		timePtrString(oldArchivedAt), timePtrString(project.ArchivedAt),
-		operation.RequestID, operation.AuthMethod, operation.TokenID, nullIfEmpty(operation.TokenName))
+		operation.RequestID, operation.AuthMethod, operation.TokenID,
+		nullIfEmpty(operation.TokenName), operation.AgentRunID)
 	if err != nil {
 		return ProjectWithRelations{}, fmt.Errorf("record Project archive action: %w", err)
 	}
@@ -464,7 +466,7 @@ func (s *ProjectStore) ListActivity(ctx context.Context, projectID uuid.UUID) ([
 	rows, err := s.db.Pool.Query(ctx, `
 		SELECT id, project_id, milestone_id, actor_id, action, reason,
 			old_value, new_value, request_id, auth_method, api_token_id,
-			token_name_snapshot, created_at
+			token_name_snapshot, agent_run_id, created_at
 		FROM project_activity
 		WHERE project_id=$1
 		ORDER BY created_at, id`, projectID)
@@ -480,7 +482,7 @@ func (s *ProjectStore) ListActivity(ctx context.Context, projectID uuid.UUID) ([
 			&activity.ActorID, &activity.Action, &activity.Reason,
 			&activity.OldValue, &activity.NewValue, &activity.RequestID,
 			&activity.AuthMethod, &activity.APITokenID, &activity.TokenName,
-			&activity.CreatedAt,
+			&activity.AgentRunID, &activity.CreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan project activity: %w", err)
 		}

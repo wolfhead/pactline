@@ -17,6 +17,7 @@ type RequestIdentity struct {
 	AuthenticationMethod access.AuthenticationMethod
 	APITokenID           *uuid.UUID
 	APITokenName         string
+	AgentRunID           *uuid.UUID
 	Scopes               []access.Scope
 }
 

@@ -57,6 +57,53 @@ must be no existing local Administrator before bootstrap.
 rotation is not automated in this release: changing or removing the key before
 stored credentials are re-encrypted makes those credentials unreadable.
 
+## First-party Agent bot
+
+The first-party Agent is opt-in through `AGENT_ENABLED=true`. Before enabling
+it, publish a Lark application version that:
+
+- enables the bot capability;
+- subscribes an HTTP callback at
+  `https://<application-origin>/api/integrations/lark/events` to
+  `im.message.receive_v1`;
+- allows receiving group mentions and replying as the bot; and
+- allows reading messages from groups in which the bot participates.
+
+Configure the callback for plaintext event payloads and signature
+verification. Encrypted callback payloads are deliberately rejected; HTTPS,
+the Lark signature, the application ID, tenant key, and verification token are
+all validated. Set `LARK_BOT_OPEN_ID` to the application's bot Open ID so an
+ordinary mention cannot be mistaken for an Agent trigger.
+
+The group-history permission can be sensitive and may require tenant
+administrator approval plus publication of a new application version. This is
+an external rollout prerequisite; the server can remain deployed with
+`AGENT_ENABLED=false` until it is granted.
+
+Generate independent delegation and checkpoint keys with
+`openssl rand -base64 32`. Keep the DeepSeek key and all Lark callback values
+in secret files. Never reuse the OAuth credential-encryption key.
+
+The Agent reacts only to an explicit bot mention. It may read at most 100
+messages from the same conversation, never newer than the triggering message
+or older than seven days. A clarification reply must be a direct reply to the
+bot's question and must come from the initiating Pactline user.
+
+Operational smoke test:
+
+1. Enable the Agent with one worker and restart the API.
+2. Mention the bot in a dedicated test group with one clear Task request.
+3. Confirm exactly one Task is created and the fixed reply contains its link
+   and an eight-character Run reference.
+4. Send a deliberately ambiguous two-topic discussion request; confirm no Task
+   is created until the initiating user replies with one specific Task.
+5. Repeat the original Lark event payload and confirm no second Task appears.
+
+If callback delivery fails, check signature/token/app/tenant rejection logs
+without logging the payload. If a Run remains queued, inspect worker and lease
+state. If a Task exists but no group reply arrived, inspect the Agent Outbox;
+delivery retries do not repeat the Task mutation.
+
 For the production frontend build, leave `VITE_AUTH_PROVIDER` unset or set it
 to `lark`. Only local Development builds may use
 `VITE_AUTH_PROVIDER=development`. Configure the edge server to send `/api/*`

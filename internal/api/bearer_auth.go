@@ -37,9 +37,13 @@ func (m bearerAuthentication) wrap(bearerNext, sessionFallback http.Handler) htt
 			sessionFallback.ServeHTTP(w, r)
 			return
 		}
+		rejectedMethod := access.AuthenticationMethodAPIToken
+		if strings.Contains(authorization, " "+access.AgentDelegatePrefix) {
+			rejectedMethod = access.AuthenticationMethodAgentDelegate
+		}
 		markAccessAuthentication(
-			r, access.AuthenticationMethodAPIToken, access.AuthOutcomeRejected,
-			nil, nil, "",
+			r, rejectedMethod, access.AuthOutcomeRejected,
+			nil, nil, nil, "",
 		)
 		raw, valid := parseBearerAuthorization(authorization)
 		if !valid || m.tokens == nil {
@@ -53,19 +57,20 @@ func (m bearerAuthentication) wrap(bearerNext, sessionFallback http.Handler) htt
 		}
 		userID := principal.User.ID
 		markAccessAuthentication(
-			r, access.AuthenticationMethodAPIToken, access.AuthOutcomeAuthenticated,
-			&userID, principal.TokenID, principal.TokenName,
+			r, principal.Method, access.AuthOutcomeAuthenticated,
+			&userID, principal.TokenID, principal.AgentRunID, principal.TokenName,
 		)
 		if m.limiter != nil {
-			if principal.TokenID == nil {
-				writeBearerProblem(w, r, errors.New("authenticated bearer principal has no token ID"))
+			credentialID, ok := principal.CredentialID()
+			if !ok {
+				writeBearerProblem(w, r, errors.New("authenticated bearer principal has no credential ID"))
 				return
 			}
 			now := time.Now()
 			if m.now != nil {
 				now = m.now()
 			}
-			decision := m.limiter.Allow(*principal.TokenID, now)
+			decision := m.limiter.Allow(credentialID, now)
 			writeRateLimitHeaders(w, decision)
 			if !decision.Allowed {
 				retryable := true
@@ -88,7 +93,8 @@ func (m bearerAuthentication) wrap(bearerNext, sessionFallback http.Handler) htt
 			Actor: principal.User, Subject: principal.User,
 			AuthenticationMethod: principal.Method,
 			APITokenID:           principal.TokenID, APITokenName: principal.TokenName,
-			Scopes: append([]access.Scope(nil), principal.Scopes...),
+			AgentRunID: principal.AgentRunID,
+			Scopes:     append([]access.Scope(nil), principal.Scopes...),
 		}
 		ctx := identity.WithRequestIdentity(r.Context(), requestIdentity)
 		bearerNext.ServeHTTP(w, r.WithContext(ctx))
@@ -122,6 +128,10 @@ func writeBearerProblem(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, access.ErrTokenInvalid), errors.Is(err, access.ErrTokenNotFound):
 	case errors.Is(err, access.ErrTokenExpired):
 		detail, code = "The bearer token has expired.", "TOKEN_EXPIRED"
+	case errors.Is(err, access.ErrAgentDelegateExpired):
+		detail, code = "The Agent delegation credential has expired.", "AGENT_DELEGATE_EXPIRED"
+	case errors.Is(err, access.ErrAgentDelegateInvalid), errors.Is(err, access.ErrAgentDelegateRun):
+		detail, code = "The Agent delegation credential is invalid.", "AGENT_DELEGATE_INVALID"
 	case errors.Is(err, access.ErrTokenRevoked):
 		detail, code = "The bearer token has been revoked.", "TOKEN_REVOKED"
 	case errors.Is(err, access.ErrUserInactive), errors.Is(err, identity.ErrUserInactive):
@@ -160,7 +170,7 @@ func requireScope(required access.Scope, next http.Handler) http.Handler {
 			})
 			return
 		}
-		if requestIdentity.AuthenticationMethod != access.AuthenticationMethodAPIToken {
+		if requestIdentity.AuthenticationMethod == access.AuthenticationMethodSession {
 			next.ServeHTTP(w, r)
 			return
 		}

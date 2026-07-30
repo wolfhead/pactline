@@ -13,6 +13,8 @@ type maintenanceStore struct {
 	idempotencyBefore  time.Time
 	accessRemoved      int64
 	idempotencyRemoved int64
+	agentBefore        time.Time
+	agentRunsRemoved   int64
 }
 
 func (s *maintenanceStore) DeleteAccessAuditBefore(_ context.Context, before time.Time) (int64, error) {
@@ -25,9 +27,16 @@ func (s *maintenanceStore) DeleteIdempotencyBefore(_ context.Context, before tim
 	return s.idempotencyRemoved, nil
 }
 
+func (s *maintenanceStore) DeleteAgentRunsBefore(_ context.Context, before time.Time) (int64, error) {
+	s.agentBefore = before
+	return s.agentRunsRemoved, nil
+}
+
 func TestMaintenanceDeletesExpiredTransientRecords(t *testing.T) {
 	now := time.Date(2026, 7, 28, 18, 0, 0, 0, time.UTC)
-	store := &maintenanceStore{accessRemoved: 2, idempotencyRemoved: 3}
+	store := &maintenanceStore{
+		accessRemoved: 2, idempotencyRemoved: 3, agentRunsRemoved: 4,
+	}
 	maintenance := Maintenance{Store: store}
 
 	result, err := maintenance.RunOnce(context.Background(), now)
@@ -35,5 +44,8 @@ func TestMaintenanceDeletesExpiredTransientRecords(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, now.Add(-90*24*time.Hour), store.accessBefore)
 	require.Equal(t, now, store.idempotencyBefore)
-	require.Equal(t, MaintenanceResult{AccessAuditRemoved: 2, IdempotencyRemoved: 3}, result)
+	require.Equal(t, now.Add(-90*24*time.Hour), store.agentBefore)
+	require.Equal(t, MaintenanceResult{
+		AccessAuditRemoved: 2, IdempotencyRemoved: 3, AgentRunsRemoved: 4,
+	}, result)
 }

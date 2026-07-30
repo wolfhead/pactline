@@ -37,6 +37,7 @@ func OperationActorFromContext(ctx context.Context) (domain.OperationActor, bool
 		AuthMethod: current.AuthenticationMethod,
 		TokenID:    current.APITokenID,
 		TokenName:  current.APITokenName,
+		AgentRunID: current.AgentRunID,
 		RequestID:  RequestIDFromContext(ctx),
 	}
 	return actor, actor.Validate() == nil

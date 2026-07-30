@@ -46,5 +46,6 @@ type Activity struct {
 	AuthMethod *AuthenticationMethod
 	APITokenID *uuid.UUID
 	TokenName  *string
+	AgentRunID *uuid.UUID
 	CreatedAt  time.Time
 }

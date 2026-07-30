@@ -22,8 +22,9 @@ const (
 type AuthenticationMethod = domain.AuthenticationMethod
 
 const (
-	AuthenticationMethodSession  = domain.AuthenticationMethodSession
-	AuthenticationMethodAPIToken = domain.AuthenticationMethodAPIToken
+	AuthenticationMethodSession       = domain.AuthenticationMethodSession
+	AuthenticationMethodAPIToken      = domain.AuthenticationMethodAPIToken
+	AuthenticationMethodAgentDelegate = domain.AuthenticationMethodAgentDelegate
 )
 
 const (
@@ -89,11 +90,26 @@ type IssuedToken struct {
 }
 
 type Principal struct {
-	User      domain.User
-	Method    AuthenticationMethod
-	TokenID   *uuid.UUID
-	TokenName string
-	Scopes    []Scope
+	User       domain.User
+	Method     AuthenticationMethod
+	TokenID    *uuid.UUID
+	TokenName  string
+	AgentRunID *uuid.UUID
+	Scopes     []Scope
+}
+
+func (p Principal) CredentialID() (uuid.UUID, bool) {
+	switch p.Method {
+	case AuthenticationMethodAPIToken:
+		if p.TokenID != nil {
+			return *p.TokenID, true
+		}
+	case AuthenticationMethodAgentDelegate:
+		if p.AgentRunID != nil {
+			return *p.AgentRunID, true
+		}
+	}
+	return uuid.Nil, false
 }
 
 func (p Principal) HasScope(required Scope) bool {

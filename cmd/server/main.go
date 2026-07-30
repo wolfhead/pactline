@@ -14,16 +14,24 @@ import (
 	"github.com/wolfhead/pactline"
 	contract "github.com/wolfhead/pactline/api"
 	"github.com/wolfhead/pactline/internal/access"
+	pactagent "github.com/wolfhead/pactline/internal/agent"
+	"github.com/wolfhead/pactline/internal/agent/channel"
+	agentopenapi "github.com/wolfhead/pactline/internal/agent/openapi"
+	"github.com/wolfhead/pactline/internal/agent/reply"
+	agentruntime "github.com/wolfhead/pactline/internal/agent/runtime"
 	"github.com/wolfhead/pactline/internal/api"
 	apiv1 "github.com/wolfhead/pactline/internal/api/v1"
 	"github.com/wolfhead/pactline/internal/application"
 	"github.com/wolfhead/pactline/internal/identity"
+	"github.com/wolfhead/pactline/internal/integrations/deepseek"
 	"github.com/wolfhead/pactline/internal/integrations/devauth"
 	"github.com/wolfhead/pactline/internal/integrations/lark"
 	legacyapi "github.com/wolfhead/pactline/internal/legacy/api"
 	legacystore "github.com/wolfhead/pactline/internal/legacy/store"
 	"github.com/wolfhead/pactline/internal/logging"
 	"github.com/wolfhead/pactline/internal/store"
+
+	"github.com/cloudwego/eino/components/model"
 )
 
 func main() {
@@ -79,9 +87,11 @@ func main() {
 	)
 	accessAuditStore := store.NewAccessAuditStore(db)
 	idempotencyStore := store.NewIdempotencyStore(db)
+	agentStore := store.NewAgentStore(db)
 	maintenanceContext, stopMaintenance := context.WithCancel(context.Background())
 	defer stopMaintenance()
 	go (application.Maintenance{Store: accessAuditStore}).Run(maintenanceContext)
+	var larkClient *lark.Client
 	if cfg.AuthProvider == AuthProviderLark {
 		cipher, cipherErr := identity.NewCredentialCipher(map[string][]byte{
 			cfg.TokenEncryptionKeyID: cfg.TokenEncryptionKey,
@@ -90,15 +100,19 @@ func main() {
 			slog.Error("configure credential encryption", "error", cipherErr)
 			os.Exit(1)
 		}
-		larkClient, clientErr := lark.NewClient(lark.Config{
+		configuredLarkClient, clientErr := lark.NewClient(lark.Config{
 			AppID: cfg.LarkAppID, AppSecret: cfg.LarkAppSecret, TenantKey: cfg.LarkTenantKey,
 			Cipher: cipher, EncryptionKeyID: cfg.TokenEncryptionKeyID,
-			RedirectURI: cfg.LarkRedirectURI.String(),
+			RedirectURI:            cfg.LarkRedirectURI.String(),
+			EventVerificationToken: cfg.LarkEventVerificationToken,
+			EventEncryptKey:        cfg.LarkEventEncryptKey,
+			BotOpenID:              cfg.LarkBotOpenID,
 		})
 		if clientErr != nil {
 			slog.Error("configure Lark client", "error", clientErr)
 			os.Exit(1)
 		}
+		larkClient = configuredLarkClient
 		if configureErr := identityService.ConfigureLark(identity.LarkServiceConfig{
 			Repository: identityStore, Authenticator: larkClient, Verifier: larkClient,
 			Directory: larkClient, Notifier: larkClient, AppBaseURL: cfg.AppBaseURL.String(),
@@ -138,18 +152,108 @@ func main() {
 		slog.Error("configure OpenAPI v1 server", "error", err)
 		os.Exit(1)
 	}
+	var (
+		delegateService *access.DelegateService
+		agentIngress    http.Handler
+		inputCipher     *pactagent.InputCipher
+		checkpointStore *pactagent.EncryptedCheckpointStore
+		agentTimezone   *time.Location
+	)
+	if cfg.AgentEnabled {
+		delegateService, err = access.NewDelegateService(access.DelegateConfig{
+			ActiveKeyID: cfg.AgentDelegationSigningKeyID,
+			SigningKeys: map[string][]byte{
+				cfg.AgentDelegationSigningKeyID: cfg.AgentDelegationSigningKey,
+			},
+		}, agentStore, users, identity.SystemClock{})
+		if err != nil {
+			slog.Error("configure Agent delegation", "error", err)
+			os.Exit(1)
+		}
+		inputCipher, err = pactagent.NewInputCipher(
+			cfg.AgentCheckpointEncryptionKeyID,
+			cfg.AgentCheckpointEncryptionKey,
+		)
+		if err != nil {
+			slog.Error("configure Agent input encryption", "error", err)
+			os.Exit(1)
+		}
+		checkpointStore, err = pactagent.NewEncryptedCheckpointStore(
+			agentStore,
+			cfg.AgentCheckpointEncryptionKeyID,
+			cfg.AgentCheckpointEncryptionKey,
+			cfg.DeepSeekModel,
+			time.Now,
+		)
+		if err != nil {
+			slog.Error("configure Agent checkpoint encryption", "error", err)
+			os.Exit(1)
+		}
+		agentTimezone, err = time.LoadLocation(cfg.AgentTenantTimezone)
+		if err != nil {
+			slog.Error("configure Agent tenant timezone", "error", err)
+			os.Exit(1)
+		}
+		ingress, ingressErr := api.NewAgentChannelHandler(
+			larkClient,
+			identityStore,
+			agentStore,
+			inputCipher,
+			cfg.DeepSeekModel,
+			time.Now,
+		)
+		if ingressErr != nil {
+			slog.Error("configure Agent channel ingress", "error", ingressErr)
+			os.Exit(1)
+		}
+		agentIngress = ingress
+	}
 	applicationHandler := api.NewRouter(legacyHandler, api.RouterOptions{
 		Auth: api.AuthSurface{
 			Sessions: identityService, Tokens: tokenService,
+			Delegates:   delegateService,
 			AccessAudit: accessAuditStore,
 			Idempotency: idempotencyStore,
 			Development: developmentAuth, AppBaseURL: cfg.AppBaseURL,
 			LarkEnabled:   cfg.AuthProvider == AuthProviderLark,
 			SecureCookies: cfg.AppEnv != EnvironmentDevelopment && cfg.AppEnv != EnvironmentTest,
 		},
-		V1:      v1Handler,
-		OpenAPI: apiv1.OpenAPIHandler(contract.OpenAPIDocument),
+		V1:           v1Handler,
+		OpenAPI:      apiv1.OpenAPIHandler(contract.OpenAPIDocument),
+		AgentIngress: agentIngress,
 	})
+	var agentWorker *agentruntime.Worker
+	if cfg.AgentEnabled {
+		clientFactory, factoryErr := agentopenapi.NewFactory(delegateService, applicationHandler)
+		if factoryErr != nil {
+			slog.Error("configure Agent OpenAPI client", "error", factoryErr)
+			os.Exit(1)
+		}
+		agentWorker, err = agentruntime.New(agentruntime.Config{
+			Repository: agentStore,
+			Channels: map[string]channel.ChannelAdapter{
+				"lark": larkClient,
+			},
+			OpenAPI:         clientFactory,
+			InputCipher:     inputCipher,
+			CheckpointStore: checkpointStore,
+			Renderer:        reply.Renderer{AppBaseURL: cfg.AppBaseURL},
+			WorkerID:        "pactline",
+			Concurrency:     cfg.AgentWorkerConcurrency,
+			Timezone:        agentTimezone,
+			Model: func(ctx context.Context, run pactagent.Run) (model.ToolCallingChatModel, error) {
+				return deepseek.NewChatModel(ctx, deepseek.Config{
+					APIKey:  cfg.DeepSeekAPIKey,
+					BaseURL: cfg.DeepSeekBaseURL,
+					Model:   run.Model,
+				})
+			},
+		})
+		if err != nil {
+			slog.Error("configure Agent worker", "error", err)
+			os.Exit(1)
+		}
+	}
 	handler := withOperationalEndpoints(applicationHandler, db.Pool)
 
 	addr := os.Getenv("ADDR")
@@ -166,6 +270,13 @@ func main() {
 	}
 	runContext, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopSignals()
+	if agentWorker != nil {
+		go agentWorker.Run(runContext)
+		slog.Info("Agent worker started",
+			"concurrency", cfg.AgentWorkerConcurrency,
+			"model", cfg.DeepSeekModel,
+			"prompt_version", agentruntime.PromptVersion)
+	}
 	shutdownComplete := make(chan struct{})
 	go func() {
 		<-runContext.Done()

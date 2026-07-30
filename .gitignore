@@ -31,9 +31,11 @@ output/playwright/
 # Brainstorming mockups (the sdd/ reports alongside them are tracked)
 .superpowers/brainstorm/
 
-# Local design and implementation notes. These may contain internal context
-# and are intentionally excluded from the distributable repository.
-docs/superpowers/
+# Local Superpowers working notes may contain internal context. Accepted
+# specifications and implementation plans are distributable project records.
+docs/superpowers/*
+!docs/superpowers/specs/
+!docs/superpowers/plans/
 
 # Deployment state. Only examples and deployment definitions are tracked.
 deploy/secrets/

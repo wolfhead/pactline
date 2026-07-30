@@ -11,6 +11,7 @@ import (
 type AuthSurface struct {
 	Sessions      *identity.Service
 	Tokens        *access.Service
+	Delegates     *access.DelegateService
 	AccessAudit   accessAuditStore
 	Idempotency   idempotencyRepository
 	Development   developmentAuthenticator
@@ -20,9 +21,10 @@ type AuthSurface struct {
 }
 
 type RouterOptions struct {
-	Auth    AuthSurface
-	V1      http.Handler
-	OpenAPI http.Handler
+	Auth         AuthSurface
+	V1           http.Handler
+	OpenAPI      http.Handler
+	AgentIngress http.Handler
 }
 
 type accessAuditStore interface {
@@ -82,6 +84,9 @@ func NewRouter(
 		root.HandleFunc("GET /api/auth/lark/callback", auth.larkCallback)
 		root.HandleFunc("POST /api/invitations/accept", adminIdentity.acceptInvitation)
 	}
+	if options.AgentIngress != nil {
+		root.Handle("POST /api/integrations/lark/events", options.AgentIngress)
+	}
 	middleware := identityMiddleware{
 		sessions: options.Auth.Sessions, appBaseURL: options.Auth.AppBaseURL, cookies: cookies,
 		routes: protected,
@@ -102,7 +107,9 @@ func NewRouter(
 	v1Audited := apiAccessAudit{
 		store: options.Auth.AccessAudit, routes: resolver,
 	}.wrap(bearerAuthentication{
-		tokens:  options.Auth.Tokens,
+		tokens: access.BearerService{
+			Tokens: options.Auth.Tokens, Delegates: options.Auth.Delegates,
+		},
 		owners:  options.Auth.Sessions,
 		limiter: limiter,
 	}.wrap(v1Bearer, v1Session))

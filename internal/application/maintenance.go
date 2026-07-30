@@ -15,6 +15,7 @@ const (
 type MaintenanceStore interface {
 	DeleteAccessAuditBefore(context.Context, time.Time) (int64, error)
 	DeleteIdempotencyBefore(context.Context, time.Time) (int64, error)
+	DeleteAgentRunsBefore(context.Context, time.Time) (int64, error)
 }
 
 type Maintenance struct {
@@ -24,6 +25,7 @@ type Maintenance struct {
 type MaintenanceResult struct {
 	AccessAuditRemoved int64
 	IdempotencyRemoved int64
+	AgentRunsRemoved   int64
 }
 
 func (m Maintenance) RunOnce(ctx context.Context, now time.Time) (MaintenanceResult, error) {
@@ -35,8 +37,15 @@ func (m Maintenance) RunOnce(ctx context.Context, now time.Time) (MaintenanceRes
 	if err != nil {
 		return MaintenanceResult{}, fmt.Errorf("expire idempotency records: %w", err)
 	}
+	agentRunsRemoved, err := m.Store.DeleteAgentRunsBefore(
+		ctx, now.Add(-AccessAuditRetention),
+	)
+	if err != nil {
+		return MaintenanceResult{}, fmt.Errorf("expire Agent runs: %w", err)
+	}
 	return MaintenanceResult{
 		AccessAuditRemoved: accessRemoved, IdempotencyRemoved: idempotencyRemoved,
+		AgentRunsRemoved: agentRunsRemoved,
 	}, nil
 }
 
@@ -49,7 +58,8 @@ func (m Maintenance) Run(ctx context.Context) {
 		}
 		slog.Info("maintenance completed",
 			"access_audit_removed", result.AccessAuditRemoved,
-			"idempotency_removed", result.IdempotencyRemoved)
+			"idempotency_removed", result.IdempotencyRemoved,
+			"agent_runs_removed", result.AgentRunsRemoved)
 	}
 	run()
 	ticker := time.NewTicker(MaintenanceInterval)

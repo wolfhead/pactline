@@ -160,3 +160,30 @@ func TestLoadConfigReadsProductionSecretsFromFiles(t *testing.T) {
 	require.Len(t, cfg.TokenEncryptionKey, 32)
 	require.Equal(t, "app-secret", cfg.LarkAppSecret)
 }
+
+func TestAgentConfigRequiresLarkAndDedicatedSecrets(t *testing.T) {
+	baseURL, err := url.Parse("https://tasks.example.test")
+	require.NoError(t, err)
+	redirectURL, err := url.Parse("https://tasks.example.test/api/auth/lark/callback")
+	require.NoError(t, err)
+	config := Config{
+		AppEnv: EnvironmentProduction, AuthProvider: AuthProviderLark,
+		AppBaseURL: baseURL, SessionSecret: make([]byte, 32),
+		TokenEncryptionKey: make([]byte, 32), TokenEncryptionKeyID: "oauth-key",
+		LarkAppID: "app", LarkAppSecret: "secret", LarkTenantKey: "tenant",
+		LarkRedirectURI: redirectURL, BootstrapAdminEmail: "admin@example.test",
+		AgentEnabled: true, DeepSeekAPIKey: "test-only-key",
+		AgentDelegationSigningKey: make([]byte, 32), AgentDelegationSigningKeyID: "delegate-key",
+		AgentCheckpointEncryptionKey: make([]byte, 32), AgentCheckpointEncryptionKeyID: "checkpoint-key",
+		AgentWorkerConcurrency: 1, AgentTenantTimezone: "Asia/Shanghai",
+		LarkEventVerificationToken: "verification-token",
+		LarkEventEncryptKey:        "encrypt-key", LarkBotOpenID: "ou_bot",
+	}
+	require.NoError(t, config.Validate())
+
+	config.DeepSeekAPIKey = ""
+	require.EqualError(t, config.Validate(), "DEEPSEEK_API_KEY is required when AGENT_ENABLED=true")
+	config.DeepSeekAPIKey = "test-only-key"
+	config.AuthProvider = AuthProviderDevelopment
+	require.EqualError(t, config.Validate(), "development authentication is not allowed in production")
+}

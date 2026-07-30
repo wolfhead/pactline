@@ -79,6 +79,11 @@ read-only package token before running the deploy script.
 Images contain no runtime credentials. Lark, session, encryption, and database
 secrets are injected only on the deployment host.
 
+The built-in Agent additionally requires independent DeepSeek, delegation
+signing, checkpoint encryption, and Lark event callback secrets. Keep
+`AGENT_ENABLED=false` until the Lark bot application version and permissions
+described in `docs/operations/lark-identity.md` are published.
+
 ## Host preparation
 
 Requirements:

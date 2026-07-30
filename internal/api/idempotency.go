@@ -13,6 +13,8 @@ import (
 
 	"github.com/wolfhead/pactline/internal/access"
 	"github.com/wolfhead/pactline/internal/identity"
+
+	"github.com/google/uuid"
 )
 
 type idempotencyRepository interface {
@@ -37,13 +39,15 @@ func (m idempotencyMiddleware) wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		current, ok := identity.FromContext(r.Context())
 		if !ok ||
-			current.AuthenticationMethod != access.AuthenticationMethodAPIToken ||
+			(current.AuthenticationMethod != access.AuthenticationMethodAPIToken &&
+				current.AuthenticationMethod != access.AuthenticationMethodAgentDelegate) ||
 			!requiresIdempotency(r.Method) {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if current.APITokenID == nil {
-			writeIdempotencyInternalError(w, r, "bearer identity has no token ID", nil)
+		credentialID, tokenID, agentRunID, validCredential := idempotencyCredential(current)
+		if !validCredential {
+			writeIdempotencyInternalError(w, r, "bearer identity has no credential ID", nil)
 			return
 		}
 		if m.store == nil {
@@ -87,7 +91,8 @@ func (m idempotencyMiddleware) wrap(next http.Handler) http.Handler {
 		r.Body = io.NopCloser(bytes.NewReader(body))
 		requestHash := idempotencyFingerprint(r, route, body)
 		key := access.IdempotencyKey{
-			UserID: current.Actor.ID, TokenID: *current.APITokenID,
+			UserID: current.Actor.ID, CredentialKind: current.AuthenticationMethod,
+			CredentialID: credentialID, TokenID: tokenID, AgentRunID: agentRunID,
 			Method: r.Method, RoutePattern: route, Value: values[0],
 		}
 		now := time.Now().UTC()
@@ -153,6 +158,22 @@ func (m idempotencyMiddleware) wrap(next http.Handler) http.Handler {
 		}
 		captured.writeTo(w)
 	})
+}
+
+func idempotencyCredential(
+	current identity.RequestIdentity,
+) (uuid.UUID, *uuid.UUID, *uuid.UUID, bool) {
+	switch current.AuthenticationMethod {
+	case access.AuthenticationMethodAPIToken:
+		if current.APITokenID != nil && *current.APITokenID != uuid.Nil {
+			return *current.APITokenID, current.APITokenID, nil, true
+		}
+	case access.AuthenticationMethodAgentDelegate:
+		if current.AgentRunID != nil && *current.AgentRunID != uuid.Nil {
+			return *current.AgentRunID, nil, current.AgentRunID, true
+		}
+	}
+	return uuid.Nil, nil, nil, false
 }
 
 func requiresIdempotency(method string) bool {

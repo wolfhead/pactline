@@ -24,25 +24,29 @@ const (
 )
 
 type Config struct {
-	AppID            string
-	AppSecret        string
-	TenantKey        string
-	BaseURL          string
-	AuthorizationURL string
-	RedirectURI      string
-	Cipher           *identity.CredentialCipher
-	EncryptionKeyID  string
-	HTTPClient       *http.Client
+	AppID                  string
+	AppSecret              string
+	TenantKey              string
+	BaseURL                string
+	AuthorizationURL       string
+	RedirectURI            string
+	Cipher                 *identity.CredentialCipher
+	EncryptionKeyID        string
+	HTTPClient             *http.Client
+	EventVerificationToken string
+	EventEncryptKey        string
+	BotOpenID              string
 }
 
 type Client struct {
-	appID, appSecret, tenantKey string
-	baseURL, authorizationURL   string
-	redirectURI                 string
-	cipher                      *identity.CredentialCipher
-	encryptionKeyID             string
-	httpClient                  *http.Client
-	now                         func() time.Time
+	appID, appSecret, tenantKey                        string
+	baseURL, authorizationURL                          string
+	redirectURI                                        string
+	cipher                                             *identity.CredentialCipher
+	encryptionKeyID                                    string
+	httpClient                                         *http.Client
+	now                                                func() time.Time
+	eventVerificationToken, eventEncryptKey, botOpenID string
 }
 
 func NewClient(config Config) (*Client, error) {
@@ -76,7 +80,10 @@ func NewClient(config Config) (*Client, error) {
 		baseURL: strings.TrimRight(config.BaseURL, "/"), authorizationURL: config.AuthorizationURL,
 		redirectURI: config.RedirectURI,
 		cipher:      config.Cipher, encryptionKeyID: config.EncryptionKeyID, httpClient: config.HTTPClient,
-		now: func() time.Time { return time.Now().UTC() },
+		eventVerificationToken: strings.TrimSpace(config.EventVerificationToken),
+		eventEncryptKey:        strings.TrimSpace(config.EventEncryptKey),
+		botOpenID:              strings.TrimSpace(config.BotOpenID),
+		now:                    func() time.Time { return time.Now().UTC() },
 	}, nil
 }
 

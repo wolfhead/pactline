@@ -43,11 +43,29 @@ services:
       OAUTH_TOKEN_ENCRYPTION_KEY_FILE: /run/secrets/oauth_token_encryption_key
       OAUTH_TOKEN_ENCRYPTION_KEY_ID: ${OAUTH_TOKEN_ENCRYPTION_KEY_ID:-primary}
       SESSION_SECRET_FILE: /run/secrets/session_secret
+      AGENT_ENABLED: ${AGENT_ENABLED:-false}
+      DEEPSEEK_API_KEY_FILE: /run/secrets/deepseek_api_key
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-pro}
+      AGENT_DELEGATION_SIGNING_KEY_FILE: /run/secrets/agent_delegation_signing_key
+      AGENT_DELEGATION_SIGNING_KEY_ID: ${AGENT_DELEGATION_SIGNING_KEY_ID:-agent-delegate-primary}
+      AGENT_CHECKPOINT_ENCRYPTION_KEY_FILE: /run/secrets/agent_checkpoint_encryption_key
+      AGENT_CHECKPOINT_ENCRYPTION_KEY_ID: ${AGENT_CHECKPOINT_ENCRYPTION_KEY_ID:-agent-checkpoint-primary}
+      AGENT_WORKER_CONCURRENCY: ${AGENT_WORKER_CONCURRENCY:-1}
+      AGENT_TENANT_TIMEZONE: ${AGENT_TENANT_TIMEZONE:-Asia/Shanghai}
+      LARK_EVENT_VERIFICATION_TOKEN_FILE: /run/secrets/lark_event_verification_token
+      LARK_EVENT_ENCRYPT_KEY_FILE: /run/secrets/lark_event_encrypt_key
+      LARK_BOT_OPEN_ID: ${LARK_BOT_OPEN_ID:-}
     secrets:
       - database_url
       - lark_app_secret
       - oauth_token_encryption_key
       - session_secret
+      - deepseek_api_key
+      - agent_delegation_signing_key
+      - agent_checkpoint_encryption_key
+      - lark_event_verification_token
+      - lark_event_encrypt_key
     depends_on:
       postgres:
         condition: service_healthy
@@ -117,6 +135,16 @@ secrets:
     file: ${PACTLINE_SECRETS_DIR:-./deploy/secrets}/postgres_password
   session_secret:
     file: ${PACTLINE_SECRETS_DIR:-./deploy/secrets}/session_secret
+  deepseek_api_key:
+    file: ${PACTLINE_SECRETS_DIR:-./deploy/secrets}/deepseek_api_key
+  agent_delegation_signing_key:
+    file: ${PACTLINE_SECRETS_DIR:-./deploy/secrets}/agent_delegation_signing_key
+  agent_checkpoint_encryption_key:
+    file: ${PACTLINE_SECRETS_DIR:-./deploy/secrets}/agent_checkpoint_encryption_key
+  lark_event_verification_token:
+    file: ${PACTLINE_SECRETS_DIR:-./deploy/secrets}/lark_event_verification_token
+  lark_event_encrypt_key:
+    file: ${PACTLINE_SECRETS_DIR:-./deploy/secrets}/lark_event_encrypt_key
 
 volumes:
   postgres_data:

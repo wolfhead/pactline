@@ -20,8 +20,9 @@ acceptance criteria.
   are optional, revisioned, and independently checkable.
 - Tasks support one-level parent-child grouping, cycle-free same-Project
   dependencies, optional schedules, and shared List/Gantt collection views.
-- People use browser sessions. Agents use personal scoped tokens against the
-  same contract-first `/api/v1` API.
+- People use browser sessions. External Agents use personal scoped tokens;
+  Pactline's built-in Lark Agent uses a short-lived initiating-user delegation.
+  Both operate through the same contract-first `/api/v1` API.
 - Production identity is invitation-only, single-tenant Lark OAuth with one
   Administrator.
 - Administrative impersonation is read-only and keeps the Administrator as the
@@ -36,6 +37,7 @@ The durable entity semantics and invariants are documented in
 - PostgreSQL 16
 - React 18, TypeScript, Vite, Tailwind CSS, and Radix UI
 - ogen-generated OpenAPI transport
+- CloudWeGo Eino with DeepSeek for the built-in Agent Harness
 - Vitest and Playwright
 
 ## Local development
@@ -91,9 +93,10 @@ labels, acceptance criteria, checks, activity, and active-user references.
 The canonical contract is [`api/openapi.yaml`](api/openapi.yaml); authenticated
 users can read it at `/api/openapi.yaml` and browse it at `/api-docs`.
 
-Browser mutations require same-origin session and CSRF credentials. Agent
-requests use personal Bearer Tokens with `work:read` or `work:write`, plus the
-documented idempotency and optimistic-concurrency headers.
+Browser mutations require same-origin session and CSRF credentials. External
+Agent requests use personal Bearer Tokens with `work:read` or `work:write`.
+The built-in Agent receives a short-lived internal delegation for its Run.
+Both use the documented idempotency and optimistic-concurrency headers.
 
 ```bash
 make openapi-generate
@@ -116,8 +119,9 @@ Do not edit `internal/api/v1generated` manually.
 - [`docs/operations/deployment.md`](docs/operations/deployment.md) —
   container deployment, backup, and rollback
 
-Local design notes under `docs/superpowers/` are intentionally ignored and are
-not part of the distributable repository.
+Accepted designs and implementation plans under `docs/superpowers/specs/` and
+`docs/superpowers/plans/` are distributable project records; other local
+Superpowers working notes remain ignored.
 
 ## Legacy boundary
 

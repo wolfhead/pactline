@@ -57,6 +57,36 @@ func TestBearerAuthenticationCreatesNonImpersonatingIdentity(t *testing.T) {
 	require.Equal(t, []access.Scope{access.ScopeWorkRead, access.ScopeWorkWrite}, got.Scopes)
 }
 
+func TestBearerAuthenticationCreatesAgentDelegatedIdentity(t *testing.T) {
+	runID := uuid.New()
+	user := domain.User{ID: uuid.New(), Name: "Initiating user", Active: true}
+	authenticator := &fakeBearerAuthenticator{principal: access.Principal{
+		User: user, Method: access.AuthenticationMethodAgentDelegate,
+		AgentRunID: &runID,
+		Scopes:     []access.Scope{access.ScopeWorkRead, access.ScopeWorkWrite},
+	}}
+	var got identity.RequestIdentity
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got, _ = identity.FromContext(r.Context())
+		w.WriteHeader(http.StatusNoContent)
+	})
+	handler := RequestIDMiddleware(
+		bearerAuthentication{tokens: authenticator}.wrap(next, http.NotFoundHandler()),
+	)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/tasks", nil)
+	request.Header.Set("Authorization", "Bearer "+access.AgentDelegatePrefix+"credential")
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusNoContent, response.Code)
+	require.Equal(t, access.AuthenticationMethodAgentDelegate, got.AuthenticationMethod)
+	require.Nil(t, got.APITokenID)
+	require.Equal(t, runID, *got.AgentRunID)
+	require.Equal(t, user.ID, got.Actor.ID)
+	require.Equal(t, user.ID, got.Subject.ID)
+}
+
 func TestBearerAuthenticationUsesSessionFallbackWithoutAuthorization(t *testing.T) {
 	authenticator := &fakeBearerAuthenticator{}
 	fallback := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -150,6 +180,14 @@ func TestScopeMiddlewareAllowsSessionsAndChecksBearerScopes(t *testing.T) {
 				Scopes:               []access.Scope{access.ScopeWorkRead},
 			},
 			handler: RequireWorkWrite(next), wantStatus: http.StatusForbidden,
+		},
+		{
+			name: "delegated write",
+			identity: identity.RequestIdentity{
+				AuthenticationMethod: access.AuthenticationMethodAgentDelegate,
+				Scopes:               []access.Scope{access.ScopeWorkRead, access.ScopeWorkWrite},
+			},
+			handler: RequireWorkWrite(next), wantStatus: http.StatusNoContent,
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {

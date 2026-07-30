@@ -31,7 +31,7 @@ func (m identityMiddleware) wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		markAccessAuthentication(
 			r, access.AuthenticationMethodSession, access.AuthOutcomeRejected,
-			nil, nil, "",
+			nil, nil, nil, "",
 		)
 		cookie, err := r.Cookie(sessionCookieName)
 		if err != nil {
@@ -56,7 +56,7 @@ func (m identityMiddleware) wrap(next http.Handler) http.Handler {
 		actorID := requestIdentity.Actor.ID
 		markAccessAuthentication(
 			r, access.AuthenticationMethodSession, access.AuthOutcomeAuthenticated,
-			&actorID, nil, "",
+			&actorID, nil, nil, "",
 		)
 		routePattern := "unmatched"
 		if m.routes != nil {

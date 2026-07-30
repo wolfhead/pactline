@@ -95,6 +95,7 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 	tokenService := access.NewService(
 		store.NewAccessStore(db), identity.SystemClock{}, access.CryptoSecretGenerator{},
 	)
+	delegateService := newTestDelegateService(t, db)
 	accessAuditStore := store.NewAccessAuditStore(db)
 	baseURL, err := url.Parse("http://app.test")
 	require.NoError(t, err)
@@ -110,6 +111,7 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 	h := api.NewRouter(legacyHandler, api.RouterOptions{
 		Auth: api.AuthSurface{
 			Sessions: identityService, Tokens: tokenService,
+			Delegates:   delegateService,
 			AccessAudit: accessAuditStore, Idempotency: store.NewIdempotencyStore(db),
 			Development: devauth.New(users, identityService), AppBaseURL: baseURL,
 		},
@@ -117,6 +119,18 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 		OpenAPI: apiv1.OpenAPIHandler(contract.OpenAPIDocument),
 	})
 	return h, db
+}
+
+func newTestDelegateService(t *testing.T, db *store.DB) *access.DelegateService {
+	t.Helper()
+	service, err := access.NewDelegateService(access.DelegateConfig{
+		ActiveKeyID: "api-test-agent-key",
+		SigningKeys: map[string][]byte{
+			"api-test-agent-key": []byte("api-test-agent-delegation-key-32b"),
+		},
+	}, store.NewAgentStore(db), store.NewUserStore(db), identity.SystemClock{})
+	require.NoError(t, err)
+	return service
 }
 
 // The HTTP suite exercises Development sessions with all six historical role

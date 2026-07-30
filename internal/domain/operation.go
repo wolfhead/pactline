@@ -12,8 +12,9 @@ import (
 type AuthenticationMethod string
 
 const (
-	AuthenticationMethodSession  AuthenticationMethod = "session"
-	AuthenticationMethodAPIToken AuthenticationMethod = "api_token"
+	AuthenticationMethodSession       AuthenticationMethod = "session"
+	AuthenticationMethodAPIToken      AuthenticationMethod = "api_token"
+	AuthenticationMethodAgentDelegate AuthenticationMethod = "agent_delegate"
 )
 
 var ErrInvalidOperationActor = errors.New("operation actor is invalid")
@@ -23,6 +24,7 @@ type OperationActor struct {
 	AuthMethod AuthenticationMethod
 	TokenID    *uuid.UUID
 	TokenName  string
+	AgentRunID *uuid.UUID
 	RequestID  string
 }
 
@@ -32,11 +34,16 @@ func (a OperationActor) Validate() error {
 	}
 	switch a.AuthMethod {
 	case AuthenticationMethodSession:
-		if a.TokenID != nil || a.TokenName != "" {
+		if a.TokenID != nil || a.TokenName != "" || a.AgentRunID != nil {
 			return ErrInvalidOperationActor
 		}
 	case AuthenticationMethodAPIToken:
-		if a.TokenID == nil || *a.TokenID == uuid.Nil {
+		if a.TokenID == nil || *a.TokenID == uuid.Nil || a.AgentRunID != nil {
+			return ErrInvalidOperationActor
+		}
+	case AuthenticationMethodAgentDelegate:
+		if a.TokenID != nil || a.TokenName != "" ||
+			a.AgentRunID == nil || *a.AgentRunID == uuid.Nil {
 			return ErrInvalidOperationActor
 		}
 	default:

@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -18,17 +20,30 @@ const (
 )
 
 type Config struct {
-	AppEnv               string
-	AuthProvider         string
-	AppBaseURL           *url.URL
-	SessionSecret        []byte
-	TokenEncryptionKey   []byte
-	TokenEncryptionKeyID string
-	LarkAppID            string
-	LarkAppSecret        string
-	LarkTenantKey        string
-	LarkRedirectURI      *url.URL
-	BootstrapAdminEmail  string
+	AppEnv                         string
+	AuthProvider                   string
+	AppBaseURL                     *url.URL
+	SessionSecret                  []byte
+	TokenEncryptionKey             []byte
+	TokenEncryptionKeyID           string
+	LarkAppID                      string
+	LarkAppSecret                  string
+	LarkTenantKey                  string
+	LarkRedirectURI                *url.URL
+	BootstrapAdminEmail            string
+	AgentEnabled                   bool
+	DeepSeekAPIKey                 string
+	DeepSeekBaseURL                string
+	DeepSeekModel                  string
+	AgentDelegationSigningKey      []byte
+	AgentDelegationSigningKeyID    string
+	AgentCheckpointEncryptionKey   []byte
+	AgentCheckpointEncryptionKeyID string
+	AgentWorkerConcurrency         int
+	AgentTenantTimezone            string
+	LarkEventVerificationToken     string
+	LarkEventEncryptKey            string
+	LarkBotOpenID                  string
 }
 
 func LoadConfig() (Config, error) {
@@ -44,14 +59,61 @@ func LoadConfig() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	deepSeekAPIKey, err := readConfigurationValue("DEEPSEEK_API_KEY")
+	if err != nil {
+		return Config{}, err
+	}
+	delegationSigningKey, err := readConfigurationValue("AGENT_DELEGATION_SIGNING_KEY")
+	if err != nil {
+		return Config{}, err
+	}
+	checkpointEncryptionKey, err := readConfigurationValue("AGENT_CHECKPOINT_ENCRYPTION_KEY")
+	if err != nil {
+		return Config{}, err
+	}
+	larkEventVerificationToken, err := readConfigurationValue("LARK_EVENT_VERIFICATION_TOKEN")
+	if err != nil {
+		return Config{}, err
+	}
+	larkEventEncryptKey, err := readConfigurationValue("LARK_EVENT_ENCRYPT_KEY")
+	if err != nil {
+		return Config{}, err
+	}
+	agentEnabled, err := parseOptionalBool("AGENT_ENABLED", os.Getenv("AGENT_ENABLED"))
+	if err != nil {
+		return Config{}, err
+	}
+	agentConcurrency, err := parseOptionalInt(
+		"AGENT_WORKER_CONCURRENCY", os.Getenv("AGENT_WORKER_CONCURRENCY"), 1,
+	)
+	if err != nil {
+		return Config{}, err
+	}
 	cfg := Config{
-		AppEnv:               strings.TrimSpace(os.Getenv("APP_ENV")),
-		AuthProvider:         strings.TrimSpace(os.Getenv("AUTH_PROVIDER")),
-		TokenEncryptionKeyID: strings.TrimSpace(os.Getenv("OAUTH_TOKEN_ENCRYPTION_KEY_ID")),
-		LarkAppID:            strings.TrimSpace(os.Getenv("LARK_APP_ID")),
-		LarkAppSecret:        larkAppSecret,
-		LarkTenantKey:        strings.TrimSpace(os.Getenv("LARK_TENANT_KEY")),
-		BootstrapAdminEmail:  strings.TrimSpace(os.Getenv("BOOTSTRAP_ADMIN_EMAIL")),
+		AppEnv:                         strings.TrimSpace(os.Getenv("APP_ENV")),
+		AuthProvider:                   strings.TrimSpace(os.Getenv("AUTH_PROVIDER")),
+		TokenEncryptionKeyID:           strings.TrimSpace(os.Getenv("OAUTH_TOKEN_ENCRYPTION_KEY_ID")),
+		LarkAppID:                      strings.TrimSpace(os.Getenv("LARK_APP_ID")),
+		LarkAppSecret:                  larkAppSecret,
+		LarkTenantKey:                  strings.TrimSpace(os.Getenv("LARK_TENANT_KEY")),
+		BootstrapAdminEmail:            strings.TrimSpace(os.Getenv("BOOTSTRAP_ADMIN_EMAIL")),
+		AgentEnabled:                   agentEnabled,
+		DeepSeekAPIKey:                 strings.TrimSpace(deepSeekAPIKey),
+		DeepSeekBaseURL:                strings.TrimSpace(os.Getenv("DEEPSEEK_BASE_URL")),
+		DeepSeekModel:                  strings.TrimSpace(os.Getenv("DEEPSEEK_MODEL")),
+		AgentDelegationSigningKeyID:    strings.TrimSpace(os.Getenv("AGENT_DELEGATION_SIGNING_KEY_ID")),
+		AgentCheckpointEncryptionKeyID: strings.TrimSpace(os.Getenv("AGENT_CHECKPOINT_ENCRYPTION_KEY_ID")),
+		AgentWorkerConcurrency:         agentConcurrency,
+		AgentTenantTimezone:            strings.TrimSpace(os.Getenv("AGENT_TENANT_TIMEZONE")),
+		LarkEventVerificationToken:     strings.TrimSpace(larkEventVerificationToken),
+		LarkEventEncryptKey:            strings.TrimSpace(larkEventEncryptKey),
+		LarkBotOpenID:                  strings.TrimSpace(os.Getenv("LARK_BOT_OPEN_ID")),
+	}
+	if cfg.DeepSeekModel == "" {
+		cfg.DeepSeekModel = "deepseek-v4-pro"
+	}
+	if cfg.AgentTenantTimezone == "" {
+		cfg.AgentTenantTimezone = "Asia/Shanghai"
 	}
 	cfg.SessionSecret, err = decodeSecret("SESSION_SECRET", sessionSecret)
 	if err != nil {
@@ -67,6 +129,22 @@ func LoadConfig() (Config, error) {
 	}
 	if encoded := tokenEncryptionKey; encoded != "" {
 		cfg.TokenEncryptionKey, err = decodeEncryptionKey(encoded)
+		if err != nil {
+			return Config{}, err
+		}
+	}
+	if encoded := delegationSigningKey; encoded != "" {
+		cfg.AgentDelegationSigningKey, err = decodeNamedEncryptionKey(
+			"AGENT_DELEGATION_SIGNING_KEY", encoded,
+		)
+		if err != nil {
+			return Config{}, err
+		}
+	}
+	if encoded := checkpointEncryptionKey; encoded != "" {
+		cfg.AgentCheckpointEncryptionKey, err = decodeNamedEncryptionKey(
+			"AGENT_CHECKPOINT_ENCRYPTION_KEY", encoded,
+		)
 		if err != nil {
 			return Config{}, err
 		}
@@ -142,6 +220,33 @@ func (c Config) Validate() error {
 			return errors.New("LARK_REDIRECT_URI must use HTTPS in production")
 		}
 	}
+	if c.AgentEnabled {
+		if c.AuthProvider != AuthProviderLark {
+			return errors.New("AGENT_ENABLED requires AUTH_PROVIDER=lark")
+		}
+		if c.DeepSeekAPIKey == "" {
+			return errors.New("DEEPSEEK_API_KEY is required when AGENT_ENABLED=true")
+		}
+		if len(c.AgentDelegationSigningKey) != 32 ||
+			c.AgentDelegationSigningKeyID == "" {
+			return errors.New("AGENT_DELEGATION_SIGNING_KEY and AGENT_DELEGATION_SIGNING_KEY_ID are required")
+		}
+		if len(c.AgentCheckpointEncryptionKey) != 32 ||
+			c.AgentCheckpointEncryptionKeyID == "" {
+			return errors.New("AGENT_CHECKPOINT_ENCRYPTION_KEY and AGENT_CHECKPOINT_ENCRYPTION_KEY_ID are required")
+		}
+		if c.LarkEventVerificationToken == "" ||
+			c.LarkEventEncryptKey == "" ||
+			c.LarkBotOpenID == "" {
+			return errors.New("LARK_EVENT_VERIFICATION_TOKEN, LARK_EVENT_ENCRYPT_KEY, and LARK_BOT_OPEN_ID are required")
+		}
+		if c.AgentWorkerConcurrency < 1 || c.AgentWorkerConcurrency > 8 {
+			return errors.New("AGENT_WORKER_CONCURRENCY must be between 1 and 8")
+		}
+		if _, err := time.LoadLocation(c.AgentTenantTimezone); err != nil {
+			return fmt.Errorf("AGENT_TENANT_TIMEZONE is invalid: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -151,6 +256,32 @@ func decodeEncryptionKey(encoded string) ([]byte, error) {
 		return nil, err
 	}
 	return key, nil
+}
+
+func decodeNamedEncryptionKey(name, encoded string) ([]byte, error) {
+	return decodeSecret(name, encoded)
+}
+
+func parseOptionalBool(name, raw string) (bool, error) {
+	if strings.TrimSpace(raw) == "" {
+		return false, nil
+	}
+	value, err := strconv.ParseBool(strings.TrimSpace(raw))
+	if err != nil {
+		return false, fmt.Errorf("%s must be a boolean", name)
+	}
+	return value, nil
+}
+
+func parseOptionalInt(name, raw string, defaultValue int) (int, error) {
+	if strings.TrimSpace(raw) == "" {
+		return defaultValue, nil
+	}
+	value, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil {
+		return 0, fmt.Errorf("%s must be an integer", name)
+	}
+	return value, nil
 }
 
 func decodeSecret(name, encoded string) ([]byte, error) {

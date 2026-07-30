@@ -24,6 +24,7 @@ type RequestAuditEvent struct {
 	UserID              *uuid.UUID           `json:"user_id,omitempty"`
 	TokenID             *uuid.UUID           `json:"token_id,omitempty"`
 	TokenName           string               `json:"token_name,omitempty"`
+	AgentRunID          *uuid.UUID           `json:"agent_run_id,omitempty"`
 	Method              string               `json:"method"`
 	RoutePattern        string               `json:"route_pattern"`
 	StatusCode          int                  `json:"status_code"`
@@ -43,6 +44,7 @@ type RequestAuditCursor struct {
 type RequestAuditFilter struct {
 	UserID        *uuid.UUID
 	TokenID       *uuid.UUID
+	AgentRunID    *uuid.UUID
 	Method        string
 	RoutePattern  string
 	StatusCode    *int

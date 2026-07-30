@@ -35,6 +35,7 @@ type accessAuditState struct {
 	userID              *uuid.UUID
 	tokenID             *uuid.UUID
 	tokenName           string
+	agentRunID          *uuid.UUID
 	problemCode         string
 	idempotencyReplayed bool
 }
@@ -78,7 +79,8 @@ func (m apiAccessAudit) wrap(next http.Handler) http.Handler {
 			ID: uuid.New(), OccurredAt: started, RequestID: requestID(auditedRequest),
 			AuthMethod: state.authMethod, AuthOutcome: state.authOutcome,
 			UserID: state.userID, TokenID: state.tokenID, TokenName: state.tokenName,
-			Method: r.Method, RoutePattern: route, StatusCode: statusCode,
+			AgentRunID: state.agentRunID,
+			Method:     r.Method, RoutePattern: route, StatusCode: statusCode,
 			ProblemCode:   state.problemCode,
 			DurationMS:    max(0, now().UTC().Sub(started).Milliseconds()),
 			ResponseBytes: recorder.bytes, IdempotencyReplayed: state.idempotencyReplayed,
@@ -102,7 +104,7 @@ func markAccessAuthentication(
 	r *http.Request,
 	method access.AuthenticationMethod,
 	outcome access.AuthOutcome,
-	userID, tokenID *uuid.UUID,
+	userID, tokenID, agentRunID *uuid.UUID,
 	tokenName string,
 ) {
 	state, _ := r.Context().Value(accessAuditContextKey{}).(*accessAuditState)
@@ -111,6 +113,7 @@ func markAccessAuthentication(
 	}
 	state.authMethod, state.authOutcome = method, outcome
 	state.userID, state.tokenID, state.tokenName = userID, tokenID, tokenName
+	state.agentRunID = agentRunID
 }
 
 func markProblemCode(r *http.Request, code string) {

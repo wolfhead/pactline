@@ -33,7 +33,8 @@ func TestIdempotencyStoreClaimsCompletesReplaysAndRejectsReuse(t *testing.T) {
 	})
 	repository := store.NewIdempotencyStore(db)
 	key := access.IdempotencyKey{
-		UserID: userA, TokenID: token.ID, Method: "POST",
+		UserID: userA, CredentialKind: access.AuthenticationMethodAPIToken,
+		CredentialID: token.ID, TokenID: &token.ID, Method: "POST",
 		RoutePattern: "/api/v1/tasks", Value: "create-task",
 	}
 	firstHash := sha256.Sum256([]byte("first"))
@@ -82,7 +83,8 @@ func TestIdempotencyStoreSerializesConcurrentClaimsAndCanRelease(t *testing.T) {
 	})
 	repository := store.NewIdempotencyStore(db)
 	key := access.IdempotencyKey{
-		UserID: userA, TokenID: token.ID, Method: "POST",
+		UserID: userA, CredentialKind: access.AuthenticationMethodAPIToken,
+		CredentialID: token.ID, TokenID: &token.ID, Method: "POST",
 		RoutePattern: "/api/v1/tasks", Value: "concurrent-create",
 	}
 	hash := sha256.Sum256([]byte("same"))

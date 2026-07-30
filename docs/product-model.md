@@ -106,12 +106,14 @@ are rejected.
 ## Human and Agent access
 
 Browser users authenticate with server-owned sessions and CSRF protection.
-Agents authenticate with personal scoped Bearer Tokens.
+External Agents authenticate with user-created personal scoped Bearer Tokens.
+The first-party Pactline Agent uses short-lived internal delegation credentials
+that represent the initiating user and are bound to one durable Agent Run.
 
 Both use the same `/api/v1` work contract. Agent mutations additionally use
 idempotency keys and ETag preconditions where documented. Audit records preserve
-the real actor, effective subject, token provenance, and request identifier
-without recording credentials or unnecessary personal data.
+the real actor, effective subject, personal-token or Agent-Run provenance, and
+request identifier without recording credentials or unnecessary personal data.
 
 ## Legacy context
 

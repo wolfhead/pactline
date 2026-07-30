@@ -1483,10 +1483,11 @@ func insertActivity(
 	_, err := tx.Exec(ctx,
 		`INSERT INTO task_activity (
 			id, task_id, actor_id, field, old_value, new_value,
-			request_id, auth_method, api_token_id, token_name_snapshot
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+			request_id, auth_method, api_token_id, token_name_snapshot, agent_run_id
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
 		uuid.New(), taskID, actor.UserID, string(field), oldValue, newValue,
-		actor.RequestID, actor.AuthMethod, actor.TokenID, nullIfEmpty(actor.TokenName))
+		actor.RequestID, actor.AuthMethod, actor.TokenID, nullIfEmpty(actor.TokenName),
+		actor.AgentRunID)
 	if err != nil {
 		return fmt.Errorf("insert activity %s for task %s: %w", field, taskID, err)
 	}
@@ -1537,7 +1538,7 @@ func (s *TaskStore) ListActivity(ctx context.Context, taskID uuid.UUID) ([]domai
 	rows, err := s.db.Pool.Query(ctx,
 		`SELECT id, task_id, actor_id, field, old_value, new_value,
 		        request_id, auth_method, api_token_id, token_name_snapshot,
-		        created_at
+		        agent_run_id, created_at
 		 FROM task_activity WHERE task_id = $1 ORDER BY created_at ASC, id ASC`, taskID)
 	if err != nil {
 		return nil, fmt.Errorf("query activity for task %s: %w", taskID, err)
@@ -1550,7 +1551,7 @@ func (s *TaskStore) ListActivity(ctx context.Context, taskID uuid.UUID) ([]domai
 		if err := rows.Scan(
 			&a.ID, &a.TaskID, &a.ActorID, &a.Field, &a.OldValue, &a.NewValue,
 			&a.RequestID, &a.AuthMethod, &a.APITokenID, &a.TokenName,
-			&a.CreatedAt,
+			&a.AgentRunID, &a.CreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan activity: %w", err)
 		}

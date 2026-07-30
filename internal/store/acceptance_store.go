@@ -483,11 +483,11 @@ func (s *AcceptanceStore) RemoveCriterionWithOperation(
 	_, err = tx.Exec(ctx, `
 		INSERT INTO project_activity (
 			id, project_id, actor_id, action, reason, old_value,
-			request_id, auth_method, api_token_id, token_name_snapshot
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+			request_id, auth_method, api_token_id, token_name_snapshot, agent_run_id
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
 		uuid.New(), *projectID, actor.UserID, action, strings.TrimSpace(reason),
 		criterionID.String(), actor.RequestID, actor.AuthMethod, actor.TokenID,
-		nullIfEmpty(actor.TokenName))
+		nullIfEmpty(actor.TokenName), actor.AgentRunID)
 	if err != nil {
 		return fmt.Errorf("record criterion removal: %w", err)
 	}

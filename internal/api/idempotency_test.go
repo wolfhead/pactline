@@ -202,6 +202,36 @@ func TestIdempotencyReleasesClaimAfterPanic(t *testing.T) {
 	require.EqualValues(t, 2, executions.Load())
 }
 
+func TestIdempotencyUsesAgentRunAsDelegatedCredentialIdentity(t *testing.T) {
+	store := newMemoryIdempotencyStore()
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/v1/tasks", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+	})
+	runID, userID := uuid.New(), uuid.New()
+	principal := identity.RequestIdentity{
+		Actor: domain.User{ID: userID, Active: true}, Subject: domain.User{ID: userID, Active: true},
+		AuthenticationMethod: access.AuthenticationMethodAgentDelegate,
+		AgentRunID:           &runID,
+		Scopes:               []access.Scope{access.ScopeWorkRead, access.ScopeWorkWrite},
+	}
+	handler := RequestIDMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := identity.WithRequestIdentity(r.Context(), principal)
+		idempotencyMiddleware{store: store, routes: mux}.wrap(mux).ServeHTTP(w, r.WithContext(ctx))
+	}))
+
+	response := performIdempotentRequest(handler, "delegated", "create-task", `{}`)
+
+	require.Equal(t, http.StatusCreated, response.Code)
+	require.Len(t, store.records, 1)
+	for key := range store.records {
+		require.Equal(t, access.AuthenticationMethodAgentDelegate, key.CredentialKind)
+		require.Equal(t, runID, key.CredentialID)
+		require.Nil(t, key.TokenID)
+		require.Equal(t, runID, *key.AgentRunID)
+	}
+}
+
 func idempotencyTestHandler(
 	t *testing.T,
 	store idempotencyRepository,

@@ -22,16 +22,16 @@ func (s *AccessAuditStore) RecordAccessAudit(
 			id, occurred_at, request_id, auth_method, auth_outcome, user_id,
 			token_id, token_name, method, route_pattern, status_code, problem_code,
 			duration_ms, response_bytes, idempotency_replayed, user_agent,
-			network_address
+			network_address, agent_run_id
 		) VALUES (
-			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17
+			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18
 		)`,
 		event.ID, event.OccurredAt, event.RequestID, event.AuthMethod,
 		event.AuthOutcome, event.UserID, event.TokenID, nullIfEmpty(event.TokenName),
 		event.Method, event.RoutePattern, event.StatusCode,
 		nullIfEmpty(event.ProblemCode), event.DurationMS, event.ResponseBytes,
 		event.IdempotencyReplayed, event.UserAgent,
-		nullIfEmpty(event.NetworkAddress),
+		nullIfEmpty(event.NetworkAddress), event.AgentRunID,
 	)
 	if err != nil {
 		return fmt.Errorf("insert API access audit: %w", err)
@@ -63,6 +63,22 @@ func (s *AccessAuditStore) DeleteIdempotencyBefore(
 	return tag.RowsAffected(), nil
 }
 
+func (s *AccessAuditStore) DeleteAgentRunsBefore(
+	ctx context.Context,
+	before time.Time,
+) (int64, error) {
+	tag, err := s.db.Pool.Exec(ctx, `
+		DELETE FROM agent_runs
+		WHERE completed_at < $1
+		  AND status IN ('succeeded','failed','cancelled')`,
+		before.UTC(),
+	)
+	if err != nil {
+		return 0, fmt.Errorf("delete expired Agent runs: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
 func (s *AccessAuditStore) ListAccessAudit(
 	ctx context.Context,
 	filter access.RequestAuditFilter,
@@ -76,7 +92,7 @@ func (s *AccessAuditStore) ListAccessAudit(
 		SELECT id, occurred_at, request_id, auth_method, auth_outcome, user_id,
 		       token_id, token_name, method, route_pattern, status_code,
 		       problem_code, duration_ms, response_bytes, idempotency_replayed,
-		       user_agent, host(network_address)
+		       user_agent, host(network_address), agent_run_id
 		FROM api_request_audit_events
 		WHERE true`)
 	args := make([]any, 0, 10)
@@ -89,6 +105,9 @@ func (s *AccessAuditStore) ListAccessAudit(
 	}
 	if filter.TokenID != nil {
 		add("token_id", *filter.TokenID)
+	}
+	if filter.AgentRunID != nil {
+		add("agent_run_id", *filter.AgentRunID)
 	}
 	if filter.Method != "" {
 		add("method", filter.Method)
@@ -137,6 +156,7 @@ func (s *AccessAuditStore) ListAccessAudit(
 			&event.Method, &event.RoutePattern, &event.StatusCode, &problemCode,
 			&event.DurationMS, &event.ResponseBytes, &event.IdempotencyReplayed,
 			&event.UserAgent, &networkAddress,
+			&event.AgentRunID,
 		); err != nil {
 			return nil, fmt.Errorf("scan API access audit: %w", err)
 		}

@@ -21,11 +21,14 @@ const (
 var ErrIdempotencyNotClaimed = errors.New("idempotency key is not claimed")
 
 type IdempotencyKey struct {
-	UserID       uuid.UUID
-	TokenID      uuid.UUID
-	Method       string
-	RoutePattern string
-	Value        string
+	UserID         uuid.UUID
+	CredentialKind AuthenticationMethod
+	CredentialID   uuid.UUID
+	TokenID        *uuid.UUID
+	AgentRunID     *uuid.UUID
+	Method         string
+	RoutePattern   string
+	Value          string
 }
 
 type StoredResponse struct {

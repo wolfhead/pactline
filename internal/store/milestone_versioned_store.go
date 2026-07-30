@@ -161,10 +161,11 @@ func (s *MilestoneStore) UpdateVersionedWithOperation(
 	_, err = tx.Exec(ctx, `
 		INSERT INTO project_activity
 			(id, project_id, milestone_id, actor_id, action, old_value, new_value,
-			 request_id, auth_method, api_token_id, token_name_snapshot)
-		VALUES ($1,$2,$3,$4,'milestone_updated',$5,$6,$7,$8,$9,$10)`,
+			 request_id, auth_method, api_token_id, token_name_snapshot, agent_run_id)
+		VALUES ($1,$2,$3,$4,'milestone_updated',$5,$6,$7,$8,$9,$10,$11)`,
 		uuid.New(), projectID, milestoneID, actor.UserID, old.Name, current.Name,
 		actor.RequestID, actor.AuthMethod, actor.TokenID, nullIfEmpty(actor.TokenName),
+		actor.AgentRunID,
 	)
 	if err != nil {
 		return MilestoneMutation{}, fmt.Errorf("record milestone update: %w", err)
@@ -282,11 +283,11 @@ func (s *MilestoneStore) ApplyLifecycleVersionedWithOperation(
 	_, err = tx.Exec(ctx, `
 		INSERT INTO project_activity
 			(id, project_id, milestone_id, actor_id, action, reason, old_value, new_value,
-			 request_id, auth_method, api_token_id, token_name_snapshot)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+			 request_id, auth_method, api_token_id, token_name_snapshot, agent_run_id)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
 		uuid.New(), projectID, milestoneID, actor.UserID, action, reason, oldStatus,
 		milestone.Status, actor.RequestID, actor.AuthMethod, actor.TokenID,
-		nullIfEmpty(actor.TokenName),
+		nullIfEmpty(actor.TokenName), actor.AgentRunID,
 	)
 	if err != nil {
 		return MilestoneMutation{}, fmt.Errorf("record milestone lifecycle: %w", err)

@@ -510,10 +510,11 @@ func (h *Handler) CreateAcceptanceCheck(
 		return nil, err
 	}
 	checker := domain.Actor{Type: domain.ActorTypeUser, UserID: &subjectID}
-	if actor.AuthMethod == domain.AuthenticationMethodAPIToken {
+	if actor.AuthMethod == domain.AuthenticationMethodAPIToken ||
+		actor.AuthMethod == domain.AuthenticationMethodAgentDelegate {
 		checker = domain.Actor{Type: domain.ActorTypeAgent, Ref: actor.TokenName}
 		if checker.Ref == "" {
-			checker.Ref = "api-token"
+			checker.Ref = string(actor.AuthMethod)
 		}
 	}
 	created, err := h.Projects.Acceptance.AddCheckVersioned(

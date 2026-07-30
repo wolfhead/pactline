@@ -17,7 +17,7 @@ Run `make openapi-check` after any contract change. Do not edit generated files.
 
 ## Authentication boundary
 
-Agents authenticate only with a user-owned personal Bearer Token:
+External Agents authenticate only with a user-owned personal Bearer Token:
 
 ```http
 Authorization: Bearer bb_pat_example_never_use
@@ -42,6 +42,14 @@ owner rejects the token immediately.
 
 Bearer tokens cannot access `/api/auth`, `/api/account`, `/api/admin`, or
 `/api/legacy`. Those routes intentionally return 404 to bearer requests.
+
+Pactline's built-in Lark Agent also calls the generated `/api/v1` client, but
+uses an internal `agent_delegate` credential issued for the active Run and
+initiating user. It is signed in memory, expires within five minutes, is
+reissued for each operation, and is never exposed to the user or stored in the
+database. It grants only `work:read` and `work:write`, remains subject to the
+initiating user's current active status, and is valid only while that Run is
+executing. Users must not create a personal token for the built-in Agent.
 
 ## Safe client setup
 
@@ -230,6 +238,13 @@ retained for 90 days.
 Business audit and product activity retain the actor, request ID,
 authentication method, token ID, and token-name snapshot transactionally with
 the mutation. Business history is retained indefinitely.
+
+For built-in Agent operations, the authentication method is
+`agent_delegate`; the Agent Run ID replaces token identity in access audit,
+idempotency ownership, business audit, and product activity. This lets an
+operator trace a created Task back to the Lark command without persisting the
+command body, conversation history, model reasoning, checkpoint plaintext, or
+delegation credential.
 
 For mutations and failed requests, use `request_id` to correlate:
 

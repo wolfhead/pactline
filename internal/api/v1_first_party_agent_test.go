@@ -1,0 +1,112 @@
+package api_test
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	pactagent "github.com/wolfhead/pactline/internal/agent"
+	agentopenapi "github.com/wolfhead/pactline/internal/agent/openapi"
+	generated "github.com/wolfhead/pactline/internal/api/v1generated"
+	"github.com/wolfhead/pactline/internal/store"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+)
+
+func TestFirstPartyAgentCreatesTaskThroughDelegatedOpenAPIWithAudit(t *testing.T) {
+	handler, db := newTaskTestServer(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	run, err := pactagent.NewRun(pactagent.NewRunInput{
+		Provider:            "lark",
+		TenantID:            "tenant-first-party-agent",
+		ConversationID:      "chat-first-party-agent",
+		TriggerMessageID:    "message-" + uuid.NewString(),
+		ProviderEventID:     "event-" + uuid.NewString(),
+		TriggerOccurredAt:   now,
+		InitiatingUserID:    uuid.MustParse(userA),
+		InitiatingSubjectID: "ou_first_party_agent",
+		CommandKind:         pactagent.CommandDirect,
+		Model:               "deepseek-v4-pro",
+		PromptVersion:       "first-party-task-v1",
+	}, now)
+	require.NoError(t, err)
+	runs := store.NewAgentStore(db)
+	_, _, err = runs.CreateRun(ctx, run)
+	require.NoError(t, err)
+	_, claimed, err := runs.ClaimRun(ctx, "agent-test-worker", now, time.Minute)
+	require.NoError(t, err)
+	require.True(t, claimed)
+
+	var taskID uuid.UUID
+	t.Cleanup(func() {
+		ctx := context.Background()
+		for _, statement := range []string{
+			`DELETE FROM api_request_audit_events WHERE agent_run_id=$1`,
+			`DELETE FROM business_audit_events WHERE agent_run_id=$1`,
+			`DELETE FROM idempotency_records WHERE agent_run_id=$1`,
+		} {
+			_, cleanupErr := db.Pool.Exec(ctx, statement, run.ID)
+			require.NoError(t, cleanupErr)
+		}
+		_, cleanupErr := db.Pool.Exec(ctx, `DELETE FROM tasks WHERE id=$1`, taskID)
+		require.NoError(t, cleanupErr)
+		_, cleanupErr = db.Pool.Exec(ctx, `DELETE FROM agent_runs WHERE id=$1`, run.ID)
+		require.NoError(t, cleanupErr)
+	})
+
+	factory, err := agentopenapi.NewFactory(newTestDelegateService(t, db), handler)
+	require.NoError(t, err)
+	client, err := factory.New(run.ID, run.InitiatingUserID)
+	require.NoError(t, err)
+	request := &generated.TaskCreate{
+		Title:          "Create a delegated Agent Task",
+		Context:        "The first-party Agent must use the public API boundary.",
+		ExpectedResult: "The Task and its provenance are durably audited.",
+		ProjectNumber:  activeProjectNumber(t, db),
+	}
+	key := generated.NewOptString(pactagent.CreateTaskIdempotencyKey(run.ID))
+	result, err := client.CreateTask(ctx, request, generated.CreateTaskParams{
+		IdempotencyKey: key,
+	})
+	require.NoError(t, err)
+	created, ok := result.(*generated.TaskCreatedHeaders)
+	require.True(t, ok, "unexpected response %T", result)
+	taskID = created.Response.ID
+
+	replayResult, err := client.CreateTask(ctx, request, generated.CreateTaskParams{
+		IdempotencyKey: key,
+	})
+	require.NoError(t, err)
+	replay, ok := replayResult.(*generated.TaskCreatedHeaders)
+	require.True(t, ok)
+	require.Equal(t, taskID, replay.Response.ID)
+	require.True(t, replay.IdempotencyReplayed.Or(false))
+
+	queries := []struct {
+		sql      string
+		withTask bool
+	}{
+		{sql: `SELECT count(*) FROM api_request_audit_events
+		 WHERE agent_run_id=$1 AND auth_method='agent_delegate'
+		   AND route_pattern='/api/v1/tasks' AND status_code=201`},
+		{sql: `SELECT count(*) FROM business_audit_events
+		 WHERE agent_run_id=$1 AND auth_method='agent_delegate'
+		   AND entity_id=$2 AND action='created'`, withTask: true},
+		{sql: `SELECT count(*) FROM task_activity
+		 WHERE task_id=$2 AND agent_run_id=$1 AND auth_method='agent_delegate'`, withTask: true},
+		{sql: `SELECT count(*) FROM idempotency_records
+		 WHERE agent_run_id=$1 AND credential_kind='agent_delegate'
+		   AND credential_id=$1`},
+	}
+	for _, query := range queries {
+		var count int
+		args := []any{run.ID}
+		if query.withTask {
+			args = append(args, taskID)
+		}
+		require.NoError(t, db.Pool.QueryRow(ctx, query.sql, args...).Scan(&count))
+		require.Greater(t, count, 0, query.sql)
+	}
+}
