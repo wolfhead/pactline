@@ -130,14 +130,34 @@ func TestGeneratedClientAgentWorkflow(t *testing.T) {
 	require.True(t, ok, "unexpected activate response %T", activatedResult)
 	require.Equal(t, generated.MilestoneStatusActive, activated.Response.Status)
 
+	predecessorResult, err := client.CreateTask(
+		ctx,
+		&generated.TaskCreate{
+			Title:          "Prepare the generated API fixture",
+			Context:        "The relationship workflow needs an unfinished predecessor.",
+			ExpectedResult: "The dependent task is blocked until this task concludes.",
+			ProjectNumber:  project.Number,
+			MilestoneID:    generated.NewOptNilUUID(milestone.ID),
+		},
+		generated.CreateTaskParams{
+			IdempotencyKey: generated.NewOptString("create-predecessor-" + uuid.NewString()),
+		},
+	)
+	require.NoError(t, err)
+	predecessorCreated, ok := predecessorResult.(*generated.TaskCreatedHeaders)
+	require.True(t, ok, "unexpected predecessor response %T", predecessorResult)
+	predecessor := predecessorCreated.Response
+	cleanupTaskRow(t, db, predecessor.ID)
+
 	taskResult, err := client.CreateTask(
 		ctx,
 		&generated.TaskCreate{
-			Title:          "Exercise the generated API",
-			Context:        "The generated API workflow needs end-to-end verification.",
-			ExpectedResult: "The Agent completes the versioned workflow through generated types.",
-			ProjectNumber:  project.Number,
-			MilestoneID:    generated.NewOptNilUUID(milestone.ID),
+			Title:             "Exercise the generated API",
+			Context:           "The generated API workflow needs end-to-end verification.",
+			ExpectedResult:    "The Agent completes the versioned workflow through generated types.",
+			ProjectNumber:     project.Number,
+			MilestoneID:       generated.NewOptNilUUID(milestone.ID),
+			DependencyNumbers: []int64{predecessor.Number},
 		},
 		generated.CreateTaskParams{
 			IdempotencyKey: generated.NewOptString("create-task-" + uuid.NewString()),
@@ -149,6 +169,9 @@ func TestGeneratedClientAgentWorkflow(t *testing.T) {
 	task := taskCreated.Response
 	cleanupTaskRow(t, db, task.ID)
 	require.Equal(t, project.Number, task.Project.Number)
+	require.True(t, task.Blocked)
+	require.Len(t, task.Dependencies, 1)
+	require.Equal(t, predecessor.Number, task.Dependencies[0].Number)
 
 	taskCriterionResult, err := client.CreateTaskCriterion(
 		ctx,
@@ -187,6 +210,19 @@ func TestGeneratedClientAgentWorkflow(t *testing.T) {
 		require.Equal(t, generated.AcceptanceCheckCheckerTypeAgent, created.Response.CheckerType)
 		require.Equal(t, issued.Name, created.Response.CheckerRef.Or(""))
 	}
+
+	completedPredecessorResult, err := client.UpdateTask(
+		ctx,
+		&generated.TaskPatch{Status: generated.NewOptTaskStatus(generated.TaskStatusDone)},
+		generated.UpdateTaskParams{
+			Number: predecessor.Number, IfMatch: `"1"`,
+			IdempotencyKey: generated.NewOptString("complete-predecessor-" + uuid.NewString()),
+		},
+	)
+	require.NoError(t, err)
+	completedPredecessor, ok := completedPredecessorResult.(*generated.TaskHeaders)
+	require.True(t, ok, "unexpected predecessor completion response %T", completedPredecessorResult)
+	require.Equal(t, generated.TaskStatusDone, completedPredecessor.Response.Status)
 
 	completedTaskResult, err := client.UpdateTask(
 		ctx,

@@ -3176,6 +3176,69 @@ func (o OptNilDate) Or(d time.Time) time.Time {
 	return d
 }
 
+// NewOptNilInt64 returns new OptNilInt64 with value set to v.
+func NewOptNilInt64(v int64) OptNilInt64 {
+	return OptNilInt64{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptNilInt64 is optional nullable int64.
+type OptNilInt64 struct {
+	Value int64
+	Set   bool
+	Null  bool
+}
+
+// IsSet returns true if OptNilInt64 was set.
+func (o OptNilInt64) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptNilInt64) Reset() {
+	var v int64
+	o.Value = v
+	o.Set = false
+	o.Null = false
+}
+
+// SetTo sets value to v.
+func (o *OptNilInt64) SetTo(v int64) {
+	o.Set = true
+	o.Null = false
+	o.Value = v
+}
+
+// IsNull returns true if value is Null.
+func (o OptNilInt64) IsNull() bool { return o.Null }
+
+// SetToNull sets value to null.
+func (o *OptNilInt64) SetToNull() {
+	o.Set = true
+	o.Null = true
+	var v int64
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptNilInt64) Get() (v int64, ok bool) {
+	if o.Null {
+		return v, false
+	}
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptNilInt64) Or(d int64) int64 {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptNilUUID returns new OptNilUUID with value set to v.
 func NewOptNilUUID(v uuid.UUID) OptNilUUID {
 	return OptNilUUID{
@@ -3417,6 +3480,52 @@ func (o OptTaskPriority) Get() (v TaskPriority, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptTaskPriority) Or(d TaskPriority) TaskPriority {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptTaskRelationRef returns new OptTaskRelationRef with value set to v.
+func NewOptTaskRelationRef(v TaskRelationRef) OptTaskRelationRef {
+	return OptTaskRelationRef{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptTaskRelationRef is optional TaskRelationRef.
+type OptTaskRelationRef struct {
+	Value TaskRelationRef
+	Set   bool
+}
+
+// IsSet returns true if OptTaskRelationRef was set.
+func (o OptTaskRelationRef) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptTaskRelationRef) Reset() {
+	var v TaskRelationRef
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptTaskRelationRef) SetTo(v TaskRelationRef) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptTaskRelationRef) Get() (v TaskRelationRef, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptTaskRelationRef) Or(d TaskRelationRef) TaskRelationRef {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -4820,25 +4929,33 @@ func (s *SessionCookie) SetRoles(val []string) {
 
 // Ref: #/components/schemas/Task
 type Task struct {
-	ID             uuid.UUID       `json:"id"`
-	Number         int64           `json:"number"`
-	Version        int64           `json:"version"`
-	Title          string          `json:"title"`
-	Context        string          `json:"context"`
-	ExpectedResult string          `json:"expected_result"`
-	Description    string          `json:"description"`
-	Status         TaskStatus      `json:"status"`
-	Priority       TaskPriority    `json:"priority"`
-	Assignee       OptUserRef      `json:"assignee"`
-	Creator        UserRef         `json:"creator"`
-	DueDate        OptDate         `json:"due_date"`
-	Project        ProjectRef      `json:"project"`
-	Milestone      OptMilestoneRef `json:"milestone"`
-	Labels         []Label         `json:"labels"`
-	CreatedAt      time.Time       `json:"created_at"`
-	UpdatedAt      time.Time       `json:"updated_at"`
-	CompletedAt    OptDateTime     `json:"completed_at"`
-	ArchivedAt     OptDateTime     `json:"archived_at"`
+	ID             uuid.UUID          `json:"id"`
+	Number         int64              `json:"number"`
+	Version        int64              `json:"version"`
+	Title          string             `json:"title"`
+	Context        string             `json:"context"`
+	ExpectedResult string             `json:"expected_result"`
+	Description    string             `json:"description"`
+	Status         TaskStatus         `json:"status"`
+	Priority       TaskPriority       `json:"priority"`
+	Assignee       OptUserRef         `json:"assignee"`
+	Creator        UserRef            `json:"creator"`
+	StartDate      OptDate            `json:"start_date"`
+	DueDate        OptDate            `json:"due_date"`
+	Project        ProjectRef         `json:"project"`
+	Milestone      OptMilestoneRef    `json:"milestone"`
+	Labels         []Label            `json:"labels"`
+	Parent         OptTaskRelationRef `json:"parent"`
+	Children       []TaskRelationRef  `json:"children"`
+	Dependencies   []TaskRelationRef  `json:"dependencies"`
+	Dependents     []TaskRelationRef  `json:"dependents"`
+	// True when at least one dependency is not done or cancelled. Blocked tasks may start but may not
+	// enter done.
+	Blocked     bool        `json:"blocked"`
+	CreatedAt   time.Time   `json:"created_at"`
+	UpdatedAt   time.Time   `json:"updated_at"`
+	CompletedAt OptDateTime `json:"completed_at"`
+	ArchivedAt  OptDateTime `json:"archived_at"`
 }
 
 // GetID returns the value of ID.
@@ -4896,6 +5013,11 @@ func (s *Task) GetCreator() UserRef {
 	return s.Creator
 }
 
+// GetStartDate returns the value of StartDate.
+func (s *Task) GetStartDate() OptDate {
+	return s.StartDate
+}
+
 // GetDueDate returns the value of DueDate.
 func (s *Task) GetDueDate() OptDate {
 	return s.DueDate
@@ -4914,6 +5036,31 @@ func (s *Task) GetMilestone() OptMilestoneRef {
 // GetLabels returns the value of Labels.
 func (s *Task) GetLabels() []Label {
 	return s.Labels
+}
+
+// GetParent returns the value of Parent.
+func (s *Task) GetParent() OptTaskRelationRef {
+	return s.Parent
+}
+
+// GetChildren returns the value of Children.
+func (s *Task) GetChildren() []TaskRelationRef {
+	return s.Children
+}
+
+// GetDependencies returns the value of Dependencies.
+func (s *Task) GetDependencies() []TaskRelationRef {
+	return s.Dependencies
+}
+
+// GetDependents returns the value of Dependents.
+func (s *Task) GetDependents() []TaskRelationRef {
+	return s.Dependents
+}
+
+// GetBlocked returns the value of Blocked.
+func (s *Task) GetBlocked() bool {
+	return s.Blocked
 }
 
 // GetCreatedAt returns the value of CreatedAt.
@@ -4991,6 +5138,11 @@ func (s *Task) SetCreator(val UserRef) {
 	s.Creator = val
 }
 
+// SetStartDate sets the value of StartDate.
+func (s *Task) SetStartDate(val OptDate) {
+	s.StartDate = val
+}
+
 // SetDueDate sets the value of DueDate.
 func (s *Task) SetDueDate(val OptDate) {
 	s.DueDate = val
@@ -5009,6 +5161,31 @@ func (s *Task) SetMilestone(val OptMilestoneRef) {
 // SetLabels sets the value of Labels.
 func (s *Task) SetLabels(val []Label) {
 	s.Labels = val
+}
+
+// SetParent sets the value of Parent.
+func (s *Task) SetParent(val OptTaskRelationRef) {
+	s.Parent = val
+}
+
+// SetChildren sets the value of Children.
+func (s *Task) SetChildren(val []TaskRelationRef) {
+	s.Children = val
+}
+
+// SetDependencies sets the value of Dependencies.
+func (s *Task) SetDependencies(val []TaskRelationRef) {
+	s.Dependencies = val
+}
+
+// SetDependents sets the value of Dependents.
+func (s *Task) SetDependents(val []TaskRelationRef) {
+	s.Dependents = val
+}
+
+// SetBlocked sets the value of Blocked.
+func (s *Task) SetBlocked(val bool) {
+	s.Blocked = val
 }
 
 // SetCreatedAt sets the value of CreatedAt.
@@ -5274,10 +5451,17 @@ type TaskCreate struct {
 	Status         OptTaskStatus   `json:"status"`
 	Priority       OptTaskPriority `json:"priority"`
 	AssigneeID     OptNilUUID      `json:"assignee_id"`
-	DueDate        OptNilDate      `json:"due_date"`
-	LabelIds       []uuid.UUID     `json:"label_ids"`
-	ProjectNumber  int64           `json:"project_number"`
-	MilestoneID    OptNilUUID      `json:"milestone_id"`
+	// Optional first scheduled day. Must not be after due_date.
+	StartDate     OptNilDate  `json:"start_date"`
+	DueDate       OptNilDate  `json:"due_date"`
+	LabelIds      []uuid.UUID `json:"label_ids"`
+	ProjectNumber int64       `json:"project_number"`
+	MilestoneID   OptNilUUID  `json:"milestone_id"`
+	// Optional parent task in the same Project and Milestone (or the same Backlog). Only one
+	// parent-child level is supported.
+	ParentNumber OptInt64 `json:"parent_number"`
+	// Tasks in the same Project that must conclude before this task can enter done.
+	DependencyNumbers []int64 `json:"dependency_numbers"`
 }
 
 // GetTitle returns the value of Title.
@@ -5315,6 +5499,11 @@ func (s *TaskCreate) GetAssigneeID() OptNilUUID {
 	return s.AssigneeID
 }
 
+// GetStartDate returns the value of StartDate.
+func (s *TaskCreate) GetStartDate() OptNilDate {
+	return s.StartDate
+}
+
 // GetDueDate returns the value of DueDate.
 func (s *TaskCreate) GetDueDate() OptNilDate {
 	return s.DueDate
@@ -5333,6 +5522,16 @@ func (s *TaskCreate) GetProjectNumber() int64 {
 // GetMilestoneID returns the value of MilestoneID.
 func (s *TaskCreate) GetMilestoneID() OptNilUUID {
 	return s.MilestoneID
+}
+
+// GetParentNumber returns the value of ParentNumber.
+func (s *TaskCreate) GetParentNumber() OptInt64 {
+	return s.ParentNumber
+}
+
+// GetDependencyNumbers returns the value of DependencyNumbers.
+func (s *TaskCreate) GetDependencyNumbers() []int64 {
+	return s.DependencyNumbers
 }
 
 // SetTitle sets the value of Title.
@@ -5370,6 +5569,11 @@ func (s *TaskCreate) SetAssigneeID(val OptNilUUID) {
 	s.AssigneeID = val
 }
 
+// SetStartDate sets the value of StartDate.
+func (s *TaskCreate) SetStartDate(val OptNilDate) {
+	s.StartDate = val
+}
+
 // SetDueDate sets the value of DueDate.
 func (s *TaskCreate) SetDueDate(val OptNilDate) {
 	s.DueDate = val
@@ -5388,6 +5592,16 @@ func (s *TaskCreate) SetProjectNumber(val int64) {
 // SetMilestoneID sets the value of MilestoneID.
 func (s *TaskCreate) SetMilestoneID(val OptNilUUID) {
 	s.MilestoneID = val
+}
+
+// SetParentNumber sets the value of ParentNumber.
+func (s *TaskCreate) SetParentNumber(val OptInt64) {
+	s.ParentNumber = val
+}
+
+// SetDependencyNumbers sets the value of DependencyNumbers.
+func (s *TaskCreate) SetDependencyNumbers(val []int64) {
+	s.DependencyNumbers = val
 }
 
 // TaskCreatedHeaders wraps Task with response headers.
@@ -5667,10 +5881,21 @@ type TaskPatch struct {
 	Status         OptTaskStatus   `json:"status"`
 	Priority       OptTaskPriority `json:"priority"`
 	AssigneeID     OptNilUUID      `json:"assignee_id"`
-	DueDate        OptNilDate      `json:"due_date"`
-	LabelIds       []uuid.UUID     `json:"label_ids"`
-	ProjectNumber  OptInt64        `json:"project_number"`
-	MilestoneID    OptNilUUID      `json:"milestone_id"`
+	// Set or clear the first scheduled day. Must not be after due_date.
+	StartDate     OptNilDate  `json:"start_date"`
+	DueDate       OptNilDate  `json:"due_date"`
+	LabelIds      []uuid.UUID `json:"label_ids"`
+	ProjectNumber OptInt64    `json:"project_number"`
+	MilestoneID   OptNilUUID  `json:"milestone_id"`
+	// Set or clear the one-level parent relationship. Moving a child to another Project or Milestone
+	// requires clearing this field in the same request.
+	ParentNumber OptNilInt64 `json:"parent_number"`
+	// Replace all predecessor dependencies. Dependencies must stay within the Project and may not form a
+	// cycle.
+	DependencyNumbers []int64 `json:"dependency_numbers"`
+	// Shift this task's schedule by whole days. For a parent task, every scheduled child is shifted
+	// atomically.
+	ScheduleShiftDays OptInt `json:"schedule_shift_days"`
 }
 
 // GetTitle returns the value of Title.
@@ -5708,6 +5933,11 @@ func (s *TaskPatch) GetAssigneeID() OptNilUUID {
 	return s.AssigneeID
 }
 
+// GetStartDate returns the value of StartDate.
+func (s *TaskPatch) GetStartDate() OptNilDate {
+	return s.StartDate
+}
+
 // GetDueDate returns the value of DueDate.
 func (s *TaskPatch) GetDueDate() OptNilDate {
 	return s.DueDate
@@ -5726,6 +5956,21 @@ func (s *TaskPatch) GetProjectNumber() OptInt64 {
 // GetMilestoneID returns the value of MilestoneID.
 func (s *TaskPatch) GetMilestoneID() OptNilUUID {
 	return s.MilestoneID
+}
+
+// GetParentNumber returns the value of ParentNumber.
+func (s *TaskPatch) GetParentNumber() OptNilInt64 {
+	return s.ParentNumber
+}
+
+// GetDependencyNumbers returns the value of DependencyNumbers.
+func (s *TaskPatch) GetDependencyNumbers() []int64 {
+	return s.DependencyNumbers
+}
+
+// GetScheduleShiftDays returns the value of ScheduleShiftDays.
+func (s *TaskPatch) GetScheduleShiftDays() OptInt {
+	return s.ScheduleShiftDays
 }
 
 // SetTitle sets the value of Title.
@@ -5763,6 +6008,11 @@ func (s *TaskPatch) SetAssigneeID(val OptNilUUID) {
 	s.AssigneeID = val
 }
 
+// SetStartDate sets the value of StartDate.
+func (s *TaskPatch) SetStartDate(val OptNilDate) {
+	s.StartDate = val
+}
+
 // SetDueDate sets the value of DueDate.
 func (s *TaskPatch) SetDueDate(val OptNilDate) {
 	s.DueDate = val
@@ -5781,6 +6031,21 @@ func (s *TaskPatch) SetProjectNumber(val OptInt64) {
 // SetMilestoneID sets the value of MilestoneID.
 func (s *TaskPatch) SetMilestoneID(val OptNilUUID) {
 	s.MilestoneID = val
+}
+
+// SetParentNumber sets the value of ParentNumber.
+func (s *TaskPatch) SetParentNumber(val OptNilInt64) {
+	s.ParentNumber = val
+}
+
+// SetDependencyNumbers sets the value of DependencyNumbers.
+func (s *TaskPatch) SetDependencyNumbers(val []int64) {
+	s.DependencyNumbers = val
+}
+
+// SetScheduleShiftDays sets the value of ScheduleShiftDays.
+func (s *TaskPatch) SetScheduleShiftDays(val OptInt) {
+	s.ScheduleShiftDays = val
 }
 
 // Ref: #/components/schemas/TaskPriority
@@ -5844,6 +6109,76 @@ func (s *TaskPriority) UnmarshalText(data []byte) error {
 	default:
 		return errors.Errorf("invalid value: %q", data)
 	}
+}
+
+// Ref: #/components/schemas/TaskRelationRef
+type TaskRelationRef struct {
+	ID        uuid.UUID       `json:"id"`
+	Number    int64           `json:"number"`
+	Title     string          `json:"title"`
+	Status    TaskStatus      `json:"status"`
+	Archived  bool            `json:"archived"`
+	Milestone OptMilestoneRef `json:"milestone"`
+}
+
+// GetID returns the value of ID.
+func (s *TaskRelationRef) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetNumber returns the value of Number.
+func (s *TaskRelationRef) GetNumber() int64 {
+	return s.Number
+}
+
+// GetTitle returns the value of Title.
+func (s *TaskRelationRef) GetTitle() string {
+	return s.Title
+}
+
+// GetStatus returns the value of Status.
+func (s *TaskRelationRef) GetStatus() TaskStatus {
+	return s.Status
+}
+
+// GetArchived returns the value of Archived.
+func (s *TaskRelationRef) GetArchived() bool {
+	return s.Archived
+}
+
+// GetMilestone returns the value of Milestone.
+func (s *TaskRelationRef) GetMilestone() OptMilestoneRef {
+	return s.Milestone
+}
+
+// SetID sets the value of ID.
+func (s *TaskRelationRef) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetNumber sets the value of Number.
+func (s *TaskRelationRef) SetNumber(val int64) {
+	s.Number = val
+}
+
+// SetTitle sets the value of Title.
+func (s *TaskRelationRef) SetTitle(val string) {
+	s.Title = val
+}
+
+// SetStatus sets the value of Status.
+func (s *TaskRelationRef) SetStatus(val TaskStatus) {
+	s.Status = val
+}
+
+// SetArchived sets the value of Archived.
+func (s *TaskRelationRef) SetArchived(val bool) {
+	s.Archived = val
+}
+
+// SetMilestone sets the value of Milestone.
+func (s *TaskRelationRef) SetMilestone(val OptMilestoneRef) {
+	s.Milestone = val
 }
 
 // Ref: #/components/schemas/TaskStatus

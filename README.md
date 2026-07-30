@@ -18,6 +18,8 @@ acceptance criteria.
   Project Backlog.
 - Task creation requires context and an expected result. Acceptance criteria
   are optional, revisioned, and independently checkable.
+- Tasks support one-level parent-child grouping, cycle-free same-Project
+  dependencies, optional schedules, and shared List/Gantt collection views.
 - People use browser sessions. Agents use personal scoped tokens against the
   same contract-first `/api/v1` API.
 - Production identity is invitation-only, single-tenant Lark OAuth with one

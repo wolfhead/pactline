@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/wolfhead/pactline/internal/domain"
 	"github.com/wolfhead/pactline/internal/store"
@@ -24,6 +25,8 @@ func (s *TaskService) Create(
 	labelIDs []uuid.UUID,
 	projectNumber *int64,
 	milestoneID *uuid.UUID,
+	parentNumber *int64,
+	dependencyNumbers []int64,
 	actor domain.OperationActor,
 ) (store.TaskWithRelations, error) {
 	projectID, resolvedMilestoneID, err := s.Projects.ResolveTaskAssociation(
@@ -34,7 +37,18 @@ func (s *TaskService) Create(
 	}
 	task.ProjectID = projectID
 	task.MilestoneID = resolvedMilestoneID
-	return s.Tasks.CreateWithOperation(ctx, task, labelIDs, actor)
+	if parentNumber != nil {
+		parent, err := s.Tasks.GetByNumber(ctx, *parentNumber)
+		if err != nil {
+			return store.TaskWithRelations{}, err
+		}
+		task.ParentTaskID = &parent.Task.ID
+	}
+	dependencyIDs, err := s.resolveTaskNumbers(ctx, dependencyNumbers)
+	if err != nil {
+		return store.TaskWithRelations{}, err
+	}
+	return s.Tasks.CreateWithOperation(ctx, task, labelIDs, dependencyIDs, actor)
 }
 
 type TaskAssociationPatch struct {
@@ -44,11 +58,19 @@ type TaskAssociationPatch struct {
 	MilestoneID      *uuid.UUID
 }
 
+type TaskRelationshipPatch struct {
+	ParentSet         bool
+	ParentNumber      *int64
+	DependenciesSet   bool
+	DependencyNumbers []int64
+}
+
 func (s *TaskService) Update(
 	ctx context.Context,
 	number, expectedVersion int64,
 	patch domain.TaskPatch,
 	association TaskAssociationPatch,
+	relationships TaskRelationshipPatch,
 	actor domain.OperationActor,
 ) (store.TaskWithRelations, error) {
 	if association.ProjectNumberSet {
@@ -81,9 +103,47 @@ func (s *TaskService) Update(
 			patch.MilestoneID = milestoneID
 		}
 	}
+	if relationships.ParentSet {
+		patch.ParentSet = true
+		if relationships.ParentNumber != nil {
+			parent, err := s.Tasks.GetByNumber(ctx, *relationships.ParentNumber)
+			if err != nil {
+				return store.TaskWithRelations{}, err
+			}
+			patch.ParentTaskID = &parent.Task.ID
+		}
+	}
+	if relationships.DependenciesSet {
+		dependencyIDs, err := s.resolveTaskNumbers(ctx, relationships.DependencyNumbers)
+		if err != nil {
+			return store.TaskWithRelations{}, err
+		}
+		patch.DependenciesSet = true
+		patch.DependencyIDs = dependencyIDs
+	}
 	return s.Tasks.UpdateVersionedWithOperation(
 		ctx, number, expectedVersion, patch, actor,
 	)
+}
+
+func (s *TaskService) resolveTaskNumbers(
+	ctx context.Context,
+	numbers []int64,
+) ([]uuid.UUID, error) {
+	ids := make([]uuid.UUID, 0, len(numbers))
+	seen := make(map[int64]struct{}, len(numbers))
+	for _, number := range numbers {
+		if _, duplicate := seen[number]; duplicate {
+			return nil, fmt.Errorf("%w: duplicate task number %d", domain.ErrInvalidInput, number)
+		}
+		seen[number] = struct{}{}
+		task, err := s.Tasks.GetByNumber(ctx, number)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, task.Task.ID)
+	}
+	return ids, nil
 }
 
 func (s *TaskService) SetArchived(

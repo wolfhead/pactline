@@ -3345,6 +3345,57 @@ func (s *OptNilDate) UnmarshalJSON(data []byte) error {
 	return s.Decode(d, json.DecodeDate)
 }
 
+// Encode encodes int64 as json.
+func (o OptNilInt64) Encode(e *jx.Encoder) {
+	if !o.Set {
+		return
+	}
+	if o.Null {
+		e.Null()
+		return
+	}
+	e.Int64(int64(o.Value))
+}
+
+// Decode decodes int64 from json.
+func (o *OptNilInt64) Decode(d *jx.Decoder) error {
+	if o == nil {
+		return errors.New("invalid: unable to decode OptNilInt64 to nil")
+	}
+	if d.Next() == jx.Null {
+		if err := d.Null(); err != nil {
+			return err
+		}
+
+		var v int64
+		o.Value = v
+		o.Set = true
+		o.Null = true
+		return nil
+	}
+	o.Set = true
+	o.Null = false
+	v, err := d.Int64()
+	if err != nil {
+		return err
+	}
+	o.Value = int64(v)
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s OptNilInt64) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *OptNilInt64) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
 // Encode encodes uuid.UUID as json.
 func (o OptNilUUID) Encode(e *jx.Encoder) {
 	if !o.Set {
@@ -3526,6 +3577,39 @@ func (s OptTaskPriority) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *OptTaskPriority) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes TaskRelationRef as json.
+func (o OptTaskRelationRef) Encode(e *jx.Encoder) {
+	if !o.Set {
+		return
+	}
+	o.Value.Encode(e)
+}
+
+// Decode decodes TaskRelationRef from json.
+func (o *OptTaskRelationRef) Decode(d *jx.Decoder) error {
+	if o == nil {
+		return errors.New("invalid: unable to decode OptTaskRelationRef to nil")
+	}
+	o.Set = true
+	if err := o.Value.Decode(d); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s OptTaskRelationRef) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *OptTaskRelationRef) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -5306,6 +5390,12 @@ func (s *Task) encodeFields(e *jx.Encoder) {
 		s.Creator.Encode(e)
 	}
 	{
+		if s.StartDate.Set {
+			e.FieldStart("start_date")
+			s.StartDate.Encode(e, json.EncodeDate)
+		}
+	}
+	{
 		if s.DueDate.Set {
 			e.FieldStart("due_date")
 			s.DueDate.Encode(e, json.EncodeDate)
@@ -5330,6 +5420,40 @@ func (s *Task) encodeFields(e *jx.Encoder) {
 		e.ArrEnd()
 	}
 	{
+		if s.Parent.Set {
+			e.FieldStart("parent")
+			s.Parent.Encode(e)
+		}
+	}
+	{
+		e.FieldStart("children")
+		e.ArrStart()
+		for _, elem := range s.Children {
+			elem.Encode(e)
+		}
+		e.ArrEnd()
+	}
+	{
+		e.FieldStart("dependencies")
+		e.ArrStart()
+		for _, elem := range s.Dependencies {
+			elem.Encode(e)
+		}
+		e.ArrEnd()
+	}
+	{
+		e.FieldStart("dependents")
+		e.ArrStart()
+		for _, elem := range s.Dependents {
+			elem.Encode(e)
+		}
+		e.ArrEnd()
+	}
+	{
+		e.FieldStart("blocked")
+		e.Bool(s.Blocked)
+	}
+	{
 		e.FieldStart("created_at")
 		json.EncodeDateTime(e, s.CreatedAt)
 	}
@@ -5351,7 +5475,7 @@ func (s *Task) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfTask = [19]string{
+var jsonFieldsNameOfTask = [25]string{
 	0:  "id",
 	1:  "number",
 	2:  "version",
@@ -5363,14 +5487,20 @@ var jsonFieldsNameOfTask = [19]string{
 	8:  "priority",
 	9:  "assignee",
 	10: "creator",
-	11: "due_date",
-	12: "project",
-	13: "milestone",
-	14: "labels",
-	15: "created_at",
-	16: "updated_at",
-	17: "completed_at",
-	18: "archived_at",
+	11: "start_date",
+	12: "due_date",
+	13: "project",
+	14: "milestone",
+	15: "labels",
+	16: "parent",
+	17: "children",
+	18: "dependencies",
+	19: "dependents",
+	20: "blocked",
+	21: "created_at",
+	22: "updated_at",
+	23: "completed_at",
+	24: "archived_at",
 }
 
 // Decode decodes Task from json.
@@ -5378,7 +5508,7 @@ func (s *Task) Decode(d *jx.Decoder) error {
 	if s == nil {
 		return errors.New("invalid: unable to decode Task to nil")
 	}
-	var requiredBitSet [3]uint8
+	var requiredBitSet [4]uint8
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -5506,6 +5636,16 @@ func (s *Task) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"creator\"")
 			}
+		case "start_date":
+			if err := func() error {
+				s.StartDate.Reset()
+				if err := s.StartDate.Decode(d, json.DecodeDate); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"start_date\"")
+			}
 		case "due_date":
 			if err := func() error {
 				s.DueDate.Reset()
@@ -5517,7 +5657,7 @@ func (s *Task) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"due_date\"")
 			}
 		case "project":
-			requiredBitSet[1] |= 1 << 4
+			requiredBitSet[1] |= 1 << 5
 			if err := func() error {
 				if err := s.Project.Decode(d); err != nil {
 					return err
@@ -5537,7 +5677,7 @@ func (s *Task) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"milestone\"")
 			}
 		case "labels":
-			requiredBitSet[1] |= 1 << 6
+			requiredBitSet[1] |= 1 << 7
 			if err := func() error {
 				s.Labels = make([]Label, 0)
 				if err := d.Arr(func(d *jx.Decoder) error {
@@ -5554,8 +5694,84 @@ func (s *Task) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"labels\"")
 			}
+		case "parent":
+			if err := func() error {
+				s.Parent.Reset()
+				if err := s.Parent.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"parent\"")
+			}
+		case "children":
+			requiredBitSet[2] |= 1 << 1
+			if err := func() error {
+				s.Children = make([]TaskRelationRef, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem TaskRelationRef
+					if err := elem.Decode(d); err != nil {
+						return err
+					}
+					s.Children = append(s.Children, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"children\"")
+			}
+		case "dependencies":
+			requiredBitSet[2] |= 1 << 2
+			if err := func() error {
+				s.Dependencies = make([]TaskRelationRef, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem TaskRelationRef
+					if err := elem.Decode(d); err != nil {
+						return err
+					}
+					s.Dependencies = append(s.Dependencies, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"dependencies\"")
+			}
+		case "dependents":
+			requiredBitSet[2] |= 1 << 3
+			if err := func() error {
+				s.Dependents = make([]TaskRelationRef, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem TaskRelationRef
+					if err := elem.Decode(d); err != nil {
+						return err
+					}
+					s.Dependents = append(s.Dependents, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"dependents\"")
+			}
+		case "blocked":
+			requiredBitSet[2] |= 1 << 4
+			if err := func() error {
+				v, err := d.Bool()
+				s.Blocked = bool(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"blocked\"")
+			}
 		case "created_at":
-			requiredBitSet[1] |= 1 << 7
+			requiredBitSet[2] |= 1 << 5
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.CreatedAt = v
@@ -5567,7 +5783,7 @@ func (s *Task) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"created_at\"")
 			}
 		case "updated_at":
-			requiredBitSet[2] |= 1 << 0
+			requiredBitSet[2] |= 1 << 6
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.UpdatedAt = v
@@ -5607,10 +5823,11 @@ func (s *Task) Decode(d *jx.Decoder) error {
 	}
 	// Validate required fields.
 	var failures []validate.FieldError
-	for i, mask := range [3]uint8{
+	for i, mask := range [4]uint8{
 		0b11111111,
-		0b11010101,
-		0b00000001,
+		0b10100101,
+		0b01111110,
+		0b00000000,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -6098,6 +6315,12 @@ func (s *TaskCreate) encodeFields(e *jx.Encoder) {
 		}
 	}
 	{
+		if s.StartDate.Set {
+			e.FieldStart("start_date")
+			s.StartDate.Encode(e, json.EncodeDate)
+		}
+	}
+	{
 		if s.DueDate.Set {
 			e.FieldStart("due_date")
 			s.DueDate.Encode(e, json.EncodeDate)
@@ -6123,9 +6346,25 @@ func (s *TaskCreate) encodeFields(e *jx.Encoder) {
 			s.MilestoneID.Encode(e)
 		}
 	}
+	{
+		if s.ParentNumber.Set {
+			e.FieldStart("parent_number")
+			s.ParentNumber.Encode(e)
+		}
+	}
+	{
+		if s.DependencyNumbers != nil {
+			e.FieldStart("dependency_numbers")
+			e.ArrStart()
+			for _, elem := range s.DependencyNumbers {
+				e.Int64(elem)
+			}
+			e.ArrEnd()
+		}
+	}
 }
 
-var jsonFieldsNameOfTaskCreate = [11]string{
+var jsonFieldsNameOfTaskCreate = [14]string{
 	0:  "title",
 	1:  "context",
 	2:  "expected_result",
@@ -6133,10 +6372,13 @@ var jsonFieldsNameOfTaskCreate = [11]string{
 	4:  "status",
 	5:  "priority",
 	6:  "assignee_id",
-	7:  "due_date",
-	8:  "label_ids",
-	9:  "project_number",
-	10: "milestone_id",
+	7:  "start_date",
+	8:  "due_date",
+	9:  "label_ids",
+	10: "project_number",
+	11: "milestone_id",
+	12: "parent_number",
+	13: "dependency_numbers",
 }
 
 // Decode decodes TaskCreate from json.
@@ -6224,6 +6466,16 @@ func (s *TaskCreate) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"assignee_id\"")
 			}
+		case "start_date":
+			if err := func() error {
+				s.StartDate.Reset()
+				if err := s.StartDate.Decode(d, json.DecodeDate); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"start_date\"")
+			}
 		case "due_date":
 			if err := func() error {
 				s.DueDate.Reset()
@@ -6254,7 +6506,7 @@ func (s *TaskCreate) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"label_ids\"")
 			}
 		case "project_number":
-			requiredBitSet[1] |= 1 << 1
+			requiredBitSet[1] |= 1 << 2
 			if err := func() error {
 				v, err := d.Int64()
 				s.ProjectNumber = int64(v)
@@ -6275,6 +6527,35 @@ func (s *TaskCreate) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"milestone_id\"")
 			}
+		case "parent_number":
+			if err := func() error {
+				s.ParentNumber.Reset()
+				if err := s.ParentNumber.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"parent_number\"")
+			}
+		case "dependency_numbers":
+			if err := func() error {
+				s.DependencyNumbers = make([]int64, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem int64
+					v, err := d.Int64()
+					elem = int64(v)
+					if err != nil {
+						return err
+					}
+					s.DependencyNumbers = append(s.DependencyNumbers, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"dependency_numbers\"")
+			}
 		default:
 			return errors.Errorf("unexpected field %q", k)
 		}
@@ -6286,7 +6567,7 @@ func (s *TaskCreate) Decode(d *jx.Decoder) error {
 	var failures []validate.FieldError
 	for i, mask := range [2]uint8{
 		0b00000111,
-		0b00000010,
+		0b00000100,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -6507,6 +6788,12 @@ func (s *TaskPatch) encodeFields(e *jx.Encoder) {
 		}
 	}
 	{
+		if s.StartDate.Set {
+			e.FieldStart("start_date")
+			s.StartDate.Encode(e, json.EncodeDate)
+		}
+	}
+	{
 		if s.DueDate.Set {
 			e.FieldStart("due_date")
 			s.DueDate.Encode(e, json.EncodeDate)
@@ -6534,9 +6821,31 @@ func (s *TaskPatch) encodeFields(e *jx.Encoder) {
 			s.MilestoneID.Encode(e)
 		}
 	}
+	{
+		if s.ParentNumber.Set {
+			e.FieldStart("parent_number")
+			s.ParentNumber.Encode(e)
+		}
+	}
+	{
+		if s.DependencyNumbers != nil {
+			e.FieldStart("dependency_numbers")
+			e.ArrStart()
+			for _, elem := range s.DependencyNumbers {
+				e.Int64(elem)
+			}
+			e.ArrEnd()
+		}
+	}
+	{
+		if s.ScheduleShiftDays.Set {
+			e.FieldStart("schedule_shift_days")
+			s.ScheduleShiftDays.Encode(e)
+		}
+	}
 }
 
-var jsonFieldsNameOfTaskPatch = [11]string{
+var jsonFieldsNameOfTaskPatch = [15]string{
 	0:  "title",
 	1:  "context",
 	2:  "expected_result",
@@ -6544,10 +6853,14 @@ var jsonFieldsNameOfTaskPatch = [11]string{
 	4:  "status",
 	5:  "priority",
 	6:  "assignee_id",
-	7:  "due_date",
-	8:  "label_ids",
-	9:  "project_number",
-	10: "milestone_id",
+	7:  "start_date",
+	8:  "due_date",
+	9:  "label_ids",
+	10: "project_number",
+	11: "milestone_id",
+	12: "parent_number",
+	13: "dependency_numbers",
+	14: "schedule_shift_days",
 }
 
 // Decode decodes TaskPatch from json.
@@ -6630,6 +6943,16 @@ func (s *TaskPatch) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"assignee_id\"")
 			}
+		case "start_date":
+			if err := func() error {
+				s.StartDate.Reset()
+				if err := s.StartDate.Decode(d, json.DecodeDate); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"start_date\"")
+			}
 		case "due_date":
 			if err := func() error {
 				s.DueDate.Reset()
@@ -6678,6 +7001,45 @@ func (s *TaskPatch) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"milestone_id\"")
+			}
+		case "parent_number":
+			if err := func() error {
+				s.ParentNumber.Reset()
+				if err := s.ParentNumber.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"parent_number\"")
+			}
+		case "dependency_numbers":
+			if err := func() error {
+				s.DependencyNumbers = make([]int64, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem int64
+					v, err := d.Int64()
+					elem = int64(v)
+					if err != nil {
+						return err
+					}
+					s.DependencyNumbers = append(s.DependencyNumbers, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"dependency_numbers\"")
+			}
+		case "schedule_shift_days":
+			if err := func() error {
+				s.ScheduleShiftDays.Reset()
+				if err := s.ScheduleShiftDays.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"schedule_shift_days\"")
 			}
 		default:
 			return errors.Errorf("unexpected field %q", k)
@@ -6754,6 +7116,185 @@ func (s TaskPriority) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *TaskPriority) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *TaskRelationRef) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *TaskRelationRef) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("id")
+		json.EncodeUUID(e, s.ID)
+	}
+	{
+		e.FieldStart("number")
+		e.Int64(s.Number)
+	}
+	{
+		e.FieldStart("title")
+		e.Str(s.Title)
+	}
+	{
+		e.FieldStart("status")
+		s.Status.Encode(e)
+	}
+	{
+		e.FieldStart("archived")
+		e.Bool(s.Archived)
+	}
+	{
+		if s.Milestone.Set {
+			e.FieldStart("milestone")
+			s.Milestone.Encode(e)
+		}
+	}
+}
+
+var jsonFieldsNameOfTaskRelationRef = [6]string{
+	0: "id",
+	1: "number",
+	2: "title",
+	3: "status",
+	4: "archived",
+	5: "milestone",
+}
+
+// Decode decodes TaskRelationRef from json.
+func (s *TaskRelationRef) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode TaskRelationRef to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "id":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				v, err := json.DecodeUUID(d)
+				s.ID = v
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"id\"")
+			}
+		case "number":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				v, err := d.Int64()
+				s.Number = int64(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"number\"")
+			}
+		case "title":
+			requiredBitSet[0] |= 1 << 2
+			if err := func() error {
+				v, err := d.Str()
+				s.Title = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"title\"")
+			}
+		case "status":
+			requiredBitSet[0] |= 1 << 3
+			if err := func() error {
+				if err := s.Status.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"status\"")
+			}
+		case "archived":
+			requiredBitSet[0] |= 1 << 4
+			if err := func() error {
+				v, err := d.Bool()
+				s.Archived = bool(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"archived\"")
+			}
+		case "milestone":
+			if err := func() error {
+				s.Milestone.Reset()
+				if err := s.Milestone.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"milestone\"")
+			}
+		default:
+			return errors.Errorf("unexpected field %q", k)
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode TaskRelationRef")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00011111,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfTaskRelationRef) {
+					name = jsonFieldsNameOfTaskRelationRef[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *TaskRelationRef) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *TaskRelationRef) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }

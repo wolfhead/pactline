@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { CornerDownRight, Link2, Rows3 } from 'lucide-react'
 import type { Tier } from '@/hooks/useBreakpoint'
 import { cn } from '@/lib/utils'
 import type { Task, TaskPatchBody, UserRef } from '@/task-types'
@@ -63,7 +64,8 @@ export default function TaskRow({ task, selected, tier, users, error, onPatch, o
     const url = `${window.location.origin}/tasks/${task.number}`
     navigator.clipboard?.writeText(url).catch(() => {
       // Best-effort: clipboard access can be unavailable (insecure context,
-      // permission denied). 打开详情 in the same menu still reaches the task.
+      // permission denied). The detail action in the same menu still reaches
+      // the task.
     })
   }
 
@@ -118,8 +120,23 @@ export default function TaskRow({ task, selected, tier, users, error, onPatch, o
         <div className="flex items-start justify-between gap-2">
           <Link
             to={`/tasks/${task.number}`}
-            className={cn('flex min-h-11 min-w-0 flex-1 items-center text-sm font-medium', dimmedTextClass)}
+            className={cn(
+              'flex min-h-11 min-w-0 flex-1 items-center gap-1.5 text-sm font-medium',
+              task.parent && 'pl-3',
+              dimmedTextClass,
+            )}
           >
+            {task.parent ? (
+              <CornerDownRight className="size-3.5 shrink-0 text-fg-subtle" aria-hidden="true" />
+            ) : task.children?.length ? (
+              <span
+                className="flex shrink-0 items-center gap-1 text-xs text-fg-subtle"
+                aria-label={`${task.children.length} 个子任务`}
+              >
+                <Rows3 className="size-3.5" aria-hidden="true" />
+                {task.children.length}
+              </span>
+            ) : null}
             {task.title}
           </Link>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -128,6 +145,12 @@ export default function TaskRow({ task, selected, tier, users, error, onPatch, o
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
+          {task.blocked && (
+            <span className="flex items-center gap-1 rounded-full bg-status-in-progress/10 px-2 py-0.5 text-[11px] text-status-in-progress">
+              <Link2 className="size-3" aria-hidden="true" />
+              等待依赖
+            </span>
+          )}
           {labelChips}
           {priorityControl}
           {dueDateControl}
@@ -153,20 +176,37 @@ export default function TaskRow({ task, selected, tier, users, error, onPatch, o
       )}
     >
       <span className="w-12 shrink-0 font-mono text-xs text-fg-muted">#{task.number}</span>
+      <span className="flex w-4 shrink-0 justify-center text-fg-subtle">
+        {task.parent ? (
+          <CornerDownRight className="size-3.5" aria-label={`子任务，父任务 #${task.parent.number}`} />
+        ) : task.children?.length ? (
+          <Rows3 className="size-3.5" aria-label={`${task.children.length} 个子任务`} />
+        ) : null}
+      </span>
       <Link
         to={`/tasks/${task.number}`}
-        className={cn('min-w-0 flex-1 truncate text-sm', dimmedTextClass)}
+        className={cn(
+          'min-w-0 flex-1 truncate text-sm',
+          task.parent && 'pl-2',
+          dimmedTextClass,
+        )}
       >
         {task.title}
       </Link>
+      {task.blocked && (
+        <span className="flex shrink-0 items-center gap-1 rounded-full bg-status-in-progress/10 px-2 py-0.5 text-[11px] text-status-in-progress">
+          <Link2 className="size-3" aria-hidden="true" />
+          等待依赖
+        </span>
+      )}
       {labelChips}
       <div className="w-28 shrink-0">{statusControl}</div>
       <div className="w-24 shrink-0">{priorityControl}</div>
       <div className="w-28 shrink-0">{assigneeControl}</div>
       {/* Width-wrapped exactly like the three controls above. It used to be
           left bare on the theory that a due date is "near-fixed-width
-          regardless of value" — it is not: 无截止 measures ~36px narrower
-          than 2026-08-15, so every row carrying a real date dragged status,
+          regardless of value" — it is not: the empty value measures about
+          36px narrower than 2026-08-15, so every row carrying a real date dragged status,
           priority and assignee ~36px left of the rows that don't, and the
           five control columns read as ragged down the whole list (found in
           Task 14's screenshot pass, at every tier and in both themes). */}

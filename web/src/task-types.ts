@@ -48,6 +48,15 @@ export interface TaskMilestoneRef {
   name: string
 }
 
+export interface TaskRelationRef {
+  id: string
+  number: number
+  title: string
+  status: TaskStatus
+  archived: boolean
+  milestone: TaskMilestoneRef | null
+}
+
 export interface Task {
   id: string
   number: number
@@ -60,10 +69,16 @@ export interface Task {
   priority: TaskPriority
   assignee: UserRef | null
   creator: UserRef
+  start_date: string | null
   due_date: string | null
   project: TaskProjectRef
   milestone: TaskMilestoneRef | null
   labels: Label[]
+  parent: TaskRelationRef | null
+  children: TaskRelationRef[]
+  dependencies: TaskRelationRef[]
+  dependents: TaskRelationRef[]
+  blocked: boolean
   created_at: string
   updated_at: string
   completed_at: string | null
@@ -95,10 +110,13 @@ export type ActivityField =
   | 'status'
   | 'priority'
   | 'assignee'
+  | 'start_date'
   | 'due_date'
   | 'labels'
   | 'project'
   | 'milestone'
+  | 'parent'
+  | 'dependencies'
   | 'archived'
 
 export interface Activity {
@@ -123,10 +141,14 @@ export interface TaskPatchBody {
   // `null` clears (matches decodeTaskPatch's *Set-boolean semantics for a
   // present-but-null key); omitting the key entirely leaves it unchanged.
   assignee_id?: string | null
+  start_date?: string | null
   due_date?: string | null
   label_ids?: string[]
   project_number?: number
   milestone_id?: string | null
+  parent_number?: number | null
+  dependency_numbers?: number[]
+  schedule_shift_days?: number
 }
 
 export interface CreateTaskBody {
@@ -139,6 +161,9 @@ export interface CreateTaskBody {
   assignee_id?: string | null
   project_number: number
   milestone_id?: string | null
+  parent_number?: number
+  dependency_numbers?: number[]
+  start_date?: string | null
   due_date?: string | null
   label_ids?: string[]
 }

@@ -1296,6 +1296,12 @@ components:
         - type: string
           format: date
         - type: "null"
+    NullableTaskNumber:
+      oneOf:
+        - type: integer
+          format: int64
+          minimum: 1
+        - type: "null"
     TaskCreate:
       type: object
       additionalProperties: false
@@ -1321,6 +1327,9 @@ components:
           $ref: "#/components/schemas/TaskPriority"
         assignee_id:
           $ref: "#/components/schemas/NullableUUID"
+        start_date:
+          $ref: "#/components/schemas/NullableDate"
+          description: Optional first scheduled day. Must not be after due_date.
         due_date:
           $ref: "#/components/schemas/NullableDate"
         label_ids:
@@ -1335,6 +1344,19 @@ components:
           minimum: 1
         milestone_id:
           $ref: "#/components/schemas/NullableUUID"
+        parent_number:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Optional parent task in the same Project and Milestone (or the same Backlog). Only one parent-child level is supported.
+        dependency_numbers:
+          type: array
+          uniqueItems: true
+          description: Tasks in the same Project that must conclude before this task can enter done.
+          items:
+            type: integer
+            format: int64
+            minimum: 1
     TaskPatch:
       type: object
       additionalProperties: false
@@ -1358,6 +1380,9 @@ components:
           $ref: "#/components/schemas/TaskPriority"
         assignee_id:
           $ref: "#/components/schemas/NullableUUID"
+        start_date:
+          $ref: "#/components/schemas/NullableDate"
+          description: Set or clear the first scheduled day. Must not be after due_date.
         due_date:
           $ref: "#/components/schemas/NullableDate"
         label_ids:
@@ -1372,6 +1397,22 @@ components:
           minimum: 1
         milestone_id:
           $ref: "#/components/schemas/NullableUUID"
+        parent_number:
+          $ref: "#/components/schemas/NullableTaskNumber"
+          description: Set or clear the one-level parent relationship. Moving a child to another Project or Milestone requires clearing this field in the same request.
+        dependency_numbers:
+          type: array
+          uniqueItems: true
+          description: Replace all predecessor dependencies. Dependencies must stay within the Project and may not form a cycle.
+          items:
+            type: integer
+            format: int64
+            minimum: 1
+        schedule_shift_days:
+          type: integer
+          minimum: -3650
+          maximum: 3650
+          description: Shift this task's schedule by whole days. For a parent task, every scheduled child is shifted atomically.
     ProjectRef:
       type: object
       additionalProperties: false
@@ -1396,6 +1437,26 @@ components:
           format: uuid
         name:
           type: string
+    TaskRelationRef:
+      type: object
+      additionalProperties: false
+      required: [id, number, title, status, archived]
+      properties:
+        id:
+          type: string
+          format: uuid
+        number:
+          type: integer
+          format: int64
+          minimum: 1
+        title:
+          type: string
+        status:
+          $ref: "#/components/schemas/TaskStatus"
+        archived:
+          type: boolean
+        milestone:
+          $ref: "#/components/schemas/MilestoneRef"
     Task:
       type: object
       additionalProperties: false
@@ -1412,6 +1473,10 @@ components:
         - creator
         - project
         - labels
+        - children
+        - dependencies
+        - dependents
+        - blocked
         - created_at
         - updated_at
       properties:
@@ -1442,6 +1507,9 @@ components:
           $ref: "#/components/schemas/UserRef"
         creator:
           $ref: "#/components/schemas/UserRef"
+        start_date:
+          type: string
+          format: date
         due_date:
           type: string
           format: date
@@ -1453,6 +1521,23 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Label"
+        parent:
+          $ref: "#/components/schemas/TaskRelationRef"
+        children:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaskRelationRef"
+        dependencies:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaskRelationRef"
+        dependents:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaskRelationRef"
+        blocked:
+          type: boolean
+          description: True when at least one dependency is not done or cancelled. Blocked tasks may start but may not enter done.
         created_at:
           type: string
           format: date-time

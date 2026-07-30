@@ -1,5 +1,6 @@
 import type { Tier } from '@/hooks/useBreakpoint'
 import { STATUS_LABELS, TASK_STATUSES, type Task, type TaskPatchBody, type UserRef } from '@/task-types'
+import { orderTasksWithChildren } from './task-hierarchy'
 import TaskRow from './TaskRow'
 
 interface TaskListProps {
@@ -55,14 +56,14 @@ export default function TaskList({
   if (!grouped) {
     return (
       <div role="list">
-        {tasks.map(renderRow)}
+        {orderTasksWithChildren(tasks).map(renderRow)}
       </div>
     )
   }
 
   const groups = TASK_STATUSES.map((status) => ({
     status,
-    tasks: tasks.filter((t) => t.status === status),
+    tasks: orderTasksWithChildren(tasks.filter((t) => t.status === status)),
   })).filter((group) => group.tasks.length > 0)
 
   return (

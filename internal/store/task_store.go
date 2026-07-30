@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -25,7 +26,8 @@ func NewTaskStore(db *DB) *TaskStore { return &TaskStore{db: db} }
 
 const taskColumns = `t.id, t.number, t.version, t.title, t.context, t.expected_result,
 	t.description, t.status, t.priority,
-	t.assignee_id, t.creator_id, t.due_date, t.project_id, t.milestone_id,
+	t.assignee_id, t.creator_id, t.start_date, t.due_date, t.project_id, t.milestone_id,
+	t.parent_task_id,
 	t.created_at, t.updated_at, t.completed_at, t.archived_at`
 
 // taskSelectColumns adds the joined creator/assignee/labels columns that
@@ -37,7 +39,11 @@ const taskSelectColumns = taskColumns + `,
 	au.id, au.name, au.email,
 	p.id, p.number, p.name,
 	m.id, m.name,
-	COALESCE(lbl.labels, '[]'::json)`
+	COALESCE(lbl.labels, '[]'::json),
+	COALESCE(parent_rel.task, 'null'::json),
+	COALESCE(child_rel.tasks, '[]'::json),
+	COALESCE(dependency_rel.tasks, '[]'::json),
+	COALESCE(dependent_rel.tasks, '[]'::json)`
 
 const taskFromJoins = `FROM tasks t
 	JOIN users cu ON cu.id = t.creator_id
@@ -50,19 +56,102 @@ const taskFromJoins = `FROM tasks t
 		) ORDER BY l.name) AS labels
 		FROM task_labels tl JOIN labels l ON l.id = tl.label_id
 		WHERE tl.task_id = t.id
-	) lbl ON true`
+	) lbl ON true
+	LEFT JOIN LATERAL (
+		SELECT json_build_object(
+			'id', related.id,
+			'number', related.number,
+			'title', related.title,
+			'status', related.status,
+			'archived', related.archived_at IS NOT NULL,
+			'milestone', CASE
+				WHEN related_milestone.id IS NULL THEN NULL
+				ELSE json_build_object(
+					'id', related_milestone.id,
+					'name', related_milestone.name
+				)
+			END
+		) AS task
+		FROM tasks related
+		LEFT JOIN milestones related_milestone ON related_milestone.id = related.milestone_id
+		WHERE related.id = t.parent_task_id
+	) parent_rel ON true
+	LEFT JOIN LATERAL (
+		SELECT json_agg(json_build_object(
+			'id', related.id,
+			'number', related.number,
+			'title', related.title,
+			'status', related.status,
+			'archived', related.archived_at IS NOT NULL,
+			'milestone', CASE
+				WHEN related_milestone.id IS NULL THEN NULL
+				ELSE json_build_object(
+					'id', related_milestone.id,
+					'name', related_milestone.name
+				)
+			END
+		) ORDER BY related.number) AS tasks
+		FROM tasks related
+		LEFT JOIN milestones related_milestone ON related_milestone.id = related.milestone_id
+		WHERE related.parent_task_id = t.id
+	) child_rel ON true
+	LEFT JOIN LATERAL (
+		SELECT json_agg(json_build_object(
+			'id', related.id,
+			'number', related.number,
+			'title', related.title,
+			'status', related.status,
+			'archived', related.archived_at IS NOT NULL,
+			'milestone', CASE
+				WHEN related_milestone.id IS NULL THEN NULL
+				ELSE json_build_object(
+					'id', related_milestone.id,
+					'name', related_milestone.name
+				)
+			END
+		) ORDER BY related.number) AS tasks
+		FROM task_dependencies dependency
+		JOIN tasks related ON related.id = dependency.depends_on_task_id
+		LEFT JOIN milestones related_milestone ON related_milestone.id = related.milestone_id
+		WHERE dependency.task_id = t.id
+	) dependency_rel ON true
+	LEFT JOIN LATERAL (
+		SELECT json_agg(json_build_object(
+			'id', related.id,
+			'number', related.number,
+			'title', related.title,
+			'status', related.status,
+			'archived', related.archived_at IS NOT NULL,
+			'milestone', CASE
+				WHEN related_milestone.id IS NULL THEN NULL
+				ELSE json_build_object(
+					'id', related_milestone.id,
+					'name', related_milestone.name
+				)
+			END
+		) ORDER BY related.number) AS tasks
+		FROM task_dependencies dependency
+		JOIN tasks related ON related.id = dependency.task_id
+		LEFT JOIN milestones related_milestone ON related_milestone.id = related.milestone_id
+		WHERE dependency.depends_on_task_id = t.id
+	) dependent_rel ON true`
 
 // TaskWithRelations is a task together with the entities a frontend needs
 // alongside it in one response: the creator, required Project, the assignee
 // (nil when unassigned — a normal, first-class state), and every label it
 // wears.
 type TaskWithRelations struct {
-	Task      domain.Task
-	Creator   domain.UserRef
-	Assignee  *domain.UserRef
-	Project   ProjectRef
-	Milestone *MilestoneRef
-	Labels    []domain.Label
+	Task         domain.Task
+	Creator      domain.UserRef
+	Assignee     *domain.UserRef
+	Project      ProjectRef
+	Milestone    *MilestoneRef
+	Labels       []domain.Label
+	Parent       *TaskRelationRef
+	Children     []TaskRelationRef
+	Dependencies []TaskRelationRef
+	Dependents   []TaskRelationRef
+	Blocked      bool
 }
 
 type ProjectRef struct {
@@ -72,25 +161,39 @@ type ProjectRef struct {
 }
 
 type MilestoneRef struct {
-	ID   uuid.UUID
-	Name string
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
+}
+
+type TaskRelationRef struct {
+	ID        uuid.UUID         `json:"id"`
+	Number    int64             `json:"number"`
+	Title     string            `json:"title"`
+	Status    domain.TaskStatus `json:"status"`
+	Archived  bool              `json:"archived"`
+	Milestone *MilestoneRef     `json:"milestone"`
 }
 
 func scanTaskWithRelations(s scanner) (TaskWithRelations, error) {
 	var (
-		twr           TaskWithRelations
-		assigneeID    *uuid.UUID
-		assigneeName  *string
-		assigneeEmail *string
-		milestoneID   *uuid.UUID
-		milestoneName *string
-		labelsJSON    []byte
+		twr              TaskWithRelations
+		assigneeID       *uuid.UUID
+		assigneeName     *string
+		assigneeEmail    *string
+		milestoneID      *uuid.UUID
+		milestoneName    *string
+		labelsJSON       []byte
+		parentJSON       []byte
+		childrenJSON     []byte
+		dependenciesJSON []byte
+		dependentsJSON   []byte
 	)
 	err := s.Scan(
 		&twr.Task.ID, &twr.Task.Number, &twr.Task.Version,
 		&twr.Task.Title, &twr.Task.Context, &twr.Task.ExpectedResult,
 		&twr.Task.Description, &twr.Task.Status, &twr.Task.Priority,
-		&twr.Task.AssigneeID, &twr.Task.CreatorID, &twr.Task.DueDate, &twr.Task.ProjectID, &twr.Task.MilestoneID,
+		&twr.Task.AssigneeID, &twr.Task.CreatorID, &twr.Task.StartDate, &twr.Task.DueDate,
+		&twr.Task.ProjectID, &twr.Task.MilestoneID, &twr.Task.ParentTaskID,
 		&twr.Task.CreatedAt, &twr.Task.UpdatedAt,
 		&twr.Task.CompletedAt, &twr.Task.ArchivedAt,
 		&twr.Creator.ID, &twr.Creator.Name, &twr.Creator.Email,
@@ -98,6 +201,7 @@ func scanTaskWithRelations(s scanner) (TaskWithRelations, error) {
 		&twr.Project.ID, &twr.Project.Number, &twr.Project.Name,
 		&milestoneID, &milestoneName,
 		&labelsJSON,
+		&parentJSON, &childrenJSON, &dependenciesJSON, &dependentsJSON,
 	)
 	if err != nil {
 		return TaskWithRelations{}, fmt.Errorf("scan task: %w", err)
@@ -113,7 +217,34 @@ func scanTaskWithRelations(s scanner) (TaskWithRelations, error) {
 		return TaskWithRelations{}, fmt.Errorf("unmarshal labels for task %s: %w", twr.Task.ID, err)
 	}
 	twr.Labels = labels
+	if len(parentJSON) > 0 && string(parentJSON) != "null" {
+		var parent TaskRelationRef
+		if err := json.Unmarshal(parentJSON, &parent); err != nil {
+			return TaskWithRelations{}, fmt.Errorf("unmarshal parent for task %s: %w", twr.Task.ID, err)
+		}
+		twr.Parent = &parent
+	}
+	if err := unmarshalTaskRelationRefs(childrenJSON, &twr.Children); err != nil {
+		return TaskWithRelations{}, fmt.Errorf("unmarshal children for task %s: %w", twr.Task.ID, err)
+	}
+	if err := unmarshalTaskRelationRefs(dependenciesJSON, &twr.Dependencies); err != nil {
+		return TaskWithRelations{}, fmt.Errorf("unmarshal dependencies for task %s: %w", twr.Task.ID, err)
+	}
+	if err := unmarshalTaskRelationRefs(dependentsJSON, &twr.Dependents); err != nil {
+		return TaskWithRelations{}, fmt.Errorf("unmarshal dependents for task %s: %w", twr.Task.ID, err)
+	}
+	for _, dependency := range twr.Dependencies {
+		if dependency.Status != domain.TaskStatusDone && dependency.Status != domain.TaskStatusCancelled {
+			twr.Blocked = true
+			break
+		}
+	}
 	return twr, nil
+}
+
+func unmarshalTaskRelationRefs(raw []byte, target *[]TaskRelationRef) error {
+	*target = []TaskRelationRef{}
+	return json.Unmarshal(raw, target)
 }
 
 func derefStr(s *string) string {
@@ -128,13 +259,14 @@ func derefStr(s *string) string {
 // the two can never drift apart. Status/Priority default to todo/none
 // when left blank, mirroring the column defaults.
 func (s *TaskStore) Create(ctx context.Context, t domain.Task, labelIDs []uuid.UUID) (TaskWithRelations, error) {
-	return s.CreateWithOperation(ctx, t, labelIDs, domain.SessionOperation(t.CreatorID, "internal"))
+	return s.CreateWithOperation(ctx, t, labelIDs, nil, domain.SessionOperation(t.CreatorID, "internal"))
 }
 
 func (s *TaskStore) CreateWithOperation(
 	ctx context.Context,
 	t domain.Task,
 	labelIDs []uuid.UUID,
+	dependencyIDs []uuid.UUID,
 	actor domain.OperationActor,
 ) (TaskWithRelations, error) {
 	if err := actor.Validate(); err != nil {
@@ -170,6 +302,9 @@ func (s *TaskStore) CreateWithOperation(
 	if t.ProjectID == uuid.Nil {
 		return TaskWithRelations{}, fmt.Errorf("%w: task project is required", domain.ErrInvalidInput)
 	}
+	if err := domain.ValidateSchedule(t.StartDate, t.DueDate); err != nil {
+		return TaskWithRelations{}, err
+	}
 
 	var completedAt *time.Time
 	if t.Status == domain.TaskStatusDone {
@@ -183,6 +318,28 @@ func (s *TaskStore) CreateWithOperation(
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck // no-op once committed
 
+	if err := validateParentAssignment(
+		ctx, tx, t.ID, t.ParentTaskID, t.ProjectID, t.MilestoneID, t.Status,
+	); err != nil {
+		return TaskWithRelations{}, err
+	}
+	if err := validateDependencyAssignments(
+		ctx, tx, t.ID, t.ProjectID, t.ParentTaskID, dependencyIDs,
+	); err != nil {
+		return TaskWithRelations{}, err
+	}
+	if t.Status == domain.TaskStatusDone {
+		unfinished, err := countUnfinishedTasks(ctx, tx, dependencyIDs)
+		if err != nil {
+			return TaskWithRelations{}, err
+		}
+		if err := t.ValidateCompletion(domain.TaskCompletionReadiness{
+			UnfinishedDependencies: unfinished,
+		}); err != nil {
+			return TaskWithRelations{}, err
+		}
+	}
+
 	var (
 		id     uuid.UUID
 		number int64
@@ -190,12 +347,13 @@ func (s *TaskStore) CreateWithOperation(
 	err = tx.QueryRow(ctx, `
 		INSERT INTO tasks
 			(id, title, context, expected_result, description, status, priority,
-			 assignee_id, creator_id, due_date, project_id, milestone_id, completed_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+			 assignee_id, creator_id, start_date, due_date, project_id, milestone_id,
+			 parent_task_id, completed_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
 		RETURNING id, number`,
 		t.ID, t.Title, t.Context, t.ExpectedResult, t.Description,
 		string(t.Status), string(t.Priority), t.AssigneeID, t.CreatorID,
-		t.DueDate, t.ProjectID, t.MilestoneID, completedAt,
+		t.StartDate, t.DueDate, t.ProjectID, t.MilestoneID, t.ParentTaskID, completedAt,
 	).Scan(&id, &number)
 	if err != nil {
 		return TaskWithRelations{}, mapPgError(err)
@@ -206,6 +364,9 @@ func (s *TaskStore) CreateWithOperation(
 			return TaskWithRelations{}, err
 		}
 	}
+	if err := replaceTaskDependencies(ctx, tx, id, dependencyIDs); err != nil {
+		return TaskWithRelations{}, err
+	}
 
 	statusVal := string(t.Status)
 	if err := insertActivity(ctx, tx, id, actor, domain.ActivityFieldCreated, nil, &statusVal); err != nil {
@@ -215,8 +376,10 @@ func (s *TaskStore) CreateWithOperation(
 		"title": t.Title, "context": t.Context, "expected_result": t.ExpectedResult,
 		"description": t.Description, "status": t.Status,
 		"priority": t.Priority, "assignee_id": t.AssigneeID,
-		"due_date": t.DueDate, "project_id": t.ProjectID,
-		"milestone_id": t.MilestoneID, "label_ids": labelIDs,
+		"start_date": t.StartDate, "due_date": t.DueDate,
+		"project_id": t.ProjectID, "milestone_id": t.MilestoneID,
+		"parent_task_id": t.ParentTaskID, "label_ids": labelIDs,
+		"dependency_ids": dependencyIDs,
 	})
 	if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
 		OccurredAt: time.Now().UTC(), Actor: actor, EntityType: "task",
@@ -315,20 +478,23 @@ func (s *TaskStore) updateWithExpectedVersion(
 		oldStatus                                               domain.TaskStatus
 		oldPriority                                             domain.TaskPriority
 		oldAssignee                                             *uuid.UUID
+		oldStartDate                                            *time.Time
 		oldDueDate                                              *time.Time
 		oldProject                                              uuid.UUID
 		oldMilestone                                            *uuid.UUID
+		oldParent                                               *uuid.UUID
 		oldCompletedAt                                          *time.Time
 		oldVersion                                              int64
 	)
 	err = tx.QueryRow(ctx,
 		`SELECT id, version, title, context, expected_result, description,
-		        status, priority, assignee_id, due_date,
-		        project_id, milestone_id, completed_at
+		        status, priority, assignee_id, start_date, due_date,
+		        project_id, milestone_id, parent_task_id, completed_at
 		 FROM tasks WHERE number = $1 FOR UPDATE`, number,
 	).Scan(&id, &oldVersion, &oldTitle, &oldContext, &oldExpectedResult,
 		&oldDescription, &oldStatus, &oldPriority, &oldAssignee,
-		&oldDueDate, &oldProject, &oldMilestone, &oldCompletedAt)
+		&oldStartDate, &oldDueDate, &oldProject, &oldMilestone,
+		&oldParent, &oldCompletedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return TaskWithRelations{}, domain.ErrNotFound
 	}
@@ -342,8 +508,9 @@ func (s *TaskStore) updateWithExpectedVersion(
 	newTitle, newContext := oldTitle, oldContext
 	newExpectedResult, newDescription := oldExpectedResult, oldDescription
 	newStatus, newPriority := oldStatus, oldPriority
-	newAssignee, newDueDate := oldAssignee, oldDueDate
+	newAssignee, newStartDate, newDueDate := oldAssignee, oldStartDate, oldDueDate
 	newProject, newMilestone := oldProject, oldMilestone
+	newParent := oldParent
 
 	if patch.Title != nil {
 		if strings.TrimSpace(*patch.Title) == "" {
@@ -381,8 +548,53 @@ func (s *TaskStore) updateWithExpectedVersion(
 	if patch.AssigneeSet {
 		newAssignee = patch.AssigneeID
 	}
+	if patch.StartDateSet {
+		newStartDate = patch.StartDate
+	}
 	if patch.DueDateSet {
 		newDueDate = patch.DueDate
+	}
+	if patch.ScheduleShiftDays != nil {
+		if *patch.ScheduleShiftDays == 0 {
+			return TaskWithRelations{}, fmt.Errorf(
+				"%w: schedule_shift_days must not be zero",
+				domain.ErrInvalidInput,
+			)
+		}
+		if patch.StartDateSet || patch.DueDateSet {
+			return TaskWithRelations{}, fmt.Errorf(
+				"%w: schedule_shift_days cannot be combined with explicit schedule dates",
+				domain.ErrInvalidInput,
+			)
+		}
+		if newStartDate != nil {
+			shifted := newStartDate.AddDate(0, 0, *patch.ScheduleShiftDays)
+			newStartDate = &shifted
+		}
+		if newDueDate != nil {
+			shifted := newDueDate.AddDate(0, 0, *patch.ScheduleShiftDays)
+			newDueDate = &shifted
+		}
+		if newStartDate == nil && newDueDate == nil {
+			var scheduledChildren bool
+			if err := tx.QueryRow(ctx, `
+				SELECT EXISTS (
+					SELECT 1
+					FROM tasks
+					WHERE parent_task_id=$1
+					  AND (start_date IS NOT NULL OR due_date IS NOT NULL)
+				)`,
+				id,
+			).Scan(&scheduledChildren); err != nil {
+				return TaskWithRelations{}, fmt.Errorf("check child schedules: %w", err)
+			}
+			if !scheduledChildren {
+				return TaskWithRelations{}, fmt.Errorf(
+					"%w: an unscheduled task cannot be shifted",
+					domain.ErrConflict,
+				)
+			}
+		}
 	}
 	if patch.ProjectSet {
 		if patch.ProjectID == nil || *patch.ProjectID == uuid.Nil {
@@ -397,19 +609,68 @@ func (s *TaskStore) updateWithExpectedVersion(
 	if patch.MilestoneSet {
 		newMilestone = patch.MilestoneID
 	}
+	if patch.ParentSet {
+		newParent = patch.ParentTaskID
+	}
 	if newProject == uuid.Nil {
 		return TaskWithRelations{}, fmt.Errorf("%w: task project is required", domain.ErrInvalidInput)
 	}
+	if err := domain.ValidateSchedule(newStartDate, newDueDate); err != nil {
+		return TaskWithRelations{}, err
+	}
+	if oldParent != nil &&
+		(oldProject != newProject || !uuidPtrsEqual(oldMilestone, newMilestone)) &&
+		(!patch.ParentSet || patch.ParentTaskID != nil) {
+		return TaskWithRelations{}, fmt.Errorf(
+			"%w: detach a child before moving it to another project or milestone",
+			domain.ErrConflict,
+		)
+	}
+	if err := validateParentAssignment(
+		ctx, tx, id, newParent, newProject, newMilestone, newStatus,
+	); err != nil {
+		return TaskWithRelations{}, err
+	}
+	oldDependencyIDs, err := taskDependencyIDs(ctx, tx, id, true)
+	if err != nil {
+		return TaskWithRelations{}, err
+	}
+	newDependencyIDs := oldDependencyIDs
+	if patch.DependenciesSet {
+		newDependencyIDs = patch.DependencyIDs
+		if err := validateDependencyAssignments(
+			ctx, tx, id, newProject, newParent, patch.DependencyIDs,
+		); err != nil {
+			return TaskWithRelations{}, err
+		}
+		if err := replaceTaskDependencies(ctx, tx, id, patch.DependencyIDs); err != nil {
+			return TaskWithRelations{}, err
+		}
+	} else if oldProject != newProject {
+		if err := validateExistingDependenciesForProject(ctx, tx, id, newProject); err != nil {
+			return TaskWithRelations{}, err
+		}
+	}
 
 	newCompletedAt := oldCompletedAt
-	if oldStatus != domain.TaskStatusDone && newStatus == domain.TaskStatusDone {
+	if newStatus == domain.TaskStatusDone &&
+		(oldStatus != domain.TaskStatusDone || patch.DependenciesSet) {
 		var readiness domain.TaskCompletionReadiness
 		if err := tx.QueryRow(ctx, `
 			SELECT count(*),
 				count(*) FILTER (
 					WHERE latest.outcome IS NULL
 						OR latest.outcome NOT IN ('passed', 'waived')
-				)
+				),
+				(SELECT count(*)
+				 FROM tasks child
+				 WHERE child.parent_task_id=$1
+				   AND child.status NOT IN ('done', 'cancelled')),
+				(SELECT count(*)
+				 FROM task_dependencies dependency
+				 JOIN tasks predecessor ON predecessor.id=dependency.depends_on_task_id
+				 WHERE dependency.task_id=$1
+				   AND predecessor.status NOT IN ('done', 'cancelled'))
 			FROM acceptance_criteria ac
 			LEFT JOIN LATERAL (
 				SELECT chk.outcome
@@ -421,14 +682,21 @@ func (s *TaskStore) updateWithExpectedVersion(
 			) latest ON true
 			WHERE ac.task_id=$1 AND ac.archived_at IS NULL`,
 			id,
-		).Scan(&readiness.ActiveCriteria, &readiness.UnsatisfiedCriteria); err != nil {
+		).Scan(
+			&readiness.ActiveCriteria,
+			&readiness.UnsatisfiedCriteria,
+			&readiness.UnfinishedChildren,
+			&readiness.UnfinishedDependencies,
+		); err != nil {
 			return TaskWithRelations{}, fmt.Errorf("read task acceptance readiness: %w", err)
 		}
 		if err := (domain.Task{ID: id, Status: oldStatus}).ValidateCompletion(readiness); err != nil {
 			return TaskWithRelations{}, err
 		}
-		now := time.Now().UTC()
-		newCompletedAt = &now
+		if oldStatus != domain.TaskStatusDone {
+			now := time.Now().UTC()
+			newCompletedAt = &now
+		}
 	} else if oldStatus == domain.TaskStatusDone && newStatus != domain.TaskStatusDone {
 		newCompletedAt = nil
 	}
@@ -437,16 +705,31 @@ func (s *TaskStore) updateWithExpectedVersion(
 	if err := tx.QueryRow(ctx, `
 		UPDATE tasks SET
 			title=$2, context=$3, expected_result=$4, description=$5,
-			status=$6, priority=$7, assignee_id=$8, due_date=$9,
-			project_id=$10, milestone_id=$11, completed_at=$12,
+			status=$6, priority=$7, assignee_id=$8, start_date=$9, due_date=$10,
+			project_id=$11, milestone_id=$12, parent_task_id=$13, completed_at=$14,
 			version=version+1, updated_at=now()
-		WHERE id=$1 AND version=$13
+		WHERE id=$1 AND version=$15
 		RETURNING version`,
 		id, newTitle, newContext, newExpectedResult, newDescription,
-		string(newStatus), string(newPriority), newAssignee, newDueDate,
-		newProject, newMilestone, newCompletedAt, oldVersion,
+		string(newStatus), string(newPriority), newAssignee, newStartDate, newDueDate,
+		newProject, newMilestone, newParent, newCompletedAt, oldVersion,
 	).Scan(&nextVersion); err != nil {
 		return TaskWithRelations{}, mapPgError(err)
+	}
+	if oldParent == nil &&
+		(oldProject != newProject || !uuidPtrsEqual(oldMilestone, newMilestone)) {
+		if err := moveTaskChildren(
+			ctx, tx, id, newProject, newMilestone, actor,
+		); err != nil {
+			return TaskWithRelations{}, err
+		}
+	}
+	if patch.ScheduleShiftDays != nil && oldParent == nil {
+		if err := shiftTaskChildrenSchedules(
+			ctx, tx, id, *patch.ScheduleShiftDays, actor,
+		); err != nil {
+			return TaskWithRelations{}, err
+		}
 	}
 
 	if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldTitle, oldTitle, newTitle); err != nil {
@@ -470,6 +753,9 @@ func (s *TaskStore) updateWithExpectedVersion(
 	if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldAssignee, uuidPtrString(oldAssignee), uuidPtrString(newAssignee)); err != nil {
 		return TaskWithRelations{}, err
 	}
+	if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldStartDate, datePtrString(oldStartDate), datePtrString(newStartDate)); err != nil {
+		return TaskWithRelations{}, err
+	}
 	if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldDueDate, datePtrString(oldDueDate), datePtrString(newDueDate)); err != nil {
 		return TaskWithRelations{}, err
 	}
@@ -478,6 +764,17 @@ func (s *TaskStore) updateWithExpectedVersion(
 	}
 	if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldMilestone, uuidPtrString(oldMilestone), uuidPtrString(newMilestone)); err != nil {
 		return TaskWithRelations{}, err
+	}
+	if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldParent, uuidPtrString(oldParent), uuidPtrString(newParent)); err != nil {
+		return TaskWithRelations{}, err
+	}
+	if patch.DependenciesSet {
+		if err := recordFieldChange(
+			ctx, tx, id, actor, domain.ActivityFieldDependencies,
+			uuidListString(oldDependencyIDs), uuidListString(newDependencyIDs),
+		); err != nil {
+			return TaskWithRelations{}, err
+		}
 	}
 
 	if patch.LabelsSet {
@@ -500,13 +797,18 @@ func (s *TaskStore) updateWithExpectedVersion(
 		"title": oldTitle, "context": oldContext, "expected_result": oldExpectedResult,
 		"description": oldDescription, "status": oldStatus,
 		"priority": oldPriority, "assignee_id": oldAssignee,
-		"due_date": oldDueDate, "project_id": oldProject, "milestone_id": oldMilestone,
+		"start_date": oldStartDate, "due_date": oldDueDate,
+		"project_id": oldProject, "milestone_id": oldMilestone,
+		"parent_task_id": oldParent, "dependency_ids": oldDependencyIDs,
 	})
 	newValue, _ := json.Marshal(map[string]any{
 		"title": newTitle, "context": newContext, "expected_result": newExpectedResult,
 		"description": newDescription, "status": newStatus,
 		"priority": newPriority, "assignee_id": newAssignee,
-		"due_date": newDueDate, "project_id": newProject, "milestone_id": newMilestone,
+		"start_date": newStartDate, "due_date": newDueDate,
+		"project_id": newProject, "milestone_id": newMilestone,
+		"parent_task_id": newParent, "dependency_ids": newDependencyIDs,
+		"schedule_shift_days": patch.ScheduleShiftDays,
 	})
 	if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
 		OccurredAt: time.Now().UTC(), Actor: actor, EntityType: "task",
@@ -643,6 +945,503 @@ func (s *TaskStore) setArchivedWithExpectedVersion(
 }
 
 // --- helpers ---
+
+func validateParentAssignment(
+	ctx context.Context,
+	tx pgx.Tx,
+	taskID uuid.UUID,
+	parentID *uuid.UUID,
+	projectID uuid.UUID,
+	milestoneID *uuid.UUID,
+	status domain.TaskStatus,
+) error {
+	if parentID == nil {
+		return nil
+	}
+	if *parentID == taskID {
+		return fmt.Errorf("%w: a task cannot be its own parent", domain.ErrInvalidInput)
+	}
+
+	var (
+		parentParentID  *uuid.UUID
+		parentProjectID uuid.UUID
+		parentMilestone *uuid.UUID
+		parentStatus    domain.TaskStatus
+		parentArchived  bool
+	)
+	err := tx.QueryRow(ctx, `
+		SELECT parent_task_id, project_id, milestone_id, status, archived_at IS NOT NULL
+		FROM tasks
+		WHERE id=$1
+		FOR SHARE`,
+		*parentID,
+	).Scan(
+		&parentParentID,
+		&parentProjectID,
+		&parentMilestone,
+		&parentStatus,
+		&parentArchived,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("read task parent: %w", err)
+	}
+	if parentArchived {
+		return fmt.Errorf("%w: an archived task cannot become a parent", domain.ErrConflict)
+	}
+	if parentParentID != nil {
+		return fmt.Errorf("%w: task relationships support exactly one parent-child level", domain.ErrConflict)
+	}
+	if parentProjectID != projectID || !uuidPtrsEqual(parentMilestone, milestoneID) {
+		return fmt.Errorf("%w: parent and child must share project and milestone", domain.ErrConflict)
+	}
+	var hasChildren bool
+	if err := tx.QueryRow(
+		ctx,
+		`SELECT EXISTS (SELECT 1 FROM tasks WHERE parent_task_id=$1)`,
+		taskID,
+	).Scan(&hasChildren); err != nil {
+		return fmt.Errorf("check task children: %w", err)
+	}
+	if hasChildren {
+		return fmt.Errorf("%w: a task with children cannot become a child", domain.ErrConflict)
+	}
+	if parentStatus == domain.TaskStatusDone &&
+		status != domain.TaskStatusDone &&
+		status != domain.TaskStatusCancelled {
+		return fmt.Errorf("%w: a completed parent cannot receive an unfinished child", domain.ErrConflict)
+	}
+	var directlyRelated bool
+	if err := tx.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM task_dependencies
+			WHERE (task_id=$1 AND depends_on_task_id=$2)
+			   OR (task_id=$2 AND depends_on_task_id=$1)
+		)`,
+		taskID,
+		*parentID,
+	).Scan(&directlyRelated); err != nil {
+		return fmt.Errorf("check parent dependency overlap: %w", err)
+	}
+	if directlyRelated {
+		return fmt.Errorf("%w: direct parent and child cannot also be dependencies", domain.ErrConflict)
+	}
+	return nil
+}
+
+func validateDependencyAssignments(
+	ctx context.Context,
+	tx pgx.Tx,
+	taskID uuid.UUID,
+	projectID uuid.UUID,
+	parentID *uuid.UUID,
+	dependencyIDs []uuid.UUID,
+) error {
+	seen := make(map[uuid.UUID]struct{}, len(dependencyIDs))
+	for _, dependencyID := range dependencyIDs {
+		if dependencyID == taskID {
+			return fmt.Errorf("%w: a task cannot depend on itself", domain.ErrInvalidInput)
+		}
+		if _, duplicate := seen[dependencyID]; duplicate {
+			return fmt.Errorf("%w: duplicate task dependency", domain.ErrInvalidInput)
+		}
+		seen[dependencyID] = struct{}{}
+
+		var (
+			dependencyProject  uuid.UUID
+			dependencyParent   *uuid.UUID
+			dependencyArchived bool
+		)
+		err := tx.QueryRow(ctx, `
+			SELECT project_id, parent_task_id, archived_at IS NOT NULL
+			FROM tasks
+			WHERE id=$1
+			FOR SHARE`,
+			dependencyID,
+		).Scan(&dependencyProject, &dependencyParent, &dependencyArchived)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("read task dependency: %w", err)
+		}
+		if dependencyArchived {
+			return fmt.Errorf("%w: archived tasks cannot be dependencies", domain.ErrConflict)
+		}
+		if dependencyProject != projectID {
+			return fmt.Errorf("%w: task dependencies must stay within one project", domain.ErrConflict)
+		}
+		if (parentID != nil && *parentID == dependencyID) ||
+			(dependencyParent != nil && *dependencyParent == taskID) {
+			return fmt.Errorf("%w: direct parent and child cannot also be dependencies", domain.ErrConflict)
+		}
+
+		var createsCycle bool
+		if err := tx.QueryRow(ctx, `
+			WITH RECURSIVE reachable(id) AS (
+				SELECT depends_on_task_id
+				FROM task_dependencies
+				WHERE task_id=$1
+				UNION
+				SELECT dependency.depends_on_task_id
+				FROM task_dependencies dependency
+				JOIN reachable ON reachable.id=dependency.task_id
+			)
+			SELECT EXISTS (SELECT 1 FROM reachable WHERE id=$2)`,
+			dependencyID,
+			taskID,
+		).Scan(&createsCycle); err != nil {
+			return fmt.Errorf("check task dependency cycle: %w", err)
+		}
+		if createsCycle {
+			return fmt.Errorf("%w: task dependency cycle is not allowed", domain.ErrConflict)
+		}
+	}
+	return nil
+}
+
+func validateExistingDependenciesForProject(
+	ctx context.Context,
+	tx pgx.Tx,
+	taskID uuid.UUID,
+	projectID uuid.UUID,
+) error {
+	var invalid bool
+	if err := tx.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM task_dependencies dependency
+			JOIN tasks related
+			  ON related.id=CASE
+				WHEN dependency.task_id=$1 THEN dependency.depends_on_task_id
+				ELSE dependency.task_id
+			  END
+			WHERE (dependency.task_id=$1 OR dependency.depends_on_task_id=$1)
+			  AND related.project_id<>$2
+		)`,
+		taskID,
+		projectID,
+	).Scan(&invalid); err != nil {
+		return fmt.Errorf("validate dependency project: %w", err)
+	}
+	if invalid {
+		return fmt.Errorf("%w: detach dependencies before moving this task to another project", domain.ErrConflict)
+	}
+	return nil
+}
+
+func replaceTaskDependencies(
+	ctx context.Context,
+	tx pgx.Tx,
+	taskID uuid.UUID,
+	dependencyIDs []uuid.UUID,
+) error {
+	if _, err := tx.Exec(ctx, `DELETE FROM task_dependencies WHERE task_id=$1`, taskID); err != nil {
+		return fmt.Errorf("clear task dependencies: %w", err)
+	}
+	for _, dependencyID := range dependencyIDs {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO task_dependencies (task_id, depends_on_task_id)
+			VALUES ($1,$2)`,
+			taskID,
+			dependencyID,
+		); err != nil {
+			return mapPgError(err)
+		}
+	}
+	return nil
+}
+
+func taskDependencyIDs(
+	ctx context.Context,
+	tx pgx.Tx,
+	taskID uuid.UUID,
+	lock bool,
+) ([]uuid.UUID, error) {
+	query := `SELECT depends_on_task_id FROM task_dependencies WHERE task_id=$1 ORDER BY depends_on_task_id`
+	if lock {
+		query += ` FOR UPDATE`
+	}
+	rows, err := tx.Query(ctx, query, taskID)
+	if err != nil {
+		return nil, fmt.Errorf("list task dependency IDs: %w", err)
+	}
+	defer rows.Close()
+	ids := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan task dependency ID: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list task dependency IDs: %w", err)
+	}
+	return ids, nil
+}
+
+func countUnfinishedTasks(
+	ctx context.Context,
+	tx pgx.Tx,
+	taskIDs []uuid.UUID,
+) (int, error) {
+	if len(taskIDs) == 0 {
+		return 0, nil
+	}
+	var count int
+	if err := tx.QueryRow(ctx, `
+		SELECT count(*)
+		FROM tasks
+		WHERE id=ANY($1::uuid[])
+		  AND status NOT IN ('done', 'cancelled')`,
+		taskIDs,
+	).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count unfinished tasks: %w", err)
+	}
+	return count, nil
+}
+
+func moveTaskChildren(
+	ctx context.Context,
+	tx pgx.Tx,
+	parentID uuid.UUID,
+	projectID uuid.UUID,
+	milestoneID *uuid.UUID,
+	actor domain.OperationActor,
+) error {
+	rows, err := tx.Query(ctx, `
+		SELECT id, number, project_id, milestone_id
+		FROM tasks
+		WHERE parent_task_id=$1
+		ORDER BY number
+		FOR UPDATE`,
+		parentID,
+	)
+	if err != nil {
+		return fmt.Errorf("lock task children for move: %w", err)
+	}
+	type childMove struct {
+		id           uuid.UUID
+		number       int64
+		oldProject   uuid.UUID
+		oldMilestone *uuid.UUID
+	}
+	children := []childMove{}
+	groupIDs := []uuid.UUID{parentID}
+	for rows.Next() {
+		var child childMove
+		if err := rows.Scan(
+			&child.id,
+			&child.number,
+			&child.oldProject,
+			&child.oldMilestone,
+		); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan task child for move: %w", err)
+		}
+		children = append(children, child)
+		groupIDs = append(groupIDs, child.id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("list task children for move: %w", err)
+	}
+	if len(children) == 0 {
+		return nil
+	}
+
+	if children[0].oldProject != projectID {
+		var externalDependency bool
+		if err := tx.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1
+				FROM task_dependencies
+				WHERE (task_id=ANY($1::uuid[]) AND NOT (depends_on_task_id=ANY($1::uuid[])))
+				   OR (depends_on_task_id=ANY($1::uuid[]) AND NOT (task_id=ANY($1::uuid[])))
+			)`,
+			groupIDs,
+		).Scan(&externalDependency); err != nil {
+			return fmt.Errorf("validate child group dependencies: %w", err)
+		}
+		if externalDependency {
+			return fmt.Errorf(
+				"%w: detach external dependencies before moving the parent group to another project",
+				domain.ErrConflict,
+			)
+		}
+	}
+
+	for _, child := range children {
+		if _, err := tx.Exec(ctx, `
+			UPDATE tasks
+			SET project_id=$2, milestone_id=$3, version=version+1, updated_at=now()
+			WHERE id=$1`,
+			child.id,
+			projectID,
+			milestoneID,
+		); err != nil {
+			return mapPgError(err)
+		}
+		if err := recordFieldChange(
+			ctx, tx, child.id, actor, domain.ActivityFieldProject,
+			child.oldProject.String(), projectID.String(),
+		); err != nil {
+			return err
+		}
+		if err := recordFieldChange(
+			ctx, tx, child.id, actor, domain.ActivityFieldMilestone,
+			uuidPtrString(child.oldMilestone), uuidPtrString(milestoneID),
+		); err != nil {
+			return err
+		}
+		childNumber := child.number
+		oldValue, _ := json.Marshal(map[string]any{
+			"project_id":   child.oldProject,
+			"milestone_id": child.oldMilestone,
+		})
+		newValue, _ := json.Marshal(map[string]any{
+			"project_id":           projectID,
+			"milestone_id":         milestoneID,
+			"moved_with_parent_id": parentID,
+		})
+		if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
+			OccurredAt:   time.Now().UTC(),
+			Actor:        actor,
+			EntityType:   "task",
+			EntityID:     child.id,
+			EntityNumber: &childNumber,
+			Action:       "moved_with_parent",
+			OldValue:     oldValue,
+			NewValue:     newValue,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func shiftTaskChildrenSchedules(
+	ctx context.Context,
+	tx pgx.Tx,
+	parentID uuid.UUID,
+	days int,
+	actor domain.OperationActor,
+) error {
+	rows, err := tx.Query(ctx, `
+		SELECT id, number, start_date, due_date
+		FROM tasks
+		WHERE parent_task_id=$1
+		  AND (start_date IS NOT NULL OR due_date IS NOT NULL)
+		ORDER BY number
+		FOR UPDATE`,
+		parentID,
+	)
+	if err != nil {
+		return fmt.Errorf("lock child schedules: %w", err)
+	}
+	type scheduledChild struct {
+		id        uuid.UUID
+		number    int64
+		startDate *time.Time
+		dueDate   *time.Time
+	}
+	children := []scheduledChild{}
+	for rows.Next() {
+		var child scheduledChild
+		if err := rows.Scan(
+			&child.id,
+			&child.number,
+			&child.startDate,
+			&child.dueDate,
+		); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan child schedule: %w", err)
+		}
+		children = append(children, child)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("list child schedules: %w", err)
+	}
+
+	for _, child := range children {
+		var shiftedStart, shiftedDue *time.Time
+		if child.startDate != nil {
+			value := child.startDate.AddDate(0, 0, days)
+			shiftedStart = &value
+		}
+		if child.dueDate != nil {
+			value := child.dueDate.AddDate(0, 0, days)
+			shiftedDue = &value
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE tasks
+			SET start_date=$2, due_date=$3, version=version+1, updated_at=now()
+			WHERE id=$1`,
+			child.id,
+			shiftedStart,
+			shiftedDue,
+		); err != nil {
+			return mapPgError(err)
+		}
+		if err := recordFieldChange(
+			ctx, tx, child.id, actor, domain.ActivityFieldStartDate,
+			datePtrString(child.startDate), datePtrString(shiftedStart),
+		); err != nil {
+			return err
+		}
+		if err := recordFieldChange(
+			ctx, tx, child.id, actor, domain.ActivityFieldDueDate,
+			datePtrString(child.dueDate), datePtrString(shiftedDue),
+		); err != nil {
+			return err
+		}
+		childNumber := child.number
+		oldValue, _ := json.Marshal(map[string]any{
+			"start_date": child.startDate,
+			"due_date":   child.dueDate,
+		})
+		newValue, _ := json.Marshal(map[string]any{
+			"start_date":             shiftedStart,
+			"due_date":               shiftedDue,
+			"shifted_with_parent_id": parentID,
+			"shift_days":             days,
+		})
+		if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
+			OccurredAt:   time.Now().UTC(),
+			Actor:        actor,
+			EntityType:   "task",
+			EntityID:     child.id,
+			EntityNumber: &childNumber,
+			Action:       "schedule_shifted_with_parent",
+			OldValue:     oldValue,
+			NewValue:     newValue,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func uuidPtrsEqual(left, right *uuid.UUID) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
+}
+
+func uuidListString(ids []uuid.UUID) string {
+	values := make([]string, len(ids))
+	for i, id := range ids {
+		values[i] = id.String()
+	}
+	sort.Strings(values)
+	return strings.Join(values, ",")
+}
 
 func replaceTaskLabels(ctx context.Context, tx pgx.Tx, taskID uuid.UUID, labelIDs []uuid.UUID) error {
 	if _, err := tx.Exec(ctx, `DELETE FROM task_labels WHERE task_id = $1`, taskID); err != nil {

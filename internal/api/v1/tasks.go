@@ -38,6 +38,9 @@ func (h *Handler) CreateTask(
 	if value, ok := req.AssigneeID.Get(); ok {
 		task.AssigneeID = &value
 	}
+	if value, ok := req.StartDate.Get(); ok {
+		task.StartDate = &value
+	}
 	if value, ok := req.DueDate.Get(); ok {
 		task.DueDate = &value
 	}
@@ -46,8 +49,13 @@ func (h *Handler) CreateTask(
 	if value, ok := req.MilestoneID.Get(); ok {
 		milestoneID = &value
 	}
+	var parentNumber *int64
+	if value, ok := req.ParentNumber.Get(); ok {
+		parentNumber = &value
+	}
 	created, err := h.Tasks.Create(
-		ctx, task, req.LabelIds, &projectNumber, milestoneID, actor,
+		ctx, task, req.LabelIds, &projectNumber, milestoneID,
+		parentNumber, req.DependencyNumbers, actor,
 	)
 	if err != nil {
 		return nil, err
@@ -201,6 +209,12 @@ func (h *Handler) UpdateTask(
 			patch.DueDate = &value
 		}
 	}
+	if req.StartDate.IsSet() {
+		patch.StartDateSet = true
+		if value, ok := req.StartDate.Get(); ok {
+			patch.StartDate = &value
+		}
+	}
 	if req.LabelIds != nil {
 		patch.LabelsSet = true
 		patch.LabelIDs = req.LabelIds
@@ -215,8 +229,21 @@ func (h *Handler) UpdateTask(
 	if value, ok := req.MilestoneID.Get(); ok {
 		association.MilestoneID = &value
 	}
+	relationships := application.TaskRelationshipPatch{
+		ParentSet:       req.ParentNumber.IsSet(),
+		DependenciesSet: req.DependencyNumbers != nil,
+	}
+	if value, ok := req.ParentNumber.Get(); ok {
+		relationships.ParentNumber = &value
+	}
+	if req.DependencyNumbers != nil {
+		relationships.DependencyNumbers = req.DependencyNumbers
+	}
+	if value, ok := req.ScheduleShiftDays.Get(); ok {
+		patch.ScheduleShiftDays = &value
+	}
 	updated, err := h.Tasks.Update(
-		ctx, params.Number, expectedVersion, patch, association, actor,
+		ctx, params.Number, expectedVersion, patch, association, relationships, actor,
 	)
 	if err != nil {
 		return nil, err
@@ -521,17 +548,24 @@ func taskFromDomain(task store.TaskWithRelations) generated.Task {
 		ID: task.Task.ID, Number: task.Task.Number, Version: task.Task.Version,
 		Title: task.Task.Title, Context: task.Task.Context,
 		ExpectedResult: task.Task.ExpectedResult, Description: task.Task.Description,
-		Status:    generated.TaskStatus(task.Task.Status),
-		Priority:  generated.TaskPriority(task.Task.Priority),
-		Creator:   userRefFromDomain(task.Creator),
-		Labels:    make([]generated.Label, len(task.Labels)),
-		CreatedAt: task.Task.CreatedAt, UpdatedAt: task.Task.UpdatedAt,
+		Status:       generated.TaskStatus(task.Task.Status),
+		Priority:     generated.TaskPriority(task.Task.Priority),
+		Creator:      userRefFromDomain(task.Creator),
+		Labels:       make([]generated.Label, len(task.Labels)),
+		Children:     make([]generated.TaskRelationRef, len(task.Children)),
+		Dependencies: make([]generated.TaskRelationRef, len(task.Dependencies)),
+		Dependents:   make([]generated.TaskRelationRef, len(task.Dependents)),
+		Blocked:      task.Blocked,
+		CreatedAt:    task.Task.CreatedAt, UpdatedAt: task.Task.UpdatedAt,
 	}
 	for i, label := range task.Labels {
 		out.Labels[i] = labelFromDomain(label)
 	}
 	if task.Assignee != nil {
 		out.Assignee = generated.NewOptUserRef(userRefFromDomain(*task.Assignee))
+	}
+	if task.Task.StartDate != nil {
+		out.StartDate = generated.NewOptDate(*task.Task.StartDate)
 	}
 	if task.Task.DueDate != nil {
 		out.DueDate = generated.NewOptDate(*task.Task.DueDate)
@@ -544,11 +578,40 @@ func taskFromDomain(task store.TaskWithRelations) generated.Task {
 			ID: task.Milestone.ID, Name: task.Milestone.Name,
 		})
 	}
+	if task.Parent != nil {
+		out.Parent = generated.NewOptTaskRelationRef(taskRelationRefFromDomain(*task.Parent))
+	}
+	for i, child := range task.Children {
+		out.Children[i] = taskRelationRefFromDomain(child)
+	}
+	for i, dependency := range task.Dependencies {
+		out.Dependencies[i] = taskRelationRefFromDomain(dependency)
+	}
+	for i, dependent := range task.Dependents {
+		out.Dependents[i] = taskRelationRefFromDomain(dependent)
+	}
 	if task.Task.CompletedAt != nil {
 		out.CompletedAt = generated.NewOptDateTime(*task.Task.CompletedAt)
 	}
 	if task.Task.ArchivedAt != nil {
 		out.ArchivedAt = generated.NewOptDateTime(*task.Task.ArchivedAt)
+	}
+	return out
+}
+
+func taskRelationRefFromDomain(task store.TaskRelationRef) generated.TaskRelationRef {
+	out := generated.TaskRelationRef{
+		ID:       task.ID,
+		Number:   task.Number,
+		Title:    task.Title,
+		Status:   generated.TaskStatus(task.Status),
+		Archived: task.Archived,
+	}
+	if task.Milestone != nil {
+		out.Milestone = generated.NewOptMilestoneRef(generated.MilestoneRef{
+			ID:   task.Milestone.ID,
+			Name: task.Milestone.Name,
+		})
 	}
 	return out
 }

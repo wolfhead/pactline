@@ -48,6 +48,7 @@ Every Task:
 - belongs to exactly one Project;
 - may belong to one Milestone in that Project;
 - is in the Project Backlog when it has no Milestone;
+- may define an optional start date, due date, or coherent inclusive date range;
 - has a stable, human-facing sequential number;
 - records a creator and an optional assignee;
 - requires context and an expected result when created; and
@@ -57,6 +58,24 @@ Task status and priority are labels, not scheduling constraints. Any valid
 status may move to any other valid status. Moving to `done` is the only
 acceptance gate: a Task with active acceptance criteria may complete only when
 every current criterion revision is passed or waived by a person.
+
+Task relationships add coordination without creating a general-purpose graph:
+
+- Parent-child relationships support exactly one level. Parent and child share
+  one Project and either the same Milestone or the same Project Backlog.
+- Moving a parent to another Project or Milestone moves its children
+  atomically. Moving a child independently across those boundaries requires
+  detaching it in the same operation.
+- A parent cannot complete while a child remains unfinished.
+- Dependencies are directed, cycle-free, and confined to one Project. They may
+  cross Milestones in that Project.
+- An unfinished dependency does not prevent work from starting or change
+  status automatically; it only prevents the dependent Task from completing.
+- A direct parent-child pair cannot also be a dependency pair.
+
+List and Gantt are two renderers of the same filtered Task collection. Gantt
+uses the optional schedule fields, renders due-only work as a marker, and keeps
+entirely unscheduled work available for explicit placement.
 
 ## Acceptance
 

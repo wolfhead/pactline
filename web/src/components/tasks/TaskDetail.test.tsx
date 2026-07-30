@@ -26,8 +26,10 @@ const TASK = {
   context: '竞价请求近期频繁超时', expected_result: '恢复稳定流量且不再发生异常丢量',
   description: '丢量比例升到 4.2%', status: 'in_progress' as const,
   priority: 'high' as const, assignee: USERS[0], creator: USERS[0],
+  start_date: null,
   due_date: '2026-07-30', project: { id: 'p1', number: 12, name: 'Task Manager' },
-  milestone: null, labels: [], created_at: '', updated_at: '',
+  milestone: null, labels: [], parent: null, children: [],
+  dependencies: [], dependents: [], blocked: false, created_at: '', updated_at: '',
   completed_at: null, archived_at: null,
 }
 
@@ -223,7 +225,7 @@ describe('TaskDetail', () => {
       await screen.findByText('另一条任务')
 
       // The toast belongs to #142. Left up, it reads as #143's outcome, and
-      // its 撤销 button still closes over restoreTask(142) — one click away
+      // its undo button still closes over restoreTask(142) — one click away
       // from silently un-archiving a task the user is no longer looking at.
       expect(screen.queryByText('已归档任务。')).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: '撤销' })).not.toBeInTheDocument()

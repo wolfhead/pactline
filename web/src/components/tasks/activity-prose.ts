@@ -37,10 +37,20 @@ export function describeActivity(activity: Activity, actorName: string, userName
       const to = activity.new_value ? (userNameById[activity.new_value] ?? '未知用户') : '未分配'
       return `${who} 将负责人从「${from}」改为「${to}」`
     }
+    case 'start_date':
+      return `${who} 将开始日期从「${activity.old_value ?? '无'}」改为「${activity.new_value ?? '无'}」`
     case 'due_date':
       return `${who} 将截止日期从「${activity.old_value ?? '无'}」改为「${activity.new_value ?? '无'}」`
     case 'labels':
       return `${who} 将标签从「${activity.old_value || '无'}」改为「${activity.new_value || '无'}」`
+    case 'project':
+      return `${who} 将任务移动到其他项目`
+    case 'milestone':
+      return `${who} 调整了任务所属里程碑`
+    case 'parent':
+      return activity.new_value ? `${who} 设置了父任务` : `${who} 解除了父任务`
+    case 'dependencies':
+      return `${who} 更新了任务依赖`
     case 'archived':
       return activity.new_value === 'true' ? `${who} 归档了任务` : `${who} 恢复了任务`
     default:

@@ -104,6 +104,24 @@
  * from producing dark date/select controls inside the fixed-light app. */
 :root { color-scheme: light; }
 
+/* Gantt bars keep a compact desktop profile while coarse pointers receive a
+ * full-size direct-manipulation target. Edge resizing is intentionally a
+ * precise-pointer interaction; touch users edit schedule endpoints through
+ * the same date controls available in task detail. */
+.gantt-bar-action {
+  inset: 8px 0;
+}
+
+@media (pointer: coarse) {
+  .gantt-bar-action {
+    inset: 2px 0;
+  }
+
+  .gantt-resize-handle {
+    display: none;
+  }
+}
+
 @theme {
   /* Glacier blue owns structure; teal is a restrained secondary accent.
    * Raised surfaces remain white so hierarchy comes from the canvas and

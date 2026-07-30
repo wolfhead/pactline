@@ -71,9 +71,11 @@ type Task struct {
 	Priority       TaskPriority
 	AssigneeID     *uuid.UUID
 	CreatorID      uuid.UUID
+	StartDate      *time.Time
 	DueDate        *time.Time
 	ProjectID      uuid.UUID
 	MilestoneID    *uuid.UUID
+	ParentTaskID   *uuid.UUID
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	CompletedAt    *time.Time
@@ -84,14 +86,34 @@ type Task struct {
 // A task with no active criteria remains intentionally lightweight and may be
 // completed directly; once criteria exist, every active criterion is binding.
 type TaskCompletionReadiness struct {
-	ActiveCriteria      int
-	UnsatisfiedCriteria int
+	ActiveCriteria         int
+	UnsatisfiedCriteria    int
+	UnfinishedChildren     int
+	UnfinishedDependencies int
 }
 
-// ValidateCompletion enforces the task's optional acceptance contract.
+// ValidateCompletion enforces the task's optional acceptance contract and
+// relationship readiness. Dependencies and children never prevent work from
+// starting; they only prevent the task from entering done.
 func (t Task) ValidateCompletion(readiness TaskCompletionReadiness) error {
 	if readiness.ActiveCriteria > 0 && readiness.UnsatisfiedCriteria > 0 {
 		return fmt.Errorf("%w: task acceptance is not satisfied", ErrConflict)
+	}
+	if readiness.UnfinishedChildren > 0 {
+		return fmt.Errorf("%w: task has unfinished children", ErrConflict)
+	}
+	if readiness.UnfinishedDependencies > 0 {
+		return fmt.Errorf("%w: task has unfinished dependencies", ErrConflict)
+	}
+	return nil
+}
+
+// ValidateSchedule keeps a task's explicit range coherent. Either endpoint may
+// be absent: a due-only task renders as a marker, while an entirely unscheduled
+// task remains outside the timeline.
+func ValidateSchedule(startDate, dueDate *time.Time) error {
+	if startDate != nil && dueDate != nil && startDate.After(*dueDate) {
+		return fmt.Errorf("%w: task start date must not follow due date", ErrInvalidInput)
 	}
 	return nil
 }
@@ -117,6 +139,9 @@ type TaskPatch struct {
 	DueDateSet bool
 	DueDate    *time.Time
 
+	StartDateSet bool
+	StartDate    *time.Time
+
 	LabelsSet bool
 	LabelIDs  []uuid.UUID
 
@@ -125,6 +150,14 @@ type TaskPatch struct {
 
 	MilestoneSet bool
 	MilestoneID  *uuid.UUID
+
+	ParentSet    bool
+	ParentTaskID *uuid.UUID
+
+	DependenciesSet bool
+	DependencyIDs   []uuid.UUID
+
+	ScheduleShiftDays *int
 }
 
 // IsEmpty reports whether the patch changes nothing at all, in which case a
@@ -132,5 +165,7 @@ type TaskPatch struct {
 func (p TaskPatch) IsEmpty() bool {
 	return p.Title == nil && p.Context == nil && p.ExpectedResult == nil &&
 		p.Description == nil && p.Status == nil && p.Priority == nil &&
-		!p.AssigneeSet && !p.DueDateSet && !p.LabelsSet && !p.ProjectSet && !p.MilestoneSet
+		!p.AssigneeSet && !p.StartDateSet && !p.DueDateSet && !p.LabelsSet &&
+		!p.ProjectSet && !p.MilestoneSet && !p.ParentSet && !p.DependenciesSet &&
+		p.ScheduleShiftDays == nil
 }

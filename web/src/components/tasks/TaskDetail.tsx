@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { XIcon } from 'lucide-react'
+import { Link2, XIcon } from 'lucide-react'
 import AcceptanceChecklist from '@/components/projects/AcceptanceChecklist'
 import ActivityLog from './ActivityLog'
 import CommentSection from './CommentSection'
@@ -10,6 +10,7 @@ import LabelControl from './controls/LabelControl'
 import PriorityControl from './controls/PriorityControl'
 import StatusControl from './controls/StatusControl'
 import ProjectControl from './controls/ProjectControl'
+import TaskRelations from './TaskRelations'
 import { archiveTask, getTask, listLabels, restoreTask, updateTask } from '@/api/tasks'
 import {
   checkCriterion,
@@ -118,10 +119,10 @@ export default function TaskDetail({
     setAcceptanceCriteria([])
     setError('')
     // Everything else on screen belongs to the task being replaced, not the
-    // one arriving. A `更新失败：…，已恢复原状态` raised against A would
-    // otherwise read as B's failure; worse, the 已归档任务。undo toast would
-    // stay up over B with `undoActionRef` still closed over A, so pressing
-    // 撤销 would silently restore a task the user is no longer looking at.
+    // one arriving. A failed-update message raised against A would otherwise
+    // read as B's failure; worse, A's archive undo toast would stay up over B
+    // with `undoActionRef` still closed over A, so pressing undo would silently
+    // restore a task the user is no longer looking at.
     setFieldError('')
     clearUndo()
     let cancelled = false
@@ -407,6 +408,22 @@ export default function TaskDetail({
 
       {task.archived_at && <p className="text-sm text-fg-muted">此任务已归档。</p>}
 
+      {task.blocked && (
+        <div
+          role="status"
+          className="flex items-start gap-2 rounded-md bg-status-in-progress/10 px-3 py-2 text-sm text-status-in-progress"
+        >
+          <Link2 className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <span>
+            等待 {task.dependencies.filter((dependency) => (
+              !['done', 'cancelled'].includes(dependency.status)
+            )).length} 个前置任务完成，当前不能标记为完成。
+          </span>
+        </div>
+      )}
+
+      {fieldError && <p role="alert" className="text-sm text-danger">{fieldError}</p>}
+
       <div
         data-task-properties
         className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 [&_[data-property-control]]:text-sm [&_[data-slot=select-trigger]]:justify-start"
@@ -440,6 +457,16 @@ export default function TaskDetail({
           />
         </div>
         <div className="contents">
+          <span className="text-sm text-fg-muted">开始日期</span>
+          <DueDateControl
+            value={task.start_date ?? null}
+            onChange={(start) => patchOptimistic({ start_date: start }, { start_date: start })}
+            ariaLabel="开始日期"
+            emptyLabel="无开始"
+            pickerLabel="选择开始日期"
+          />
+        </div>
+        <div className="contents">
           <span className="text-sm text-fg-muted">截止日期</span>
           <DueDateControl
             value={task.due_date}
@@ -466,9 +493,19 @@ export default function TaskDetail({
         />
       </div>
 
+      <TaskRelations
+        task={{
+          ...task,
+          children: task.children ?? [],
+          dependencies: task.dependencies ?? [],
+          dependents: task.dependents ?? [],
+        }}
+        onPatch={(patch) => patchOptimistic(patch, {})}
+      />
+
       <section className="flex flex-col gap-3 border-t border-border pt-4">
         <div>
-          <h3 className="text-xs font-medium uppercase tracking-wide text-fg-muted">背景 / 问题</h3>
+          <h3 className="text-xs font-medium text-fg-muted">背景 / 问题</h3>
           <InlineEditable
             value={task.context}
             onCommit={(next) => patchOptimistic({ context: next }, { context: next })}
@@ -479,7 +516,7 @@ export default function TaskDetail({
           />
         </div>
         <div>
-          <h3 className="text-xs font-medium uppercase tracking-wide text-fg-muted">期望结果</h3>
+          <h3 className="text-xs font-medium text-fg-muted">期望结果</h3>
           <InlineEditable
             value={task.expected_result}
             onCommit={(next) => patchOptimistic({ expected_result: next }, { expected_result: next })}
@@ -490,7 +527,7 @@ export default function TaskDetail({
           />
         </div>
         <div>
-          <h3 className="text-xs font-medium uppercase tracking-wide text-fg-muted">补充说明</h3>
+          <h3 className="text-xs font-medium text-fg-muted">补充说明</h3>
           <InlineEditable
             value={task.description}
             onCommit={(next) => patchOptimistic({ description: next }, { description: next })}
@@ -510,8 +547,6 @@ export default function TaskDetail({
         onUpdate={editAcceptanceCriterion}
         onRemove={removeAcceptanceCriterion}
       />
-
-      {fieldError && <p className="text-sm text-danger">{fieldError}</p>}
 
       <p className="text-xs text-fg-muted">
         创建者：{task.creator.name} · 创建于 {new Date(task.created_at).toLocaleString()}

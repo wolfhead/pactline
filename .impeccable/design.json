@@ -1,0 +1,495 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-29T15:49:25Z",
+  "title": "Design System: Pactline",
+  "extensions": {
+    "colorMeta": {
+      "glacier-signal-blue": {
+        "role": "primary",
+        "displayName": "Glacier Signal Blue",
+        "canonical": "#2563eb",
+        "tonalRamp": [
+          "oklch(15% 0.10 260)",
+          "oklch(27% 0.13 260)",
+          "oklch(39% 0.16 260)",
+          "oklch(51% 0.18 260)",
+          "oklch(63% 0.16 260)",
+          "oklch(75% 0.12 260)",
+          "oklch(87% 0.07 260)",
+          "oklch(95% 0.03 260)"
+        ]
+      },
+      "glacier-signal-wash": {
+        "role": "primary",
+        "displayName": "Glacier Signal Wash",
+        "canonical": "#e6efff",
+        "tonalRamp": [
+          "oklch(15% 0.04 260)",
+          "oklch(27% 0.05 260)",
+          "oklch(39% 0.06 260)",
+          "oklch(51% 0.07 260)",
+          "oklch(63% 0.06 260)",
+          "oklch(75% 0.05 260)",
+          "oklch(87% 0.04 260)",
+          "oklch(95% 0.025 260)"
+        ]
+      },
+      "confluence-teal": {
+        "role": "secondary",
+        "displayName": "Confluence Teal",
+        "canonical": "#0f766e",
+        "tonalRamp": [
+          "oklch(15% 0.06 180)",
+          "oklch(27% 0.08 180)",
+          "oklch(39% 0.10 180)",
+          "oklch(51% 0.11 180)",
+          "oklch(63% 0.10 180)",
+          "oklch(75% 0.08 180)",
+          "oklch(87% 0.05 180)",
+          "oklch(95% 0.025 180)"
+        ]
+      },
+      "confluence-wash": {
+        "role": "secondary",
+        "displayName": "Confluence Wash",
+        "canonical": "#e2f4f1",
+        "tonalRamp": [
+          "oklch(15% 0.03 180)",
+          "oklch(27% 0.04 180)",
+          "oklch(39% 0.05 180)",
+          "oklch(51% 0.055 180)",
+          "oklch(63% 0.05 180)",
+          "oklch(75% 0.04 180)",
+          "oklch(87% 0.03 180)",
+          "oklch(95% 0.018 180)"
+        ]
+      },
+      "glacier-canvas": {
+        "role": "neutral",
+        "displayName": "Glacier Canvas",
+        "canonical": "#f3f7fb",
+        "tonalRamp": [
+          "oklch(15% 0.015 245)",
+          "oklch(27% 0.018 245)",
+          "oklch(39% 0.020 245)",
+          "oklch(51% 0.022 245)",
+          "oklch(63% 0.020 245)",
+          "oklch(75% 0.018 245)",
+          "oklch(87% 0.014 245)",
+          "oklch(95% 0.009 245)"
+        ]
+      },
+      "sidebar-mist": {
+        "role": "neutral",
+        "displayName": "Sidebar Mist",
+        "canonical": "#eaf2f9",
+        "tonalRamp": [
+          "oklch(15% 0.020 245)",
+          "oklch(27% 0.024 245)",
+          "oklch(39% 0.027 245)",
+          "oklch(51% 0.030 245)",
+          "oklch(63% 0.027 245)",
+          "oklch(75% 0.023 245)",
+          "oklch(87% 0.018 245)",
+          "oklch(95% 0.011 245)"
+        ]
+      },
+      "white-surface": {
+        "role": "neutral",
+        "displayName": "White Surface",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(27% 0 0)",
+          "oklch(39% 0 0)",
+          "oklch(51% 0 0)",
+          "oklch(63% 0 0)",
+          "oklch(75% 0 0)",
+          "oklch(87% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "quiet-surface": {
+        "role": "neutral",
+        "displayName": "Quiet Surface",
+        "canonical": "#eef4f8",
+        "tonalRamp": [
+          "oklch(15% 0.012 235)",
+          "oklch(27% 0.015 235)",
+          "oklch(39% 0.017 235)",
+          "oklch(51% 0.019 235)",
+          "oklch(63% 0.017 235)",
+          "oklch(75% 0.015 235)",
+          "oklch(87% 0.012 235)",
+          "oklch(95% 0.008 235)"
+        ]
+      },
+      "deep-slate-ink": {
+        "role": "neutral",
+        "displayName": "Deep Slate Ink",
+        "canonical": "#172b3d",
+        "tonalRamp": [
+          "oklch(15% 0.035 245)",
+          "oklch(27% 0.045 245)",
+          "oklch(39% 0.050 245)",
+          "oklch(51% 0.048 245)",
+          "oklch(63% 0.040 245)",
+          "oklch(75% 0.030 245)",
+          "oklch(87% 0.020 245)",
+          "oklch(95% 0.010 245)"
+        ]
+      },
+      "slate-muted": {
+        "role": "neutral",
+        "displayName": "Slate Muted",
+        "canonical": "#4f6274",
+        "tonalRamp": [
+          "oklch(15% 0.025 245)",
+          "oklch(27% 0.032 245)",
+          "oklch(39% 0.036 245)",
+          "oklch(51% 0.035 245)",
+          "oklch(63% 0.030 245)",
+          "oklch(75% 0.024 245)",
+          "oklch(87% 0.016 245)",
+          "oklch(95% 0.008 245)"
+        ]
+      },
+      "slate-subtle": {
+        "role": "neutral",
+        "displayName": "Slate Subtle",
+        "canonical": "#687a8b",
+        "tonalRamp": [
+          "oklch(15% 0.020 245)",
+          "oklch(27% 0.027 245)",
+          "oklch(39% 0.030 245)",
+          "oklch(51% 0.030 245)",
+          "oklch(63% 0.026 245)",
+          "oklch(75% 0.021 245)",
+          "oklch(87% 0.014 245)",
+          "oklch(95% 0.007 245)"
+        ]
+      },
+      "soft-divider": {
+        "role": "neutral",
+        "displayName": "Soft Divider",
+        "canonical": "#d8e3ec",
+        "tonalRamp": [
+          "oklch(15% 0.018 240)",
+          "oklch(27% 0.022 240)",
+          "oklch(39% 0.025 240)",
+          "oklch(51% 0.026 240)",
+          "oklch(63% 0.023 240)",
+          "oklch(75% 0.019 240)",
+          "oklch(87% 0.014 240)",
+          "oklch(95% 0.008 240)"
+        ]
+      },
+      "strong-control-stroke": {
+        "role": "neutral",
+        "displayName": "Strong Control Stroke",
+        "canonical": "#718196",
+        "tonalRamp": [
+          "oklch(15% 0.025 250)",
+          "oklch(27% 0.033 250)",
+          "oklch(39% 0.038 250)",
+          "oklch(51% 0.038 250)",
+          "oklch(63% 0.033 250)",
+          "oklch(75% 0.026 250)",
+          "oklch(87% 0.017 250)",
+          "oklch(95% 0.009 250)"
+        ]
+      },
+      "danger-red": {
+        "role": "tertiary",
+        "displayName": "Danger Red",
+        "canonical": "#b4232c",
+        "tonalRamp": [
+          "oklch(15% 0.10 25)",
+          "oklch(27% 0.13 25)",
+          "oklch(39% 0.16 25)",
+          "oklch(51% 0.18 25)",
+          "oklch(63% 0.16 25)",
+          "oklch(75% 0.12 25)",
+          "oklch(87% 0.07 25)",
+          "oklch(95% 0.03 25)"
+        ]
+      },
+      "danger-wash": {
+        "role": "tertiary",
+        "displayName": "Danger Wash",
+        "canonical": "#fcebec",
+        "tonalRamp": [
+          "oklch(15% 0.035 25)",
+          "oklch(27% 0.045 25)",
+          "oklch(39% 0.055 25)",
+          "oklch(51% 0.060 25)",
+          "oklch(63% 0.052 25)",
+          "oklch(75% 0.042 25)",
+          "oklch(87% 0.030 25)",
+          "oklch(95% 0.016 25)"
+        ]
+      },
+      "progress-amber": {
+        "role": "tertiary",
+        "displayName": "Progress Amber",
+        "canonical": "#b45309",
+        "tonalRamp": [
+          "oklch(15% 0.08 65)",
+          "oklch(27% 0.11 65)",
+          "oklch(39% 0.14 65)",
+          "oklch(51% 0.16 65)",
+          "oklch(63% 0.14 65)",
+          "oklch(75% 0.11 65)",
+          "oklch(87% 0.07 65)",
+          "oklch(95% 0.03 65)"
+        ]
+      },
+      "review-ochre": {
+        "role": "tertiary",
+        "displayName": "Review Ochre",
+        "canonical": "#8a5a05",
+        "tonalRamp": [
+          "oklch(15% 0.07 80)",
+          "oklch(27% 0.09 80)",
+          "oklch(39% 0.12 80)",
+          "oklch(51% 0.14 80)",
+          "oklch(63% 0.12 80)",
+          "oklch(75% 0.09 80)",
+          "oklch(87% 0.06 80)",
+          "oklch(95% 0.025 80)"
+        ]
+      },
+      "high-priority-orange": {
+        "role": "tertiary",
+        "displayName": "High-Priority Orange",
+        "canonical": "#c2410c",
+        "tonalRamp": [
+          "oklch(15% 0.09 45)",
+          "oklch(27% 0.12 45)",
+          "oklch(39% 0.15 45)",
+          "oklch(51% 0.17 45)",
+          "oklch(63% 0.15 45)",
+          "oklch(75% 0.11 45)",
+          "oklch(87% 0.07 45)",
+          "oklch(95% 0.03 45)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Page and project names inside the application shell."
+      },
+      "section": {
+        "displayName": "Section",
+        "purpose": "Major operating regions such as attention and active milestones."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Panel, card, and subsection titles."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Task titles, field values, descriptions, and actions."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Metadata, compact controls, counts, and captions."
+      },
+      "mono-label": {
+        "displayName": "Mono Label",
+        "purpose": "Stable task, request, and token identifiers."
+      }
+    },
+    "shadows": [
+      {
+        "name": "shell-hairline",
+        "value": "0 1px 3px rgb(23 43 61 / 0.04)",
+        "purpose": "Separates the fixed application header from the work surface."
+      },
+      {
+        "name": "control-lift",
+        "value": "0 1px 3px rgb(0 0 0 / 0.10), 0 1px 2px -1px rgb(0 0 0 / 0.10)",
+        "purpose": "Provides restrained tactile emphasis for a primary action or active navigation item."
+      },
+      {
+        "name": "detail-separation",
+        "value": "-8px 0 24px rgb(23 43 61 / 0.04)",
+        "purpose": "Separates an open detail panel without making it modal."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-color",
+        "value": "150ms cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "Default hover, focus, and selected-state color transition."
+      },
+      {
+        "name": "overlay-open",
+        "value": "500ms ease-in-out",
+        "purpose": "Sheet entry when spatial continuity helps the user understand where secondary work lives."
+      },
+      {
+        "name": "overlay-close",
+        "value": "300ms ease-in-out",
+        "purpose": "Sheet exit, shortened so dismissal never feels obstructive."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "tailwind-sm",
+        "value": "640px"
+      },
+      {
+        "name": "phone-to-medium",
+        "value": "768px"
+      },
+      {
+        "name": "permanent-navigation",
+        "value": "1024px"
+      },
+      {
+        "name": "extra-wide",
+        "value": "1280px"
+      },
+      {
+        "name": "task-due-column",
+        "value": "1400px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The dominant action for one local decision region.",
+      "html": "<button class=\"ds-btn-primary\">Create task</button>",
+      "css": ".ds-btn-primary { min-height: 40px; padding: 8px 12px; border: 0; border-radius: 6px; background: var(--color-accent); color: var(--color-accent-fg); font: 500 14px/20px -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; box-shadow: 0 1px 3px rgb(0 0 0 / 0.10), 0 1px 2px -1px rgb(0 0 0 / 0.10); transition: opacity 150ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-primary:hover { opacity: 0.9; } .ds-btn-primary:focus-visible { outline: 3px solid rgb(37 99 235 / 0.50); outline-offset: 2px; } .ds-btn-primary:active { box-shadow: none; }"
+    },
+    {
+      "name": "Quiet Button",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "A secondary action that remains discoverable without competing with the primary action.",
+      "html": "<button class=\"ds-btn-quiet\">Edit</button>",
+      "css": ".ds-btn-quiet { padding: 6px 12px; border: 1px solid var(--color-border-strong); border-radius: 6px; background: transparent; color: var(--color-fg); font: 400 14px/20px -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1), border-color 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-quiet:hover { background: var(--color-surface-subtle); } .ds-btn-quiet:focus-visible { border-color: var(--color-accent); outline: 3px solid rgb(37 99 235 / 0.30); outline-offset: 1px; } .ds-btn-quiet:active { background: var(--color-accent-subtle); }"
+    },
+    {
+      "name": "Compact Search Input",
+      "kind": "input",
+      "refersTo": "input-compact",
+      "description": "The dense collection search field used alongside independent filters.",
+      "html": "<input class=\"ds-input-search\" type=\"search\" placeholder=\"Search tasks…\" aria-label=\"Search tasks\">",
+      "css": ".ds-input-search { width: 320px; height: 32px; padding: 0 10px; border: 1px solid var(--color-border-strong); border-radius: 6px; background: var(--color-surface); color: var(--color-fg); font: 400 14px/20px -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; outline: none; } .ds-input-search::placeholder { color: var(--color-fg-muted); } .ds-input-search:hover { border-color: var(--color-fg-muted); } .ds-input-search:focus-visible { border-color: var(--color-accent); box-shadow: 0 0 0 3px rgb(37 99 235 / 0.50); }"
+    },
+    {
+      "name": "Active Navigation Item",
+      "kind": "nav",
+      "refersTo": "navigation-active",
+      "description": "The singular current location inside permanent or drawer navigation.",
+      "html": "<a class=\"ds-nav-active\" href=\"#\" aria-current=\"page\">My work</a>",
+      "css": ".ds-nav-active { display: flex; align-items: center; min-height: 36px; padding: 8px 12px; border-radius: 6px; background: var(--color-accent); color: var(--color-accent-fg); font: 500 14px/20px -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; text-decoration: none; box-shadow: 0 1px 3px rgb(0 0 0 / 0.10), 0 1px 2px -1px rgb(0 0 0 / 0.10); } .ds-nav-active:hover { opacity: 0.9; } .ds-nav-active:focus-visible { outline: 3px solid rgb(37 99 235 / 0.45); outline-offset: 2px; }"
+    },
+    {
+      "name": "Active Filter Trigger",
+      "kind": "chip",
+      "refersTo": "button-quiet",
+      "description": "A compact control that reveals its active filtering effect without permanent form chrome.",
+      "html": "<button class=\"ds-filter-trigger\" aria-pressed=\"true\">Status · 2</button>",
+      "css": ".ds-filter-trigger { height: 32px; padding: 0 8px; border: 1px solid var(--color-accent); border-radius: 6px; background: var(--color-accent-subtle); color: var(--color-accent); font: 500 12px/16px -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-filter-trigger:hover { background: var(--color-surface-subtle); } .ds-filter-trigger:focus-visible { outline: 3px solid rgb(37 99 235 / 0.30); outline-offset: 1px; } .ds-filter-trigger:active { background: var(--color-accent-subtle); }"
+    },
+    {
+      "name": "Metadata Chip",
+      "kind": "chip",
+      "refersTo": "metadata-chip",
+      "description": "A non-interactive annotation for a label or small piece of supporting metadata.",
+      "html": "<span class=\"ds-metadata-chip\">Frontend</span>",
+      "css": ".ds-metadata-chip { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 9999px; background: var(--color-surface-subtle); color: var(--color-fg-muted); font: 400 11px/16px -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; }"
+    },
+    {
+      "name": "Surface Card",
+      "kind": "card",
+      "refersTo": "surface-card",
+      "description": "An independently selectable or conceptually bounded work object.",
+      "html": "<article class=\"ds-surface-card\"><h3>Active milestone</h3><p>Coordinate the next coherent delivery window.</p></article>",
+      "css": ".ds-surface-card { padding: 16px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); color: var(--color-fg); transition: border-color 150ms cubic-bezier(0.4, 0, 0.2, 1), transform 150ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-surface-card h3 { margin: 0; font: 600 16px/24px -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; } .ds-surface-card p { margin: 4px 0 0; color: var(--color-fg-muted); font: 400 14px/20px -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; } .ds-surface-card:hover { border-color: rgb(37 99 235 / 0.40); transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.10), 0 2px 4px -2px rgb(0 0 0 / 0.10); } .ds-surface-card:focus-within { outline: 3px solid rgb(37 99 235 / 0.30); outline-offset: 2px; }"
+    },
+    {
+      "name": "Selected Task Row",
+      "kind": "custom",
+      "refersTo": "task-row",
+      "description": "The compact desktop scan line with a clear but non-carded selection state.",
+      "html": "<div class=\"ds-task-row\" aria-current=\"true\"><span class=\"ds-task-number\">#42</span><a href=\"#\">Resolve dependency status</a><span class=\"ds-task-property\">In progress</span><span class=\"ds-task-property\">High</span></div>",
+      "css": ".ds-task-row { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border-bottom: 1px solid var(--color-border); background: var(--color-accent-subtle); color: var(--color-fg); box-shadow: inset 3px 0 0 var(--color-accent); font: 400 14px/20px -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; } .ds-task-row a { min-width: 0; flex: 1; overflow: hidden; color: inherit; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; } .ds-task-row a:hover { color: var(--color-accent); } .ds-task-row a:focus-visible { border-radius: 4px; outline: 3px solid rgb(37 99 235 / 0.30); outline-offset: 1px; } .ds-task-number { width: 48px; flex: 0 0 48px; color: var(--color-fg-muted); font: 400 12px/16px ui-monospace, SFMono-Regular, Menlo, monospace; } .ds-task-property { width: 96px; flex: 0 0 96px; color: var(--color-fg-muted); font-size: 12px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Converging Workbench",
+    "overview": "Pactline is a modern collaborative workbench where human and Agent workstreams converge into one legible delivery path. It should feel direct, precise, and current without becoming flashy. Fast inline actions, immediate state feedback, and clear focus make it modern; ornamental effects do not.\n\nThe interface is a working surface rather than an electronic ledger. Audit and structure are trustworthy foundations, but they stay beneath a calm operating experience. Information hierarchy follows the user's next decision, so the most actionable risk, task, or outcome receives emphasis before supporting metadata.\n\nThe system evolves through focused improvements rather than a one-time visual replacement. New work should strengthen the shared hierarchy and interaction grammar while preserving familiar workflows.",
+    "keyCharacteristics": [
+      "Modern and direct, without novelty for its own sake",
+      "Dense enough for daily operation, but never visually flat",
+      "Quiet at rest and unmistakable during action",
+      "Structured by user attention rather than database shape",
+      "Layered through tone, spacing, and borders before shadow"
+    ],
+    "rules": [
+      {
+        "name": "The Accent Scarcity Rule",
+        "body": "Glacier Signal Blue identifies the current action or location; it must not become general decoration.",
+        "section": "colors"
+      },
+      {
+        "name": "The State Has Meaning Rule",
+        "body": "Status, priority, danger, and selection colors must keep stable semantics across List and Gantt renderers.",
+        "section": "colors"
+      },
+      {
+        "name": "The Content Earns Emphasis Rule",
+        "body": "Weight and size follow workflow importance, not entity rank; a blocking condition may outrank the project name when it is the user's next decision.",
+        "section": "typography"
+      },
+      {
+        "name": "The Attention Follows Work Rule",
+        "body": "Visual priority must match the user's likely attention order.",
+        "section": "layout"
+      },
+      {
+        "name": "The Shared Collection Rule",
+        "body": "List and Gantt are renderers of the same task collection. Filters, selection, loading, errors, pagination, and mutations must keep the same placement and behavior unless the renderer requires a genuinely different interaction.",
+        "section": "layout"
+      },
+      {
+        "name": "The Layered, Not Carded Rule",
+        "body": "Add a card only when content is independently selectable, movable, or conceptually bounded; use spacing and dividers for ordinary grouping.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Radius Has a Job Rule",
+        "body": "Larger radii communicate a larger bounded surface; do not apply pill or prominent-surface rounding to ordinary buttons for friendliness alone.",
+        "section": "shapes"
+      },
+      {
+        "name": "The Quiet at Rest Rule",
+        "body": "A control may recede when its value reads clearly as content, but hover, focus, open, selected, blocked, and error states must be immediately recognizable.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "Do order information around the user's next decision and common work sequence.",
+      "Do preserve fast inline editing and provide visible success, conflict, rollback, and undo feedback.",
+      "Do use the shared semantic palette so List and Gantt communicate the same status, priority, selection, and danger meanings.",
+      "Do use whitespace and dividers before introducing another container.",
+      "Do improve existing surfaces incrementally while converging on these shared rules."
+    ],
+    "donts": [
+      "Don't make the product resemble an administrative ledger merely because its underlying records are auditable.",
+      "Don't hide the highest-priority risk or action beneath summary metadata, activity history, or entity chrome.",
+      "Don't imitate chat-shaped task capture or encourage one-line requests.",
+      "Don't turn every field, property, or content group into a bordered box or floating card.",
+      "Don't use exaggerated motion, novelty interactions, decorative gradients, or gamification to manufacture modernity.",
+      "Don't reduce desktop information density solely to satisfy mobile touch sizing; apply touch sizing according to input capability."
+    ]
+  }
+}

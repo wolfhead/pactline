@@ -20,10 +20,13 @@ const (
 	ActivityFieldStatus         ActivityField = "status"
 	ActivityFieldPriority       ActivityField = "priority"
 	ActivityFieldAssignee       ActivityField = "assignee"
+	ActivityFieldStartDate      ActivityField = "start_date"
 	ActivityFieldDueDate        ActivityField = "due_date"
 	ActivityFieldLabels         ActivityField = "labels"
 	ActivityFieldProject        ActivityField = "project"
 	ActivityFieldMilestone      ActivityField = "milestone"
+	ActivityFieldParent         ActivityField = "parent"
+	ActivityFieldDependencies   ActivityField = "dependencies"
 	ActivityFieldArchived       ActivityField = "archived"
 )
 

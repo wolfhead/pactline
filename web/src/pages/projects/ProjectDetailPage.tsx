@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { flushSync } from 'react-dom'
 import { Link, NavLink, useParams } from 'react-router-dom'
 import { Plus } from 'lucide-react'
@@ -14,7 +14,6 @@ import {
   type ProjectActivity,
   type ProjectDetail,
 } from '@/api/projects'
-import { archiveTask, restoreTask, updateTask } from '@/api/tasks'
 import {
   checkCriterion,
   removeCriterion,
@@ -24,11 +23,12 @@ import {
 } from '@/api/acceptance'
 import { ProblemError } from '@/api/v1/client'
 import AcceptanceChecklist from '@/components/projects/AcceptanceChecklist'
-import TaskList from '@/components/tasks/TaskList'
+import TaskCollection from '@/components/tasks/TaskCollection'
+import { useTaskCollection } from '@/components/tasks/useTaskCollection'
 import { useTaskComposer } from '@/components/tasks/TaskComposer'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useIdentity } from '@/identity'
-import type { Task, TaskPatchBody, UserRef } from '@/task-types'
+import type { UserRef } from '@/task-types'
 import { cn } from '@/lib/utils'
 
 type ProjectView = 'overview' | 'milestones' | 'backlog'
@@ -209,8 +209,6 @@ export default function ProjectDetailPage({ view = 'overview' }: { view?: Projec
         <Backlog
           detail={detail}
           users={users}
-          onMutate={mutate}
-          onReload={reload}
         />
       )}
       {view === 'milestones' && (
@@ -306,36 +304,24 @@ function Overview({ detail, users }: { detail: ProjectDetail; users: Array<{ id:
 function Backlog({
   detail,
   users,
-  onMutate,
-  onReload,
 }: {
   detail: ProjectDetail
   users: UserRef[]
-  onMutate: (operation: () => Promise<unknown>) => Promise<boolean>
-  onReload: () => Promise<void>
 }) {
-  const { openTaskComposer } = useTaskComposer()
-  const backlog = detail.tasks.filter((task) => !task.milestone && !task.archived_at)
   return (
-    <section className="rounded-lg border border-border bg-surface-raised">
-      <div className="flex items-start justify-between gap-4 border-b border-border p-4">
+    <section className="overflow-hidden rounded-xl border border-border bg-surface">
+      <div className="border-b border-border px-4 py-3">
         <div>
           <h2 className="font-semibold">项目 Backlog</h2>
           <p className="mt-1 text-sm text-fg-muted">尚未安排到里程碑的任务。</p>
         </div>
-        <button
-          type="button"
-          onClick={() => openTaskComposer({
-            projectNumber: detail.project.number,
-            onCreated: () => { void onReload() },
-          })}
-          className="flex shrink-0 items-center gap-1.5 rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-fg"
-        >
-          <Plus className="size-4" aria-hidden="true" />
-          新建任务
-        </button>
       </div>
-      <ProjectTaskCollection tasks={backlog} users={users} onMutate={onMutate} empty="Backlog 为空。" />
+      <ProjectTaskCollection
+        projectNumber={detail.project.number}
+        backlogOnly
+        users={users}
+        empty="Backlog 为空。"
+      />
     </section>
   )
 }
@@ -352,7 +338,6 @@ function Milestones({
   onReload: () => Promise<void>
 }) {
   const project = detail.project
-  const { openTaskComposer } = useTaskComposer()
   const [editingMilestone, setEditingMilestone] = useState(false)
   const [acceptanceMutationPending, setAcceptanceMutationPending] = useState(false)
   useEffect(() => {
@@ -373,7 +358,6 @@ function Milestones({
   }
 
   if (selected) {
-    const tasks = detail.tasks.filter((task) => task.milestone?.id === selected.id && !task.archived_at)
     const mutateAcceptance = async (operation: () => Promise<unknown>) => {
       setAcceptanceMutationPending(true)
       try {
@@ -488,24 +472,16 @@ function Milestones({
           }}
         />
         <div className="rounded-lg border border-border bg-surface-raised">
-          <div className="flex items-center justify-between gap-4 border-b border-border p-4">
+          <div className="border-b border-border px-4 py-3">
             <h3 className="font-semibold">里程碑任务</h3>
-            {(selected.status === 'planned' || selected.status === 'active') && (
-              <button
-                type="button"
-                onClick={() => openTaskComposer({
-                  projectNumber: project.number,
-                  milestoneID: selected.id,
-                  onCreated: () => { void onReload() },
-                })}
-                className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-fg"
-              >
-                <Plus className="size-4" aria-hidden="true" />
-                新建任务
-              </button>
-            )}
           </div>
-          <ProjectTaskCollection tasks={tasks} users={users} onMutate={onMutate} empty="还没有任务归入此里程碑。" />
+          <ProjectTaskCollection
+            projectNumber={project.number}
+            milestoneID={selected.id}
+            users={users}
+            canCreate={selected.status === 'planned' || selected.status === 'active'}
+            empty="还没有任务归入此里程碑。"
+          />
         </div>
         <ActivityFeed
           activity={detail.activity.filter((item) => item.milestone_id === selected.id)}
@@ -605,77 +581,50 @@ function ActivityFeed({
 }
 
 function ProjectTaskCollection({
-  tasks,
+  projectNumber,
+  milestoneID,
+  backlogOnly = false,
   users,
-  onMutate,
+  canCreate = true,
   empty,
 }: {
-  tasks: Task[]
+  projectNumber: number
+  milestoneID?: string
+  backlogOnly?: boolean
   users: UserRef[]
-  onMutate: (operation: () => Promise<unknown>) => Promise<boolean>
+  canCreate?: boolean
   empty: string
 }) {
+  const { me, isReadOnly } = useIdentity()
+  const { openTaskComposer } = useTaskComposer()
   const tier = useBreakpoint()
-  const [items, setItems] = useState(tasks)
-  const [rowErrors, setRowErrors] = useState<Record<number, string>>({})
-  useEffect(() => setItems(tasks), [tasks])
-
-  function patch(task: Task, body: TaskPatchBody, optimistic: Partial<Task>) {
-    const previous = task
-    setItems((current) => current.map((item) => (
-      item.number === task.number ? { ...item, ...optimistic } : item
-    )))
-    setRowErrors((current) => ({ ...current, [task.number]: '' }))
-    void (async () => {
-      let persisted: Task | undefined
-      const success = await onMutate(async () => {
-        persisted = await updateTask(task.number, task.version, body)
-      })
-      if (success && persisted) {
-        setItems((current) => current.map((item) => (
-          item.number === task.number ? persisted! : item
-        )))
-        return
-      }
-      setItems((current) => current.map((item) => (
-        item.number === task.number ? previous : item
-      )))
-      setRowErrors((current) => ({
-        ...current,
-        [task.number]: '更新失败，已恢复原状态。',
-      }))
-    })()
-  }
-
-  function changeArchive(task: Task, archived: boolean) {
-    setRowErrors((current) => ({ ...current, [task.number]: '' }))
-    void (async () => {
-      const success = await onMutate(() => (
-        archived
-          ? archiveTask(task.number, task.version)
-          : restoreTask(task.number, task.version)
-      ))
-      if (!success) {
-        setRowErrors((current) => ({
-          ...current,
-          [task.number]: `${archived ? '归档' : '恢复'}失败。`,
-        }))
-      }
-    })()
-  }
-
-  if (!items.length) return <p className="p-4 text-sm text-fg-muted">{empty}</p>
+  const query = useMemo(() => ({
+    project_number: projectNumber,
+    milestone_id: milestoneID,
+    backlog_only: backlogOnly || undefined,
+  }), [backlogOnly, milestoneID, projectNumber])
+  const collection = useTaskCollection(query, me?.id)
   return (
-    <TaskList
-      tasks={items}
-      selectedNumber={null}
+    <TaskCollection
+      controller={collection}
       tier={tier}
       users={users}
-      rowErrors={rowErrors}
-      grouped
-      onPatch={patch}
-      onArchive={(task) => changeArchive(task, true)}
-      onRestore={(task) => changeArchive(task, false)}
+      allowGantt={!backlogOnly}
+      empty={empty}
+      actions={canCreate && !isReadOnly && (
+        <button
+          type="button"
+          onClick={() => openTaskComposer({
+            projectNumber,
+            milestoneID,
+            onCreated: collection.prependTask,
+          })}
+          className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-fg shadow-[0_4px_12px_rgb(37_99_235/0.16)]"
+        >
+          <Plus className="size-3.5" aria-hidden="true" />
+          新建任务
+        </button>
+      )}
     />
   )
 }

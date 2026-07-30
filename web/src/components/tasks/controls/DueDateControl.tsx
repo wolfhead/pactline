@@ -36,9 +36,9 @@ function calendarDays(month: Date): Date[] {
   })
 }
 
-function triggerLabel(value: string | null): string {
+function triggerLabel(value: string | null, emptyLabel: string): string {
   const date = parseDate(value)
-  if (!date) return '无截止'
+  if (!date) return emptyLabel
   return `${date.getMonth() + 1}月${date.getDate()}日`
 }
 
@@ -46,11 +46,13 @@ function triggerLabel(value: string | null): string {
  * cards. It deliberately avoids the browser-native date picker, whose
  * appearance and behavior vary by platform. */
 export default function DueDateControl({
-  value, onChange, ariaLabel,
+  value, onChange, ariaLabel, emptyLabel = '无截止', pickerLabel = '选择截止日期',
 }: {
   value: string | null
   onChange: (next: string | null) => void
   ariaLabel: string
+  emptyLabel?: string
+  pickerLabel?: string
 }) {
   const [open, setOpen] = useState(false)
   const selected = parseDate(value)
@@ -81,11 +83,11 @@ export default function DueDateControl({
         <span className={PROPERTY_ICON_SLOT_CLASS} aria-hidden="true">
           <CalendarDays className="size-3.5 text-fg-muted" />
         </span>
-        {triggerLabel(value)}
+        {triggerLabel(value, emptyLabel)}
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        aria-label="选择截止日期"
+        aria-label={pickerLabel}
         className="w-[17.5rem] p-3 [@media(pointer:coarse)]:w-[21rem]"
       >
         <div className="flex items-center justify-between">

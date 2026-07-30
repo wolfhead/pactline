@@ -32,8 +32,10 @@ const TASK = {
   context: '竞价请求近期频繁超时', expected_result: '恢复稳定流量', description: '',
   status: 'todo' as const, priority: 'none' as const, assignee: null,
   creator: { id: 'u1', name: '张沁', email: 'a@x.com' },
+  start_date: null,
   due_date: null, project: { id: 'p1', number: 12, name: 'Task Manager' },
-  milestone: null, labels: [], created_at: '', updated_at: '',
+  milestone: null, labels: [], parent: null, children: [],
+  dependencies: [], dependents: [], blocked: false, created_at: '', updated_at: '',
   completed_at: null, archived_at: null,
 }
 

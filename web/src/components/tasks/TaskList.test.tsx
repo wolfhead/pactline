@@ -12,11 +12,13 @@ function task(n: number, over: Partial<Task> = {}): Task {
     context: 'Test context', expected_result: 'Test result', description: '',
     status: 'todo', priority: 'none', assignee: null,
     creator: USERS[0], due_date: null, labels: [],
+    parent: null, children: [], dependencies: [], dependents: [], blocked: false,
     created_at: '', updated_at: '', completed_at: null, archived_at: null,
     ...over,
     version: over.version ?? 1,
     project: over.project ?? { id: 'p1', number: 12, name: 'Task Manager' },
     milestone: over.milestone ?? null,
+    start_date: over.start_date ?? null,
   }
 }
 
@@ -70,5 +72,33 @@ describe('TaskList', () => {
     const selected = rows.filter((r) => r.getAttribute('aria-current') === 'true')
     expect(selected).toHaveLength(1)
     expect(within(selected[0]).getByText('任务 2')).toBeInTheDocument()
+  })
+
+  it('keeps visible children immediately after their parent', () => {
+    const parentRef = {
+      id: 'id-4',
+      number: 4,
+      title: '任务 4',
+      status: 'todo' as const,
+      archived: false,
+      milestone: null,
+    }
+    renderList([
+      task(4, {
+        children: [{
+          id: 'id-1',
+          number: 1,
+          title: '任务 1',
+          status: 'todo',
+          archived: false,
+          milestone: null,
+        }],
+      }),
+      task(3),
+      task(1, { parent: parentRef }),
+    ])
+
+    expect(screen.getAllByRole('listitem').map((row) => row.dataset.taskNumber))
+      .toEqual(['4', '1', '3'])
   })
 })
