@@ -108,8 +108,10 @@ type ReplyRequest struct {
 	TenantID        string
 	ConversationID  string
 	TargetMessageID string
-	Body            string
-	IdempotencyKey  string
+	// Body is bounded platform-rendered Markdown. Adapters choose their native
+	// presentation without allowing model-authored provider payloads.
+	Body           string
+	IdempotencyKey string
 }
 
 type AcknowledgeRequest struct {

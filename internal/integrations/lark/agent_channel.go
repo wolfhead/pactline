@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -22,6 +23,12 @@ import (
 var ErrAgentChannelNotConfigured = errors.New("Lark Agent channel is not configured")
 
 const acknowledgementEmojiType = "OnIt"
+
+const (
+	defaultAgentCardTitle  = "Pactline Agent"
+	maxAgentCardTitleRunes = 80
+	maxAgentCardBytes      = 30 * 1024
+)
 
 func (c *Client) AgentChannelReady() bool {
 	if c == nil {
@@ -257,7 +264,10 @@ func (c *Client) Reply(
 	if err != nil {
 		return "", err
 	}
-	content, _ := json.Marshal(map[string]string{"text": request.Body})
+	content, err := buildAgentMarkdownCard(request.Body)
+	if err != nil {
+		return "", err
+	}
 	idempotencyHash := sha256.Sum256([]byte(request.IdempotencyKey))
 	path := "/open-apis/im/v1/messages/" +
 		url.PathEscape(request.TargetMessageID) +
@@ -269,7 +279,7 @@ func (c *Client) Reply(
 		http.MethodPost,
 		path,
 		tenantToken,
-		map[string]string{"msg_type": "text", "content": string(content)},
+		map[string]string{"msg_type": "interactive", "content": string(content)},
 		&response,
 	)
 	if err != nil {
@@ -284,6 +294,80 @@ func (c *Client) Reply(
 		)
 	}
 	return channel.ProviderMessageID(response.Data.MessageID), nil
+}
+
+func buildAgentMarkdownCard(markdown string) ([]byte, error) {
+	title, body := splitAgentMarkdown(markdown)
+	card := map[string]any{
+		"config": map[string]any{
+			"wide_screen_mode": true,
+		},
+		"header": map[string]any{
+			"template": "blue",
+			"title": map[string]string{
+				"tag":     "plain_text",
+				"content": title,
+			},
+		},
+		"elements": []any{
+			map[string]any{
+				"tag": "div",
+				"text": map[string]string{
+					"tag":     "lark_md",
+					"content": body,
+				},
+			},
+		},
+	}
+	encoded, err := json.Marshal(card)
+	if err != nil {
+		return nil, fmt.Errorf("encode Lark Agent card: %w", err)
+	}
+	if len(encoded) > maxAgentCardBytes {
+		return nil, fmt.Errorf(
+			"%w: Lark Agent card exceeds %d bytes",
+			channel.ErrInvalidEvent,
+			maxAgentCardBytes,
+		)
+	}
+	return encoded, nil
+}
+
+func splitAgentMarkdown(markdown string) (string, string) {
+	markdown = strings.TrimSpace(markdown)
+	title := defaultAgentCardTitle
+	body := markdown
+	lines := strings.Split(markdown, "\n")
+	if len(lines) > 0 && strings.HasPrefix(strings.TrimSpace(lines[0]), "# ") {
+		title = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(lines[0]), "# "))
+		body = strings.TrimSpace(strings.Join(lines[1:], "\n"))
+	}
+	title = plainAgentCardTitle(title)
+	if title == "" {
+		title = defaultAgentCardTitle
+	}
+	titleRunes := []rune(title)
+	if len(titleRunes) > maxAgentCardTitleRunes {
+		title = string(titleRunes[:maxAgentCardTitleRunes-1]) + "…"
+	}
+	if body == "" {
+		body = title
+	}
+	return title, body
+}
+
+func plainAgentCardTitle(value string) string {
+	value = html.UnescapeString(value)
+	var title strings.Builder
+	title.Grow(len(value))
+	for index := 0; index < len(value); index++ {
+		if value[index] == '\\' && index+1 < len(value) &&
+			strings.ContainsRune("\\`*_~[]()#>-+!|{}", rune(value[index+1])) {
+			index++
+		}
+		title.WriteByte(value[index])
+	}
+	return strings.TrimSpace(title.String())
 }
 
 func (c *Client) Acknowledge(

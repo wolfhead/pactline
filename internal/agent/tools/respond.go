@@ -33,8 +33,8 @@ const (
 type RespondInput struct {
 	ResponseType      string   `json:"response_type" jsonschema:"required,enum=task_created,enum=task_detail,enum=project_status,enum=milestone_status,enum=error,enum=ask_user_question,enum=general_response" jsonschema_description:"Platform response template to use"`
 	SourceToolCallIDs []string `json:"source_tool_call_ids,omitempty" jsonschema_description:"Evidence IDs returned by compatible completed business tools in this Run"`
-	Summary           string   `json:"summary,omitempty" jsonschema_description:"Optional Agent interpretation shown separately from verified fields"`
-	Message           string   `json:"message,omitempty" jsonschema_description:"Plain text for error or general_response"`
+	Summary           string   `json:"summary,omitempty" jsonschema_description:"Required concise Markdown interpretation for every structured business response; shown separately from verified fields"`
+	Message           string   `json:"message,omitempty" jsonschema_description:"Bounded Markdown for error or general_response"`
 	Question          string   `json:"question,omitempty" jsonschema_description:"Focused clarification question for ask_user_question"`
 	Candidates        []string `json:"candidates,omitempty" jsonschema_description:"At most three concise clarification candidates"`
 }
@@ -108,6 +108,12 @@ func (t *RespondTool) InvokableRun(
 	input.Message = strings.TrimSpace(input.Message)
 	if utf8.RuneCountInString(input.Summary) > maxResponseSummaryLength {
 		return "", fmt.Errorf("%w: response summary is too long", ErrToolInput)
+	}
+	if requiresResponseSummary(input.ResponseType) && input.Summary == "" {
+		return "", fmt.Errorf(
+			"%w: structured response requires a Markdown summary",
+			ErrToolInput,
+		)
 	}
 	if err := t.requireMutationReceipt(ctx, input.ResponseType); err != nil {
 		return "", err
@@ -255,4 +261,16 @@ func (t *RespondTool) singleEvidence(
 
 func inputResponseLabel(toolName string) string {
 	return strings.TrimPrefix(toolName, "get_")
+}
+
+func requiresResponseSummary(responseType string) bool {
+	switch responseType {
+	case ResponseTaskCreated,
+		ResponseTaskDetail,
+		ResponseProjectStatus,
+		ResponseMilestoneStatus:
+		return true
+	default:
+		return false
+	}
 }

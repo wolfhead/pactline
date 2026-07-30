@@ -27,22 +27,22 @@ func (r Renderer) Response(
 ) (string, error) {
 	switch selection.Type {
 	case agenttools.ResponseTaskCreated:
-		if selection.CreatedTask == nil {
+		if selection.CreatedTask == nil || strings.TrimSpace(selection.Summary) == "" {
 			return "", ErrInvalidResponseSelection
 		}
-		return r.Success(runID, *selection.CreatedTask), nil
+		return r.taskCreated(runID, selection.Summary, *selection.CreatedTask), nil
 	case agenttools.ResponseTaskDetail:
-		if selection.TaskDetail == nil {
+		if selection.TaskDetail == nil || strings.TrimSpace(selection.Summary) == "" {
 			return "", ErrInvalidResponseSelection
 		}
 		return r.taskDetail(runID, selection.Summary, *selection.TaskDetail), nil
 	case agenttools.ResponseProjectStatus:
-		if selection.ProjectOverview == nil {
+		if selection.ProjectOverview == nil || strings.TrimSpace(selection.Summary) == "" {
 			return "", ErrInvalidResponseSelection
 		}
 		return r.projectStatus(runID, selection.Summary, *selection.ProjectOverview), nil
 	case agenttools.ResponseMilestoneStatus:
-		if selection.MilestoneOverview == nil {
+		if selection.MilestoneOverview == nil || strings.TrimSpace(selection.Summary) == "" {
 			return "", ErrInvalidResponseSelection
 		}
 		return r.milestoneStatus(runID, selection.Summary, *selection.MilestoneOverview), nil
@@ -51,8 +51,8 @@ func (r Renderer) Response(
 			return "", ErrInvalidResponseSelection
 		}
 		return fmt.Sprintf(
-			"⚠️ %s\nRun：%s",
-			strings.TrimSpace(selection.Message),
+			"# ⚠️ 请求未完成\n\n%s\n\n---\n`Run %s`",
+			sanitizeModelMarkdown(selection.Message, 4_000),
 			pactagent.ShortRunReference(runID),
 		), nil
 	case agenttools.ResponseGeneral:
@@ -60,8 +60,8 @@ func (r Renderer) Response(
 			return "", ErrInvalidResponseSelection
 		}
 		return fmt.Sprintf(
-			"%s\nRun：%s",
-			strings.TrimSpace(selection.Message),
+			"# 💬 Pactline Agent\n\n%s\n\n---\n`Run %s`",
+			sanitizeModelMarkdown(selection.Message, 4_000),
 			pactagent.ShortRunReference(runID),
 		), nil
 	default:
@@ -70,6 +70,14 @@ func (r Renderer) Response(
 }
 
 func (r Renderer) Success(runID uuid.UUID, task agenttools.CreatedTask) string {
+	return r.taskCreated(runID, "", task)
+}
+
+func (r Renderer) taskCreated(
+	runID uuid.UUID,
+	summary string,
+	task agenttools.CreatedTask,
+) string {
 	location := "Backlog"
 	if task.MilestoneName != "" {
 		location = task.MilestoneName
@@ -86,18 +94,26 @@ func (r Renderer) Success(runID uuid.UUID, task agenttools.CreatedTask) string {
 	if r.AppBaseURL != nil {
 		taskURL = strings.TrimRight(r.AppBaseURL.String(), "/") + taskURL
 	}
-	return fmt.Sprintf(
-		"✅ 已创建 Task #%d：%s\n项目：%s\n位置：%s\n负责人：%s\n截止日期：%s\n状态：%s\n链接：%s\nRun：%s",
+	var body strings.Builder
+	fmt.Fprintf(
+		&body,
+		"# ✅ Task #%d 已创建 · %s\n\n",
 		task.Number,
-		task.Title,
-		task.ProjectName,
-		location,
-		assignee,
-		dueDate,
-		task.Status,
+		inlineMarkdown(task.Title),
+	)
+	writeSummary(&body, summary)
+	fmt.Fprintf(
+		&body,
+		"**项目**：%s\n**位置**：%s\n**负责人**：%s\n**截止日期**：%s\n**状态**：%s\n\n[在 Pactline 中打开 Task](%s)\n\n---\n`Run %s`",
+		inlineMarkdown(task.ProjectName),
+		inlineMarkdown(location),
+		inlineMarkdown(assignee),
+		inlineMarkdown(dueDate),
+		inlineMarkdown(task.Status),
 		taskURL,
 		pactagent.ShortRunReference(runID),
 	)
+	return body.String()
 }
 
 func (r Renderer) taskDetail(
@@ -106,28 +122,41 @@ func (r Renderer) taskDetail(
 	task agenttools.TaskDetail,
 ) string {
 	var body strings.Builder
-	fmt.Fprintf(&body, "📋 Task #%d：%s\n", task.Number, task.Title)
+	fmt.Fprintf(
+		&body,
+		"# 📋 Task #%d · %s\n\n",
+		task.Number,
+		inlineMarkdown(task.Title),
+	)
 	writeSummary(&body, summary)
 	fmt.Fprintf(
 		&body,
-		"状态：%s\n优先级：%s\n项目：%s\n位置：%s\n负责人：%s\n截止日期：%s\n阻塞：%s",
-		task.Status,
-		task.Priority,
-		task.ProjectName,
-		valueOr(task.MilestoneName, "Backlog"),
-		valueOr(task.AssigneeName, "未指派"),
-		optionalString(task.DueDate, "未设置"),
-		boolLabel(task.Blocked),
+		"**状态**：%s\n**优先级**：%s\n**项目**：%s\n**位置**：%s\n**负责人**：%s\n**截止日期**：%s\n**阻塞**：%s",
+		inlineMarkdown(task.Status),
+		inlineMarkdown(task.Priority),
+		inlineMarkdown(task.ProjectName),
+		inlineMarkdown(valueOr(task.MilestoneName, "Backlog")),
+		inlineMarkdown(valueOr(task.AssigneeName, "未指派")),
+		inlineMarkdown(optionalString(task.DueDate, "未设置")),
+		inlineMarkdown(boolLabel(task.Blocked)),
 	)
 	if task.Context != "" {
-		fmt.Fprintf(&body, "\n背景：%s", truncateText(task.Context, 400))
+		fmt.Fprintf(
+			&body,
+			"\n\n**背景**\n\n%s",
+			escapeMarkdown(truncateText(task.Context, 400)),
+		)
 	}
 	if task.ExpectedResult != "" {
-		fmt.Fprintf(&body, "\n预期结果：%s", truncateText(task.ExpectedResult, 400))
+		fmt.Fprintf(
+			&body,
+			"\n\n**预期结果**\n\n%s",
+			escapeMarkdown(truncateText(task.ExpectedResult, 400)),
+		)
 	}
 	fmt.Fprintf(
 		&body,
-		"\n链接：%s\nRun：%s",
+		"\n\n[在 Pactline 中打开 Task](%s)\n\n---\n`Run %s`",
 		r.entityURL(fmt.Sprintf("/tasks/%d", task.Number)),
 		pactagent.ShortRunReference(runID),
 	)
@@ -140,11 +169,16 @@ func (r Renderer) projectStatus(
 	project agenttools.ProjectOverview,
 ) string {
 	var body strings.Builder
-	fmt.Fprintf(&body, "📊 Project #%d：%s\n", project.ProjectNumber, project.ProjectName)
+	fmt.Fprintf(
+		&body,
+		"# 📊 Project #%d · %s\n\n",
+		project.ProjectNumber,
+		inlineMarkdown(project.ProjectName),
+	)
 	writeSummary(&body, summary)
 	fmt.Fprintf(
 		&body,
-		"任务：%d（todo %d / 进行中 %d / 评审中 %d / 完成 %d / 已取消 %d）\nBacklog：%d\n逾期：%d\n阻塞：%d",
+		"**任务概览**\n\n- 全部：**%d**\n- Todo：%d\n- 进行中：%d\n- 评审中：%d\n- 完成：%d\n- 已取消：%d\n- Backlog：%d\n- 逾期：%d\n- 阻塞：%d",
 		project.TaskCount,
 		project.StatusCounts.Todo,
 		project.StatusCounts.InProgress,
@@ -156,13 +190,13 @@ func (r Renderer) projectStatus(
 		project.BlockedCount,
 	)
 	if len(project.Milestones) > 0 {
-		body.WriteString("\nMilestones：")
+		body.WriteString("\n\n**Milestones**")
 		for _, milestone := range project.Milestones {
 			fmt.Fprintf(
 				&body,
-				"\n• %s：%s，完成 %.0f%%，任务 %d，逾期 %d，阻塞 %d",
-				milestone.Name,
-				milestone.Status,
+				"\n\n- **%s** · %s · 完成 %.0f%% · 任务 %d · 逾期 %d · 阻塞 %d",
+				inlineMarkdown(milestone.Name),
+				inlineMarkdown(milestone.Status),
 				milestone.CompletionRatio*100,
 				milestone.TaskCount,
 				milestone.OverdueCount,
@@ -170,13 +204,13 @@ func (r Renderer) projectStatus(
 			)
 		}
 		if project.MilestonesTruncated {
-			body.WriteString("\n• 仅显示前 10 个 Milestone")
+			body.WriteString("\n\n- _仅显示前 10 个 Milestone_")
 		}
 	}
 	writeAttentionTasks(&body, project.AttentionTasks)
 	fmt.Fprintf(
 		&body,
-		"\n链接：%s\nRun：%s",
+		"\n\n[在 Pactline 中打开 Project](%s)\n\n---\n`Run %s`",
 		r.entityURL(fmt.Sprintf("/projects/%d", project.ProjectNumber)),
 		pactagent.ShortRunReference(runID),
 	)
@@ -192,33 +226,37 @@ func (r Renderer) milestoneStatus(
 	var body strings.Builder
 	fmt.Fprintf(
 		&body,
-		"🎯 Milestone：%s\n项目：%s\n",
-		milestone.Name,
-		overview.ProjectName,
+		"# 🎯 Milestone · %s\n\n**项目**：%s\n\n",
+		inlineMarkdown(milestone.Name),
+		inlineMarkdown(overview.ProjectName),
 	)
 	writeSummary(&body, summary)
 	fmt.Fprintf(
 		&body,
-		"状态：%s\n目标日期：%s\n任务：%d（todo %d / 进行中 %d / 评审中 %d / 完成 %d / 已取消 %d）\n完成度：%.0f%%\n逾期：%d\n阻塞：%d",
-		milestone.Status,
-		optionalString(milestone.TargetDate, "未设置"),
+		"**状态**：%s\n\n**目标日期**：%s\n\n**完成度**：**%.0f%%**\n\n**任务概览**\n\n- 全部：%d\n- Todo：%d\n- 进行中：%d\n- 评审中：%d\n- 完成：%d\n- 已取消：%d\n- 逾期：%d\n- 阻塞：%d",
+		inlineMarkdown(milestone.Status),
+		inlineMarkdown(optionalString(milestone.TargetDate, "未设置")),
+		milestone.CompletionRatio*100,
 		milestone.TaskCount,
 		milestone.StatusCounts.Todo,
 		milestone.StatusCounts.InProgress,
 		milestone.StatusCounts.InReview,
 		milestone.StatusCounts.Done,
 		milestone.StatusCounts.Cancelled,
-		milestone.CompletionRatio*100,
 		milestone.OverdueCount,
 		milestone.BlockedCount,
 	)
 	if overview.Outcome != "" {
-		fmt.Fprintf(&body, "\n目标成果：%s", truncateText(overview.Outcome, 400))
+		fmt.Fprintf(
+			&body,
+			"\n\n**目标成果**\n\n%s",
+			escapeMarkdown(truncateText(overview.Outcome, 400)),
+		)
 	}
 	writeAttentionTasks(&body, overview.AttentionTasks)
 	fmt.Fprintf(
 		&body,
-		"\n链接：%s\nRun：%s",
+		"\n\n[在 Pactline 中打开 Milestone](%s)\n\n---\n`Run %s`",
 		r.entityURL(fmt.Sprintf(
 			"/projects/%d/milestones/%s",
 			overview.ProjectNumber,
@@ -238,7 +276,11 @@ func (r Renderer) entityURL(path string) string {
 
 func writeSummary(body *strings.Builder, summary string) {
 	if summary = strings.TrimSpace(summary); summary != "" {
-		fmt.Fprintf(body, "Agent 总结：%s\n", truncateText(summary, 1_000))
+		fmt.Fprintf(
+			body,
+			"**Agent 总结**\n\n%s\n\n",
+			sanitizeModelMarkdown(summary, 1_000),
+		)
 	}
 }
 
@@ -246,7 +288,7 @@ func writeAttentionTasks(body *strings.Builder, tasks []agenttools.TaskSummary) 
 	if len(tasks) == 0 {
 		return
 	}
-	body.WriteString("\n需要关注：")
+	body.WriteString("\n\n**需要关注**")
 	for _, task := range tasks {
 		var reasons []string
 		if task.Overdue {
@@ -257,10 +299,10 @@ func writeAttentionTasks(body *strings.Builder, tasks []agenttools.TaskSummary) 
 		}
 		fmt.Fprintf(
 			body,
-			"\n• #%d %s（%s）",
+			"\n\n- **#%d %s**（%s）",
 			task.Number,
-			task.Title,
-			strings.Join(reasons, "、"),
+			inlineMarkdown(task.Title),
+			inlineMarkdown(strings.Join(reasons, "、")),
 		)
 	}
 }
@@ -297,20 +339,24 @@ func truncateText(value string, limit int) string {
 
 func (Renderer) Clarification(runID uuid.UUID, question string, candidates []string) string {
 	var body strings.Builder
-	body.WriteString("❓ 需要更多信息，尚未执行请求。\n")
+	body.WriteString("# ❓ 需要更多信息\n\n尚未执行请求。")
 	if len(candidates) > 0 {
-		body.WriteString("可能的方向：\n")
+		body.WriteString("\n\n**可能的方向**")
 		for _, candidate := range candidates {
 			candidate = strings.TrimSpace(candidate)
 			if candidate != "" {
-				fmt.Fprintf(&body, "• %s\n", candidate)
+				fmt.Fprintf(
+					&body,
+					"\n\n- %s",
+					escapeMarkdown(truncateText(candidate, 200)),
+				)
 			}
 		}
 	}
 	fmt.Fprintf(
 		&body,
-		"%s\n请直接回复此消息并补充信息。\nRun：%s",
-		strings.TrimSpace(question),
+		"\n\n%s\n\n请直接回复此消息并补充信息。\n\n---\n`Run %s`",
+		escapeMarkdown(truncateText(question, 500)),
 		pactagent.ShortRunReference(runID),
 	)
 	return body.String()
@@ -318,22 +364,56 @@ func (Renderer) Clarification(runID uuid.UUID, question string, candidates []str
 
 func (Renderer) PermissionFailure(runID uuid.UUID, operation string) string {
 	return fmt.Sprintf(
-		"⛔ 无法完成请求：当前用户无权执行 %s。\nRun：%s",
-		strings.TrimSpace(operation),
+		"# ⛔ 无法完成请求\n\n当前用户无权执行 **%s**。\n\n---\n`Run %s`",
+		inlineMarkdown(operation),
 		pactagent.ShortRunReference(runID),
 	)
 }
 
 func (Renderer) Failure(runID uuid.UUID) string {
 	return fmt.Sprintf(
-		"⚠️ 本次请求无法完成，请稍后重试。\nRun：%s",
+		"# ⚠️ 请求未完成\n\n本次请求无法完成，请稍后重试。\n\n---\n`Run %s`",
 		pactagent.ShortRunReference(runID),
 	)
 }
 
 func (Renderer) Expired(runID uuid.UUID) string {
 	return fmt.Sprintf(
-		"⌛ 澄清请求已超过 24 小时，请重新 @Pactline 发起请求。\nRun：%s",
+		"# ⌛ 请求已过期\n\n澄清请求已超过 24 小时，请重新 @Pactline 发起请求。\n\n---\n`Run %s`",
 		pactagent.ShortRunReference(runID),
 	)
+}
+
+func inlineMarkdown(value string) string {
+	value = strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
+	return escapeMarkdown(value)
+}
+
+func escapeMarkdown(value string) string {
+	value = strings.ReplaceAll(value, "\x00", "")
+	return strings.NewReplacer(
+		`\`, `\\`,
+		"`", "\\`",
+		"*", `\*`,
+		"_", `\_`,
+		"~", `\~`,
+		"[", `\[`,
+		"]", `\]`,
+		"(", `\(`,
+		")", `\)`,
+		"#", `\#`,
+		"-", `\-`,
+		"+", `\+`,
+		"!", `\!`,
+		"|", `\|`,
+		"{", `\{`,
+		"}", `\}`,
+		"<", "&lt;",
+		">", "&gt;",
+	).Replace(value)
+}
+
+func sanitizeModelMarkdown(value string, limit int) string {
+	value = truncateText(strings.ReplaceAll(value, "\x00", ""), limit)
+	return strings.NewReplacer("<", "&lt;", ">", "&gt;").Replace(value)
 }

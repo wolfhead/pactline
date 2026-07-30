@@ -199,14 +199,62 @@ func TestAgentChannelFetchesBoundedContextAndReplies(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, channel.ProviderMessageID("reply-1"), providerID)
-	require.Equal(t, "text", replyBody["msg_type"])
-	require.JSONEq(t, `{"text":"created"}`, replyBody["content"])
+	require.Equal(t, "interactive", replyBody["msg_type"])
+	var card struct {
+		Header struct {
+			Template string `json:"template"`
+			Title    struct {
+				Tag     string `json:"tag"`
+				Content string `json:"content"`
+			} `json:"title"`
+		} `json:"header"`
+		Elements []struct {
+			Tag  string `json:"tag"`
+			Text struct {
+				Tag     string `json:"tag"`
+				Content string `json:"content"`
+			} `json:"text"`
+		} `json:"elements"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(replyBody["content"]), &card))
+	require.Equal(t, "blue", card.Header.Template)
+	require.Equal(t, "Pactline Agent", card.Header.Title.Content)
+	require.Len(t, card.Elements, 1)
+	require.Equal(t, "lark_md", card.Elements[0].Text.Tag)
+	require.Equal(t, "created", card.Elements[0].Text.Content)
 
 	require.NoError(t, client.Acknowledge(context.Background(), channel.AcknowledgeRequest{
 		TenantID:        "tenant",
 		TargetMessageID: "message-1",
 	}))
 	require.Equal(t, "OnIt", reactionBody["reaction_type"]["emoji_type"])
+}
+
+func TestBuildAgentMarkdownCardPromotesFirstHeading(t *testing.T) {
+	encoded, err := buildAgentMarkdownCard(
+		"# 📋 Task #42 · Inspect\\_status\n\n**状态**：in\\_progress\n\n[打开](https://tasks.example.test/tasks/42)",
+	)
+	require.NoError(t, err)
+
+	var card struct {
+		Header struct {
+			Title struct {
+				Content string `json:"content"`
+			} `json:"title"`
+		} `json:"header"`
+		Elements []struct {
+			Text struct {
+				Content string `json:"content"`
+			} `json:"text"`
+		} `json:"elements"`
+	}
+	require.NoError(t, json.Unmarshal(encoded, &card))
+	require.Equal(t, "📋 Task #42 · Inspect_status", card.Header.Title.Content)
+	require.Equal(
+		t,
+		"**状态**：in\\_progress\n\n[打开](https://tasks.example.test/tasks/42)",
+		card.Elements[0].Text.Content,
+	)
 }
 
 func newAgentChannelTestClient(

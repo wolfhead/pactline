@@ -287,3 +287,19 @@ first release.
   counts plus a separately labeled Agent summary.
 - A general conversational request may use `general_response`, while an
   already-successful mutation always receives its verified structured receipt.
+
+## Phase 11: Markdown and Lark Card Presentation
+
+- [ ] Render every platform-owned response template as bounded Markdown.
+- [ ] Require non-empty Markdown summaries for every structured business
+  response while retaining evidence-backed platform fields.
+- [ ] Escape business values and sanitize raw provider tags from model-written
+  summaries, errors, and general responses.
+- [ ] Change the `respond` contract to describe Markdown-capable free-form
+  fields without allowing model-authored card JSON.
+- [ ] Convert the first Markdown heading and body to one static Lark
+  `interactive` card inside the Lark adapter.
+- [ ] Preserve the existing Outbox, reply target, provider UUID
+  deduplication, retry, and audit behavior.
+- [ ] Add renderer and Lark payload tests, then verify Task, Project, and
+  Milestone cards in the live test group.

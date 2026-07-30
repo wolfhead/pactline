@@ -523,6 +523,24 @@ reasoning content, and authorization values.
 
 Replies use fixed renderers, not free-form final model output.
 
+The platform renderer produces bounded Markdown. Structured business values
+are Markdown-escaped, while model-written summaries and general responses may
+use Markdown after provider-extension sanitization. In particular, model
+content cannot emit raw Lark tags such as `<at>` that would create mentions or
+other channel-side effects.
+
+Every structured business `respond` selection (`task_created`, `task_detail`,
+`project_status`, and `milestone_status`) requires a non-empty Markdown
+`summary`. The summary is interpretation, never evidence, and is displayed
+separately from platform-rendered verified fields. Error and general responses
+use their bounded Markdown `message` field instead.
+
+The provider-neutral Outbox stores that Markdown. The Lark adapter converts it
+to one static `interactive` message card: the first level-one heading becomes
+the card header and the remaining Markdown becomes the card body. The model
+never creates card JSON. Other channel adapters may render the same Markdown
+using their native presentation primitives.
+
 Success includes the Task number, title, Project, Backlog or Milestone,
 assignee, due date, status, URL, and short Run reference.
 
@@ -530,8 +548,8 @@ Task detail, Project status, and Milestone status use platform-owned templates
 populated from compatible completed OpenAPI tool results. An optional
 model-written summary is displayed separately from verified fields.
 
-`general_response` renders bounded plain text selected by the model. It is an
-Agent message rather than verified evidence of a business mutation.
+`general_response` renders bounded sanitized Markdown selected by the model. It
+is an Agent message rather than verified evidence of a business mutation.
 
 Clarification explains that no Task was created, may list concise candidate
 directions, and asks the initiating user to reply with one specific Task.

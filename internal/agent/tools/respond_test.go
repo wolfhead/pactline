@@ -116,13 +116,13 @@ func TestRespondRejectsMismatchedEvidenceAndSecondTerminalResponse(t *testing.T)
 
 	_, err = respond.InvokableRun(
 		context.Background(),
-		`{"response_type":"task_detail","source_tool_call_ids":["call-project"]}`,
+		`{"response_type":"task_detail","source_tool_call_ids":["call-project"],"summary":"**Active** work."}`,
 	)
 	require.ErrorIs(t, err, pactagent.ErrToolCallProtocol)
 
 	_, err = respond.InvokableRun(
 		context.Background(),
-		`{"response_type":"project_status","source_tool_call_ids":["call-project"]}`,
+		`{"response_type":"project_status","source_tool_call_ids":["call-project"],"summary":"- Two Tasks are done."}`,
 	)
 	require.NoError(t, err)
 	_, err = respond.InvokableRun(
@@ -130,6 +130,35 @@ func TestRespondRejectsMismatchedEvidenceAndSecondTerminalResponse(t *testing.T)
 		`{"response_type":"general_response","message":"another response"}`,
 	)
 	require.ErrorIs(t, err, pactagent.ErrToolCallProtocol)
+}
+
+func TestRespondRequiresMarkdownSummaryForStructuredResponse(t *testing.T) {
+	runID := uuid.New()
+	result, err := json.Marshal(ProjectOverview{ProjectNumber: 7, ProjectName: "Launch"})
+	require.NoError(t, err)
+	repository := &responseRepositoryStub{
+		run: pactagent.Run{ID: runID},
+		calls: map[string]pactagent.ToolCall{
+			"call-project": {
+				RunID: runID, ToolCallID: "call-project",
+				ToolName: ToolGetProjectOverview, State: pactagent.ToolCallCompleted,
+				Result: result,
+			},
+		},
+	}
+	respond := &RespondTool{
+		config: Config{Run: repository.run, Repository: repository},
+		state:  &responseState{},
+	}
+
+	_, err = respond.InvokableRun(
+		context.Background(),
+		`{"response_type":"project_status","source_tool_call_ids":["call-project"]}`,
+	)
+
+	require.ErrorIs(t, err, ErrToolInput)
+	_, selected := respond.LastResponse()
+	require.False(t, selected)
 }
 
 func TestGeneralResponseIsUnrestrictedButCannotReplaceCreatedTaskReceipt(t *testing.T) {

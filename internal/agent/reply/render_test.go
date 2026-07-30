@@ -16,17 +16,17 @@ func TestRendererUsesFixedUserVisibleFormats(t *testing.T) {
 	require.NoError(t, err)
 	renderer := Renderer{AppBaseURL: baseURL}
 	require.Equal(t,
-		"✅ 已创建 Task #42：整理群聊需求\n项目：Pactline\n位置：Backlog\n负责人：未指派\n截止日期：未设置\n状态：backlog\n链接：https://tasks.example.test/tasks/42\nRun：aaaaaaaa",
+		"# ✅ Task #42 已创建 · 整理群聊需求\n\n**项目**：Pactline\n**位置**：Backlog\n**负责人**：未指派\n**截止日期**：未设置\n**状态**：backlog\n\n[在 Pactline 中打开 Task](https://tasks.example.test/tasks/42)\n\n---\n`Run aaaaaaaa`",
 		renderer.Success(runID, agenttools.CreatedTask{
 			Number: 42, Title: "整理群聊需求", ProjectName: "Pactline", Status: "backlog",
 		}),
 	)
 	require.Equal(t,
-		"❓ 需要更多信息，尚未执行请求。\n可能的方向：\n• 修复登录\n• 增加审计\n请明确选择一个方向。\n请直接回复此消息并补充信息。\nRun：aaaaaaaa",
+		"# ❓ 需要更多信息\n\n尚未执行请求。\n\n**可能的方向**\n\n- 修复登录\n\n- 增加审计\n\n请明确选择一个方向。\n\n请直接回复此消息并补充信息。\n\n---\n`Run aaaaaaaa`",
 		renderer.Clarification(runID, "请明确选择一个方向。", []string{"修复登录", "增加审计"}),
 	)
 	require.Contains(t, renderer.PermissionFailure(runID, "创建 Task"), "⛔ 无法完成请求")
-	require.Contains(t, renderer.Failure(runID), "⚠️ 本次请求无法完成")
+	require.Contains(t, renderer.Failure(runID), "本次请求无法完成")
 	require.Contains(t, renderer.Expired(runID), "超过 24 小时")
 }
 
@@ -48,12 +48,13 @@ func TestRendererFormatsVerifiedStatusResponses(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Contains(t, taskBody, "Task #42")
-	require.Contains(t, taskBody, "状态：in_progress")
-	require.Contains(t, taskBody, "阻塞：是")
+	require.Contains(t, taskBody, "**状态**：in\\_progress")
+	require.Contains(t, taskBody, "**阻塞**：是")
 	require.Contains(t, taskBody, "https://tasks.example.test/tasks/42")
 
 	projectBody, err := renderer.Response(runID, agenttools.ResponseSelection{
-		Type: agenttools.ResponseProjectStatus,
+		Type:    agenttools.ResponseProjectStatus,
+		Summary: "**Two** Tasks are complete.",
 		ProjectOverview: &agenttools.ProjectOverview{
 			ProjectNumber: 7, ProjectName: "Pactline", TaskCount: 5,
 			StatusCounts: agenttools.TaskStatusCounts{
@@ -68,8 +69,21 @@ func TestRendererFormatsVerifiedStatusResponses(t *testing.T) {
 	require.Contains(t, projectBody, "逾期：1")
 
 	generalBody, err := renderer.Response(runID, agenttools.ResponseSelection{
-		Type: agenttools.ResponseGeneral, Message: "A free-form response.",
+		Type:    agenttools.ResponseGeneral,
+		Message: "**Free-form** response. <at id=all></at>",
 	})
 	require.NoError(t, err)
-	require.Equal(t, "A free-form response.\nRun：aaaaaaaa", generalBody)
+	require.Equal(
+		t,
+		"# 💬 Pactline Agent\n\n**Free-form** response. &lt;at id=all&gt;&lt;/at&gt;\n\n---\n`Run aaaaaaaa`",
+		generalBody,
+	)
+
+	_, err = renderer.Response(runID, agenttools.ResponseSelection{
+		Type: agenttools.ResponseTaskDetail,
+		TaskDetail: &agenttools.TaskDetail{TaskSummary: agenttools.TaskSummary{
+			Number: 42,
+		}},
+	})
+	require.ErrorIs(t, err, ErrInvalidResponseSelection)
 }
