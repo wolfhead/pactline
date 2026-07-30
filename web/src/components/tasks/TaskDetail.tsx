@@ -32,10 +32,7 @@ interface TaskDetailProps {
   users: UserRef[]
   // The caller's own copy of this task, when it has one. This is the other
   // half of `onPatched`: the seam has to run both ways or the two views
-  // diverge. At xl the selected row sits directly beside the open detail
-  // with its controls live, so a status changed from the row must show up
-  // here too — without it the detail keeps rendering the old value until
-  // something remounts it, side by side with the row that already moved on.
+  // diverge while the inspector is open.
   // Optional and nullable: a task the caller doesn't hold (filtered out, or
   // on a later page) simply isn't synced, and TaskDetail still owns its own
   // fetch for everything else — comments, activity, the initial load.
@@ -43,17 +40,13 @@ interface TaskDetailProps {
   // Lets the list page fold a server-confirmed change
   // into its own copy of the task without a full reload.
   onPatched: (task: Task) => void
-  // Only the shell knows whether it needs a close affordance at all — a
-  // three-column layout at xl never passes this, a Sheet or a phone page
-  // always does.
+  // Only the inspector shell owns navigation and therefore the close action.
   onClose?: () => void
 }
 
 /**
- * Detail *content* for one task — no dialog, no page chrome, no back link
- * of its own. Task 9 places this inside a third column at xl, a slide-over
- * Sheet at lg/md, and a full page on a phone; this component has no idea
- * which. The task brief is edited exactly where it is read (see
+ * Detail content for one task — no dialog, page chrome, or back link of its
+ * own. The task brief is edited exactly where it is read (see
  * InlineEditable). Every property commits the instant it changes —
  * optimistic update, then reconciled against whatever the server actually
  * persisted, reverting visibly with a reason if it refuses. Archiving does
@@ -80,9 +73,9 @@ export default function TaskDetail({
 
   // Which task this component is currently *for*. The load effect's
   // `cancelled` flag only guards its own fetch; every other request here is
-  // fired from an event handler, which has no cleanup to flip. At xl
-  // `number` changes in place — clicking another row never remounts
-  // TaskDetail — so an in-flight updateTask/archiveTask/restoreTask for the
+  // fired from an event handler, which has no cleanup to flip. `number`
+  // changes in place when another task opens, so an in-flight
+  // updateTask/archiveTask/restoreTask for the
   // previously shown task can still resolve after the new one has loaded
   // and rendered. Writing that response into `task` would leave A's title,
   // status and comments sitting under the URL /tasks/B with nothing left to
@@ -105,12 +98,9 @@ export default function TaskDetail({
   }
 
   // Fetches whenever `number` changes, a reload is requested, or identity
-  // changes — mirrors the cancelled-flag idiom in identity.tsx /
-  // WorkFeed.tsx / BountyDetail.tsx. `number` changing without a
-  // remount is the normal case at xl: clicking another row in the list
-  // column changes this prop in place, it never unmounts/remounts
-  // TaskDetail, so this effect (not initial-mount logic) is what has to
-  // replace the loaded task. `me?.id` is a dependency for the same reason —
+  // changes. Clicking another task updates `number` without remounting the
+  // inspector, so this effect replaces the loaded task. `me?.id` is a
+  // dependency for the same reason —
   // switching identity has to replace the data, and a slow stale response
   // must never overwrite a newer one.
   useEffect(() => {

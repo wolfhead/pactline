@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import type { Task } from '@/task-types'
 import GanttView from './GanttView'
@@ -65,7 +65,10 @@ function controller(
   }
 }
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+})
 
 describe('GanttView', () => {
   it('renders a parent summary while keeping child edges directly resizable', () => {
@@ -105,7 +108,7 @@ describe('GanttView', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByRole('button', { name: /Parent，2026-08-03 至 2026-08-08/ }))
+    expect(screen.getByRole('link', { name: /Parent，2026-08-03 至 2026-08-08/ }))
       .toBeVisible()
     expect(screen.queryByRole('button', { name: '调整 Parent 开始日期' }))
       .not.toBeInTheDocument()
@@ -155,7 +158,7 @@ describe('GanttView', () => {
     )
 
     fireEvent.keyDown(
-      screen.getByRole('button', { name: /Keyboard task，2026-08-03 至 2026-08-05/ }),
+      screen.getByRole('link', { name: /Keyboard task，2026-08-03 至 2026-08-05/ }),
       { key: 'ArrowRight' },
     )
 
@@ -181,5 +184,100 @@ describe('GanttView', () => {
     expect(screen.getByRole('link', { name: 'Failed schedule' }))
       .toHaveAttribute('href', '/tasks/5')
     expect(screen.getByRole('alert')).toHaveAttribute('title', 'Version conflict')
+  })
+
+  it('uses a readable deadline marker and preserves a contextual task link', () => {
+    const dueOnly = task(6, {
+      title: 'Ship release',
+      due_date: '2026-08-07',
+    })
+    render(
+      <MemoryRouter>
+        <GanttView
+          controller={controller([dueOnly])}
+          tier="xl"
+          selectedNumber={null}
+          taskHref={(value) => `?task=${value.number}`}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('link', {
+      name: 'Ship release，仅截止日期 · 2026-08-07',
+    })).toHaveAttribute('href', '/?task=6')
+  })
+
+  it('waits before showing the full task preview', () => {
+    vi.useFakeTimers()
+    const scheduled = task(7, {
+      title: 'A complete title that should not be truncated in the preview',
+      start_date: '2026-08-07',
+      due_date: '2026-08-07',
+      assignee: { id: 'user-2', name: 'Taylor', email: null },
+    })
+    render(
+      <MemoryRouter>
+        <GanttView controller={controller([scheduled])} tier="xl" selectedNumber={null} />
+      </MemoryRouter>,
+    )
+
+    const taskLabel = screen.getByRole('link', { name: scheduled.title })
+    fireEvent.pointerEnter(taskLabel)
+    fireEvent.pointerMove(taskLabel)
+    act(() => vi.advanceTimersByTime(499))
+    expect(screen.queryByText('点击打开任务详情')).not.toBeInTheDocument()
+
+    act(() => vi.advanceTimersByTime(1))
+    expect(screen.getByText('点击打开任务详情')).toBeVisible()
+    expect(screen.getAllByText('Taylor')).toHaveLength(2)
+    expect(screen.getByText('单日任务 · 2026-08-07')).toBeVisible()
+  })
+
+  it('shows week context, weekend bands, assignee, and priority in the task column', () => {
+    const scheduled = task(8, {
+      title: 'Metadata task',
+      start_date: '2026-08-03',
+      due_date: '2026-08-07',
+      priority: 'high',
+      assignee: { id: 'user-3', name: 'Morgan', email: null },
+    })
+    const { container } = render(
+      <MemoryRouter>
+        <GanttView controller={controller([scheduled])} tier="xl" selectedNumber={null} />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('8月 · 第32周')).toBeVisible()
+    expect(screen.getByText('Morgan')).toBeVisible()
+    expect(screen.getByText('高')).toHaveClass('text-priority-high')
+    expect(container.querySelectorAll('[data-weekend-band="true"]').length)
+      .toBeGreaterThanOrEqual(2)
+  })
+
+  it('extends the timeline to fill a wide container without stretching day cells', async () => {
+    const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth')
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+      configurable: true,
+      get: () => 1800,
+    })
+    try {
+      const { container } = render(
+        <MemoryRouter>
+          <GanttView controller={controller([task(9)])} tier="xl" selectedNumber={null} />
+        </MemoryRouter>,
+      )
+
+      const gantt = container.querySelector('[data-gantt-view]')
+      await waitFor(() => {
+        expect(Number(gantt?.getAttribute('data-timeline-days')))
+          .toBeGreaterThanOrEqual(Math.ceil((1800 - 320) / 36))
+      })
+    } finally {
+      if (original) {
+        Object.defineProperty(HTMLElement.prototype, 'clientWidth', original)
+      } else {
+        delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth
+      }
+    }
   })
 })

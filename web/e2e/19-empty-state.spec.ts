@@ -20,7 +20,10 @@ test('a search that matches nothing shows guidance distinct from "no tasks at al
   tasksApi,
 }) => {
   const title = uniqueTitle('Empty state guard')
-  const task = await tasksApi.createTask(USERS.engineerC.id, { title })
+  const task = await tasksApi.createTask(USERS.engineerC.id, {
+    title,
+    assignee_id: USERS.sponsorA.id,
+  })
   trackTask(task.id)
 
   await page.goto('/tasks')

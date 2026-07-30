@@ -11,7 +11,9 @@ import { USERS } from './config'
 export async function switchIdentity(page: Page, _userId: string): Promise<void> {
   const userSelect = page.getByLabel('Local user')
   const logout = page.getByRole('button', { name: '退出登录' })
-  await expect(userSelect.or(logout).first()).toBeVisible()
+  const taskDetail = page.getByRole('dialog', { name: '任务详情' })
+  await expect(userSelect.or(logout).or(taskDetail).first()).toBeVisible()
+  if (await taskDetail.isVisible()) return
   if (await logout.isVisible()) return
 
   await expect(userSelect).toBeVisible()

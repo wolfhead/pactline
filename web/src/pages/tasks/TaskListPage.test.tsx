@@ -79,21 +79,21 @@ describe('TaskListPage', () => {
     expect(screen.queryByRole('complementary', { name: '任务详情' })).not.toBeInTheDocument()
   })
 
-  it('shows a bounded, closable third column only after selection at xl', async () => {
+  it('shows a bounded, closable inspector after selection at xl', async () => {
     setWidth(1440)
     renderAt('/tasks/142')
     await screen.findAllByText('修复竞价超时')
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(screen.getByRole('complementary', { name: '任务详情' }))
-      .toHaveClass('w-[clamp(28rem,36vw,36rem)]')
+    expect(screen.getByRole('dialog')).toHaveClass('sm:max-w-[36rem]')
+    expect(screen.queryByRole('complementary', { name: '任务详情' }))
+      .not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '关闭' }))
     await waitFor(() =>
-      expect(screen.queryByRole('complementary', { name: '任务详情' })).not.toBeInTheDocument(),
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
     )
   })
 
-  it('shows the detail as a dialog below xl', async () => {
+  it('uses the same detail dialog below xl', async () => {
     setWidth(1120)
     renderAt('/tasks/142')
     // At lg the detail slides over the list instead of taking a column.
@@ -107,9 +107,11 @@ describe('TaskListPage', () => {
   it('keeps the list mounted while the detail is open', async () => {
     setWidth(1440)
     renderAt('/tasks/142')
-    // The list must still be there — that is the whole reason for three
-    // columns. A decoy that swaps the list out for the detail fails here.
-    await waitFor(() => expect(screen.getAllByRole('listitem').length).toBeGreaterThan(0))
+    // Keeping the collection mounted preserves filters and scroll position
+    // while the inspector temporarily covers it.
+    await waitFor(() =>
+      expect(screen.getAllByRole('listitem', { hidden: true }).length).toBeGreaterThan(0),
+    )
   })
 
   it('reflects a detail-side change in the list without refetching', async () => {
@@ -123,32 +125,32 @@ describe('TaskListPage', () => {
     fireEvent.click(await screen.findByRole('option', { name: '已完成' }))
 
     await waitFor(() =>
-      expect(screen.getByRole('combobox', { name: '任务 #142 状态' })).toHaveTextContent('已完成'),
+      expect(screen.getByRole('combobox', {
+        name: '任务 #142 状态',
+        hidden: true,
+      })).toHaveTextContent('已完成'),
     )
     // Shared state, not a re-fetch: the list must not hit the API again.
     expect(vi.mocked(tasksApi.listTasks).mock.calls.length).toBe(listCalls)
   })
 
-  it('reflects a list-side change in the detail without refetching', async () => {
+  it('keeps the updated collection value after the inspector closes', async () => {
     setWidth(1440)
     vi.mocked(tasksApi.updateTask).mockResolvedValue({ ...TASK, status: 'done' })
     renderAt('/tasks/142')
     await screen.findAllByText('修复竞价超时')
     expect(screen.getByRole('combobox', { name: '状态' })).toHaveTextContent('待办')
 
-    // The other direction of the same seam. At xl the selected row's
-    // controls are live and sit directly beside the open detail, so a change
-    // committed from the row has to move the detail too — otherwise the two
-    // panes show different values for one task, side by side.
     const listCalls = vi.mocked(tasksApi.listTasks).mock.calls.length
-    fireEvent.click(screen.getByRole('combobox', { name: '任务 #142 状态' }))
+    fireEvent.click(screen.getByRole('combobox', { name: '状态' }))
     fireEvent.click(await screen.findByRole('option', { name: '已完成' }))
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }))
 
     await waitFor(() =>
-      expect(screen.getByRole('combobox', { name: '状态' })).toHaveTextContent('已完成'),
+      expect(screen.getByRole('combobox', { name: '任务 #142 状态' }))
+        .toHaveTextContent('已完成'),
     )
     expect(vi.mocked(tasksApi.listTasks).mock.calls.length).toBe(listCalls)
-    // The detail must not have re-fetched the task to notice, either.
     expect(vi.mocked(tasksApi.getTask).mock.calls.length).toBe(1)
   })
 

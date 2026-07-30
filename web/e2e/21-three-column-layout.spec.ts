@@ -3,12 +3,11 @@ import { switchIdentity } from './support/identity'
 import { USERS } from './support/config'
 
 /**
- * The four arrangements are one component tree, not four. These assertions
- * pin the two things that actually differ: whether the detail takes a column
- * or slides over the list, and whether navigation is permanent, a drawer, or
- * a bottom bar.
+ * Task detail uses one modal inspector at every breakpoint. The collection
+ * remains mounted underneath so closing the inspector restores the exact
+ * list context rather than navigating to a separate detail page.
  */
-test('the detail takes a third column at xl and slides over the list below it', async ({
+test('task detail uses one closable inspector while preserving the list', async ({
   page,
   uniqueTitle,
   trackTask,
@@ -21,38 +20,28 @@ test('the detail takes a third column at xl and slides over the list below it', 
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto(`/tasks/${task.number}`)
   await switchIdentity(page, USERS.engineerC.id)
-  await expect(page.getByRole('link', { name: title, exact: true })).toBeVisible()
 
-  // xl: a real column — no dialog — and the list is still there beside it.
-  await expect(page.getByRole('dialog')).toHaveCount(0)
-  await expect(page.getByRole('listitem').first()).toBeVisible()
-
-  // At the lower edge of xl, the bounded detail still leaves enough room
-  // for the task title to remain a real visible link.
-  await page.setViewportSize({ width: 1280, height: 820 })
-  await expect(page.getByRole('link', { name: title, exact: true })).toBeVisible()
-
-  // The desktop column is not permanent: closing it returns to the full
-  // list and clears the selected-task URL.
-  await page.getByRole('button', { name: '关闭', exact: true }).click()
-  await expect(page).toHaveURL(/\/tasks$/)
-  await expect(page.getByRole('complementary', { name: '任务详情' })).toHaveCount(0)
-
-  await page.goto(`/tasks/${task.number}`)
-
-  // lg: the same URL now slides the detail over an unshrunken list.
-  await page.setViewportSize({ width: 1120, height: 820 })
-  await expect(page.getByRole('dialog')).toBeVisible()
-  // A CSS attribute selector rather than getByRole('listitem'): Radix marks
-  // everything outside an open modal `aria-hidden`, so the accessibility
-  // tree reports zero listitems here even though the list is very much
-  // still mounted underneath — which is the one thing this line is for.
+  const inspector = page.getByRole('dialog', { name: '任务详情' })
+  await expect(inspector.getByRole('heading', { name: title, exact: true })).toBeVisible()
   await expect(page.locator('[role="listitem"]').first()).toBeAttached()
 
-  // Portaled property controls must stay inside the modal sheet's
-  // accessibility boundary. A body-level popover is hidden by Radix's modal
-  // isolation even though the same control works in the xl column.
-  await page.getByRole('dialog', { name: '任务详情' })
+  // The same inspector contract remains stable across desktop breakpoints.
+  await page.setViewportSize({ width: 1280, height: 820 })
+  await expect(inspector.getByRole('heading', { name: title, exact: true })).toBeVisible()
+
+  // Closing returns to the full list and clears the selected-task URL.
+  await page.getByRole('button', { name: '关闭', exact: true }).click()
+  await expect(page).toHaveURL(/\/tasks$/)
+  await expect(inspector).toHaveCount(0)
+
+  await page.goto(`/tasks/${task.number}`)
+  await page.setViewportSize({ width: 1120, height: 820 })
+  await expect(inspector).toBeVisible()
+  await expect(page.locator('[role="listitem"]').first()).toBeAttached()
+
+  // Portaled property controls stay inside the inspector's accessibility
+  // boundary instead of being hidden by modal isolation.
+  await inspector
     .getByRole('button', { name: '截止日期' }).click()
   await expect(page.getByRole('dialog', { name: '选择截止日期' })).toBeVisible()
 })
@@ -74,15 +63,15 @@ test('navigation is permanent at lg, a drawer at md, and a bottom bar on a phone
 // apply. It moved to 22-touch-targets.spec.ts, which runs under the
 // chromium-touch project.
 
-test('the phone header carries no switchers and the filter bar no create button', async ({ page }) => {
+test('the phone header keeps account controls tucked away and task creation visible', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/tasks')
   await expect(page.getByRole('navigation', { name: '底部导航' })).toBeVisible()
 
-  // Account controls remain reachable behind 我的, and 新建任务 would be a
-  // third route to the capture row directly above it.
+  // Account controls remain reachable behind 我的. Task creation stays
+  // visible because it is the primary action, not an account switcher.
   await expect(page.getByRole('button', { name: '退出登录' })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: '新建任务' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '新建任务' })).toBeVisible()
 
   await page.getByRole('button', { name: '我的' }).click()
   await expect(page.getByRole('button', { name: '退出登录' })).toBeVisible()
@@ -91,7 +80,9 @@ test('the phone header carries no switchers and the filter bar no create button'
   await page.keyboard.press('Escape')
   await page.setViewportSize({ width: 1280, height: 900 })
   await expect(page.getByRole('button', { name: '退出登录' })).toBeVisible()
-  await expect(page.getByRole('button', { name: '新建任务' })).toBeVisible()
+  await expect(
+    page.getByRole('main').getByRole('button', { name: '新建任务' }),
+  ).toBeVisible()
 })
 
 test('opening a task from deep in the list keeps the list position', async ({
@@ -102,7 +93,10 @@ test('opening a task from deep in the list keeps the list position', async ({
 }) => {
   const made = []
   for (let i = 0; i < 25; i++) {
-    const t = await tasksApi.createTask(USERS.engineerC.id, { title: uniqueTitle(`Scroll ${i}`) })
+    const t = await tasksApi.createTask(USERS.engineerC.id, {
+      title: uniqueTitle(`Scroll ${i}`),
+      assignee_id: USERS.sponsorA.id,
+    })
     trackTask(t.id)
     made.push(t)
   }

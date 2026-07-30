@@ -46,6 +46,7 @@ SheetOverlay.displayName = SheetPrimitive.Overlay.displayName
 type SheetContentProps = React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
+  overlayClassName?: string
 }
 
 const SheetContent = React.forwardRef<
@@ -56,6 +57,7 @@ const SheetContent = React.forwardRef<
   children,
   side = "right",
   showCloseButton = true,
+  overlayClassName,
   ...props
 }, ref) {
   const [portalContainer, setPortalContainer] = React.useState<HTMLDivElement | null>(null)
@@ -70,7 +72,7 @@ const SheetContent = React.forwardRef<
 
   return (
     <SheetPortal>
-      <SheetOverlay />
+      <SheetOverlay className={overlayClassName} />
       <SheetPrimitive.Content
         ref={setContentRef}
         data-slot="sheet-content"

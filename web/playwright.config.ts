@@ -18,8 +18,11 @@ const repoRoot = path.resolve(__dirname, '..')
 
 const DSN = process.env.E2E_DATABASE_URL ??
   'postgres://bounty:bounty@localhost:5433/bountyboard?sslmode=disable'
-const BACKEND_URL = process.env.E2E_BACKEND_URL ?? 'http://localhost:8080'
-const WEB_URL = process.env.E2E_WEB_URL ?? 'http://localhost:5173'
+// Keep browser tests isolated from the normal local deployment
+// (5173/8080). Reusing that stack would pair test fixtures with the wrong
+// database and produce misleading missing-data or authentication failures.
+const BACKEND_URL = process.env.E2E_BACKEND_URL ?? 'http://localhost:18081'
+const WEB_URL = process.env.E2E_WEB_URL ?? 'http://localhost:15173'
 const backendPort = new URL(BACKEND_URL).port || '8080'
 const webPort = new URL(WEB_URL).port || '5173'
 

@@ -29,7 +29,7 @@ test('task creation requires a durable brief and opens from the primary navigati
   await dialog.getByRole('textbox', { name: /期望结果/ }).fill(expectedResult)
   await dialog.getByRole('button', { name: '创建任务' }).click()
 
-  const taskDetails = page.getByRole('complementary', { name: '任务详情' })
+  const taskDetails = page.getByRole('dialog', { name: '任务详情' })
   await expect(taskDetails.getByRole('heading', { name: title, exact: true })).toBeVisible()
   const numberLabel = await taskDetails.getByText(/^#\d+$/).textContent()
   const number = Number(numberLabel!.slice(1))

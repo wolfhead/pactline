@@ -5,8 +5,8 @@
  * seeded Phase 1 identities (see migrations/0002_seed_users.sql).
  */
 
-export const BACKEND_URL = process.env.E2E_BACKEND_URL ?? 'http://localhost:8080'
-export const WEB_URL = process.env.E2E_WEB_URL ?? 'http://localhost:5173'
+export const BACKEND_URL = process.env.E2E_BACKEND_URL ?? 'http://localhost:18081'
+export const WEB_URL = process.env.E2E_WEB_URL ?? 'http://localhost:15173'
 
 export const DATABASE_URL =
   process.env.E2E_DATABASE_URL ?? 'postgres://bounty:bounty@localhost:5433/bountyboard?sslmode=disable'

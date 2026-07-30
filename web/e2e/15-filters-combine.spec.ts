@@ -28,9 +28,24 @@ test('two filters at once return only their intersection', async ({
   const decoyStatus = uniqueTitle('Filter intersection decoy status')
   const decoyPriority = uniqueTitle('Filter intersection decoy priority')
 
-  const t1 = await tasksApi.createTask(USERS.engineerC.id, { title: target, status: 'in_progress', priority: 'high' })
-  const t2 = await tasksApi.createTask(USERS.engineerC.id, { title: decoyStatus, status: 'todo', priority: 'high' })
-  const t3 = await tasksApi.createTask(USERS.engineerC.id, { title: decoyPriority, status: 'in_progress', priority: 'low' })
+  const t1 = await tasksApi.createTask(USERS.engineerC.id, {
+    title: target,
+    status: 'in_progress',
+    priority: 'high',
+    assignee_id: USERS.sponsorA.id,
+  })
+  const t2 = await tasksApi.createTask(USERS.engineerC.id, {
+    title: decoyStatus,
+    status: 'todo',
+    priority: 'high',
+    assignee_id: USERS.sponsorA.id,
+  })
+  const t3 = await tasksApi.createTask(USERS.engineerC.id, {
+    title: decoyPriority,
+    status: 'in_progress',
+    priority: 'low',
+    assignee_id: USERS.sponsorA.id,
+  })
   trackTask(t1.id)
   trackTask(t2.id)
   trackTask(t3.id)

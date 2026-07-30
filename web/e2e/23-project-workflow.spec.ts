@@ -26,7 +26,8 @@ test('a long-lived Project plans and completes an evidence-backed Milestone', as
   trackProject(project.id)
 
   await expect(page).toHaveURL(`/projects/${project.number}/overview`)
-  await page.getByRole('button', { name: '编辑', exact: true }).click()
+  await page.getByRole('button', { name: '项目详情', exact: true }).click()
+  await page.getByRole('button', { name: '编辑项目', exact: true }).click()
   await page.getByLabel('项目说明').fill('Edited durable Project context')
   await page.getByRole('button', { name: '保存', exact: true }).click()
   await expect(page.getByLabel('项目说明')).not.toBeVisible()
@@ -39,12 +40,14 @@ test('a long-lived Project plans and completes an evidence-backed Milestone', as
   await page.getByRole('button', { name: '创建', exact: true }).click()
 
   await page.getByRole('link', { name: /API ready/ }).click()
-  await page.getByRole('button', { name: '编辑', exact: true }).nth(1).click()
+  await page.getByRole('button', { name: '里程碑详情', exact: true }).click()
+  await page.getByRole('button', { name: '编辑里程碑', exact: true }).click()
   await page.getByLabel('里程碑说明').fill('Edited Milestone context')
   await page.getByRole('button', { name: '保存', exact: true }).click()
   await expect(page.getByLabel('里程碑说明')).not.toBeVisible()
   await expect(page.getByText('Edited Milestone context')).toBeVisible()
 
+  await page.getByRole('button', { name: /验收 0\/0/ }).click()
   const checklist = page.getByRole('region', { name: '里程碑验收标准' })
   await checklist.getByRole('button', { name: '添加验收项' }).click()
   await checklist.getByPlaceholder('需要成立的可观察事实').fill('The API check passes')
@@ -55,14 +58,20 @@ test('a long-lived Project plans and completes an evidence-backed Milestone', as
   // mutation has refreshed the Project and Milestone aggregate versions.
   await page.getByRole('button', { name: '激活' }).click()
   await expect(checklist.getByText('The API check passes')).toBeVisible()
-  await expect(page.getByText('进行中', { exact: true }).first()).toBeVisible()
+  await expect(page.getByText(/状态：进行中/)).toBeVisible()
 
   const taskResponse = page.waitForResponse(
     (response) => response.url().endsWith('/api/v1/tasks')
       && response.request().method() === 'POST',
   )
-  await page.getByLabel('新建里程碑任务').fill(taskTitle)
-  await page.getByRole('button', { name: '创建', exact: true }).click()
+  await page.getByRole('main').getByRole('button', { name: '新建任务' }).click()
+  const taskComposer = page.getByRole('dialog', { name: '新建任务' })
+  await taskComposer.getByRole('textbox', { name: /标题/ }).fill(taskTitle)
+  await taskComposer.getByRole('textbox', { name: /背景 \/ 问题/ })
+    .fill('The milestone needs a verifiable delivery task.')
+  await taskComposer.getByRole('textbox', { name: /期望结果/ })
+    .fill('The task completes inside the selected milestone.')
+  await taskComposer.getByRole('button', { name: '创建任务', exact: true }).click()
   const task = await (await taskResponse).json() as { id: string; number: number }
   await tasksApi.updateTask(USERS.sponsorA.id, task.number, { status: 'done' })
   await page.reload()
@@ -73,12 +82,14 @@ test('a long-lived Project plans and completes an evidence-backed Milestone', as
   await checklist.getByRole('button', { name: '记录' }).click()
   await expect(checklist.getByText(/通过：Verified by Playwright/)).toBeVisible()
 
+  await page.getByRole('button', { name: '里程碑详情', exact: true }).click()
   await page.getByRole('button', { name: '完成', exact: true }).click()
-  await expect(page.getByText('已完成', { exact: true }).first()).toBeVisible()
+  await expect(page.getByText(/状态：已完成/)).toBeVisible()
 
   await page.getByRole('link', { name: '整体视图' }).click()
-  await page.getByRole('button', { name: '归档', exact: true }).click()
+  await page.getByRole('button', { name: '项目详情', exact: true }).click()
+  await page.getByRole('button', { name: '归档项目', exact: true }).click()
   await expect(page.getByText('已归档', { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: '恢复', exact: true }).click()
+  await page.getByRole('button', { name: '恢复项目', exact: true }).click()
   await expect(page.getByText('已归档', { exact: true })).not.toBeVisible()
 })

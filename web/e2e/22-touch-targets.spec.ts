@@ -139,7 +139,10 @@ test('the coarse-pointer context this file needs is actually in effect', async (
 
 test('every covered control clears 44px on a phone', async ({ page, uniqueTitle, trackTask, tasksApi }) => {
   const title = uniqueTitle('Touch target')
-  const task = await tasksApi.createTask(USERS.sponsorA.id, { title })
+  const task = await tasksApi.createTask(USERS.sponsorA.id, {
+    title,
+    assignee_id: USERS.sponsorA.id,
+  })
   trackTask(task.id)
 
   await page.setViewportSize({ width: 390, height: 844 })

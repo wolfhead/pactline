@@ -2,10 +2,9 @@ import { useMemo, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import TaskCollection from '@/components/tasks/TaskCollection'
-import TaskDetail from '@/components/tasks/TaskDetail'
+import TaskInspector from '@/components/tasks/TaskInspector'
 import { useTaskCollection } from '@/components/tasks/useTaskCollection'
 import { useTaskComposer } from '@/components/tasks/TaskComposer'
-import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useIdentity } from '@/identity'
 
@@ -31,22 +30,6 @@ export default function TaskListPage() {
 
   function closeDetail() {
     navigate('/tasks')
-  }
-
-  const detailPane = selected !== null && (
-    <TaskDetail
-      number={selected}
-      users={users}
-      syncedTask={selectedTask}
-      onPatched={collection.replaceTask}
-      onClose={closeDetail}
-    />
-  )
-
-  const detailReplacesList = tier === 'phone' && selected !== null
-  const detailIsSheet = (tier === 'md' || tier === 'lg') && selected !== null
-  if (detailReplacesList) {
-    return <div className="h-full overflow-y-auto">{detailPane}</div>
   }
 
   return (
@@ -105,30 +88,13 @@ export default function TaskListPage() {
         />
       </div>
 
-      {tier === 'xl' && selected !== null && (
-        <aside
-          aria-label="任务详情"
-          className="w-[clamp(28rem,36vw,36rem)] shrink-0 overflow-y-auto border-l border-border bg-surface shadow-[-8px_0_24px_rgb(23_43_61/0.04)]"
-        >
-          {detailPane}
-        </aside>
-      )}
-
-      <Sheet
-        open={detailIsSheet}
-        onOpenChange={(open) => {
-          if (!open) closeDetail()
-        }}
-      >
-        <SheetContent
-          className="w-full overflow-y-auto p-0 outline-none sm:max-w-md"
-          showCloseButton={false}
-          aria-describedby={undefined}
-        >
-          <SheetTitle className="sr-only">任务详情</SheetTitle>
-          {detailPane}
-        </SheetContent>
-      </Sheet>
+      <TaskInspector
+        number={selected}
+        users={users}
+        syncedTask={selectedTask}
+        onPatched={collection.replaceTask}
+        onClose={closeDetail}
+      />
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { GanttChart, List } from 'lucide-react'
 import type { Tier } from '@/hooks/useBreakpoint'
-import type { UserRef } from '@/task-types'
+import type { Task, UserRef } from '@/task-types'
 import { cn } from '@/lib/utils'
 import FilterBar, { DEFAULT_FILTERS } from './FilterBar'
 import GanttView from './GanttView'
@@ -18,6 +18,7 @@ export default function TaskCollection({
   allowGantt = true,
   empty = '没有任务。',
   actions,
+  taskHref = (task) => `/tasks/${task.number}`,
 }: {
   controller: TaskCollectionController
   users: UserRef[]
@@ -26,6 +27,7 @@ export default function TaskCollection({
   allowGantt?: boolean
   empty?: string
   actions?: ReactNode
+  taskHref?: (task: Task) => string
 }) {
   const [view, setView] = useState<TaskCollectionViewMode>('list')
   const blocked = controller.tasks.filter((task) => task.blocked).length
@@ -117,6 +119,7 @@ export default function TaskCollection({
               controller={controller}
               tier={tier}
               selectedNumber={selectedNumber}
+              taskHref={taskHref}
             />
           ) : (
             <>
@@ -127,6 +130,7 @@ export default function TaskCollection({
                 users={users}
                 rowErrors={controller.rowErrors}
                 grouped={controller.grouped}
+                taskHref={taskHref}
                 onPatch={controller.patchOptimistic}
                 onArchive={controller.archive}
                 onRestore={controller.restore}

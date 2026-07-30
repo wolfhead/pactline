@@ -107,9 +107,10 @@ test('Admin can enter and exit read-only impersonation', async ({ page }) => {
 
   await expect(page.getByText('管理员 Admin User 正以 Member User 身份只读查看')).toBeVisible()
   await expect(page.getByRole('link', { name: '用户' })).toHaveCount(0)
-  await expect(page.getByRole('textbox', { name: '新建任务' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: '新建任务' })).toHaveCount(0)
 
   await page.getByRole('button', { name: '退出只读查看' }).click()
   await expect(page.getByText(/身份只读查看/)).toHaveCount(0)
+  await page.getByRole('button', { name: '系统管理' }).click()
   await expect(page.getByRole('link', { name: '用户' })).toBeVisible()
 })

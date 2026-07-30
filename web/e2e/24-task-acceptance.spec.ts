@@ -16,7 +16,7 @@ test('task acceptance criteria block completion until evidence satisfies them', 
   await switchIdentity(page, USERS.engineerC.id)
 
   const checklist = page.getByRole('region', { name: '验收标准' })
-  const detail = page.getByRole('complementary', { name: '任务详情' })
+  const detail = page.getByRole('dialog', { name: '任务详情' })
   const status = detail.getByRole('combobox', { name: '状态', exact: true })
   await checklist.getByRole('button', { name: '添加验收项' }).click()
   await checklist.getByPlaceholder('需要成立的可观察事实').fill('The task result is observable')

@@ -14,6 +14,7 @@ interface TaskListProps {
   // about what's actually under it. The caller passes `false` whenever a
   // non-default sort is active and this degrades to one flat list.
   grouped: boolean
+  taskHref?: (task: Task) => string
   onPatch: (task: Task, patch: TaskPatchBody, optimistic: Partial<Task>) => void
   onArchive: (task: Task) => void
   onRestore: (task: Task) => void
@@ -33,6 +34,7 @@ export default function TaskList({
   users,
   rowErrors,
   grouped,
+  taskHref = (task) => `/tasks/${task.number}`,
   onPatch,
   onArchive,
   onRestore,
@@ -46,6 +48,7 @@ export default function TaskList({
         tier={tier}
         users={users}
         error={rowErrors[task.number]}
+        href={taskHref(task)}
         onPatch={onPatch}
         onArchive={onArchive}
         onRestore={onRestore}

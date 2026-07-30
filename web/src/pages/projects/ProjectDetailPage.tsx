@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { flushSync } from 'react-dom'
-import { Link, NavLink, useParams } from 'react-router-dom'
-import { Plus } from 'lucide-react'
+import { Link, NavLink, useParams, useSearchParams } from 'react-router-dom'
+import { ChevronDown, ListChecks, Plus } from 'lucide-react'
 import {
   applyMilestoneLifecycle,
   applyProjectArchive,
@@ -24,6 +24,7 @@ import {
 import { ProblemError } from '@/api/v1/client'
 import AcceptanceChecklist from '@/components/projects/AcceptanceChecklist'
 import TaskCollection from '@/components/tasks/TaskCollection'
+import TaskInspector from '@/components/tasks/TaskInspector'
 import { useTaskCollection } from '@/components/tasks/useTaskCollection'
 import { useTaskComposer } from '@/components/tasks/TaskComposer'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
@@ -60,6 +61,7 @@ export default function ProjectDetailPage({ view = 'overview' }: { view?: Projec
   const [detail, setDetail] = useState<ProjectDetail | null>(null)
   const [error, setError] = useState('')
   const [addingMilestone, setAddingMilestone] = useState(false)
+  const [projectDetailsOpen, setProjectDetailsOpen] = useState(false)
   const [editingProject, setEditingProject] = useState(false)
   const [mutationPending, setMutationPending] = useState(false)
   const canAdminister = actor?.platform_role === 'ADMIN' && !impersonation
@@ -110,80 +112,15 @@ export default function ProjectDetailPage({ view = 'overview' }: { view?: Projec
     : undefined
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 p-4 sm:p-6">
-      <header className="rounded-xl border border-border bg-surface-raised p-4 sm:p-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <Link to="/projects" className="text-sm text-accent">← 全部项目</Link>
-            <p className="mt-3 font-mono text-xs text-fg-muted">项目 #{project.number}</p>
-            <h1 className="mt-1 text-xl font-semibold">{project.name}</h1>
-            <p className="mt-2 max-w-3xl text-sm text-fg-muted">{project.description || '暂无项目说明'}</p>
+    <div className="flex min-h-full w-full flex-col">
+      <header className="shrink-0 border-b border-border bg-surface px-4 pt-3 sm:px-5">
+        <div className="flex min-h-10 flex-wrap items-center gap-x-4 gap-y-2">
+          <Link to="/projects" className="shrink-0 text-sm text-accent">← 项目</Link>
+          <div className="flex min-w-0 items-center gap-2">
+            <h1 className="truncate text-lg font-semibold">{project.name}</h1>
+            {project.archived_at && <span className="shrink-0 rounded-full bg-surface-subtle px-2 py-1 text-xs">已归档</span>}
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-fg-muted">负责人：{project.owner.name}</span>
-            {project.archived_at && <span className="rounded-full bg-surface-subtle px-2 py-1 text-xs">已归档</span>}
-            <button
-              type="button"
-              disabled={mutationPending}
-              onClick={() => setEditingProject((value) => !value)}
-              className="rounded-md border border-border-strong px-3 py-1.5 text-sm disabled:cursor-wait disabled:opacity-50"
-            >
-              编辑
-            </button>
-            {canAdminister && (
-              <button
-                type="button"
-                disabled={mutationPending}
-                onClick={() => void mutate(() => applyProjectArchive(number, project.version, !project.archived_at))}
-                className="rounded-md border border-border-strong px-3 py-1.5 text-sm disabled:cursor-wait disabled:opacity-50"
-              >
-                {project.archived_at ? '恢复' : '归档'}
-              </button>
-            )}
-          </div>
-        </div>
-        {editingProject && (
-          <form
-            className="mt-4 grid gap-3 rounded-lg bg-surface-subtle p-4 md:grid-cols-2"
-            onSubmit={async (event) => {
-              event.preventDefault()
-              const data = new FormData(event.currentTarget)
-              const updated = await mutate(() => updateProject(project.number, project.version, {
-                name: String(data.get('name') ?? ''),
-                description: String(data.get('description') ?? ''),
-                owner_id: String(data.get('owner_id') ?? ''),
-              }))
-              if (updated) setEditingProject(false)
-            }}
-          >
-            <input
-              name="name"
-              required
-              defaultValue={project.name}
-              aria-label="项目名称"
-              className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm"
-            />
-            <select
-              name="owner_id"
-              defaultValue={project.owner.id}
-              aria-label="项目负责人"
-              className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm"
-            >
-              {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
-            </select>
-            <textarea
-              name="description"
-              defaultValue={project.description}
-              aria-label="项目说明"
-              rows={3}
-              className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm md:col-span-2"
-            />
-            <div className="flex justify-end md:col-span-2">
-              <button className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white">保存</button>
-            </div>
-          </form>
-        )}
-        <nav aria-label="项目视图" className="mt-5 flex gap-1 border-b border-border">
+          <nav aria-label="项目视图" className="order-last flex w-full gap-1 sm:order-none sm:w-auto">
           {([
             ['overview', '整体视图'],
             ['milestones', '里程碑'],
@@ -193,35 +130,128 @@ export default function ProjectDetailPage({ view = 'overview' }: { view?: Projec
               key={key}
               to={`${base}/${key}`}
               className={({ isActive }) => cn(
-                '-mb-px border-b-2 px-3 py-2 text-sm',
+                '-mb-px border-b-2 px-3 py-2.5 text-sm',
                 isActive ? 'border-accent font-medium text-accent' : 'border-transparent text-fg-muted',
               )}
             >
               {label}
             </NavLink>
           ))}
-        </nav>
-        {error && <p role="alert" className="mt-3 text-sm text-danger">操作失败：{error}</p>}
+          </nav>
+          <button
+            type="button"
+            aria-expanded={projectDetailsOpen}
+            aria-controls="project-details"
+            onClick={() => {
+              setProjectDetailsOpen((value) => {
+                if (value) setEditingProject(false)
+                return !value
+              })
+            }}
+            className="ml-auto flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1.5 text-sm text-fg-muted hover:bg-surface-subtle hover:text-fg"
+          >
+            项目详情
+            <ChevronDown
+              className={cn('size-4 transition-transform', projectDetailsOpen && 'rotate-180')}
+              aria-hidden="true"
+            />
+          </button>
+        </div>
+
+        {projectDetailsOpen && (
+          <div id="project-details" className="border-t border-border py-4">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="max-w-3xl">
+                <p className="text-sm leading-6 text-fg-muted">{project.description || '暂无项目说明'}</p>
+                <p className="mt-2 text-xs text-fg-subtle">
+                  项目 #{project.number} · 负责人：{project.owner.name}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={mutationPending}
+                  onClick={() => setEditingProject((value) => !value)}
+                  className="rounded-md border border-border-strong px-3 py-1.5 text-sm disabled:cursor-wait disabled:opacity-50"
+                >
+                  编辑项目
+                </button>
+                {canAdminister && (
+                  <button
+                    type="button"
+                    disabled={mutationPending}
+                    onClick={() => void mutate(() => applyProjectArchive(number, project.version, !project.archived_at))}
+                    className="rounded-md border border-border-strong px-3 py-1.5 text-sm disabled:cursor-wait disabled:opacity-50"
+                  >
+                    {project.archived_at ? '恢复项目' : '归档项目'}
+                  </button>
+                )}
+              </div>
+            </div>
+            {editingProject && (
+              <form
+                className="mt-4 grid gap-3 rounded-lg bg-surface-subtle p-4 md:grid-cols-2"
+                onSubmit={async (event) => {
+                  event.preventDefault()
+                  const data = new FormData(event.currentTarget)
+                  const updated = await mutate(() => updateProject(project.number, project.version, {
+                    name: String(data.get('name') ?? ''),
+                    description: String(data.get('description') ?? ''),
+                    owner_id: String(data.get('owner_id') ?? ''),
+                  }))
+                  if (updated) setEditingProject(false)
+                }}
+              >
+                <input
+                  name="name"
+                  required
+                  defaultValue={project.name}
+                  aria-label="项目名称"
+                  className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm"
+                />
+                <select
+                  name="owner_id"
+                  defaultValue={project.owner.id}
+                  aria-label="项目负责人"
+                  className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm"
+                >
+                  {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+                </select>
+                <textarea
+                  name="description"
+                  defaultValue={project.description}
+                  aria-label="项目说明"
+                  rows={3}
+                  className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm md:col-span-2"
+                />
+                <div className="flex justify-end md:col-span-2">
+                  <button className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white">保存</button>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
+        {error && <p role="alert" className="border-t border-border py-2 text-sm text-danger">操作失败：{error}</p>}
       </header>
 
-      {view === 'overview' && <Overview detail={detail} users={users} />}
-      {view === 'backlog' && (
-        <Backlog
-          detail={detail}
-          users={users}
-        />
-      )}
-      {view === 'milestones' && (
-        <Milestones
-          detail={detail}
-          selected={selectedMilestone}
-          adding={addingMilestone}
-          setAdding={setAddingMilestone}
-          users={users}
-          onMutate={mutate}
-          onReload={reload}
-        />
-      )}
+      <div className={cn(
+        'flex min-h-0 flex-1 flex-col gap-4 p-4 sm:p-5',
+        view === 'overview' && 'mx-auto w-full max-w-7xl',
+      )}>
+        {view === 'overview' && <Overview detail={detail} users={users} />}
+        {view === 'backlog' && <Backlog detail={detail} users={users} />}
+        {view === 'milestones' && (
+          <Milestones
+            detail={detail}
+            selected={selectedMilestone}
+            adding={addingMilestone}
+            setAdding={setAddingMilestone}
+            users={users}
+            onMutate={mutate}
+            onReload={reload}
+          />
+        )}
+      </div>
     </div>
   )
 }
@@ -309,7 +339,7 @@ function Backlog({
   users: UserRef[]
 }) {
   return (
-    <section className="overflow-hidden rounded-xl border border-border bg-surface">
+    <section className="min-h-[32rem] flex-1 overflow-hidden rounded-xl border border-border bg-surface">
       <div className="border-b border-border px-4 py-3">
         <div>
           <h2 className="font-semibold">项目 Backlog</h2>
@@ -339,11 +369,27 @@ function Milestones({
 }) {
   const project = detail.project
   const [editingMilestone, setEditingMilestone] = useState(false)
+  const [milestoneDetailsOpen, setMilestoneDetailsOpen] = useState(false)
+  const [acceptanceOpen, setAcceptanceOpen] = useState(false)
   const [acceptanceMutationPending, setAcceptanceMutationPending] = useState(false)
+  const selectedTasks = selected
+    ? detail.tasks.filter((task) => !task.archived_at && task.milestone?.id === selected.id)
+    : []
+  const concludedTasks = selectedTasks.filter((task) => ['done', 'cancelled'].includes(task.status))
+  const tasksConcluded = selectedTasks.length > 0 && concludedTasks.length === selectedTasks.length
+  const acceptanceSatisfied = selected?.acceptance_criteria.filter((criterion) => (
+    ['passed', 'waived'].includes(criterion.current_check?.outcome ?? '')
+  )).length ?? 0
+
   useEffect(() => {
     setEditingMilestone(false)
+    setMilestoneDetailsOpen(false)
+    setAcceptanceOpen(false)
     setAcceptanceMutationPending(false)
   }, [selected?.id])
+  useEffect(() => {
+    if (selected?.status === 'completed' || tasksConcluded) setAcceptanceOpen(true)
+  }, [selected?.status, tasksConcluded])
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const data = new FormData(event.currentTarget)
@@ -373,108 +419,194 @@ function Milestones({
       await onMutate(() => applyMilestoneLifecycle(project.number, project.version, selected.id, selected.version, action, reason))
     }
     return (
-      <section className="flex flex-col gap-4">
-        <Link to={`/projects/${project.number}/milestones`} className="text-sm text-accent">← 返回里程碑</Link>
-        <div className="rounded-lg border border-border bg-surface-raised p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold">{selected.name}</h2>
-              <p className="mt-1 text-sm text-fg-muted">{selected.outcome}</p>
-              {selected.description && <p className="mt-2 text-sm text-fg-muted">{selected.description}</p>}
-              <p className="mt-2 text-xs text-fg-muted">负责人：{users.find((user) => user.id === selected.owner_id)?.name ?? '未知'} · 目标：{selected.target_date ?? '未设置'}</p>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <span className="rounded-full bg-surface-subtle px-2 py-1 text-xs">{MILESTONE_LABELS[selected.status]}</span>
-              <button
-                type="button"
-                onClick={() => setEditingMilestone((value) => !value)}
-                className="rounded-md border border-border-strong px-3 py-1.5 text-sm"
-              >
-                编辑
-              </button>
-            </div>
-          </div>
-          {editingMilestone && (
-            <form
-              className="mt-4 grid gap-3 rounded-lg bg-surface-subtle p-4 md:grid-cols-2"
-              onSubmit={async (event) => {
-                event.preventDefault()
-                const data = new FormData(event.currentTarget)
-                const updated = await onMutate(() => updateMilestone(
-                  project.number,
-                  project.version,
-                  selected.id,
-                  selected.version,
-                  {
-                    name: String(data.get('name') ?? ''),
-                    outcome: String(data.get('outcome') ?? ''),
-                    description: String(data.get('description') ?? ''),
-                    owner_id: String(data.get('owner_id') ?? ''),
-                    target_date: String(data.get('target_date') ?? '') || null,
-                  },
-                ))
-                if (updated) setEditingMilestone(false)
+      <section className="flex min-h-0 flex-1 flex-col gap-3">
+        <div className="rounded-lg border border-border bg-surface px-4 py-3">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <Link to={`/projects/${project.number}/milestones`} className="shrink-0 text-sm text-accent">
+              ← 里程碑
+            </Link>
+            <h2 className="min-w-0 flex-1 truncate text-base font-semibold">{selected.name}</h2>
+            <span className="shrink-0 text-xs text-fg-muted">
+              {concludedTasks.length}/{selectedTasks.length} 完成
+            </span>
+            <span className="shrink-0 text-xs text-fg-muted">
+              目标 {selected.target_date ?? '未设置'}
+            </span>
+            <button
+              type="button"
+              aria-expanded={milestoneDetailsOpen}
+              aria-controls="milestone-details"
+              onClick={() => {
+                setMilestoneDetailsOpen((value) => {
+                  if (value) setEditingMilestone(false)
+                  return !value
+                })
               }}
+              className="flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1.5 text-sm text-fg-muted hover:bg-surface-subtle hover:text-fg"
             >
-              <input name="name" required defaultValue={selected.name} aria-label="里程碑名称" className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm" />
-              <select name="owner_id" defaultValue={selected.owner_id} aria-label="里程碑负责人" className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm">
-                {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
-              </select>
-              <textarea name="outcome" required defaultValue={selected.outcome} aria-label="里程碑成果" className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm md:col-span-2" />
-              <textarea name="description" defaultValue={selected.description} aria-label="里程碑说明" className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm md:col-span-2" />
-              <input name="target_date" type="date" defaultValue={selected.target_date ?? ''} aria-label="里程碑目标日期" className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm" />
-              <button className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white">保存</button>
-            </form>
+              里程碑详情
+              <ChevronDown
+                className={cn('size-4 transition-transform', milestoneDetailsOpen && 'rotate-180')}
+                aria-hidden="true"
+              />
+            </button>
+          </div>
+
+          {milestoneDetailsOpen && (
+            <div id="milestone-details" className="mt-3 border-t border-border pt-4">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="max-w-3xl">
+                  <p className="text-sm font-medium text-fg">{selected.outcome}</p>
+                  {selected.description && (
+                    <p className="mt-2 text-sm leading-6 text-fg-muted">{selected.description}</p>
+                  )}
+                  <p className="mt-2 text-xs text-fg-subtle">
+                    负责人：{users.find((user) => user.id === selected.owner_id)?.name ?? '未知'}
+                    {' · '}
+                    状态：{MILESTONE_LABELS[selected.status]}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingMilestone((value) => !value)}
+                    className="rounded-md border border-border-strong px-3 py-1.5 text-sm"
+                  >
+                    编辑里程碑
+                  </button>
+                  {selected.status === 'planned' && (
+                    <button disabled={acceptanceMutationPending} onClick={() => void lifecycle('activate')} className="rounded-md bg-accent px-3 py-1.5 text-sm text-white disabled:cursor-wait disabled:opacity-50">
+                      激活
+                    </button>
+                  )}
+                  {selected.status === 'active' && (
+                    <button disabled={acceptanceMutationPending} onClick={() => void lifecycle('complete')} className="rounded-md bg-accent px-3 py-1.5 text-sm text-white disabled:cursor-wait disabled:opacity-50">
+                      完成
+                    </button>
+                  )}
+                  {['planned', 'active'].includes(selected.status) && (
+                    <button disabled={acceptanceMutationPending} onClick={() => void lifecycle('cancel')} className="rounded-md border border-border-strong px-3 py-1.5 text-sm disabled:cursor-wait disabled:opacity-50">
+                      取消
+                    </button>
+                  )}
+                  {['completed', 'cancelled'].includes(selected.status) && (
+                    <button disabled={acceptanceMutationPending} onClick={() => void lifecycle('reopen')} className="rounded-md border border-border-strong px-3 py-1.5 text-sm disabled:cursor-wait disabled:opacity-50">
+                      重新开启
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {editingMilestone && (
+                <form
+                  className="mt-4 grid gap-3 rounded-lg bg-surface-subtle p-4 md:grid-cols-2"
+                  onSubmit={async (event) => {
+                    event.preventDefault()
+                    const data = new FormData(event.currentTarget)
+                    const updated = await onMutate(() => updateMilestone(
+                      project.number,
+                      project.version,
+                      selected.id,
+                      selected.version,
+                      {
+                        name: String(data.get('name') ?? ''),
+                        outcome: String(data.get('outcome') ?? ''),
+                        description: String(data.get('description') ?? ''),
+                        owner_id: String(data.get('owner_id') ?? ''),
+                        target_date: String(data.get('target_date') ?? '') || null,
+                      },
+                    ))
+                    if (updated) setEditingMilestone(false)
+                  }}
+                >
+                  <input name="name" required defaultValue={selected.name} aria-label="里程碑名称" className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm" />
+                  <select name="owner_id" defaultValue={selected.owner_id} aria-label="里程碑负责人" className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm">
+                    {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+                  </select>
+                  <textarea name="outcome" required defaultValue={selected.outcome} aria-label="里程碑成果" className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm md:col-span-2" />
+                  <textarea name="description" defaultValue={selected.description} aria-label="里程碑说明" className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm md:col-span-2" />
+                  <input name="target_date" type="date" defaultValue={selected.target_date ?? ''} aria-label="里程碑目标日期" className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm" />
+                  <button className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white">保存</button>
+                </form>
+              )}
+
+              <div className="mt-5">
+                <ActivityFeed
+                  activity={detail.activity.filter((item) => item.milestone_id === selected.id)}
+                  users={users}
+                  milestones={detail.milestones}
+                  title="最近动态"
+                />
+              </div>
+            </div>
           )}
-          <div className="mt-4 flex gap-2">
-            {selected.status === 'planned' && <button disabled={acceptanceMutationPending} onClick={() => void lifecycle('activate')} className="rounded-md bg-accent px-3 py-2 text-sm text-white disabled:cursor-wait disabled:opacity-50">激活</button>}
-            {selected.status === 'active' && <button disabled={acceptanceMutationPending} onClick={() => void lifecycle('complete')} className="rounded-md bg-accent px-3 py-2 text-sm text-white disabled:cursor-wait disabled:opacity-50">完成</button>}
-            {['planned', 'active'].includes(selected.status) && <button disabled={acceptanceMutationPending} onClick={() => void lifecycle('cancel')} className="rounded-md border border-border-strong px-3 py-2 text-sm disabled:cursor-wait disabled:opacity-50">取消</button>}
-            {['completed', 'cancelled'].includes(selected.status) && <button disabled={acceptanceMutationPending} onClick={() => void lifecycle('reopen')} className="rounded-md border border-border-strong px-3 py-2 text-sm disabled:cursor-wait disabled:opacity-50">重新开启</button>}
-          </div>
         </div>
-        <AcceptanceChecklist
-          title="里程碑验收标准"
-          criteria={selected.acceptance_criteria}
-          onAdd={async (criterion, instructions) => {
-            await mutateAcceptance(() => createMilestoneCriterion(
-              project.number,
-              project.version,
-              selected.id,
-              selected.version,
-              {
-                criterion,
-                verification_instructions: instructions,
-                position: selected.acceptance_criteria.length,
-              },
-            ))
-          }}
-          onCheck={async (criterion: AcceptanceCriterion, outcome: AcceptanceOutcome, evidence: string) => {
-            await mutateAcceptance(() => checkCriterion(
-              criterion.id,
-              criterion.version,
-              criterion.revision,
-              outcome,
-              evidence,
-            ))
-          }}
-          onUpdate={async (criterion, text, instructions) => {
-            await mutateAcceptance(() => updateCriterion(
-              criterion.id,
-              criterion.version,
-              { criterion: text, verification_instructions: instructions },
-            ))
-          }}
-          onRemove={async (criterion) => {
-            const reason = selected.status === 'active' ? window.prompt('请输入调整验收范围的原因') ?? undefined : undefined
-            if (selected.status === 'active' && !reason) return
-            await mutateAcceptance(() => removeCriterion(criterion.id, criterion.version, reason))
-          }}
-        />
-        <div className="rounded-lg border border-border bg-surface-raised">
-          <div className="border-b border-border px-4 py-3">
-            <h3 className="font-semibold">里程碑任务</h3>
-          </div>
+
+        <div className="overflow-hidden rounded-lg border border-border bg-surface">
+          <button
+            type="button"
+            aria-expanded={acceptanceOpen}
+            aria-controls="milestone-acceptance"
+            onClick={() => setAcceptanceOpen((value) => !value)}
+            className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-subtle/70"
+          >
+            <ListChecks className="size-4 shrink-0 text-secondary" aria-hidden="true" />
+            <span className="text-sm font-medium">验收 {acceptanceSatisfied}/{selected.acceptance_criteria.length}</span>
+            <span className="min-w-0 flex-1 truncate text-xs text-fg-muted">
+              {tasksConcluded || selected.status === 'completed'
+                ? '任务已结束，可以逐项检查验收结果'
+                : `尚有 ${selectedTasks.length - concludedTasks.length} 项任务未完成`}
+            </span>
+            <ChevronDown
+              className={cn('size-4 shrink-0 text-fg-muted transition-transform', acceptanceOpen && 'rotate-180')}
+              aria-hidden="true"
+            />
+          </button>
+          {acceptanceOpen && (
+            <div id="milestone-acceptance" className="border-t border-border p-3">
+              <AcceptanceChecklist
+                title="里程碑验收标准"
+                criteria={selected.acceptance_criteria}
+                onAdd={async (criterion, instructions) => {
+                  await mutateAcceptance(() => createMilestoneCriterion(
+                    project.number,
+                    project.version,
+                    selected.id,
+                    selected.version,
+                    {
+                      criterion,
+                      verification_instructions: instructions,
+                      position: selected.acceptance_criteria.length,
+                    },
+                  ))
+                }}
+                onCheck={async (criterion: AcceptanceCriterion, outcome: AcceptanceOutcome, evidence: string) => {
+                  await mutateAcceptance(() => checkCriterion(
+                    criterion.id,
+                    criterion.version,
+                    criterion.revision,
+                    outcome,
+                    evidence,
+                  ))
+                }}
+                onUpdate={async (criterion, text, instructions) => {
+                  await mutateAcceptance(() => updateCriterion(
+                    criterion.id,
+                    criterion.version,
+                    { criterion: text, verification_instructions: instructions },
+                  ))
+                }}
+                onRemove={async (criterion) => {
+                  const reason = selected.status === 'active' ? window.prompt('请输入调整验收范围的原因') ?? undefined : undefined
+                  if (selected.status === 'active' && !reason) return
+                  await mutateAcceptance(() => removeCriterion(criterion.id, criterion.version, reason))
+                }}
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="min-h-[32rem] flex-1 overflow-hidden rounded-lg border border-border bg-surface">
           <ProjectTaskCollection
             projectNumber={project.number}
             milestoneID={selected.id}
@@ -483,12 +615,6 @@ function Milestones({
             empty="还没有任务归入此里程碑。"
           />
         </div>
-        <ActivityFeed
-          activity={detail.activity.filter((item) => item.milestone_id === selected.id)}
-          users={users}
-          milestones={detail.milestones}
-          title="最近动态"
-        />
       </section>
     )
   }
@@ -598,33 +724,65 @@ function ProjectTaskCollection({
   const { me, isReadOnly } = useIdentity()
   const { openTaskComposer } = useTaskComposer()
   const tier = useBreakpoint()
+  const [searchParams, setSearchParams] = useSearchParams()
   const query = useMemo(() => ({
     project_number: projectNumber,
     milestone_id: milestoneID,
     backlog_only: backlogOnly || undefined,
   }), [backlogOnly, milestoneID, projectNumber])
   const collection = useTaskCollection(query, me?.id)
+  const selectedValue = Number(searchParams.get('task'))
+  const selectedNumber = Number.isInteger(selectedValue) && selectedValue > 0
+    ? selectedValue
+    : null
+  const selectedTask = selectedNumber === null
+    ? null
+    : collection.tasks.find((task) => task.number === selectedNumber) ?? null
+
+  function taskHref(taskNumber: number) {
+    const next = new URLSearchParams(searchParams)
+    next.set('task', String(taskNumber))
+    return `?${next.toString()}`
+  }
+
+  function closeTaskInspector() {
+    const next = new URLSearchParams(searchParams)
+    next.delete('task')
+    setSearchParams(next, { replace: true })
+  }
+
   return (
-    <TaskCollection
-      controller={collection}
-      tier={tier}
-      users={users}
-      allowGantt={!backlogOnly}
-      empty={empty}
-      actions={canCreate && !isReadOnly && (
-        <button
-          type="button"
-          onClick={() => openTaskComposer({
-            projectNumber,
-            milestoneID,
-            onCreated: collection.prependTask,
-          })}
-          className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-fg shadow-[0_4px_12px_rgb(37_99_235/0.16)]"
-        >
-          <Plus className="size-3.5" aria-hidden="true" />
-          新建任务
-        </button>
-      )}
-    />
+    <>
+      <TaskCollection
+        controller={collection}
+        tier={tier}
+        users={users}
+        selectedNumber={selectedNumber}
+        taskHref={(task) => taskHref(task.number)}
+        allowGantt={!backlogOnly}
+        empty={empty}
+        actions={canCreate && !isReadOnly && (
+          <button
+            type="button"
+            onClick={() => openTaskComposer({
+              projectNumber,
+              milestoneID,
+              onCreated: collection.prependTask,
+            })}
+            className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-fg shadow-[0_4px_12px_rgb(37_99_235/0.16)]"
+          >
+            <Plus className="size-3.5" aria-hidden="true" />
+            新建任务
+          </button>
+        )}
+      />
+      <TaskInspector
+        number={selectedNumber}
+        users={users}
+        syncedTask={selectedTask}
+        onPatched={collection.replaceTask}
+        onClose={closeTaskInspector}
+      />
+    </>
   )
 }

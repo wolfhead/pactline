@@ -15,6 +15,7 @@ interface TaskRowProps {
   tier: Tier
   users: UserRef[]
   error?: string
+  href?: string
   onPatch: (task: Task, patch: TaskPatchBody, optimistic: Partial<Task>) => void
   onArchive: (task: Task) => void
   onRestore: (task: Task) => void
@@ -34,7 +35,17 @@ interface TaskRowProps {
  * TaskPatchBody), but the optimistic fragment needs the resolved
  * `UserRef` — the row renders `assignee.name`, so an id there would blank
  * the cell until the server answered. */
-export default function TaskRow({ task, selected, tier, users, error, onPatch, onArchive, onRestore }: TaskRowProps) {
+export default function TaskRow({
+  task,
+  selected,
+  tier,
+  users,
+  error,
+  href = `/tasks/${task.number}`,
+  onPatch,
+  onArchive,
+  onRestore,
+}: TaskRowProps) {
   const isPhone = tier === 'phone'
   const dimmed = task.status === 'done' || task.status === 'cancelled'
   // fg-subtle must never sit on the selected row's accent-subtle background
@@ -119,7 +130,7 @@ export default function TaskRow({ task, selected, tier, users, error, onPatch, o
       >
         <div className="flex items-start justify-between gap-2">
           <Link
-            to={`/tasks/${task.number}`}
+            to={href}
             className={cn(
               'flex min-h-11 min-w-0 flex-1 items-center gap-1.5 text-sm font-medium',
               task.parent && 'pl-3',
@@ -184,7 +195,7 @@ export default function TaskRow({ task, selected, tier, users, error, onPatch, o
         ) : null}
       </span>
       <Link
-        to={`/tasks/${task.number}`}
+        to={href}
         className={cn(
           'min-w-0 flex-1 truncate text-sm',
           task.parent && 'pl-2',

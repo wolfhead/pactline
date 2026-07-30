@@ -77,6 +77,9 @@ export default function InlineEditable({
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) {
     if (e.key === 'Escape') {
       e.preventDefault()
+      // The task inspector is a modal Sheet. Keep the field-level Escape
+      // contract from bubbling into Radix and closing the entire inspector.
+      e.stopPropagation()
       revertingRef.current = true
       setDraft(committedRef.current)
       e.currentTarget.blur()

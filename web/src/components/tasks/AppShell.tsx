@@ -16,8 +16,8 @@ const BOTTOM_TABS = [
 
 // One shell, four arrangements — not four code paths. Navigation is a
 // permanent column at lg and up, a drawer at md, and a bottom tab bar on a
-// phone, because a 172px column and a 44px-tall thumb target cannot both fit
-// on a 375px screen.
+// phone, because a permanent sidebar and a 44px-tall thumb target cannot both
+// fit on a 375px screen.
 export default function AppShell({ children }: { children: ReactNode }) {
   const { actor, subject, impersonation, isReadOnly, logout, endImpersonation } = useIdentity()
   const { openTaskComposer } = useTaskComposer()
@@ -94,7 +94,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
       <div className="flex min-h-0 flex-1">
         {showPermanentNav && (
-          <div className="w-60 shrink-0 overflow-y-auto border-r border-border bg-sidebar">
+          <div className="w-64 shrink-0 overflow-y-auto border-r border-border bg-sidebar">
             <NavSidebar />
           </div>
         )}
