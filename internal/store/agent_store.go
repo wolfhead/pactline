@@ -476,6 +476,32 @@ func (s *AgentStore) CompleteToolCall(
 	return nil
 }
 
+func (s *AgentStore) GetCompletedToolCall(
+	ctx context.Context,
+	runID uuid.UUID,
+	toolCallID string,
+) (pactagent.ToolCall, error) {
+	var call pactagent.ToolCall
+	var completedAt time.Time
+	err := s.db.Pool.QueryRow(ctx, `
+		SELECT tool_name, result, started_at, completed_at
+		FROM agent_tool_calls
+		WHERE run_id=$1 AND tool_call_id=$2 AND state='completed'`,
+		runID, toolCallID,
+	).Scan(&call.ToolName, &call.Result, &call.StartedAt, &completedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return pactagent.ToolCall{}, pactagent.ErrToolEvidenceNotFound
+	}
+	if err != nil {
+		return pactagent.ToolCall{}, fmt.Errorf("load completed Agent tool call: %w", err)
+	}
+	call.RunID = runID
+	call.ToolCallID = toolCallID
+	call.State = pactagent.ToolCallCompleted
+	call.CompletedAt = &completedAt
+	return call, nil
+}
+
 func (s *AgentStore) FailToolCall(
 	ctx context.Context,
 	runID uuid.UUID,

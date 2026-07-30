@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	pactagent "github.com/wolfhead/pactline/internal/agent"
 	"github.com/wolfhead/pactline/internal/agent/channel"
@@ -30,6 +31,10 @@ const (
 	ToolSearchUsers            = "search_users"
 	ToolAskUser                = "ask_user"
 	ToolCreateTask             = "create_task"
+	ToolSearchTasks            = "search_tasks"
+	ToolGetTask                = "get_task"
+	ToolGetProjectOverview     = "get_project_overview"
+	ToolGetMilestoneOverview   = "get_milestone_overview"
 )
 
 var (
@@ -43,11 +48,15 @@ var (
 type OpenAPIClient interface {
 	ListProjects(context.Context, generated.ListProjectsParams) (generated.ListProjectsRes, error)
 	ListUsers(context.Context, generated.ListUsersParams) (generated.ListUsersRes, error)
+	ListTasks(context.Context, generated.ListTasksParams) (generated.ListTasksRes, error)
+	GetTask(context.Context, generated.GetTaskParams) (generated.GetTaskRes, error)
+	GetProject(context.Context, generated.GetProjectParams) (generated.GetProjectRes, error)
 	CreateTask(context.Context, *generated.TaskCreate, generated.CreateTaskParams) (generated.CreateTaskRes, error)
 }
 
 type RunRepository interface {
 	GetRun(context.Context, uuid.UUID) (pactagent.Run, error)
+	GetCompletedToolCall(context.Context, uuid.UUID, string) (pactagent.ToolCall, error)
 	AddContextMessages(context.Context, uuid.UUID, string, int, time.Time) (int, error)
 	AttachTask(
 		context.Context,
@@ -66,11 +75,13 @@ type Config struct {
 	Channel    channel.ChannelAdapter
 	Repository RunRepository
 	Now        func() time.Time
+	Timezone   *time.Location
 }
 
 type Set struct {
 	Tools      []tool.BaseTool
 	CreateTask *CreateTaskTool
+	Respond    *RespondTool
 }
 
 func NewSet(config Config) (Set, error) {
@@ -81,12 +92,19 @@ func NewSet(config Config) (Set, error) {
 	if config.Now == nil {
 		config.Now = time.Now
 	}
+	if config.Timezone == nil {
+		config.Timezone = time.UTC
+	}
+	responseState := &responseState{}
 	var tools []tool.BaseTool
 	if config.Channel != nil {
 		contextTool, err := toolutils.InferTool(
 			ToolGetConversationContext,
 			"Fetch an older bounded page from only the trigger conversation. Use only when the existing context is insufficient.",
 			func(ctx context.Context, input GetConversationContextInput) (ConversationContextResult, error) {
+				if err := responseState.ensureOpen(); err != nil {
+					return ConversationContextResult{}, err
+				}
 				return getConversationContext(ctx, config, input)
 			},
 		)
@@ -99,6 +117,9 @@ func NewSet(config Config) (Set, error) {
 		ToolSearchProjects,
 		"Search active Pactline Projects. Use an empty query to list active Projects when the user did not name one. The result identifies the only active Project when one exists. Use a matching result for an explicitly named Project; otherwise use the only active Project. Ask the user when resolution is missing or ambiguous.",
 		func(ctx context.Context, input SearchInput) (ProjectSearchResult, error) {
+			if err := responseState.ensureOpen(); err != nil {
+				return ProjectSearchResult{}, err
+			}
 			return searchProjects(ctx, config.Client, input)
 		},
 	)
@@ -109,23 +130,81 @@ func NewSet(config Config) (Set, error) {
 		ToolSearchUsers,
 		"Search active Pactline users for an explicitly requested assignee. Multiple plausible users require clarification.",
 		func(ctx context.Context, input SearchInput) (UserSearchResult, error) {
+			if err := responseState.ensureOpen(); err != nil {
+				return UserSearchResult{}, err
+			}
 			return searchUsers(ctx, config.Client, input)
 		},
 	)
 	if err != nil {
 		return Set{}, fmt.Errorf("configure user search tool: %w", err)
 	}
-	askUserTool, err := toolutils.InferTool(
-		ToolAskUser,
-		"Pause without creating a Task and ask the initiating user to state one specific Task.",
-		askUser,
+	taskSearchTool, err := toolutils.InferTool(
+		ToolSearchTasks,
+		"Search a bounded set of Pactline Tasks. Use it to resolve a Task number or answer filtered Task-list questions.",
+		func(ctx context.Context, input TaskSearchInput) (TaskSearchResult, error) {
+			if err := responseState.ensureOpen(); err != nil {
+				return TaskSearchResult{}, err
+			}
+			return searchTasks(ctx, config.Client, config.Now(), config.Timezone, input)
+		},
 	)
 	if err != nil {
-		return Set{}, fmt.Errorf("configure clarification tool: %w", err)
+		return Set{}, fmt.Errorf("configure Task search tool: %w", err)
 	}
-	createTask := &CreateTaskTool{config: config}
-	tools = append(tools, projectTool, userTool, askUserTool, createTask)
-	return Set{Tools: tools, CreateTask: createTask}, nil
+	getTaskTool, err := toolutils.InferTool(
+		ToolGetTask,
+		"Get verified details for one Pactline Task number.",
+		func(ctx context.Context, input GetTaskInput) (TaskDetail, error) {
+			if err := responseState.ensureOpen(); err != nil {
+				return TaskDetail{}, err
+			}
+			return getTask(ctx, config.Client, config.Now(), config.Timezone, input)
+		},
+	)
+	if err != nil {
+		return Set{}, fmt.Errorf("configure Task detail tool: %w", err)
+	}
+	projectOverviewTool, err := toolutils.InferTool(
+		ToolGetProjectOverview,
+		"Get a deterministic Project status aggregate including Task counts, Backlog, Milestones, overdue and blocked work.",
+		func(ctx context.Context, input ProjectOverviewInput) (ProjectOverview, error) {
+			if err := responseState.ensureOpen(); err != nil {
+				return ProjectOverview{}, err
+			}
+			return getProjectOverview(ctx, config.Client, config.Now(), config.Timezone, input)
+		},
+	)
+	if err != nil {
+		return Set{}, fmt.Errorf("configure Project overview tool: %w", err)
+	}
+	milestoneOverviewTool, err := toolutils.InferTool(
+		ToolGetMilestoneOverview,
+		"Resolve and summarize one Milestone inside a Project. An unresolved result returns candidates and requires ask_user_question.",
+		func(ctx context.Context, input MilestoneOverviewInput) (MilestoneOverviewResult, error) {
+			if err := responseState.ensureOpen(); err != nil {
+				return MilestoneOverviewResult{}, err
+			}
+			return getMilestoneOverview(ctx, config.Client, config.Now(), config.Timezone, input)
+		},
+	)
+	if err != nil {
+		return Set{}, fmt.Errorf("configure Milestone overview tool: %w", err)
+	}
+	createTask := &CreateTaskTool{config: config, responseState: responseState}
+	respond := &RespondTool{config: config, state: responseState}
+	tools = append(
+		tools,
+		projectTool,
+		userTool,
+		taskSearchTool,
+		getTaskTool,
+		projectOverviewTool,
+		milestoneOverviewTool,
+		createTask,
+		respond,
+	)
+	return Set{Tools: tools, CreateTask: createTask, Respond: respond}, nil
 }
 
 type SearchInput struct {
@@ -311,8 +390,8 @@ func getConversationContext(
 }
 
 type AskUserInput struct {
-	Question   string   `json:"question" jsonschema:"required,description=Focused question asking the user to state one specific Task"`
-	Candidates []string `json:"candidates" jsonschema:"description=At most three concise candidate directions"`
+	Question   string   `json:"question" jsonschema:"required,description=Focused clarification question"`
+	Candidates []string `json:"candidates" jsonschema:"description=At most three concise candidates"`
 }
 
 type ClarificationState struct {
@@ -335,8 +414,14 @@ func init() {
 
 func askUser(ctx context.Context, input AskUserInput) (AskUserResult, error) {
 	question := strings.TrimSpace(input.Question)
-	if question == "" || len(question) > 500 || len(input.Candidates) > 3 {
+	if question == "" || utf8.RuneCountInString(question) > 500 || len(input.Candidates) > 3 {
 		return AskUserResult{}, fmt.Errorf("%w: invalid clarification question", ErrToolInput)
+	}
+	for index, candidate := range input.Candidates {
+		input.Candidates[index] = strings.TrimSpace(candidate)
+		if input.Candidates[index] == "" || utf8.RuneCountInString(input.Candidates[index]) > 200 {
+			return AskUserResult{}, fmt.Errorf("%w: invalid clarification candidate", ErrToolInput)
+		}
 	}
 	wasInterrupted, hasState, state := tool.GetInterruptState[ClarificationState](ctx)
 	if !wasInterrupted {
@@ -393,9 +478,10 @@ type CreatedTask struct {
 }
 
 type CreateTaskTool struct {
-	config Config
-	mu     sync.Mutex
-	last   *CreatedTask
+	config        Config
+	responseState *responseState
+	mu            sync.Mutex
+	last          *CreatedTask
 }
 
 func (t *CreateTaskTool) Info(context.Context) (*schema.ToolInfo, error) {
@@ -435,6 +521,11 @@ func (t *CreateTaskTool) LastCreated() (CreatedTask, bool) {
 }
 
 func (t *CreateTaskTool) create(ctx context.Context, input CreateTaskInput) (CreatedTask, error) {
+	if t.responseState != nil {
+		if err := t.responseState.ensureOpen(); err != nil {
+			return CreatedTask{}, err
+		}
+	}
 	input.Title = strings.TrimSpace(input.Title)
 	input.Context = strings.TrimSpace(input.Context)
 	input.ExpectedResult = strings.TrimSpace(input.ExpectedResult)

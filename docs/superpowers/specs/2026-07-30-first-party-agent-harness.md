@@ -8,8 +8,9 @@
 Pactline will expose a first-party Agent through Lark. A user explicitly
 mentions the Pactline bot and asks it to create one task, either from a direct
 description or from the preceding discussion. The Agent may retrieve additional
-history and ask the initiating user for clarification. A single command creates
-at most one Task.
+history, query Task/Project/Milestone state, produce a bounded status report,
+and ask the initiating user for clarification. A single command creates at
+most one Task.
 
 The Agent runs inside the existing Go server as a built-in PostgreSQL-backed
 worker. CloudWeGo Eino provides the single-agent tool loop and checkpoint/resume
@@ -27,6 +28,7 @@ continue to use user-created personal API tokens.
 ## Goals
 
 - Create one Task from an explicit Lark bot mention.
+- Answer Task-detail queries and summarize Project or Milestone status.
 - Let the Agent retrieve bounded additional conversation context when needed.
 - Ask the initiating user a focused clarification question when the requested
   Task is ambiguous.
@@ -247,7 +249,9 @@ If the bounded history still does not identify one Task, the Agent calls
 
 ## Tools
 
-The first release exposes five model-visible tools.
+The initial release exposes five model-visible tools. The status-report
+extension adds `search_tasks`, `get_task`, `get_project_overview`,
+`get_milestone_overview`, and one mandatory terminal `respond` tool.
 
 ### `get_conversation_context`
 
@@ -315,6 +319,55 @@ idempotency record provides the second.
 Relative dates use an explicitly configured Pactline tenant timezone and a
 clock injected into the Agent application service. Dates not supplied or
 implied unambiguously remain null.
+
+### Status read tools
+
+`search_tasks` calls `GET /api/v1/tasks` with bounded filters and returns at
+most 20 compact Task references. `get_task` calls
+`GET /api/v1/tasks/{number}` and returns a compact Task detail DTO.
+
+`get_project_overview` calls `GET /api/v1/projects/{number}` and computes
+deterministic status counts, Backlog counts, overdue counts, Milestone
+summaries, and a bounded list of attention items. `get_milestone_overview`
+uses the same Project aggregate, resolves exactly one Milestone by ID or name,
+and computes its deterministic task counts and attention items. The model does
+not count raw Task arrays itself.
+
+All read results are compact model-facing DTOs. They omit descriptions,
+comments, activity bodies, acceptance-check content, and unrelated users.
+
+### `respond`
+
+Every successful execution segment must end with either `respond` or a
+clarification interrupt selected through `respond`. Ordinary final model prose
+is ignored.
+
+`respond` selects one platform-owned rendering contract:
+
+- `task_created`;
+- `task_detail`;
+- `project_status`;
+- `milestone_status`;
+- `error`;
+- `ask_user_question`; or
+- `general_response`.
+
+Structured business response types require compatible successful tool evidence
+from the same Run. The platform reads authoritative values from that evidence;
+the model cannot supply Task status, Project counts, dates, or links. A
+successful mutation must use its matching structured response and cannot be
+reported through `general_response`.
+
+If a Task mutation is already durably successful but the model omits or
+malforms the final `task_created` response, the Harness emits the verified
+Task receipt itself. A presentation mistake must not hide an already-created
+Task or cause another mutation.
+
+`ask_user_question` creates the existing durable Eino interrupt and may occur
+up to the accepted clarification limit. `general_response` is intentionally
+not semantically restricted in this phase. It is plain text with a transport
+length limit, does not prove a business mutation succeeded, and cannot override
+Harness-owned permission or execution failures.
 
 ## First-Party Delegated Authentication
 
@@ -469,6 +522,13 @@ Replies use fixed renderers, not free-form final model output.
 
 Success includes the Task number, title, Project, Backlog or Milestone,
 assignee, due date, status, URL, and short Run reference.
+
+Task detail, Project status, and Milestone status use platform-owned templates
+populated from compatible completed OpenAPI tool results. An optional
+model-written summary is displayed separately from verified fields.
+
+`general_response` renders bounded plain text selected by the model. It is an
+Agent message rather than verified evidence of a business mutation.
 
 Clarification explains that no Task was created, may list concise candidate
 directions, and asks the initiating user to reply with one specific Task.

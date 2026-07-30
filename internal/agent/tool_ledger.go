@@ -54,7 +54,11 @@ func (l ToolLedger) Middleware() compose.ToolMiddleware {
 				}
 				switch claim.Kind {
 				case ToolCallClaimReplay:
-					return &compose.ToolOutput{Result: string(claim.Result)}, nil
+					result, evidenceErr := addToolEvidenceID(claim.Result, input.CallID)
+					if evidenceErr != nil {
+						return nil, evidenceErr
+					}
+					return &compose.ToolOutput{Result: string(result)}, nil
 				case ToolCallClaimConflict:
 					return nil, ErrToolCallProtocol
 				case ToolCallClaimRunning:
@@ -81,15 +85,34 @@ func (l ToolLedger) Middleware() compose.ToolMiddleware {
 				if output == nil || !json.Valid([]byte(output.Result)) {
 					return nil, fmt.Errorf("%w: tool result must be JSON", ErrToolCallProtocol)
 				}
+				result, err := addToolEvidenceID([]byte(output.Result), input.CallID)
+				if err != nil {
+					return nil, err
+				}
 				if err := l.Repository.CompleteToolCall(
-					ctx, l.RunID, input.CallID, []byte(output.Result), now().UTC(),
+					ctx, l.RunID, input.CallID, result, now().UTC(),
 				); err != nil {
 					return nil, err
 				}
+				output.Result = string(result)
 				return output, nil
 			}
 		},
 	}
+}
+
+func addToolEvidenceID(result []byte, toolCallID string) ([]byte, error) {
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(result, &object); err != nil || object == nil {
+		return nil, fmt.Errorf("%w: tool result must be a JSON object", ErrToolCallProtocol)
+	}
+	encodedID, _ := json.Marshal(toolCallID)
+	object["evidence_id"] = encodedID
+	encoded, err := json.Marshal(object)
+	if err != nil {
+		return nil, fmt.Errorf("%w: encode tool evidence: %v", ErrToolCallProtocol, err)
+	}
+	return encoded, nil
 }
 
 func ValidateToolArguments(_ context.Context, _ string, arguments string) (string, error) {

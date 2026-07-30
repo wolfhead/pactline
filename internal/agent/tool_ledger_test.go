@@ -53,8 +53,8 @@ func TestToolLedgerRecordsAndReplaysJSONResult(t *testing.T) {
 		CallID: "call-1", Name: "search_projects", Arguments: `{"query":"Pactline"}`,
 	})
 	require.NoError(t, err)
-	require.JSONEq(t, `{"ok":true}`, output.Result)
-	require.JSONEq(t, `{"ok":true}`, string(repository.completed))
+	require.JSONEq(t, `{"ok":true,"evidence_id":"call-1"}`, output.Result)
+	require.JSONEq(t, `{"ok":true,"evidence_id":"call-1"}`, string(repository.completed))
 	require.Equal(t, runID, repository.claimed.RunID)
 
 	repository.claim = ToolCallClaim{
@@ -72,7 +72,7 @@ func TestToolLedgerRecordsAndReplaysJSONResult(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.False(t, called)
-	require.JSONEq(t, `{"ok":true}`, output.Result)
+	require.JSONEq(t, `{"ok":true,"evidence_id":"call-1"}`, output.Result)
 }
 
 func TestToolLedgerReexecutesIncompleteCallAfterWorkerRecovery(t *testing.T) {
@@ -93,8 +93,8 @@ func TestToolLedgerReexecutesIncompleteCallAfterWorkerRecovery(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, called)
-	require.JSONEq(t, `{"recovered":true}`, output.Result)
-	require.JSONEq(t, `{"recovered":true}`, string(repository.completed))
+	require.JSONEq(t, `{"recovered":true,"evidence_id":"call-recovery"}`, output.Result)
+	require.JSONEq(t, `{"recovered":true,"evidence_id":"call-recovery"}`, string(repository.completed))
 }
 
 func TestToolLedgerRejectsProtocolViolations(t *testing.T) {

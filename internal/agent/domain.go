@@ -89,6 +89,7 @@ var (
 	ErrTaskAlreadyCreated         = errors.New("agent run already created a task")
 	ErrContextLimit               = errors.New("agent context message limit reached")
 	ErrToolCallProtocol           = errors.New("agent tool call protocol violation")
+	ErrToolEvidenceNotFound       = errors.New("agent tool evidence was not found")
 	ErrAgentRunNotFound           = errors.New("agent run not found")
 	ErrAgentRunLeaseLost          = errors.New("agent run lease lost")
 	ErrAgentCheckpointNotFound    = errors.New("agent checkpoint not found")

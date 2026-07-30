@@ -22,10 +22,54 @@ func TestRendererUsesFixedUserVisibleFormats(t *testing.T) {
 		}),
 	)
 	require.Equal(t,
-		"❓ 尚未创建 Task。\n可能的方向：\n• 修复登录\n• 增加审计\n请明确选择一个方向。\n请直接回复此消息，并明确描述一个具体 Task。\nRun：aaaaaaaa",
+		"❓ 需要更多信息，尚未执行请求。\n可能的方向：\n• 修复登录\n• 增加审计\n请明确选择一个方向。\n请直接回复此消息并补充信息。\nRun：aaaaaaaa",
 		renderer.Clarification(runID, "请明确选择一个方向。", []string{"修复登录", "增加审计"}),
 	)
-	require.Contains(t, renderer.PermissionFailure(runID, "创建 Task"), "⛔ 未创建 Task")
-	require.Contains(t, renderer.Failure(runID), "⚠️ 未创建 Task")
+	require.Contains(t, renderer.PermissionFailure(runID, "创建 Task"), "⛔ 无法完成请求")
+	require.Contains(t, renderer.Failure(runID), "⚠️ 本次请求无法完成")
 	require.Contains(t, renderer.Expired(runID), "超过 24 小时")
+}
+
+func TestRendererFormatsVerifiedStatusResponses(t *testing.T) {
+	runID := uuid.MustParse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+	baseURL, err := url.Parse("https://tasks.example.test")
+	require.NoError(t, err)
+	renderer := Renderer{AppBaseURL: baseURL}
+	dueDate := "2026-07-31"
+
+	taskBody, err := renderer.Response(runID, agenttools.ResponseSelection{
+		Type:    agenttools.ResponseTaskDetail,
+		Summary: "This Task is active.",
+		TaskDetail: &agenttools.TaskDetail{TaskSummary: agenttools.TaskSummary{
+			Number: 42, Title: "Inspect status", Status: "in_progress",
+			Priority: "high", ProjectName: "Pactline", DueDate: &dueDate,
+			Blocked: true,
+		}},
+	})
+	require.NoError(t, err)
+	require.Contains(t, taskBody, "Task #42")
+	require.Contains(t, taskBody, "状态：in_progress")
+	require.Contains(t, taskBody, "阻塞：是")
+	require.Contains(t, taskBody, "https://tasks.example.test/tasks/42")
+
+	projectBody, err := renderer.Response(runID, agenttools.ResponseSelection{
+		Type: agenttools.ResponseProjectStatus,
+		ProjectOverview: &agenttools.ProjectOverview{
+			ProjectNumber: 7, ProjectName: "Pactline", TaskCount: 5,
+			StatusCounts: agenttools.TaskStatusCounts{
+				Todo: 2, InProgress: 1, Done: 2,
+			},
+			BacklogCount: 2, OverdueCount: 1,
+		},
+	})
+	require.NoError(t, err)
+	require.Contains(t, projectBody, "Project #7")
+	require.Contains(t, projectBody, "Backlog：2")
+	require.Contains(t, projectBody, "逾期：1")
+
+	generalBody, err := renderer.Response(runID, agenttools.ResponseSelection{
+		Type: agenttools.ResponseGeneral, Message: "A free-form response.",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "A free-form response.\nRun：aaaaaaaa", generalBody)
 }

@@ -237,6 +237,35 @@ first release.
 - [ ] Enable selected production groups only after duplicate protection,
   permission attribution, and checkpoint deletion are verified.
 
+## Phase 10: Status Queries and Structured Responses
+
+- [ ] Add bounded `search_tasks` and `get_task` tools backed only by the
+  generated `/api/v1` client.
+- [ ] Add deterministic `get_project_overview` and
+  `get_milestone_overview` aggregation tools with compact status counts,
+  overdue counts, Backlog counts, and bounded attention items.
+- [ ] Add a mandatory terminal `respond` tool with `task_created`,
+  `task_detail`, `project_status`, `milestone_status`, `error`,
+  `ask_user_question`, and `general_response` contracts.
+- [ ] Require compatible successful tool evidence for structured business
+  responses and prevent `general_response` from claiming a write-tool result.
+- [ ] Move clarification interruption behind `respond` while preserving
+  checkpoint/resume, original-user correlation, three-round limits, and
+  restart safety.
+- [ ] Generalize worker success from "Task was created" to "a valid terminal
+  response was selected", while continuing to ignore ordinary model prose.
+- [ ] Add platform renderers for Task detail, Project status, Milestone status,
+  semantic errors, and bounded general responses.
+- [ ] Update the prompt contract so the model composes read tools, uses
+  deterministic aggregates rather than counting, and always terminates through
+  `respond`.
+- [ ] Add focused tests for evidence compatibility, missing/ambiguous entities,
+  overdue calculations in the tenant timezone, bounded results, unrestricted
+  general response text, mutation-response enforcement, and durable
+  clarification resume.
+- [ ] Verify real Lark flows for one Task detail, one Project report, and one
+  Milestone report before rollout.
+
 ## User-Visible Acceptance
 
 - A user can explicitly mention Pactline with one clear Task request and receive
@@ -250,3 +279,9 @@ first release.
 - Permission and identity rules match the initiating user's ordinary Pactline
   access.
 - Repeated events and retries never create a second Task.
+- A user can request one Task's status and receive a verified `task_detail`
+  template.
+- A user can request a Project or Milestone report and receive deterministic
+  counts plus a separately labeled Agent summary.
+- A general conversational request may use `general_response`, while an
+  already-successful mutation always receives its verified structured receipt.

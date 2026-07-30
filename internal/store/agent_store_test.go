@@ -74,6 +74,11 @@ func TestAgentStoreDurableRunToolCheckpointClarificationAndOutbox(t *testing.T) 
 	require.NoError(t, repository.CompleteToolCall(
 		ctx, run.ID, call.ToolCallID, []byte(`{"candidates":[]}`), now.Add(time.Second),
 	))
+	evidence, err := repository.GetCompletedToolCall(ctx, run.ID, call.ToolCallID)
+	require.NoError(t, err)
+	require.Equal(t, call.ToolName, evidence.ToolName)
+	require.JSONEq(t, `{"candidates":[]}`, string(evidence.Result))
+	require.Equal(t, pactagent.ToolCallCompleted, evidence.State)
 	claim, err = repository.ClaimToolCall(ctx, call)
 	require.NoError(t, err)
 	require.Equal(t, pactagent.ToolCallClaimReplay, claim.Kind)

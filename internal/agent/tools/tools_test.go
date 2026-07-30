@@ -15,7 +15,6 @@ import (
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/components/tool"
-	toolutils "github.com/cloudwego/eino/components/tool/utils"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 	"github.com/google/uuid"
@@ -48,6 +47,27 @@ func (projectClientStub) CreateTask(
 	generated.CreateTaskParams,
 ) (generated.CreateTaskRes, error) {
 	panic("unexpected CreateTask call")
+}
+
+func (projectClientStub) ListTasks(
+	context.Context,
+	generated.ListTasksParams,
+) (generated.ListTasksRes, error) {
+	panic("unexpected ListTasks call")
+}
+
+func (projectClientStub) GetTask(
+	context.Context,
+	generated.GetTaskParams,
+) (generated.GetTaskRes, error) {
+	panic("unexpected GetTask call")
+}
+
+func (projectClientStub) GetProject(
+	context.Context,
+	generated.GetProjectParams,
+) (generated.GetProjectRes, error) {
+	panic("unexpected GetProject call")
 }
 
 func TestSearchProjectsListsTheOnlyActiveProjectWhenQueryIsEmpty(t *testing.T) {
@@ -88,17 +108,21 @@ func TestClarificationInterruptPayloadCanBeCheckpointEncoded(t *testing.T) {
 	require.NoError(t, gob.NewEncoder(&encoded).Encode(payload))
 }
 
-func TestAskUserInterruptPersistsCheckpointThroughEinoRunnerAndLedger(t *testing.T) {
+func TestRespondAskUserPersistsCheckpointThroughEinoRunnerAndLedger(t *testing.T) {
 	ctx := context.Background()
-	clarifyTool, err := toolutils.InferTool(
-		ToolAskUser,
-		"Ask the initiating user for clarification.",
-		askUser,
-	)
-	require.NoError(t, err)
+	run := pactagent.Run{ID: uuid.New()}
+	clarifyTool := &RespondTool{
+		config: Config{
+			Run: run,
+			Repository: &responseRepositoryStub{
+				run: run, calls: map[string]pactagent.ToolCall{},
+			},
+		},
+		state: &responseState{},
+	}
 	checkpoints := newCheckpointMemoryStore()
 	ledger := pactagent.ToolLedger{
-		RunID:      uuid.New(),
+		RunID:      run.ID,
 		Repository: &toolCallRepositoryStub{},
 	}
 	agent, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
@@ -156,11 +180,12 @@ func (clarificationModel) Generate(
 		ID:   "ask-user-call-1",
 		Type: "function",
 		Function: schema.FunctionCall{
-			Name: ToolAskUser,
+			Name: ToolRespond,
 			Arguments: `{
-				"question":"Which Project should contain this Task?",
-				"candidates":["测试"]
-			}`,
+					"response_type":"ask_user_question",
+					"question":"Which Project should contain this Task?",
+					"candidates":["测试"]
+				}`,
 		},
 	}}), nil
 }

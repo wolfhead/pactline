@@ -22,6 +22,22 @@ func TestModelVisibleToolsUseOnlyOpenAPIBusinessBoundary(t *testing.T) {
 			importPath, unquoteErr := strconv.Unquote(spec.Path.Value)
 			require.NoError(t, unquoteErr)
 			for _, forbidden := range []string{
+				"os",
+				"os/exec",
+				"io/fs",
+				"path/filepath",
+				"database/sql",
+			} {
+				require.NotEqual(
+					t,
+					forbidden,
+					importPath,
+					"model-visible tool %s imports forbidden capability %s",
+					path,
+					importPath,
+				)
+			}
+			for _, forbidden := range []string{
 				"/internal/store",
 				"/internal/application",
 				"/internal/api/v1",
