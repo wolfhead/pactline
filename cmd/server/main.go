@@ -102,7 +102,7 @@ func main() {
 			os.Exit(1)
 		}
 		configuredLarkClient, clientErr := lark.NewClient(lark.Config{
-			AppID: cfg.LarkAppID, AppSecret: cfg.LarkAppSecret, TenantKey: cfg.LarkTenantKey,
+			AppID: cfg.LarkAppID, AppSecret: cfg.LarkAppSecret,
 			Cipher: cipher, EncryptionKeyID: cfg.TokenEncryptionKeyID,
 			RedirectURI: cfg.LarkRedirectURI.String(),
 		})
@@ -111,10 +111,23 @@ func main() {
 			os.Exit(1)
 		}
 		larkClient = configuredLarkClient
+		initializationContext, cancelInitialization := context.WithTimeout(
+			context.Background(),
+			15*time.Second,
+		)
+		tenantKey, initializationErr := larkClient.InitializeTenant(initializationContext)
+		cancelInitialization()
+		if initializationErr != nil {
+			slog.Error("initialize Lark tenant",
+				"error_category", "tenant_initialization",
+				"error", initializationErr)
+			os.Exit(1)
+		}
+		slog.Info("Lark tenant initialized")
 		if configureErr := identityService.ConfigureLark(identity.LarkServiceConfig{
 			Repository: identityStore, Authenticator: larkClient, Verifier: larkClient,
 			Directory: larkClient, Notifier: larkClient, AppBaseURL: cfg.AppBaseURL.String(),
-			TenantID: cfg.LarkTenantKey, RedirectURI: cfg.LarkRedirectURI.String(),
+			TenantID: tenantKey, RedirectURI: cfg.LarkRedirectURI.String(),
 			BootstrapAdminEmail: cfg.BootstrapAdminEmail,
 		}); configureErr != nil {
 			slog.Error("configure Lark identity service", "error", configureErr)

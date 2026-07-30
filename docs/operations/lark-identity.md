@@ -24,7 +24,8 @@ delivery as the bot. Grant and publish these user OAuth scopes:
 The bot must also have the tenant permission required by Lark's Create
 Message API to send a direct message as the application. Configure contact
 visibility so the application can find every employee the Administrator may
-invite.
+invite. Grant the application-level `tenant:tenant:readonly` scope so Pactline
+can discover and bind the application's company tenant during startup.
 
 Register this exact redirect URI:
 
@@ -33,8 +34,9 @@ https://<application-origin>/api/auth/lark/callback
 ```
 
 `APP_BASE_URL` and `LARK_REDIRECT_URI` must use the same HTTPS origin in
-production. Obtain `LARK_TENANT_KEY` from the intended company tenant; the
-backend rejects OAuth principals from any other tenant.
+production. Pactline obtains the tenant key from Lark's Tenant API at startup
+using the application credentials and rejects OAuth principals from any other
+tenant. There is no manually configured `LARK_TENANT_KEY`.
 
 ## Required configuration
 
@@ -73,7 +75,8 @@ The API uses Lark's official Go SDK to establish the WebSocket connection with
 Verification Token, Encrypt Key, or configured Bot Open ID is required. During
 startup the API obtains the bot identity from Lark's Bot Info API and refuses
 to enable the Agent if the bot is missing or inactive. Every received event is
-still checked against the configured application ID and `LARK_TENANT_KEY`.
+still checked against the configured application ID and the tenant key
+discovered during startup.
 
 The group-history permission can be sensitive and may require tenant
 administrator approval plus publication of a new application version. This is

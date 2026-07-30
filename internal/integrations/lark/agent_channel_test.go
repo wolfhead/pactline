@@ -60,6 +60,9 @@ func TestAgentChannelFetchesBoundedContextAndReplies(t *testing.T) {
 		switch {
 		case r.URL.Path == "/open-apis/auth/v3/tenant_access_token/internal":
 			_, _ = io.WriteString(w, `{"code":0,"tenant_access_token":"tenant-token","expire":7200}`)
+		case r.URL.Path == "/open-apis/tenant/v2/tenant/query":
+			require.Equal(t, "Bearer tenant-token", r.Header.Get("Authorization"))
+			_, _ = io.WriteString(w, `{"code":0,"data":{"tenant":{"tenant_key":"tenant"}}}`)
 		case r.URL.Path == "/open-apis/bot/v3/info":
 			require.Equal(t, "Bearer tenant-token", r.Header.Get("Authorization"))
 			_, _ = io.WriteString(w, `{"code":0,"msg":"ok","bot":{"activate_status":2,"open_id":"ou_bot"}}`)
@@ -120,11 +123,14 @@ func newAgentChannelTestClient(
 	})
 	require.NoError(t, err)
 	client, err := NewClient(Config{
-		AppID: "app-id", AppSecret: "app-secret", TenantKey: "tenant",
+		AppID: "app-id", AppSecret: "app-secret",
 		BaseURL: baseURL, RedirectURI: "https://tasks.example.test/callback",
 		Cipher: cipher, EncryptionKeyID: "key-1", HTTPClient: httpClient,
 	})
 	require.NoError(t, err)
+	tenantKey, err := client.InitializeTenant(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, "tenant", tenantKey)
 	require.NoError(t, client.InitializeAgentChannel(context.Background()))
 	return client
 }
@@ -136,6 +142,9 @@ func newAgentChannelInitializationServer(t *testing.T) *httptest.Server {
 		switch r.URL.Path {
 		case "/open-apis/auth/v3/tenant_access_token/internal":
 			_, _ = io.WriteString(w, `{"code":0,"tenant_access_token":"tenant-token","expire":7200}`)
+		case "/open-apis/tenant/v2/tenant/query":
+			require.Equal(t, "Bearer tenant-token", r.Header.Get("Authorization"))
+			_, _ = io.WriteString(w, `{"code":0,"data":{"tenant":{"tenant_key":"tenant"}}}`)
 		case "/open-apis/bot/v3/info":
 			require.Equal(t, "Bearer tenant-token", r.Header.Get("Authorization"))
 			_, _ = io.WriteString(w, `{"code":0,"msg":"ok","bot":{"activate_status":2,"open_id":"ou_bot"}}`)

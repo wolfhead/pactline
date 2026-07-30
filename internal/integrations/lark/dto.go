@@ -52,6 +52,12 @@ type tenantTokenResponse struct {
 	Expire            int64  `json:"expire"`
 }
 
+type tenantQueryData struct {
+	Tenant struct {
+		TenantKey string `json:"tenant_key"`
+	} `json:"tenant"`
+}
+
 type messageData struct {
 	MessageID string `json:"message_id"`
 }

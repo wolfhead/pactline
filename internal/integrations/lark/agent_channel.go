@@ -94,14 +94,15 @@ func (c *Client) NormalizeMessageEvent(
 	header := event.EventV2Base.Header
 	message := event.Event.Message
 	sender := event.Event.Sender
+	tenantKey := c.TenantKey()
 	if event.Schema != "2.0" ||
 		header.EventType != "im.message.receive_v1" ||
 		header.EventID == "" ||
 		header.AppID != c.appID ||
-		header.TenantKey != c.tenantKey ||
+		header.TenantKey != tenantKey ||
 		sender.SenderId == nil ||
 		stringValue(sender.SenderId.OpenId) == "" ||
-		stringValue(sender.TenantKey) != c.tenantKey ||
+		stringValue(sender.TenantKey) != tenantKey ||
 		stringValue(message.MessageId) == "" ||
 		stringValue(message.ChatId) == "" {
 		return channel.IncomingMessage{}, channel.ErrInvalidEvent
@@ -162,7 +163,7 @@ func (c *Client) FetchContext(
 	ctx context.Context,
 	request channel.ContextRequest,
 ) ([]channel.ChannelMessage, error) {
-	if !c.AgentChannelReady() || request.TenantID != c.tenantKey {
+	if !c.AgentChannelReady() || request.TenantID != c.TenantKey() {
 		return nil, channel.ErrContextBoundary
 	}
 	if err := request.Validate(); err != nil {
@@ -241,7 +242,7 @@ func (c *Client) Reply(
 	request channel.ReplyRequest,
 ) (channel.ProviderMessageID, error) {
 	if !c.AgentChannelReady() ||
-		request.TenantID != c.tenantKey ||
+		request.TenantID != c.TenantKey() ||
 		request.ConversationID == "" ||
 		request.TargetMessageID == "" ||
 		strings.TrimSpace(request.Body) == "" ||

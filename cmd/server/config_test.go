@@ -17,7 +17,7 @@ func validProductionConfig() Config {
 		AppEnv: EnvironmentProduction, AuthProvider: AuthProviderLark,
 		AppBaseURL: base, SessionSecret: make([]byte, 32),
 		TokenEncryptionKey: make([]byte, 32), TokenEncryptionKeyID: "key-1",
-		LarkAppID: "app-id", LarkAppSecret: "secret", LarkTenantKey: "tenant",
+		LarkAppID: "app-id", LarkAppSecret: "secret",
 		LarkRedirectURI: redirect, BootstrapAdminEmail: "admin@example.test",
 	}
 }
@@ -67,7 +67,6 @@ func TestLoadConfigDecodesEncryptionKey(t *testing.T) {
 	t.Setenv("OAUTH_TOKEN_ENCRYPTION_KEY_ID", "key-1")
 	t.Setenv("LARK_APP_ID", "app-id")
 	t.Setenv("LARK_APP_SECRET", "secret")
-	t.Setenv("LARK_TENANT_KEY", "tenant")
 	t.Setenv("LARK_REDIRECT_URI", "https://tasks.example.test/api/auth/lark/callback")
 	t.Setenv("BOOTSTRAP_ADMIN_EMAIL", "admin@example.test")
 	cfg, err := LoadConfig()
@@ -149,7 +148,6 @@ func TestLoadConfigReadsProductionSecretsFromFiles(t *testing.T) {
 	t.Setenv("OAUTH_TOKEN_ENCRYPTION_KEY_ID", "key-1")
 	t.Setenv("LARK_APP_ID", "app-id")
 	t.Setenv("LARK_APP_SECRET_FILE", writeSecret("lark_app_secret", "app-secret"))
-	t.Setenv("LARK_TENANT_KEY", "tenant")
 	t.Setenv("LARK_REDIRECT_URI", "https://tasks.example.test/api/auth/lark/callback")
 	t.Setenv("BOOTSTRAP_ADMIN_EMAIL", "admin@example.test")
 
@@ -170,7 +168,7 @@ func TestAgentConfigRequiresLarkAndDedicatedSecrets(t *testing.T) {
 		AppEnv: EnvironmentProduction, AuthProvider: AuthProviderLark,
 		AppBaseURL: baseURL, SessionSecret: make([]byte, 32),
 		TokenEncryptionKey: make([]byte, 32), TokenEncryptionKeyID: "oauth-key",
-		LarkAppID: "app", LarkAppSecret: "secret", LarkTenantKey: "tenant",
+		LarkAppID: "app", LarkAppSecret: "secret",
 		LarkRedirectURI: redirectURL, BootstrapAdminEmail: "admin@example.test",
 		AgentEnabled: true, DeepSeekAPIKey: "test-only-key",
 		AgentDelegationSigningKey: make([]byte, 32), AgentDelegationSigningKeyID: "delegate-key",

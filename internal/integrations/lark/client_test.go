@@ -88,6 +88,58 @@ func TestAuthorizationAndOAuthTransport(t *testing.T) {
 	}, requests)
 }
 
+func TestInitializeTenantDiscoversApplicationTenant(t *testing.T) {
+	var requests []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.Method+" "+r.URL.Path)
+		switch r.URL.Path {
+		case "/open-apis/auth/v3/tenant_access_token/internal":
+			_, _ = io.WriteString(w, `{"code":0,"tenant_access_token":"tenant-secret","expire":7200}`)
+		case "/open-apis/tenant/v2/tenant/query":
+			require.Equal(t, "Bearer tenant-secret", r.Header.Get("Authorization"))
+			_, _ = io.WriteString(w, `{"code":0,"data":{"tenant":{"tenant_key":"tenant"}}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client := newTestClientWithoutTenant(t, server.URL)
+	tenantKey, err := client.InitializeTenant(context.Background())
+
+	require.NoError(t, err)
+	require.Equal(t, "tenant", tenantKey)
+	require.Equal(t, "tenant", client.TenantKey())
+	require.Equal(t, []string{
+		"POST /open-apis/auth/v3/tenant_access_token/internal",
+		"GET /open-apis/tenant/v2/tenant/query",
+	}, requests)
+}
+
+func TestInitializeTenantRejectsMissingTenantIdentity(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/open-apis/auth/v3/tenant_access_token/internal":
+			_, _ = io.WriteString(w, `{"code":0,"tenant_access_token":"tenant-secret","expire":7200}`)
+		case "/open-apis/tenant/v2/tenant/query":
+			w.Header().Set("X-Tt-Logid", "tenant-log-id")
+			_, _ = io.WriteString(w, `{"code":0,"data":{"tenant":{}}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client := newTestClientWithoutTenant(t, server.URL)
+	_, err := client.InitializeTenant(context.Background())
+
+	var providerErr *ProviderError
+	require.ErrorAs(t, err, &providerErr)
+	require.Equal(t, identity.ProviderContract, providerErr.Category)
+	require.Equal(t, "tenant-log-id", providerErr.RequestID)
+	require.Empty(t, client.TenantKey())
+}
+
 func TestSearchPaginationAndDirectMessage(t *testing.T) {
 	searchCalls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -245,6 +297,20 @@ func newTestClient(t *testing.T, baseURL string) *Client {
 	require.NoError(t, err)
 	client, err := NewClient(Config{
 		AppID: "cli_test", AppSecret: "app-secret", TenantKey: "tenant",
+		BaseURL: baseURL, AuthorizationURL: "https://accounts.example.test/open-apis/authen/v1/authorize",
+		RedirectURI: "https://app.example.test/api/auth/lark/callback",
+		Cipher:      cipher, EncryptionKeyID: "test", HTTPClient: &http.Client{Timeout: time.Second},
+	})
+	require.NoError(t, err)
+	return client
+}
+
+func newTestClientWithoutTenant(t *testing.T, baseURL string) *Client {
+	t.Helper()
+	cipher, err := identity.NewCredentialCipher(map[string][]byte{"test": make([]byte, 32)})
+	require.NoError(t, err)
+	client, err := NewClient(Config{
+		AppID: "cli_test", AppSecret: "app-secret",
 		BaseURL: baseURL, AuthorizationURL: "https://accounts.example.test/open-apis/authen/v1/authorize",
 		RedirectURI: "https://app.example.test/api/auth/lark/callback",
 		Cipher:      cipher, EncryptionKeyID: "test", HTTPClient: &http.Client{Timeout: time.Second},

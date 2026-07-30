@@ -38,7 +38,6 @@ services:
       LARK_APP_ID: ${LARK_APP_ID:?LARK_APP_ID is required}
       LARK_APP_SECRET_FILE: /run/secrets/lark_app_secret
       LARK_REDIRECT_URI: ${LARK_REDIRECT_URI:?LARK_REDIRECT_URI is required}
-      LARK_TENANT_KEY: ${LARK_TENANT_KEY:?LARK_TENANT_KEY is required}
       LOG_LEVEL: ${PACTLINE_LOG_LEVEL:-info}
       OAUTH_TOKEN_ENCRYPTION_KEY_FILE: /run/secrets/oauth_token_encryption_key
       OAUTH_TOKEN_ENCRYPTION_KEY_ID: ${OAUTH_TOKEN_ENCRYPTION_KEY_ID:-primary}

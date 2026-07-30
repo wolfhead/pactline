@@ -44,13 +44,14 @@ type Client struct {
 	encryptionKeyID             string
 	httpClient                  *http.Client
 	now                         func() time.Time
+	tenantMu                    sync.RWMutex
 	botMu                       sync.RWMutex
 	botOpenID                   string
 }
 
 func NewClient(config Config) (*Client, error) {
-	if config.AppID == "" || config.AppSecret == "" || config.TenantKey == "" {
-		return nil, errors.New("lark app id, app secret, and tenant key are required")
+	if config.AppID == "" || config.AppSecret == "" {
+		return nil, errors.New("lark app id and app secret are required")
 	}
 	if config.Cipher == nil || config.EncryptionKeyID == "" {
 		return nil, errors.New("lark credential cipher and encryption key id are required")
@@ -82,6 +83,59 @@ func NewClient(config Config) (*Client, error) {
 		httpClient: config.HTTPClient,
 		now:        func() time.Time { return time.Now().UTC() },
 	}, nil
+}
+
+func (c *Client) InitializeTenant(ctx context.Context) (string, error) {
+	if c == nil {
+		return "", errors.New("Lark client is not configured")
+	}
+	tenantToken, err := c.tenantAccessToken(ctx)
+	if err != nil {
+		return "", fmt.Errorf("initialize Lark tenant: %w", err)
+	}
+	var response providerEnvelope[tenantQueryData]
+	requestID, err := c.doJSON(
+		ctx,
+		"get_tenant_info",
+		http.MethodGet,
+		"/open-apis/tenant/v2/tenant/query",
+		tenantToken,
+		nil,
+		&response,
+	)
+	if err != nil {
+		return "", fmt.Errorf("initialize Lark tenant: %w", err)
+	}
+	tenantKey := strings.TrimSpace(response.Data.Tenant.TenantKey)
+	if response.Code != 0 || tenantKey == "" {
+		return "", providerError(
+			"get_tenant_info",
+			classifyProviderCode(response.Code),
+			firstNonEmpty(requestID, response.Error.LogID),
+			fmt.Errorf("provider code %d or incomplete tenant identity", response.Code),
+		)
+	}
+	c.tenantMu.Lock()
+	defer c.tenantMu.Unlock()
+	if c.tenantKey != "" && c.tenantKey != tenantKey {
+		return "", providerError(
+			"get_tenant_info",
+			identity.ProviderContract,
+			firstNonEmpty(requestID, response.Error.LogID),
+			errors.New("configured tenant does not match Lark application tenant"),
+		)
+	}
+	c.tenantKey = tenantKey
+	return tenantKey, nil
+}
+
+func (c *Client) TenantKey() string {
+	if c == nil {
+		return ""
+	}
+	c.tenantMu.RLock()
+	defer c.tenantMu.RUnlock()
+	return c.tenantKey
 }
 
 func (c *Client) StartAuthorization(_ context.Context, request identity.AuthorizationRequest) (identity.AuthorizationStart, error) {
@@ -279,7 +333,7 @@ func (c *Client) GetPrincipal(ctx context.Context, credential identity.OAuthCred
 }
 
 func (c *Client) SendInvitation(ctx context.Context, recipient identity.PrincipalKey, invitationURL string) (identity.DeliveryReceipt, error) {
-	if recipient.Provider != "lark" || recipient.TenantID != c.tenantKey {
+	if recipient.Provider != "lark" || recipient.TenantID != c.TenantKey() {
 		return identity.DeliveryReceipt{}, providerError("send_invitation", identity.ProviderContract, "", errors.New("recipient tenant mismatch"))
 	}
 	tenantToken, err := c.tenantAccessToken(ctx)
@@ -344,10 +398,14 @@ func (c *Client) requestUserInfo(ctx context.Context, accessToken string) (ident
 }
 
 func (c *Client) normalizeUser(user userInfo) (identity.Principal, error) {
+	tenantKey := c.TenantKey()
+	if tenantKey == "" {
+		return identity.Principal{}, errors.New("Lark tenant is not initialized")
+	}
 	if user.OpenID == "" || user.Name == "" {
 		return identity.Principal{}, errors.New("provider principal is incomplete")
 	}
-	if user.TenantKey != "" && user.TenantKey != c.tenantKey {
+	if user.TenantKey != "" && user.TenantKey != tenantKey {
 		return identity.Principal{}, errors.New("provider tenant mismatch")
 	}
 	var email, avatar *string
@@ -368,7 +426,7 @@ func (c *Client) normalizeUser(user userInfo) (identity.Principal, error) {
 		"name": user.Name, "email": user.Email, "avatar_url": avatarURL,
 	})
 	return identity.Principal{
-		Key:  identity.PrincipalKey{Provider: "lark", TenantID: c.tenantKey, SubjectID: user.OpenID},
+		Key:  identity.PrincipalKey{Provider: "lark", TenantID: tenantKey, SubjectID: user.OpenID},
 		Name: user.Name, Email: email, EmailVerified: email != nil, AvatarURL: avatar,
 		Active: !user.Status.IsResigned && !user.Status.IsFrozen, Profile: profile,
 	}, nil

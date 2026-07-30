@@ -28,7 +28,6 @@ type Config struct {
 	TokenEncryptionKeyID           string
 	LarkAppID                      string
 	LarkAppSecret                  string
-	LarkTenantKey                  string
 	LarkRedirectURI                *url.URL
 	BootstrapAdminEmail            string
 	AgentEnabled                   bool
@@ -84,7 +83,6 @@ func LoadConfig() (Config, error) {
 		TokenEncryptionKeyID:           strings.TrimSpace(os.Getenv("OAUTH_TOKEN_ENCRYPTION_KEY_ID")),
 		LarkAppID:                      strings.TrimSpace(os.Getenv("LARK_APP_ID")),
 		LarkAppSecret:                  larkAppSecret,
-		LarkTenantKey:                  strings.TrimSpace(os.Getenv("LARK_TENANT_KEY")),
 		BootstrapAdminEmail:            strings.TrimSpace(os.Getenv("BOOTSTRAP_ADMIN_EMAIL")),
 		AgentEnabled:                   agentEnabled,
 		DeepSeekAPIKey:                 strings.TrimSpace(deepSeekAPIKey),
@@ -190,8 +188,8 @@ func (c Config) Validate() error {
 		if c.TokenEncryptionKeyID == "" {
 			return errors.New("OAUTH_TOKEN_ENCRYPTION_KEY_ID is required for Lark")
 		}
-		if c.LarkAppID == "" || c.LarkAppSecret == "" || c.LarkTenantKey == "" {
-			return errors.New("LARK_APP_ID, LARK_APP_SECRET, and LARK_TENANT_KEY are required for Lark")
+		if c.LarkAppID == "" || c.LarkAppSecret == "" {
+			return errors.New("LARK_APP_ID and LARK_APP_SECRET are required for Lark")
 		}
 		if c.LarkRedirectURI == nil || c.LarkRedirectURI.Scheme == "" || c.LarkRedirectURI.Host == "" {
 			return errors.New("LARK_REDIRECT_URI must be an absolute URL for Lark")
