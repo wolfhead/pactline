@@ -2,7 +2,11 @@ package runtime
 
 import (
 	"errors"
+	"fmt"
 	"testing"
+
+	pactagent "github.com/wolfhead/pactline/internal/agent"
+	agenttools "github.com/wolfhead/pactline/internal/agent/tools"
 
 	"github.com/cloudwego/eino/adk"
 	"github.com/stretchr/testify/require"
@@ -51,4 +55,29 @@ func TestDrainEventsReturnsClarificationAfterIteratorCloses(t *testing.T) {
 	require.Equal(t, "interrupt-1", outcome.interruptID)
 	require.Equal(t, "Which single Task?", outcome.question)
 	require.Equal(t, []string{"A", "B"}, outcome.candidates)
+}
+
+func TestDescribeRunFailureUsesSafeActionableReasons(t *testing.T) {
+	evidenceFailure := describeRunFailure(fmt.Errorf(
+		"%w: %w: provider details stay internal",
+		pactagent.ErrToolCallProtocol,
+		agenttools.ErrResponseEvidence,
+	))
+	require.Equal(t, "response_evidence_invalid", evidenceFailure.code)
+	require.Equal(
+		t,
+		"Agent 生成回复时未能正确引用查询结果。",
+		evidenceFailure.message,
+	)
+
+	summaryFailure := describeRunFailure(fmt.Errorf(
+		"%w: %w",
+		agenttools.ErrToolInput,
+		agenttools.ErrResponseSummary,
+	))
+	require.Equal(t, "response_summary_missing", summaryFailure.code)
+
+	internalFailure := describeRunFailure(errors.New("database password must not surface"))
+	require.Equal(t, "internal_execution_error", internalFailure.code)
+	require.NotContains(t, internalFailure.message, "password")
 }

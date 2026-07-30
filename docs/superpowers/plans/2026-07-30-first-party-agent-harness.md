@@ -251,6 +251,8 @@ first release.
   `ask_user_question`, and `general_response` contracts.
 - [ ] Require compatible successful tool evidence for structured business
   responses and prevent `general_response` from claiming a write-tool result.
+- [ ] Permit supporting same-Run evidence IDs while requiring exactly one
+  template-compatible business result.
 - [ ] Move clarification interruption behind `respond` while preserving
   checkpoint/resume, original-user correlation, three-round limits, and
   restart safety.
@@ -301,5 +303,7 @@ first release.
   `interactive` card inside the Lark adapter.
 - [ ] Preserve the existing Outbox, reply target, provider UUID
   deduplication, retry, and audit behavior.
+- [ ] Render safe actionable terminal-failure reasons from stable internal
+  reason codes without exposing raw errors.
 - [ ] Add renderer and Lark payload tests, then verify Task, Project, and
   Milestone cards in the live test group.

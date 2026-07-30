@@ -361,6 +361,12 @@ the model cannot supply Task status, Project counts, dates, or links. A
 successful mutation must use its matching structured response and cannot be
 reported through `general_response`.
 
+The model may cite supporting completed calls from the same Run, such as a
+Project search followed by a Project overview. The Harness accepts the
+selection only when it resolves exactly one evidence result from the business
+tool compatible with the chosen template; unrelated supporting evidence cannot
+become rendered facts.
+
 If a Task mutation is already durably successful but the model omits or
 malforms the final `task_created` response, the Harness emits the verified
 Task receipt itself. A presentation mistake must not hide an already-created
@@ -368,9 +374,9 @@ Task or cause another mutation.
 
 `ask_user_question` creates the existing durable Eino interrupt and may occur
 up to the accepted clarification limit. `general_response` is intentionally
-not semantically restricted in this phase. It is plain text with a transport
-length limit, does not prove a business mutation succeeded, and cannot override
-Harness-owned permission or execution failures.
+not semantically restricted in this phase. It is sanitized Markdown with a
+transport length limit, does not prove a business mutation succeeded, and
+cannot override Harness-owned permission or execution failures.
 
 ## First-Party Delegated Authentication
 
@@ -545,8 +551,8 @@ Success includes the Task number, title, Project, Backlog or Milestone,
 assignee, due date, status, URL, and short Run reference.
 
 Task detail, Project status, and Milestone status use platform-owned templates
-populated from compatible completed OpenAPI tool results. An optional
-model-written summary is displayed separately from verified fields.
+populated from compatible completed OpenAPI tool results. A required
+model-written Markdown summary is displayed separately from verified fields.
 
 `general_response` renders bounded sanitized Markdown selected by the model. It
 is an Agent message rather than verified evidence of a business mutation.
@@ -559,6 +565,12 @@ operation without suggesting privilege escalation.
 
 Transient failure mentions automatic retry only when the Run has actually been
 requeued. Terminal failures state that no Task was created.
+
+Terminal failure cards include a platform-owned, safe reason and the short Run
+reference. Reasons distinguish response evidence, missing summaries, invalid
+tool input, authorization, OpenAPI failure, context limits, timeout, upstream
+availability, and internal execution without exposing raw provider errors,
+credentials, prompts, or message bodies.
 
 ## Retention
 

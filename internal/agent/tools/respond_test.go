@@ -107,6 +107,11 @@ func TestRespondRejectsMismatchedEvidenceAndSecondTerminalResponse(t *testing.T)
 				ToolName: ToolGetProjectOverview, State: pactagent.ToolCallCompleted,
 				Result: result,
 			},
+			"call-search": {
+				RunID: runID, ToolCallID: "call-search",
+				ToolName: ToolSearchProjects, State: pactagent.ToolCallCompleted,
+				Result: json.RawMessage(`{"projects":[]}`),
+			},
 		},
 	}
 	respond := &RespondTool{
@@ -119,10 +124,11 @@ func TestRespondRejectsMismatchedEvidenceAndSecondTerminalResponse(t *testing.T)
 		`{"response_type":"task_detail","source_tool_call_ids":["call-project"],"summary":"**Active** work."}`,
 	)
 	require.ErrorIs(t, err, pactagent.ErrToolCallProtocol)
+	require.ErrorIs(t, err, ErrResponseEvidence)
 
 	_, err = respond.InvokableRun(
 		context.Background(),
-		`{"response_type":"project_status","source_tool_call_ids":["call-project"],"summary":"- Two Tasks are done."}`,
+		`{"response_type":"project_status","source_tool_call_ids":["call-search","call-project"],"summary":"- Two Tasks are done."}`,
 	)
 	require.NoError(t, err)
 	_, err = respond.InvokableRun(
@@ -157,6 +163,7 @@ func TestRespondRequiresMarkdownSummaryForStructuredResponse(t *testing.T) {
 	)
 
 	require.ErrorIs(t, err, ErrToolInput)
+	require.ErrorIs(t, err, ErrResponseSummary)
 	_, selected := respond.LastResponse()
 	require.False(t, selected)
 }

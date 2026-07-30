@@ -43,6 +43,8 @@ var (
 	ErrOpenAPI           = errors.New("Agent OpenAPI operation failed")
 	ErrPermission        = errors.New("Agent operation was denied")
 	ErrRetryable         = errors.New("Agent operation may be retried")
+	ErrResponseEvidence  = errors.New("Agent response evidence is invalid")
+	ErrResponseSummary   = errors.New("Agent response summary is missing")
 )
 
 type OpenAPIClient interface {

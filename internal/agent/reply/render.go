@@ -370,9 +370,14 @@ func (Renderer) PermissionFailure(runID uuid.UUID, operation string) string {
 	)
 }
 
-func (Renderer) Failure(runID uuid.UUID) string {
+func (Renderer) Failure(runID uuid.UUID, reason string) string {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "执行过程中发生内部错误。"
+	}
 	return fmt.Sprintf(
-		"# ⚠️ 请求未完成\n\n本次请求无法完成，请稍后重试。\n\n---\n`Run %s`",
+		"# ⚠️ 请求未完成\n\n**原因**：%s\n\n请重试；如果问题持续出现，请向管理员提供下方 Run 编号。\n\n---\n`Run %s`",
+		inlineMarkdown(reason),
 		pactagent.ShortRunReference(runID),
 	)
 }

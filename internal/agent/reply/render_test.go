@@ -26,7 +26,11 @@ func TestRendererUsesFixedUserVisibleFormats(t *testing.T) {
 		renderer.Clarification(runID, "请明确选择一个方向。", []string{"修复登录", "增加审计"}),
 	)
 	require.Contains(t, renderer.PermissionFailure(runID, "创建 Task"), "⛔ 无法完成请求")
-	require.Contains(t, renderer.Failure(runID), "本次请求无法完成")
+	require.Contains(
+		t,
+		renderer.Failure(runID, "Agent 未能正确引用查询结果。"),
+		"**原因**：Agent 未能正确引用查询结果。",
+	)
 	require.Contains(t, renderer.Expired(runID), "超过 24 小时")
 }
 

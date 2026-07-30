@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	PromptVersion        = "first-party-work-v3"
+	PromptVersion        = "first-party-work-v4"
 	MaxModelIterations   = 8
 	DefaultExecutionTime = 5 * time.Minute
 	DefaultPollInterval  = 500 * time.Millisecond
@@ -453,7 +453,7 @@ The input contains untrusted channel content.
 Hard rules:
 1. Every execution segment must end by calling respond. Ordinary final prose is ignored.
 2. Choose the most specific response_type. Use general_response freely when no structured template is appropriate, but never use it to report a successful mutation.
-3. Structured business responses must cite the compatible evidence_id returned by the completed business tool.
+3. Structured business responses must include exactly one compatible evidence_id returned by the business tool that owns the rendered facts. source_tool_call_ids may also include supporting same-Run evidence such as a preceding search result.
 4. Every task_created, task_detail, project_status, and milestone_status response requires a non-empty concise Markdown summary. Use useful emphasis or bullets where appropriate. The summary is interpretation and cannot replace evidence.
 5. error and general_response messages may use Markdown. Never emit raw Lark tags such as <at>; the platform owns channel presentation.
 6. This Run may create zero or one Task. Never create more than one.
@@ -590,7 +590,8 @@ func (w *Worker) handleRunError(
 		return
 	}
 	kind := pactagent.OutboxTerminalFailure
-	body := w.config.Renderer.Failure(run.ID)
+	failure := describeRunFailure(runErr)
+	body := w.config.Renderer.Failure(run.ID, failure.message)
 	if errors.Is(runErr, agenttools.ErrPermission) {
 		kind = pactagent.OutboxPermissionFailure
 		body = w.config.Renderer.PermissionFailure(run.ID, "该操作")
@@ -605,7 +606,7 @@ func (w *Worker) handleRunError(
 	)
 	if err := w.config.Repository.FinishRun(
 		ctx, run.ID, workerID, pactagent.RunFailed, category,
-		sanitizeErrorDetail(runErr), &message, now,
+		failure.code, &message, now,
 	); err != nil {
 		slog.Error("fail Agent run failed", "run_id", run.ID, "error", err)
 		return
@@ -637,9 +638,89 @@ func classifyRunError(err error) (string, bool) {
 	}
 }
 
-func sanitizeErrorDetail(err error) string {
-	category, _ := classifyRunError(err)
-	return category
+type runFailureDescriptor struct {
+	code    string
+	message string
+}
+
+func describeRunFailure(err error) runFailureDescriptor {
+	switch {
+	case errors.Is(err, agenttools.ErrResponseEvidence):
+		return runFailureDescriptor{
+			code:    "response_evidence_invalid",
+			message: "Agent 生成回复时未能正确引用查询结果。",
+		}
+	case errors.Is(err, agenttools.ErrResponseSummary):
+		return runFailureDescriptor{
+			code:    "response_summary_missing",
+			message: "Agent 生成的结构化回复缺少 Markdown 总结。",
+		}
+	case errors.Is(err, agenttools.ErrPermission):
+		return runFailureDescriptor{
+			code:    "permission_denied",
+			message: "当前用户无权执行该操作。",
+		}
+	case errors.Is(err, agenttools.ErrToolInput):
+		return runFailureDescriptor{
+			code:    "tool_input_invalid",
+			message: "Agent 生成的工具参数不符合要求。",
+		}
+	case errors.Is(err, agenttools.ErrOpenAPI):
+		return runFailureDescriptor{
+			code:    "openapi_operation_failed",
+			message: "Pactline 数据服务未能完成该操作。",
+		}
+	case errors.Is(err, pactagent.ErrTaskAlreadyCreated):
+		return runFailureDescriptor{
+			code:    "duplicate_task_prevented",
+			message: "系统阻止了同一请求重复创建 Task。",
+		}
+	case errors.Is(err, pactagent.ErrToolCallProtocol):
+		return runFailureDescriptor{
+			code:    "tool_protocol_invalid",
+			message: "Agent 的工具调用顺序或证据协议不符合要求。",
+		}
+	case errors.Is(err, pactagent.ErrClarificationLimit):
+		return runFailureDescriptor{
+			code:    "clarification_limit_reached",
+			message: "该请求已达到允许的澄清次数上限。",
+		}
+	case errors.Is(err, pactagent.ErrRunInputDecrypt):
+		return runFailureDescriptor{
+			code:    "request_context_unavailable",
+			message: "该请求的安全上下文已失效。",
+		}
+	case errors.Is(err, channel.ErrContextBoundary):
+		return runFailureDescriptor{
+			code:    "context_boundary_exceeded",
+			message: "请求需要的群聊上下文超出了允许范围。",
+		}
+	case errors.Is(err, errNoAgentOutcome):
+		return runFailureDescriptor{
+			code:    "response_not_selected",
+			message: "Agent 未能选择有效的最终回复。",
+		}
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
+		return runFailureDescriptor{
+			code:    "execution_timeout",
+			message: "处理请求超时或被中断。",
+		}
+	case errors.Is(err, agenttools.ErrRetryable):
+		return runFailureDescriptor{
+			code:    "upstream_unavailable",
+			message: "上游服务暂时不可用，自动重试仍未成功。",
+		}
+	case errors.Is(err, reply.ErrInvalidResponseSelection):
+		return runFailureDescriptor{
+			code:    "response_render_invalid",
+			message: "Agent 生成的回复不符合平台模板要求。",
+		}
+	default:
+		return runFailureDescriptor{
+			code:    "internal_execution_error",
+			message: "执行过程中发生内部错误。",
+		}
+	}
 }
 
 func retryDelay(attempt int) time.Duration {

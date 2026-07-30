@@ -32,7 +32,7 @@ const (
 
 type RespondInput struct {
 	ResponseType      string   `json:"response_type" jsonschema:"required,enum=task_created,enum=task_detail,enum=project_status,enum=milestone_status,enum=error,enum=ask_user_question,enum=general_response" jsonschema_description:"Platform response template to use"`
-	SourceToolCallIDs []string `json:"source_tool_call_ids,omitempty" jsonschema_description:"Evidence IDs returned by compatible completed business tools in this Run"`
+	SourceToolCallIDs []string `json:"source_tool_call_ids,omitempty" jsonschema_description:"Same-Run evidence IDs; must contain exactly one result from the business tool compatible with the selected template and may include supporting search evidence"`
 	Summary           string   `json:"summary,omitempty" jsonschema_description:"Required concise Markdown interpretation for every structured business response; shown separately from verified fields"`
 	Message           string   `json:"message,omitempty" jsonschema_description:"Bounded Markdown for error or general_response"`
 	Question          string   `json:"question,omitempty" jsonschema_description:"Focused clarification question for ask_user_question"`
@@ -111,8 +111,9 @@ func (t *RespondTool) InvokableRun(
 	}
 	if requiresResponseSummary(input.ResponseType) && input.Summary == "" {
 		return "", fmt.Errorf(
-			"%w: structured response requires a Markdown summary",
+			"%w: %w: structured response requires a Markdown summary",
 			ErrToolInput,
+			ErrResponseSummary,
 		)
 	}
 	if err := t.requireMutationReceipt(ctx, input.ResponseType); err != nil {
@@ -159,7 +160,7 @@ func (t *RespondTool) selectResponse(
 	}
 	switch input.ResponseType {
 	case ResponseTaskCreated:
-		call, err := t.singleEvidence(ctx, input.SourceToolCallIDs, ToolCreateTask)
+		call, err := t.compatibleEvidence(ctx, input.SourceToolCallIDs, ToolCreateTask)
 		if err != nil {
 			return ResponseSelection{}, err
 		}
@@ -176,7 +177,7 @@ func (t *RespondTool) selectResponse(
 		}
 		selection.CreatedTask = &result
 	case ResponseTaskDetail:
-		call, err := t.singleEvidence(ctx, input.SourceToolCallIDs, ToolGetTask)
+		call, err := t.compatibleEvidence(ctx, input.SourceToolCallIDs, ToolGetTask)
 		if err != nil {
 			return ResponseSelection{}, err
 		}
@@ -186,7 +187,7 @@ func (t *RespondTool) selectResponse(
 		}
 		selection.TaskDetail = &result
 	case ResponseProjectStatus:
-		call, err := t.singleEvidence(ctx, input.SourceToolCallIDs, ToolGetProjectOverview)
+		call, err := t.compatibleEvidence(ctx, input.SourceToolCallIDs, ToolGetProjectOverview)
 		if err != nil {
 			return ResponseSelection{}, err
 		}
@@ -196,7 +197,7 @@ func (t *RespondTool) selectResponse(
 		}
 		selection.ProjectOverview = &result
 	case ResponseMilestoneStatus:
-		call, err := t.singleEvidence(ctx, input.SourceToolCallIDs, ToolGetMilestoneOverview)
+		call, err := t.compatibleEvidence(ctx, input.SourceToolCallIDs, ToolGetMilestoneOverview)
 		if err != nil {
 			return ResponseSelection{}, err
 		}
@@ -236,27 +237,53 @@ func (t *RespondTool) requireMutationReceipt(
 	return nil
 }
 
-func (t *RespondTool) singleEvidence(
+func (t *RespondTool) compatibleEvidence(
 	ctx context.Context,
 	toolCallIDs []string,
 	expectedTool string,
 ) (pactagent.ToolCall, error) {
-	if len(toolCallIDs) != 1 || strings.TrimSpace(toolCallIDs[0]) == "" {
-		return pactagent.ToolCall{}, fmt.Errorf("%w: exactly one evidence ID is required", ErrToolInput)
-	}
-	call, err := t.config.Repository.GetCompletedToolCall(
-		ctx, t.config.Run.ID, strings.TrimSpace(toolCallIDs[0]),
-	)
-	if err != nil {
-		return pactagent.ToolCall{}, err
-	}
-	if call.ToolName != expectedTool {
+	if len(toolCallIDs) == 0 {
 		return pactagent.ToolCall{}, fmt.Errorf(
-			"%w: %s response requires %s evidence",
-			pactagent.ErrToolCallProtocol, inputResponseLabel(expectedTool), expectedTool,
+			"%w: %w: at least one evidence ID is required",
+			pactagent.ErrToolCallProtocol,
+			ErrResponseEvidence,
 		)
 	}
-	return call, nil
+	seen := make(map[string]struct{}, len(toolCallIDs))
+	var compatible []pactagent.ToolCall
+	for _, toolCallID := range toolCallIDs {
+		toolCallID = strings.TrimSpace(toolCallID)
+		if toolCallID == "" {
+			return pactagent.ToolCall{}, fmt.Errorf(
+				"%w: %w: evidence ID cannot be empty",
+				pactagent.ErrToolCallProtocol,
+				ErrResponseEvidence,
+			)
+		}
+		if _, duplicate := seen[toolCallID]; duplicate {
+			continue
+		}
+		seen[toolCallID] = struct{}{}
+		call, err := t.config.Repository.GetCompletedToolCall(
+			ctx, t.config.Run.ID, toolCallID,
+		)
+		if err != nil {
+			return pactagent.ToolCall{}, err
+		}
+		if call.ToolName == expectedTool {
+			compatible = append(compatible, call)
+		}
+	}
+	if len(compatible) != 1 {
+		return pactagent.ToolCall{}, fmt.Errorf(
+			"%w: %w: %s response requires exactly one %s evidence result",
+			pactagent.ErrToolCallProtocol,
+			ErrResponseEvidence,
+			inputResponseLabel(expectedTool),
+			expectedTool,
+		)
+	}
+	return compatible[0], nil
 }
 
 func inputResponseLabel(toolName string) string {
