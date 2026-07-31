@@ -5,8 +5,8 @@ import TaskRow from './TaskRow'
 import type { Task } from '@/task-types'
 
 const USERS = [
-  { id: 'u1', name: '张沁', email: 'a@x.com' },
-  { id: 'u2', name: '王溪', email: 'b@x.com' },
+  { id: 'u1', name: '张沁', email: 'a@example.test' },
+  { id: 'u2', name: '王溪', email: 'b@example.test' },
 ]
 const TASK: Task = {
   id: 'id-142', number: 142, version: 1,

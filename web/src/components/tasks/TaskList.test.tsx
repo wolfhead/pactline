@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import TaskList from './TaskList'
 import type { Task } from '@/task-types'
 
-const USERS = [{ id: 'u1', name: '张沁', email: 'a@x.com' }]
+const USERS = [{ id: 'u1', name: '张沁', email: 'a@example.test' }]
 
 function task(n: number, over: Partial<Task> = {}): Task {
   return {

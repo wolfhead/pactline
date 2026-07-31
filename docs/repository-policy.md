@@ -63,6 +63,23 @@ Before the first source push, or before replacing published Git history:
 Passing automated scans is necessary but not sufficient. A maintainer must
 complete a manual review before the first source push or history replacement.
 
+## Remote enforcement
+
+GitHub Secret Scanning and Push Protection are the primary pre-receive controls
+for credentials and privately configured organization-specific patterns.
+Maintainers must not bypass a blocked push merely to make progress.
+
+The `Public Repository Gate` workflow scans all reachable history with
+Gitleaks and applies the repository path, identity, network, and local-path
+policy in `scripts/check-public-repository.sh`. It is a required merge check,
+but it runs after a branch reaches GitHub and therefore does not replace Push
+Protection.
+
+The `main` branch requires a reviewed pull request, successful required checks,
+and linear history. Force pushes and branch deletion are disabled. Emergency
+bypass access is limited to the repository owner and must not be used for
+privacy or credential findings.
+
 ## Incident response
 
 If restricted information is committed:
