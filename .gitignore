@@ -41,6 +41,7 @@ docs/superpowers/*
 deploy/secrets/
 deploy/backups/
 deploy/script/deploy_test.sh
+deploy/nginx/pactline.conf
 
 # Editor / OS
 .DS_Store
