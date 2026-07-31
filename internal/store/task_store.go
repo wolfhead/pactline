@@ -25,7 +25,7 @@ type TaskStore struct{ db *DB }
 func NewTaskStore(db *DB) *TaskStore { return &TaskStore{db: db} }
 
 const taskColumns = `t.id, t.number, t.version, t.title, t.context, t.expected_result,
-	t.description, t.status, t.priority,
+	t.description, t.status, t.priority, t.execution_mode,
 	t.assignee_id, t.creator_id, t.start_date, t.due_date, t.project_id, t.milestone_id,
 	t.parent_task_id,
 	t.created_at, t.updated_at, t.completed_at, t.archived_at`
@@ -191,7 +191,7 @@ func scanTaskWithRelations(s scanner) (TaskWithRelations, error) {
 	err := s.Scan(
 		&twr.Task.ID, &twr.Task.Number, &twr.Task.Version,
 		&twr.Task.Title, &twr.Task.Context, &twr.Task.ExpectedResult,
-		&twr.Task.Description, &twr.Task.Status, &twr.Task.Priority,
+		&twr.Task.Description, &twr.Task.Status, &twr.Task.Priority, &twr.Task.ExecutionMode,
 		&twr.Task.AssigneeID, &twr.Task.CreatorID, &twr.Task.StartDate, &twr.Task.DueDate,
 		&twr.Task.ProjectID, &twr.Task.MilestoneID, &twr.Task.ParentTaskID,
 		&twr.Task.CreatedAt, &twr.Task.UpdatedAt,
@@ -293,11 +293,19 @@ func (s *TaskStore) CreateWithOperation(
 	if t.Priority == "" {
 		t.Priority = domain.TaskPriorityNone
 	}
+	if t.ExecutionMode == "" {
+		t.ExecutionMode = domain.TaskExecutionModeHumanOnly
+	}
 	if !t.Status.Valid() {
 		return TaskWithRelations{}, fmt.Errorf("%w: unknown status %q", domain.ErrInvalidInput, t.Status)
 	}
 	if !t.Priority.Valid() {
 		return TaskWithRelations{}, fmt.Errorf("%w: unknown priority %q", domain.ErrInvalidInput, t.Priority)
+	}
+	if !t.ExecutionMode.Valid() {
+		return TaskWithRelations{}, fmt.Errorf(
+			"%w: unknown execution mode %q", domain.ErrInvalidInput, t.ExecutionMode,
+		)
 	}
 	if t.ProjectID == uuid.Nil {
 		return TaskWithRelations{}, fmt.Errorf("%w: task project is required", domain.ErrInvalidInput)
@@ -347,12 +355,12 @@ func (s *TaskStore) CreateWithOperation(
 	err = tx.QueryRow(ctx, `
 		INSERT INTO tasks
 			(id, title, context, expected_result, description, status, priority,
-			 assignee_id, creator_id, start_date, due_date, project_id, milestone_id,
-			 parent_task_id, completed_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+			 execution_mode, assignee_id, creator_id, start_date, due_date,
+			 project_id, milestone_id, parent_task_id, completed_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 		RETURNING id, number`,
 		t.ID, t.Title, t.Context, t.ExpectedResult, t.Description,
-		string(t.Status), string(t.Priority), t.AssigneeID, t.CreatorID,
+		string(t.Status), string(t.Priority), string(t.ExecutionMode), t.AssigneeID, t.CreatorID,
 		t.StartDate, t.DueDate, t.ProjectID, t.MilestoneID, t.ParentTaskID, completedAt,
 	).Scan(&id, &number)
 	if err != nil {
@@ -375,8 +383,9 @@ func (s *TaskStore) CreateWithOperation(
 	newValue, _ := json.Marshal(map[string]any{
 		"title": t.Title, "context": t.Context, "expected_result": t.ExpectedResult,
 		"description": t.Description, "status": t.Status,
-		"priority": t.Priority, "assignee_id": t.AssigneeID,
-		"start_date": t.StartDate, "due_date": t.DueDate,
+		"priority": t.Priority, "execution_mode": t.ExecutionMode,
+		"assignee_id": t.AssigneeID,
+		"start_date":  t.StartDate, "due_date": t.DueDate,
 		"project_id": t.ProjectID, "milestone_id": t.MilestoneID,
 		"parent_task_id": t.ParentTaskID, "label_ids": labelIDs,
 		"dependency_ids": dependencyIDs,
@@ -477,6 +486,7 @@ func (s *TaskStore) updateWithExpectedVersion(
 		oldTitle, oldContext, oldExpectedResult, oldDescription string
 		oldStatus                                               domain.TaskStatus
 		oldPriority                                             domain.TaskPriority
+		oldExecutionMode                                        domain.TaskExecutionMode
 		oldAssignee                                             *uuid.UUID
 		oldStartDate                                            *time.Time
 		oldDueDate                                              *time.Time
@@ -488,11 +498,11 @@ func (s *TaskStore) updateWithExpectedVersion(
 	)
 	err = tx.QueryRow(ctx,
 		`SELECT id, version, title, context, expected_result, description,
-		        status, priority, assignee_id, start_date, due_date,
+		        status, priority, execution_mode, assignee_id, start_date, due_date,
 		        project_id, milestone_id, parent_task_id, completed_at
 		 FROM tasks WHERE number = $1 FOR UPDATE`, number,
 	).Scan(&id, &oldVersion, &oldTitle, &oldContext, &oldExpectedResult,
-		&oldDescription, &oldStatus, &oldPriority, &oldAssignee,
+		&oldDescription, &oldStatus, &oldPriority, &oldExecutionMode, &oldAssignee,
 		&oldStartDate, &oldDueDate, &oldProject, &oldMilestone,
 		&oldParent, &oldCompletedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -508,6 +518,7 @@ func (s *TaskStore) updateWithExpectedVersion(
 	newTitle, newContext := oldTitle, oldContext
 	newExpectedResult, newDescription := oldExpectedResult, oldDescription
 	newStatus, newPriority := oldStatus, oldPriority
+	newExecutionMode := oldExecutionMode
 	newAssignee, newStartDate, newDueDate := oldAssignee, oldStartDate, oldDueDate
 	newProject, newMilestone := oldProject, oldMilestone
 	newParent := oldParent
@@ -544,6 +555,16 @@ func (s *TaskStore) updateWithExpectedVersion(
 			return TaskWithRelations{}, fmt.Errorf("%w: unknown priority %q", domain.ErrInvalidInput, *patch.Priority)
 		}
 		newPriority = *patch.Priority
+	}
+	if patch.ExecutionMode != nil {
+		if !patch.ExecutionMode.Valid() {
+			return TaskWithRelations{}, fmt.Errorf(
+				"%w: unknown execution mode %q",
+				domain.ErrInvalidInput,
+				*patch.ExecutionMode,
+			)
+		}
+		newExecutionMode = *patch.ExecutionMode
 	}
 	if patch.AssigneeSet {
 		newAssignee = patch.AssigneeID
@@ -705,13 +726,15 @@ func (s *TaskStore) updateWithExpectedVersion(
 	if err := tx.QueryRow(ctx, `
 		UPDATE tasks SET
 			title=$2, context=$3, expected_result=$4, description=$5,
-			status=$6, priority=$7, assignee_id=$8, start_date=$9, due_date=$10,
-			project_id=$11, milestone_id=$12, parent_task_id=$13, completed_at=$14,
+			status=$6, priority=$7, execution_mode=$8, assignee_id=$9,
+			start_date=$10, due_date=$11, project_id=$12, milestone_id=$13,
+			parent_task_id=$14, completed_at=$15,
 			version=version+1, updated_at=now()
-		WHERE id=$1 AND version=$15
+		WHERE id=$1 AND version=$16
 		RETURNING version`,
 		id, newTitle, newContext, newExpectedResult, newDescription,
-		string(newStatus), string(newPriority), newAssignee, newStartDate, newDueDate,
+		string(newStatus), string(newPriority), string(newExecutionMode),
+		newAssignee, newStartDate, newDueDate,
 		newProject, newMilestone, newParent, newCompletedAt, oldVersion,
 	).Scan(&nextVersion); err != nil {
 		return TaskWithRelations{}, mapPgError(err)
@@ -748,6 +771,12 @@ func (s *TaskStore) updateWithExpectedVersion(
 		return TaskWithRelations{}, err
 	}
 	if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldPriority, string(oldPriority), string(newPriority)); err != nil {
+		return TaskWithRelations{}, err
+	}
+	if err := recordFieldChange(
+		ctx, tx, id, actor, domain.ActivityFieldExecutionMode,
+		string(oldExecutionMode), string(newExecutionMode),
+	); err != nil {
 		return TaskWithRelations{}, err
 	}
 	if err := recordFieldChange(ctx, tx, id, actor, domain.ActivityFieldAssignee, uuidPtrString(oldAssignee), uuidPtrString(newAssignee)); err != nil {
@@ -796,16 +825,18 @@ func (s *TaskStore) updateWithExpectedVersion(
 	oldValue, _ := json.Marshal(map[string]any{
 		"title": oldTitle, "context": oldContext, "expected_result": oldExpectedResult,
 		"description": oldDescription, "status": oldStatus,
-		"priority": oldPriority, "assignee_id": oldAssignee,
-		"start_date": oldStartDate, "due_date": oldDueDate,
+		"priority": oldPriority, "execution_mode": oldExecutionMode,
+		"assignee_id": oldAssignee,
+		"start_date":  oldStartDate, "due_date": oldDueDate,
 		"project_id": oldProject, "milestone_id": oldMilestone,
 		"parent_task_id": oldParent, "dependency_ids": oldDependencyIDs,
 	})
 	newValue, _ := json.Marshal(map[string]any{
 		"title": newTitle, "context": newContext, "expected_result": newExpectedResult,
 		"description": newDescription, "status": newStatus,
-		"priority": newPriority, "assignee_id": newAssignee,
-		"start_date": newStartDate, "due_date": newDueDate,
+		"priority": newPriority, "execution_mode": newExecutionMode,
+		"assignee_id": newAssignee,
+		"start_date":  newStartDate, "due_date": newDueDate,
 		"project_id": newProject, "milestone_id": newMilestone,
 		"parent_task_id": newParent, "dependency_ids": newDependencyIDs,
 		"schedule_shift_days": patch.ScheduleShiftDays,
@@ -1566,8 +1597,9 @@ func (s *TaskStore) ListActivity(ctx context.Context, taskID uuid.UUID) ([]domai
 // non-archived task, newest first, unpaginated (up to the default page
 // size).
 type TaskListFilter struct {
-	Statuses   []domain.TaskStatus
-	Priorities []domain.TaskPriority
+	Statuses       []domain.TaskStatus
+	Priorities     []domain.TaskPriority
+	ExecutionModes []domain.TaskExecutionMode
 
 	// AssigneeID filters to tasks assigned to one user. Unassigned, if true,
 	// overrides AssigneeID and filters to tasks with no assignee instead —
@@ -1714,6 +1746,12 @@ func (s *TaskStore) List(ctx context.Context, f TaskListFilter) (TaskListResult,
 	if len(f.Priorities) > 0 {
 		where = append(where, "t.priority = ANY("+arg(priorityStrings(f.Priorities))+"::text[])")
 	}
+	if len(f.ExecutionModes) > 0 {
+		where = append(
+			where,
+			"t.execution_mode = ANY("+arg(executionModeStrings(f.ExecutionModes))+"::text[])",
+		)
+	}
 	if f.Unassigned {
 		where = append(where, "t.assignee_id IS NULL")
 	} else if f.AssigneeID != nil {
@@ -1850,6 +1888,14 @@ func priorityStrings(ps []domain.TaskPriority) []string {
 	out := make([]string, len(ps))
 	for i, p := range ps {
 		out[i] = string(p)
+	}
+	return out
+}
+
+func executionModeStrings(modes []domain.TaskExecutionMode) []string {
+	out := make([]string, len(modes))
+	for i, mode := range modes {
+		out[i] = string(mode)
 	}
 	return out
 }

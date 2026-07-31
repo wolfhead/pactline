@@ -1,7 +1,7 @@
 import { apiDelete, apiGet, apiPost } from './client'
 import type { User } from '@/identity'
 
-export type APITokenScope = 'work:read' | 'work:write'
+export type APITokenScope = 'work:read' | 'work:execute' | 'work:write'
 
 export interface APIToken {
   id: string

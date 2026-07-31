@@ -9,7 +9,7 @@ import (
 
 const (
 	AccessAuditRetention = 90 * 24 * time.Hour
-	MaintenanceInterval  = 24 * time.Hour
+	MaintenanceInterval  = 10 * time.Minute
 )
 
 type MaintenanceStore interface {
@@ -19,13 +19,17 @@ type MaintenanceStore interface {
 }
 
 type Maintenance struct {
-	Store MaintenanceStore
+	Store  MaintenanceStore
+	Claims interface {
+		ExpireDue(context.Context, time.Time, int) (int, error)
+	}
 }
 
 type MaintenanceResult struct {
 	AccessAuditRemoved int64
 	IdempotencyRemoved int64
 	AgentRunsRemoved   int64
+	TaskClaimsExpired  int
 }
 
 func (m Maintenance) RunOnce(ctx context.Context, now time.Time) (MaintenanceResult, error) {
@@ -43,9 +47,16 @@ func (m Maintenance) RunOnce(ctx context.Context, now time.Time) (MaintenanceRes
 	if err != nil {
 		return MaintenanceResult{}, fmt.Errorf("expire Agent runs: %w", err)
 	}
+	claimsExpired := 0
+	if m.Claims != nil {
+		claimsExpired, err = m.Claims.ExpireDue(ctx, now, 200)
+		if err != nil {
+			return MaintenanceResult{}, fmt.Errorf("expire Task Claims: %w", err)
+		}
+	}
 	return MaintenanceResult{
 		AccessAuditRemoved: accessRemoved, IdempotencyRemoved: idempotencyRemoved,
-		AgentRunsRemoved: agentRunsRemoved,
+		AgentRunsRemoved: agentRunsRemoved, TaskClaimsExpired: claimsExpired,
 	}, nil
 }
 
@@ -59,7 +70,8 @@ func (m Maintenance) Run(ctx context.Context) {
 		slog.Info("maintenance completed",
 			"access_audit_removed", result.AccessAuditRemoved,
 			"idempotency_removed", result.IdempotencyRemoved,
-			"agent_runs_removed", result.AgentRunsRemoved)
+			"agent_runs_removed", result.AgentRunsRemoved,
+			"task_claims_expired", result.TaskClaimsExpired)
 	}
 	run()
 	ticker := time.NewTicker(MaintenanceInterval)

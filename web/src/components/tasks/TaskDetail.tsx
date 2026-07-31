@@ -447,6 +447,22 @@ export default function TaskDetail({
           />
         </div>
         <div className="contents">
+          <span className="text-sm text-fg-muted">执行方式</span>
+          <select
+            data-property-control
+            aria-label="执行方式"
+            value={task.execution_mode ?? 'human_only'}
+            onChange={(event) => {
+              const executionMode = event.target.value as 'human_only' | 'agent_allowed'
+              patchOptimistic({ execution_mode: executionMode }, { execution_mode: executionMode })
+            }}
+            className="h-8 rounded-md border border-transparent bg-transparent px-2 text-sm text-fg hover:bg-surface-subtle focus:border-accent focus:outline-none"
+          >
+            <option value="human_only">仅人工执行</option>
+            <option value="agent_allowed">允许 Agent 执行</option>
+          </select>
+        </div>
+        <div className="contents">
           <span className="text-sm text-fg-muted">开始日期</span>
           <DueDateControl
             value={task.start_date ?? null}

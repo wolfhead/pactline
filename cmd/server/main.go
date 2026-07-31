@@ -72,6 +72,7 @@ func main() {
 	projects := store.NewProjectStore(db)
 	milestones := store.NewMilestoneStore(db)
 	acceptance := store.NewAcceptanceStore(db)
+	claims := store.NewTaskClaimStore(db)
 	projectService := &application.ProjectService{
 		Projects: projects, Milestones: milestones, Acceptance: acceptance, Tasks: tasks,
 	}
@@ -91,7 +92,7 @@ func main() {
 	agentStore := store.NewAgentStore(db)
 	maintenanceContext, stopMaintenance := context.WithCancel(context.Background())
 	defer stopMaintenance()
-	go (application.Maintenance{Store: accessAuditStore}).Run(maintenanceContext)
+	go (application.Maintenance{Store: accessAuditStore, Claims: claims}).Run(maintenanceContext)
 	var larkClient *lark.Client
 	if cfg.AuthProvider == AuthProviderLark {
 		cipher, cipherErr := identity.NewCredentialCipher(map[string][]byte{
@@ -156,6 +157,7 @@ func main() {
 		Tasks: &application.TaskService{
 			Tasks: tasks, Comments: comments, Projects: projectService,
 		},
+		Claims:   claims,
 		Labels:   &application.LabelService{Labels: labels},
 		Projects: projectService,
 	})

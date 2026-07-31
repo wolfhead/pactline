@@ -19,6 +19,7 @@ const (
 	ActivityFieldDescription    ActivityField = "description"
 	ActivityFieldStatus         ActivityField = "status"
 	ActivityFieldPriority       ActivityField = "priority"
+	ActivityFieldExecutionMode  ActivityField = "execution_mode"
 	ActivityFieldAssignee       ActivityField = "assignee"
 	ActivityFieldStartDate      ActivityField = "start_date"
 	ActivityFieldDueDate        ActivityField = "due_date"

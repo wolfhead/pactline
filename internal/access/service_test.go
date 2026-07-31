@@ -103,6 +103,32 @@ func TestIssueTokenHashesSecretAndNormalizesScopes(t *testing.T) {
 	require.Equal(t, repository.created.Metadata(), issued.Token)
 }
 
+func TestIssueExecutorTokenIncludesReadWithoutGeneralWrite(t *testing.T) {
+	repository := &testRepository{}
+	now := time.Date(2026, 7, 31, 8, 0, 0, 0, time.UTC)
+	service := NewService(
+		repository,
+		testClock{now: now},
+		testSecrets{value: make([]byte, SecretSize)},
+	)
+
+	issued, err := service.Issue(context.Background(), IssueRequest{
+		UserID: uuid.New(), Name: "Codex worker",
+		Scopes:   []Scope{ScopeWorkExecute},
+		Lifetime: 30 * 24 * time.Hour,
+	})
+	require.NoError(t, err)
+	require.Equal(
+		t,
+		[]Scope{ScopeWorkExecute, ScopeWorkRead},
+		issued.Token.Scopes,
+	)
+	principal := Principal{Scopes: issued.Token.Scopes}
+	require.True(t, principal.HasScope(ScopeWorkRead))
+	require.True(t, principal.HasScope(ScopeWorkExecute))
+	require.False(t, principal.HasScope(ScopeWorkWrite))
+}
+
 func TestIssueTokenRejectsUnsupportedLifetimeAndScope(t *testing.T) {
 	service := NewService(&testRepository{}, testClock{}, testSecrets{value: make([]byte, SecretSize)})
 

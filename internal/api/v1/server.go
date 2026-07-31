@@ -95,7 +95,13 @@ func (s *Server) Handler(r *http.Request) (http.Handler, string) {
 
 func operationRequiresIfMatch(operationID string) bool {
 	switch operationID {
-	case "activateMilestone",
+	case "answerTaskClaimQuestion",
+		"askTaskClaimQuestion",
+		"extendTaskClaim",
+		"recordTaskClaimAcceptanceCheck",
+		"releaseTaskClaim",
+		"submitTaskClaim",
+		"activateMilestone",
 		"archiveProject",
 		"archiveTask",
 		"cancelMilestone",

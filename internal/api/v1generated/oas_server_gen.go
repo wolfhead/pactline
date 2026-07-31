@@ -14,6 +14,18 @@ type Handler interface {
 	//
 	// POST /api/v1/projects/{number}/milestones/{id}/activate
 	ActivateMilestone(ctx context.Context, params ActivateMilestoneParams) (ActivateMilestoneRes, error)
+	// AddTaskClaimProgress implements addTaskClaimProgress operation.
+	//
+	// Add an Agent progress message.
+	//
+	// POST /api/v1/claims/{id}/progress
+	AddTaskClaimProgress(ctx context.Context, req *TaskClaimAgentMessage, params AddTaskClaimProgressParams) (AddTaskClaimProgressRes, error)
+	// AnswerTaskClaimQuestion implements answerTaskClaimQuestion operation.
+	//
+	// Answer the pending Agent question and resume the Claim.
+	//
+	// POST /api/v1/claims/{id}/answer
+	AnswerTaskClaimQuestion(ctx context.Context, req *TaskClaimHumanAnswer, params AnswerTaskClaimQuestionParams) (AnswerTaskClaimQuestionRes, error)
 	// ArchiveProject implements archiveProject operation.
 	//
 	// Archive a project.
@@ -26,12 +38,24 @@ type Handler interface {
 	//
 	// POST /api/v1/tasks/{number}/archive
 	ArchiveTask(ctx context.Context, params ArchiveTaskParams) (ArchiveTaskRes, error)
+	// AskTaskClaimQuestion implements askTaskClaimQuestion operation.
+	//
+	// Ask a human question and pause the Claim.
+	//
+	// POST /api/v1/claims/{id}/ask
+	AskTaskClaimQuestion(ctx context.Context, req *TaskClaimAgentMessage, params AskTaskClaimQuestionParams) (AskTaskClaimQuestionRes, error)
 	// CancelMilestone implements cancelMilestone operation.
 	//
 	// Cancel a milestone.
 	//
 	// POST /api/v1/projects/{number}/milestones/{id}/cancel
 	CancelMilestone(ctx context.Context, req OptLifecycleRequest, params CancelMilestoneParams) (CancelMilestoneRes, error)
+	// ClaimTask implements claimTask operation.
+	//
+	// Claim an eligible assigned task for this client session.
+	//
+	// POST /api/v1/tasks/{number}/claim
+	ClaimTask(ctx context.Context, req *TaskClaimSession, params ClaimTaskParams) (ClaimTaskRes, error)
 	// CompleteMilestone implements completeMilestone operation.
 	//
 	// Complete a milestone.
@@ -104,12 +128,24 @@ type Handler interface {
 	//
 	// DELETE /api/v1/tasks/{number}/comments/{id}
 	DeleteTaskComment(ctx context.Context, params DeleteTaskCommentParams) (DeleteTaskCommentRes, error)
+	// ExtendTaskClaim implements extendTaskClaim operation.
+	//
+	// Extend an active Claim.
+	//
+	// POST /api/v1/claims/{id}/extend
+	ExtendTaskClaim(ctx context.Context, req *TaskClaimSession, params ExtendTaskClaimParams) (ExtendTaskClaimRes, error)
 	// GetCurrentPrincipal implements getCurrentPrincipal operation.
 	//
 	// Get the authenticated principal.
 	//
 	// GET /api/v1/me
 	GetCurrentPrincipal(ctx context.Context) (GetCurrentPrincipalRes, error)
+	// GetCurrentTaskClaim implements getCurrentTaskClaim operation.
+	//
+	// Get the unfinished Claim owned by this client session.
+	//
+	// GET /api/v1/agent/claims/current
+	GetCurrentTaskClaim(ctx context.Context, params GetCurrentTaskClaimParams) (GetCurrentTaskClaimRes, error)
 	// GetProject implements getProject operation.
 	//
 	// Get a project and its work aggregate.
@@ -122,6 +158,12 @@ type Handler interface {
 	//
 	// GET /api/v1/tasks/{number}
 	GetTask(ctx context.Context, params GetTaskParams) (GetTaskRes, error)
+	// GetTaskClaim implements getTaskClaim operation.
+	//
+	// Get a Claim.
+	//
+	// GET /api/v1/claims/{id}
+	GetTaskClaim(ctx context.Context, params GetTaskClaimParams) (GetTaskClaimRes, error)
 	// ListLabels implements listLabels operation.
 	//
 	// List labels.
@@ -146,6 +188,18 @@ type Handler interface {
 	//
 	// GET /api/v1/tasks/{number}/activity
 	ListTaskActivity(ctx context.Context, params ListTaskActivityParams) (ListTaskActivityRes, error)
+	// ListTaskAgentConversations implements listTaskAgentConversations operation.
+	//
+	// List Agent conversations for the task timeline.
+	//
+	// GET /api/v1/tasks/{number}/agent-conversations
+	ListTaskAgentConversations(ctx context.Context, params ListTaskAgentConversationsParams) (ListTaskAgentConversationsRes, error)
+	// ListTaskClaimMessages implements listTaskClaimMessages operation.
+	//
+	// List the immutable Agent conversation for a Claim.
+	//
+	// GET /api/v1/claims/{id}/messages
+	ListTaskClaimMessages(ctx context.Context, params ListTaskClaimMessagesParams) (ListTaskClaimMessagesRes, error)
 	// ListTaskComments implements listTaskComments operation.
 	//
 	// List task comments.
@@ -170,6 +224,18 @@ type Handler interface {
 	//
 	// GET /api/v1/users
 	ListUsers(ctx context.Context, params ListUsersParams) (ListUsersRes, error)
+	// RecordTaskClaimAcceptanceCheck implements recordTaskClaimAcceptanceCheck operation.
+	//
+	// Record an acceptance check owned by the active Claim.
+	//
+	// POST /api/v1/claims/{id}/criteria/{criterion_id}/checks
+	RecordTaskClaimAcceptanceCheck(ctx context.Context, req *TaskClaimAcceptanceCheckCreate, params RecordTaskClaimAcceptanceCheckParams) (RecordTaskClaimAcceptanceCheckRes, error)
+	// ReleaseTaskClaim implements releaseTaskClaim operation.
+	//
+	// Release a Claim.
+	//
+	// POST /api/v1/claims/{id}/release
+	ReleaseTaskClaim(ctx context.Context, req *TaskClaimRelease, params ReleaseTaskClaimParams) (ReleaseTaskClaimRes, error)
 	// ReopenMilestone implements reopenMilestone operation.
 	//
 	// Reopen a milestone.
@@ -188,6 +254,12 @@ type Handler interface {
 	//
 	// POST /api/v1/tasks/{number}/restore
 	RestoreTask(ctx context.Context, params RestoreTaskParams) (RestoreTaskRes, error)
+	// SubmitTaskClaim implements submitTaskClaim operation.
+	//
+	// Submit verified Agent work for human review.
+	//
+	// POST /api/v1/claims/{id}/submit
+	SubmitTaskClaim(ctx context.Context, req *TaskClaimAgentMessage, params SubmitTaskClaimParams) (SubmitTaskClaimRes, error)
 	// UpdateCriterion implements updateCriterion operation.
 	//
 	// Update an acceptance criterion.

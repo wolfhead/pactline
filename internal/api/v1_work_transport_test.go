@@ -14,11 +14,12 @@ import (
 )
 
 type v1TaskJSON struct {
-	ID      uuid.UUID `json:"id"`
-	Number  int64     `json:"number"`
-	Version int64     `json:"version"`
-	Title   string    `json:"title"`
-	Labels  []struct {
+	ID            uuid.UUID `json:"id"`
+	Number        int64     `json:"number"`
+	Version       int64     `json:"version"`
+	Title         string    `json:"title"`
+	ExecutionMode string    `json:"execution_mode"`
+	Labels        []struct {
 		ID uuid.UUID `json:"id"`
 	} `json:"labels"`
 }

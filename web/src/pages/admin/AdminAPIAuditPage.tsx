@@ -253,7 +253,11 @@ export default function AdminAPIAuditPage() {
                       <p>{item.token.name}</p>
                       <p className="font-mono text-xs text-fg-muted">{item.token.display_prefix}…</p>
                     </td>
-                    <td className="px-4 py-3">{item.token.scopes.includes('work:write') ? '读写' : '只读'}</td>
+                    <td className="px-4 py-3">
+                      {item.token.scopes.includes('work:write')
+                        ? '读写'
+                        : item.token.scopes.includes('work:execute') ? 'Agent 执行' : '只读'}
+                    </td>
                     <td className="px-4 py-3">{new Date(item.token.expires_at).toLocaleString()}</td>
                     <td className="px-4 py-3">{item.token.revoked_at ? '已撤销' : '有效'}</td>
                     <td className="px-4 py-3 text-right">

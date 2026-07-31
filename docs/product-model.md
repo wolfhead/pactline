@@ -51,6 +51,7 @@ Every Task:
 - may define an optional start date, due date, or coherent inclusive date range;
 - has a stable, human-facing sequential number;
 - records a creator and an optional assignee;
+- declares `human_only` or `agent_allowed` execution mode;
 - requires context and an expected result when created; and
 - is archived or restored rather than hard-deleted.
 
@@ -58,6 +59,11 @@ Task status and priority are labels, not scheduling constraints. Any valid
 status may move to any other valid status. Moving to `done` is the only
 acceptance gate: a Task with active acceptance criteria may complete only when
 every current criterion revision is passed or waived by a person.
+
+`agent_allowed` is an explicit delegation signal, not a second task lifecycle.
+An external Codex session may claim only an assigned, unarchived `todo` Task
+with that mode. Claiming moves it to `in_progress`; verified submission moves
+it to `in_review`. The Agent cannot mark the Task done.
 
 Task relationships add coordination without creating a general-purpose graph:
 
@@ -114,6 +120,30 @@ Both use the same `/api/v1` work contract. Agent mutations additionally use
 idempotency keys and ETag preconditions where documented. Audit records preserve
 the real actor, effective subject, personal-token or Agent-Run provenance, and
 request identifier without recording credentials or unnecessary personal data.
+
+External Codex execution uses the least-privilege `work:execute` scope. It
+implies read access and permits only Claim-owned lifecycle operations, Agent
+conversation messages, and acceptance checks for the claimed Task. It does not
+permit editing Task definitions, criteria, Projects, or ordinary comments.
+
+A `TaskClaim` binds one unfinished Task to one real client session. A session
+may hold at most one unfinished Claim. Claims are never transferred between
+sessions. The opaque client-session binding is stored for authorization but is
+not returned in Claim responses or audit payloads:
+
+- active Claims expire after seven days and may be explicitly extended by the
+  original session;
+- a question atomically changes the Claim to `waiting_human` for at most 24
+  hours;
+- only an explicit human answer resumes the same Claim;
+- submission terminates the Claim and moves an unchanged `in_progress` Task
+  to `in_review`; and
+- release or expiry returns the Task to `todo` only if it is still
+  `in_progress`, preserving any intervening human status change.
+
+Agent progress, questions, answers, handoff, and submission are immutable
+conversation messages separate from ordinary comments. The task UI presents
+both streams together in chronological order.
 
 ## Legacy context
 

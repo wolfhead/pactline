@@ -11,7 +11,7 @@ import {
   type IssuedAPIToken,
 } from '@/api/access'
 
-type AccessLevel = 'read' | 'write'
+type AccessLevel = 'read' | 'execute' | 'write'
 
 export default function APITokensPage() {
   const [tokens, setTokens] = useState<APIToken[]>([])
@@ -50,7 +50,7 @@ export default function APITokensPage() {
     try {
       const scopes: APITokenScope[] = accessLevel === 'write'
         ? ['work:write']
-        : ['work:read']
+        : accessLevel === 'execute' ? ['work:execute'] : ['work:read']
       const result = await createAPIToken({
         name: name.trim(),
         scopes,
@@ -161,6 +161,7 @@ export default function APITokensPage() {
               className="rounded-md border border-border-strong bg-surface px-3 py-2 font-normal"
             >
               <option value="read">只读</option>
+              <option value="execute">Agent 执行</option>
               <option value="write">读写</option>
             </select>
           </label>
@@ -277,7 +278,8 @@ export default function APITokensPage() {
 }
 
 function scopeLabel(scopes: APITokenScope[]) {
-  return scopes.includes('work:write') ? '读写' : '只读'
+  if (scopes.includes('work:write')) return '读写'
+  return scopes.includes('work:execute') ? 'Agent 执行' : '只读'
 }
 
 function formatTime(value: string | null) {

@@ -23,6 +23,9 @@ acceptance criteria.
 - People use browser sessions. External Agents use personal scoped tokens;
   Pactline's built-in Lark Agent uses a short-lived initiating-user delegation.
   Both operate through the same contract-first `/api/v1` API.
+- Tasks explicitly opt into external execution. A real Codex session claims
+  one assigned eligible Task, records a separate Agent conversation and
+  acceptance evidence, then submits it for human review.
 - Production identity is invitation-only, single-tenant Lark OAuth with one
   Administrator.
 - Administrative impersonation is read-only and keeps the Administrator as the
@@ -94,7 +97,8 @@ The canonical contract is [`api/openapi.yaml`](api/openapi.yaml); authenticated
 users can read it at `/api/openapi.yaml` and browse it at `/api-docs`.
 
 Browser mutations require same-origin session and CSRF credentials. External
-Agent requests use personal Bearer Tokens with `work:read` or `work:write`.
+Agent requests use personal Bearer Tokens with `work:read`, least-privilege
+`work:execute`, or `work:write`.
 The built-in Agent receives a short-lived internal delegation for its Run.
 Both use the documented idempotency and optimistic-concurrency headers.
 
@@ -104,6 +108,23 @@ make openapi-check
 ```
 
 Do not edit `internal/api/v1generated` manually.
+
+### External Codex worker
+
+Create an executor-scoped personal Token in the account UI, then install or
+create a `pactline-work` Codex skill. Keep developer-specific configuration
+outside this repository:
+
+```text
+~/.pactline/
+├── .env          # mode 0600; base URL and personal Token
+├── pactline.md   # optional personal Agent instructions
+└── projects.md   # optional free-form local Project/repository mapping
+```
+
+The skill must bind Claims to the real `CODEX_THREAD_ID`; it must not invent a
+transferable worker identity. Local repository layouts remain user-owned and
+are intentionally not part of the Pactline domain.
 
 ## Repository guidance
 

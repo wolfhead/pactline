@@ -183,13 +183,16 @@ func normalizeScopes(values []Scope) ([]Scope, error) {
 	present := make(map[Scope]bool, len(values)+1)
 	for _, scope := range values {
 		switch scope {
-		case ScopeWorkRead, ScopeWorkWrite:
+		case ScopeWorkRead, ScopeWorkExecute, ScopeWorkWrite:
 			present[scope] = true
 		default:
 			return nil, ErrInvalidScope
 		}
 	}
 	if present[ScopeWorkWrite] {
+		present[ScopeWorkRead] = true
+	}
+	if present[ScopeWorkExecute] {
 		present[ScopeWorkRead] = true
 	}
 	scopes := make([]Scope, 0, len(present))

@@ -12,6 +12,9 @@ import type {
   CreateTaskBody,
   Label,
   Task,
+  TaskClaim,
+  TaskClaimConversation,
+  TaskExecutionMode,
   TaskListResponse,
   TaskPatchBody,
   TaskPriority,
@@ -21,6 +24,7 @@ import type {
 export interface TaskListParams {
   status?: TaskStatus[]
   priority?: TaskPriority[]
+  execution_mode?: TaskExecutionMode[]
   // A user UUID, or the literal "none" for "unassigned only" — mirrors
   // store.TaskListFilter.Unassigned overriding AssigneeID.
   assignee?: string
@@ -41,6 +45,7 @@ function buildTaskQuery(params: TaskListParams): string {
   const sp = new URLSearchParams()
   for (const s of params.status ?? []) sp.append('status', s)
   for (const p of params.priority ?? []) sp.append('priority', p)
+  for (const mode of params.execution_mode ?? []) sp.append('execution_mode', mode)
   for (const l of params.label ?? []) sp.append('label', l)
   if (params.assignee) sp.set('assignee', params.assignee)
   if (params.q) sp.set('q', params.q)
@@ -130,6 +135,33 @@ export function deleteComment(number: number, id: string, version: number): Prom
 export function listActivity(number: number): Promise<Activity[]> {
   return v1Get<{ items: Activity[] }>(`/api/v1/tasks/${number}/activity`)
     .then(({ value }) => value.items)
+}
+
+export function listTaskAgentConversations(number: number): Promise<TaskClaimConversation[]> {
+  return v1Get<{ items: TaskClaimConversation[] }>(
+    `/api/v1/tasks/${number}/agent-conversations`,
+  ).then(({ value }) => value?.items ?? [])
+}
+
+export function answerTaskClaimQuestion(
+  claimID: string,
+  claimVersion: number,
+  body: string,
+): Promise<TaskClaimConversation['claim']> {
+  return v1Post<{ claim: TaskClaimConversation['claim'] }>(
+    `/api/v1/claims/${encodeURIComponent(claimID)}/answer`,
+    { ifMatch: etagForVersion(claimVersion), body: { body } },
+  ).then(({ value }) => value.claim)
+}
+
+export function releaseTaskClaim(
+  claimID: string,
+  claimVersion: number,
+): Promise<TaskClaim> {
+  return v1Post<TaskClaim>(
+    `/api/v1/claims/${encodeURIComponent(claimID)}/release`,
+    { ifMatch: etagForVersion(claimVersion), body: {} },
+  ).then((response) => requireVersioned(response).value)
 }
 
 export function listLabels(): Promise<Label[]> {

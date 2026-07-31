@@ -2,9 +2,14 @@
 
 export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancelled'
 export type TaskPriority = 'none' | 'low' | 'medium' | 'high' | 'urgent'
+export type TaskExecutionMode = 'human_only' | 'agent_allowed'
 
 export const TASK_STATUSES: TaskStatus[] = ['todo', 'in_progress', 'in_review', 'done', 'cancelled']
 export const TASK_PRIORITIES: TaskPriority[] = ['none', 'low', 'medium', 'high', 'urgent']
+export const EXECUTION_MODE_LABELS: Record<TaskExecutionMode, string> = {
+  human_only: '仅人工执行',
+  agent_allowed: '允许 Agent 执行',
+}
 
 export const STATUS_LABELS: Record<TaskStatus, string> = {
   todo: '待办',
@@ -67,6 +72,7 @@ export interface Task {
   description: string
   status: TaskStatus
   priority: TaskPriority
+  execution_mode?: TaskExecutionMode
   assignee: UserRef | null
   creator: UserRef
   start_date: string | null
@@ -109,6 +115,7 @@ export type ActivityField =
   | 'description'
   | 'status'
   | 'priority'
+  | 'execution_mode'
   | 'assignee'
   | 'start_date'
   | 'due_date'
@@ -125,7 +132,7 @@ export interface Activity {
   field: ActivityField
   old_value: string | null
   new_value: string | null
-  authentication_method?: 'session' | 'api_token'
+  authentication_method?: 'session' | 'api_token' | 'agent_delegate'
   token_name?: string
   request_id?: string
   created_at: string
@@ -138,6 +145,7 @@ export interface TaskPatchBody {
   description?: string
   status?: TaskStatus
   priority?: TaskPriority
+  execution_mode?: TaskExecutionMode
   // `null` clears (matches decodeTaskPatch's *Set-boolean semantics for a
   // present-but-null key); omitting the key entirely leaves it unchanged.
   assignee_id?: string | null
@@ -158,6 +166,7 @@ export interface CreateTaskBody {
   description?: string
   status?: TaskStatus
   priority?: TaskPriority
+  execution_mode?: TaskExecutionMode
   assignee_id?: string | null
   project_number: number
   milestone_id?: string | null
@@ -166,4 +175,40 @@ export interface CreateTaskBody {
   start_date?: string | null
   due_date?: string | null
   label_ids?: string[]
+}
+
+export type TaskClaimStatus = 'active' | 'waiting_human' | 'submitted' | 'released' | 'expired'
+
+export interface TaskClaim {
+  id: string
+  task_id: string
+  task_number: number
+  claimed_by_user_id: string
+  token_name: string
+  client_kind: string
+  status: TaskClaimStatus
+  version: number
+  expires_at: string
+  terminal_reason?: string
+  created_at: string
+  updated_at: string
+  completed_at?: string
+}
+
+export interface TaskClaimMessage {
+  id: string
+  claim_id: string
+  task_id: string
+  author_type: 'agent' | 'human'
+  author_user_id?: string
+  kind: 'progress' | 'question' | 'answer' | 'handoff' | 'submission'
+  body: string
+  reply_to_message_id?: string
+  token_name?: string
+  created_at: string
+}
+
+export interface TaskClaimConversation {
+  claim: TaskClaim
+  messages: TaskClaimMessage[]
 }
