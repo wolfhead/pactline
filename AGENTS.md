@@ -239,3 +239,6 @@ intentionally running the Go API or Vite server.
   tracked file and commit must be safe for immediate public exposure. Never
   commit secrets, company information, personal information, internal
   infrastructure details, or production data.
+- Never bypass GitHub Push Protection or the `Public Repository Gate`. A
+  privacy or credential finding must be removed from every affected commit
+  before the branch is pushed or merged.

@@ -16,8 +16,8 @@ vi.mock('@/components/tasks/TaskComposer', () => ({
 vi.mock('@/identity', async () => ({
   ...(await vi.importActual<typeof import('@/identity')>('@/identity')),
   useIdentity: () => ({
-    me: { id: 'u1', name: '张沁', email: 'a@x.com' },
-    users: [{ id: 'u1', name: '张沁', email: 'a@x.com' }],
+    me: { id: 'u1', name: '张沁', email: 'a@example.test' },
+    users: [{ id: 'u1', name: '张沁', email: 'a@example.test' }],
     switchTo: () => {},
   }),
 }))
@@ -31,7 +31,7 @@ const TASK = {
   id: 'id-142', number: 142, version: 1, title: '修复竞价超时',
   context: '竞价请求近期频繁超时', expected_result: '恢复稳定流量', description: '',
   status: 'todo' as const, priority: 'none' as const, assignee: null,
-  creator: { id: 'u1', name: '张沁', email: 'a@x.com' },
+  creator: { id: 'u1', name: '张沁', email: 'a@example.test' },
   start_date: null,
   due_date: null, project: { id: 'p1', number: 12, name: 'Task Manager' },
   milestone: null, labels: [], parent: null, children: [],

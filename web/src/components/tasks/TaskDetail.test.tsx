@@ -20,7 +20,7 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-const USERS = [{ id: 'u1', name: '张沁', email: 'a@x.com' }]
+const USERS = [{ id: 'u1', name: '张沁', email: 'a@example.test' }]
 const TASK = {
   id: 'id-142', number: 142, version: 1, title: '修复竞价超时导致的丢量',
   context: '竞价请求近期频繁超时', expected_result: '恢复稳定流量且不再发生异常丢量',

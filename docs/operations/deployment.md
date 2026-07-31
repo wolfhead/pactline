@@ -95,10 +95,10 @@ Requirements:
 - enough disk space for PostgreSQL data, images, and backups; and
 - an existing edge proxy on shared hosts.
 
-A conventional installation layout is:
+A conventional example installation layout is:
 
 ```text
-/srv/pactline/
+<deployment-root>/
 ├── compose.production.yaml
 ├── deploy/
 │   ├── .env

@@ -1,0 +1,55 @@
+title = "Pactline public repository secret policy"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "pactline-contextual-runtime-secret"
+description = "Pactline runtime secret assigned directly in tracked content"
+regex = '''(?i)(LARK_APP_SECRET|LARK_TENANT_KEY|DEEPSEEK_API_KEY|SESSION_SECRET|OAUTH_TOKEN_ENCRYPTION_KEY|AGENT_DELEGATION_SIGNING_KEY|AGENT_CHECKPOINT_ENCRYPTION_KEY|POSTGRES_PASSWORD)[ \t]*[:=][ \t]*["']?([A-Za-z0-9+/=_-]{16,})'''
+secretGroup = 2
+keywords = [
+  "LARK_APP_SECRET",
+  "LARK_TENANT_KEY",
+  "DEEPSEEK_API_KEY",
+  "SESSION_SECRET",
+  "OAUTH_TOKEN_ENCRYPTION_KEY",
+  "AGENT_DELEGATION_SIGNING_KEY",
+  "AGENT_CHECKPOINT_ENCRYPTION_KEY",
+  "POSTGRES_PASSWORD",
+]
+
+  [[rules.allowlists]]
+  description = "Known synthetic development session secrets"
+  condition = "AND"
+  regexTarget = "match"
+  paths = [
+    '''^Makefile$''',
+    '''^compose\.yaml$''',
+    '''^web/playwright\.config\.ts$''',
+  ]
+  regexes = [
+    '''SESSION_SECRET[=:][ \t]*["']?(ZGV2ZWxvcG1lbnQtc2Vzc2lvbi1zZWNyZXQtMzJieXQ=|development-session-secret-32byt|development-only-session-secret-32b)''',
+    '''SESSION_SECRET[=:][ \t]*["']?(cGxheXdyaWdodC1zZXNzaW9uLXNlY3JldC0zMi1ieXQ=|playwright-session-secret-32-byt|playwright-development-session-secret)''',
+  ]
+
+[[rules]]
+id = "lark-application-identifier"
+description = "Lark application identifier must remain outside the public repository"
+regex = '''\bcli_[A-Za-z0-9]{16,}\b'''
+keywords = ["cli_"]
+
+[[allowlists]]
+description = "Known synthetic development session secrets reported by the default generic rule"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "match"
+paths = [
+  '''^Makefile$''',
+  '''^compose\.yaml$''',
+  '''^web/playwright\.config\.ts$''',
+]
+regexes = [
+  '''SESSION_SECRET[=:][ \t]*["']?(ZGV2ZWxvcG1lbnQtc2Vzc2lvbi1zZWNyZXQtMzJieXQ=|development-session-secret-32byt|development-only-session-secret-32b)''',
+  '''SESSION_SECRET[=:][ \t]*["']?(cGxheXdyaWdodC1zZXNzaW9uLXNlY3JldC0zMi1ieXQ=|playwright-session-secret-32-byt|playwright-development-session-secret)''',
+]
