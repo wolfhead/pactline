@@ -23,7 +23,7 @@ export default function TaskInspector({
       }}
     >
       <SheetContent
-        className="w-full gap-0 overflow-y-auto p-0 outline-none sm:max-w-[36rem]"
+        className="w-full gap-0 overflow-y-auto p-0 outline-none sm:max-w-[52rem]"
         showCloseButton={false}
         overlayClassName="bg-fg/10"
         aria-describedby={undefined}

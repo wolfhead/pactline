@@ -9,12 +9,28 @@ import {
   updateComment,
 } from '../../api/tasks'
 import { useIdentity } from '../../identity'
-import type { Comment, TaskClaimConversation, TaskClaimMessage } from '../../task-types'
+import type {
+  Comment,
+  TaskClaimConversation,
+  TaskClaimMessage,
+  TaskStatus,
+} from '../../task-types'
+import type { AcceptanceCriterion, AcceptanceOutcome } from '@/api/acceptance'
 import InlineEditable from './InlineEditable'
+import SubmissionReview from './SubmissionReview'
 
 interface CommentSectionProps {
   taskNumber: number
   taskVersion: number
+  taskStatus: TaskStatus
+  acceptanceCriteria: AcceptanceCriterion[]
+  onReviewCheck: (
+    criterion: AcceptanceCriterion,
+    outcome: AcceptanceOutcome,
+    evidence: string,
+  ) => Promise<void>
+  onCompleteReview: () => Promise<void>
+  onReturnForChanges: () => Promise<void>
   onTaskChanged: () => Promise<void>
 }
 
@@ -24,6 +40,11 @@ interface CommentSectionProps {
 export default function CommentSection({
   taskNumber,
   taskVersion,
+  taskStatus,
+  acceptanceCriteria,
+  onReviewCheck,
+  onCompleteReview,
+  onReturnForChanges,
   onTaskChanged,
 }: CommentSectionProps) {
   const { me } = useIdentity()
@@ -34,6 +55,7 @@ export default function CommentSection({
   const [answeringClaimID, setAnsweringClaimID] = useState('')
   const [releasingClaimID, setReleasingClaimID] = useState('')
   const [posting, setPosting] = useState(false)
+  const [reviewingSubmissionID, setReviewingSubmissionID] = useState('')
   const [error, setError] = useState('')
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({})
 
@@ -86,6 +108,22 @@ export default function CommentSection({
       claim.status === 'active' || claim.status === 'waiting_human'
     ))
   ), [conversations])
+
+  const latestSubmissionID = useMemo(() => {
+    if (taskStatus !== 'in_review') return ''
+    const submissions = conversations.flatMap((conversation) => (
+      conversation.claim.status === 'submitted'
+        ? conversation.messages
+          .filter((message) => message.kind === 'submission')
+          .map((message) => ({ message, conversation }))
+        : []
+    ))
+    submissions.sort((left, right) => (
+      new Date(right.message.created_at).getTime()
+      - new Date(left.message.created_at).getTime()
+    ))
+    return submissions[0]?.message.id ?? ''
+  }, [conversations, taskStatus])
 
   async function reloadConversations() {
     const loaded = await listTaskAgentConversations(taskNumber)
@@ -209,6 +247,8 @@ export default function CommentSection({
               && !conversation.messages.some((candidate) => (
                 candidate.kind === 'answer' && candidate.reply_to_message_id === message.id
               ))
+            const isLatestSubmission = message.id === latestSubmissionID
+            const reviewOpen = reviewingSubmissionID === message.id
             return (
               <li
                 key={message.id}
@@ -228,6 +268,29 @@ export default function CommentSection({
                   <span>· {new Date(message.created_at).toLocaleString()}</span>
                 </div>
                 <p className="whitespace-pre-wrap text-sm text-fg">{message.body}</p>
+                {isLatestSubmission && (
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      aria-expanded={reviewOpen}
+                      onClick={() => setReviewingSubmissionID((current) => (
+                        current === message.id ? '' : message.id
+                      ))}
+                      className="rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-white"
+                    >
+                      {reviewOpen ? '收起验收' : '验收本次提交'}
+                    </button>
+                    {reviewOpen && (
+                      <SubmissionReview
+                        criteria={acceptanceCriteria}
+                        submittedAt={conversation.claim.completed_at ?? message.created_at}
+                        onCheck={onReviewCheck}
+                        onComplete={onCompleteReview}
+                        onReturnForChanges={onReturnForChanges}
+                      />
+                    )}
+                  </div>
+                )}
                 {waitingForThisQuestion && (
                   <div className="mt-3 flex flex-col gap-2 border-t border-status-in-progress/20 pt-3">
                     <label className="text-xs font-medium text-fg" htmlFor={`claim-answer-${conversation.claim.id}`}>

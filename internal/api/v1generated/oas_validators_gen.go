@@ -4157,6 +4157,24 @@ func (s *Task) Validate() error {
 		})
 	}
 	if err := func() error {
+		if value, ok := s.AgentWork.Get(); ok {
+			if err := func() error {
+				if err := value.Validate(); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "agent_work",
+			Error: err,
+		})
+	}
+	if err := func() error {
 		if value, ok := s.Assignee.Get(); ok {
 			if err := func() error {
 				if err := value.Validate(); err != nil {
@@ -4511,6 +4529,29 @@ func (s *TaskActivityListHeaders) Validate() error {
 	}(); err != nil {
 		failures = append(failures, validate.FieldError{
 			Name:  "Response",
+			Error: err,
+		})
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+	return nil
+}
+
+func (s *TaskAgentWorkSummary) Validate() error {
+	if s == nil {
+		return validate.ErrNilPointer
+	}
+
+	var failures []validate.FieldError
+	if err := func() error {
+		if err := s.Status.Validate(); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "status",
 			Error: err,
 		})
 	}

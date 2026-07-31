@@ -3455,6 +3455,52 @@ func (o OptTaskActivityAuthenticationMethod) Or(d TaskActivityAuthenticationMeth
 	return d
 }
 
+// NewOptTaskAgentWorkSummary returns new OptTaskAgentWorkSummary with value set to v.
+func NewOptTaskAgentWorkSummary(v TaskAgentWorkSummary) OptTaskAgentWorkSummary {
+	return OptTaskAgentWorkSummary{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptTaskAgentWorkSummary is optional TaskAgentWorkSummary.
+type OptTaskAgentWorkSummary struct {
+	Value TaskAgentWorkSummary
+	Set   bool
+}
+
+// IsSet returns true if OptTaskAgentWorkSummary was set.
+func (o OptTaskAgentWorkSummary) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptTaskAgentWorkSummary) Reset() {
+	var v TaskAgentWorkSummary
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptTaskAgentWorkSummary) SetTo(v TaskAgentWorkSummary) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptTaskAgentWorkSummary) Get() (v TaskAgentWorkSummary, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptTaskAgentWorkSummary) Or(d TaskAgentWorkSummary) TaskAgentWorkSummary {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptTaskExecutionMode returns new OptTaskExecutionMode with value set to v.
 func NewOptTaskExecutionMode(v TaskExecutionMode) OptTaskExecutionMode {
 	return OptTaskExecutionMode{
@@ -5002,27 +5048,28 @@ func (s *SessionCookie) SetRoles(val []string) {
 
 // Ref: #/components/schemas/Task
 type Task struct {
-	ID             uuid.UUID          `json:"id"`
-	Number         int64              `json:"number"`
-	Version        int64              `json:"version"`
-	Title          string             `json:"title"`
-	Context        string             `json:"context"`
-	ExpectedResult string             `json:"expected_result"`
-	Description    string             `json:"description"`
-	Status         TaskStatus         `json:"status"`
-	Priority       TaskPriority       `json:"priority"`
-	ExecutionMode  TaskExecutionMode  `json:"execution_mode"`
-	Assignee       OptUserRef         `json:"assignee"`
-	Creator        UserRef            `json:"creator"`
-	StartDate      OptDate            `json:"start_date"`
-	DueDate        OptDate            `json:"due_date"`
-	Project        ProjectRef         `json:"project"`
-	Milestone      OptMilestoneRef    `json:"milestone"`
-	Labels         []Label            `json:"labels"`
-	Parent         OptTaskRelationRef `json:"parent"`
-	Children       []TaskRelationRef  `json:"children"`
-	Dependencies   []TaskRelationRef  `json:"dependencies"`
-	Dependents     []TaskRelationRef  `json:"dependents"`
+	ID             uuid.UUID               `json:"id"`
+	Number         int64                   `json:"number"`
+	Version        int64                   `json:"version"`
+	Title          string                  `json:"title"`
+	Context        string                  `json:"context"`
+	ExpectedResult string                  `json:"expected_result"`
+	Description    string                  `json:"description"`
+	Status         TaskStatus              `json:"status"`
+	Priority       TaskPriority            `json:"priority"`
+	ExecutionMode  TaskExecutionMode       `json:"execution_mode"`
+	AgentWork      OptTaskAgentWorkSummary `json:"agent_work"`
+	Assignee       OptUserRef              `json:"assignee"`
+	Creator        UserRef                 `json:"creator"`
+	StartDate      OptDate                 `json:"start_date"`
+	DueDate        OptDate                 `json:"due_date"`
+	Project        ProjectRef              `json:"project"`
+	Milestone      OptMilestoneRef         `json:"milestone"`
+	Labels         []Label                 `json:"labels"`
+	Parent         OptTaskRelationRef      `json:"parent"`
+	Children       []TaskRelationRef       `json:"children"`
+	Dependencies   []TaskRelationRef       `json:"dependencies"`
+	Dependents     []TaskRelationRef       `json:"dependents"`
 	// True when at least one dependency is not done or cancelled. Blocked tasks may start but may not
 	// enter done.
 	Blocked     bool        `json:"blocked"`
@@ -5080,6 +5127,11 @@ func (s *Task) GetPriority() TaskPriority {
 // GetExecutionMode returns the value of ExecutionMode.
 func (s *Task) GetExecutionMode() TaskExecutionMode {
 	return s.ExecutionMode
+}
+
+// GetAgentWork returns the value of AgentWork.
+func (s *Task) GetAgentWork() OptTaskAgentWorkSummary {
+	return s.AgentWork
 }
 
 // GetAssignee returns the value of Assignee.
@@ -5210,6 +5262,11 @@ func (s *Task) SetPriority(val TaskPriority) {
 // SetExecutionMode sets the value of ExecutionMode.
 func (s *Task) SetExecutionMode(val TaskExecutionMode) {
 	s.ExecutionMode = val
+}
+
+// SetAgentWork sets the value of AgentWork.
+func (s *Task) SetAgentWork(val OptTaskAgentWorkSummary) {
+	s.AgentWork = val
 }
 
 // SetAssignee sets the value of Assignee.
@@ -5523,6 +5580,76 @@ func (s *TaskActivityListHeaders) SetResponse(val TaskActivityList) {
 }
 
 func (*TaskActivityListHeaders) listTaskActivityRes() {}
+
+// Ref: #/components/schemas/TaskAgentWorkSummary
+type TaskAgentWorkSummary struct {
+	ClaimID     uuid.UUID       `json:"claim_id"`
+	Status      TaskClaimStatus `json:"status"`
+	TokenName   string          `json:"token_name"`
+	ClientKind  string          `json:"client_kind"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+	CompletedAt OptDateTime     `json:"completed_at"`
+}
+
+// GetClaimID returns the value of ClaimID.
+func (s *TaskAgentWorkSummary) GetClaimID() uuid.UUID {
+	return s.ClaimID
+}
+
+// GetStatus returns the value of Status.
+func (s *TaskAgentWorkSummary) GetStatus() TaskClaimStatus {
+	return s.Status
+}
+
+// GetTokenName returns the value of TokenName.
+func (s *TaskAgentWorkSummary) GetTokenName() string {
+	return s.TokenName
+}
+
+// GetClientKind returns the value of ClientKind.
+func (s *TaskAgentWorkSummary) GetClientKind() string {
+	return s.ClientKind
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *TaskAgentWorkSummary) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// GetCompletedAt returns the value of CompletedAt.
+func (s *TaskAgentWorkSummary) GetCompletedAt() OptDateTime {
+	return s.CompletedAt
+}
+
+// SetClaimID sets the value of ClaimID.
+func (s *TaskAgentWorkSummary) SetClaimID(val uuid.UUID) {
+	s.ClaimID = val
+}
+
+// SetStatus sets the value of Status.
+func (s *TaskAgentWorkSummary) SetStatus(val TaskClaimStatus) {
+	s.Status = val
+}
+
+// SetTokenName sets the value of TokenName.
+func (s *TaskAgentWorkSummary) SetTokenName(val string) {
+	s.TokenName = val
+}
+
+// SetClientKind sets the value of ClientKind.
+func (s *TaskAgentWorkSummary) SetClientKind(val string) {
+	s.ClientKind = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *TaskAgentWorkSummary) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// SetCompletedAt sets the value of CompletedAt.
+func (s *TaskAgentWorkSummary) SetCompletedAt(val OptDateTime) {
+	s.CompletedAt = val
+}
 
 // Ref: #/components/schemas/TaskClaim
 type TaskClaim struct {

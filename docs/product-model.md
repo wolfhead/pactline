@@ -58,7 +58,10 @@ Every Task:
 Task status and priority are labels, not scheduling constraints. Any valid
 status may move to any other valid status. Moving to `done` is the only
 acceptance gate: a Task with active acceptance criteria may complete only when
-every current criterion revision is passed or waived by a person.
+every current criterion revision is passed or waived by a person. After an
+Agent submission, only human checks recorded at or after that submission
+satisfy this gate; Agent checks are self-verification evidence for the reviewer,
+not human acceptance.
 
 `agent_allowed` is an explicit delegation signal, not a second task lifecycle.
 An external Codex session may claim only an assigned, unarchived `todo` Task
@@ -137,13 +140,16 @@ not returned in Claim responses or audit payloads:
   hours;
 - only an explicit human answer resumes the same Claim;
 - submission terminates the Claim and moves an unchanged `in_progress` Task
-  to `in_review`; and
+  to `in_review`, where the latest submission remains visible as current Agent
+  work until review finishes or the Task leaves `in_review`; and
 - release or expiry returns the Task to `todo` only if it is still
   `in_progress`, preserving any intervening human status change.
 
 Agent progress, questions, answers, handoff, and submission are immutable
 conversation messages separate from ordinary comments. The task UI presents
-both streams together in chronological order.
+both streams together in chronological order. The latest submitted message is
+also the entry point for human, criterion-by-criterion review and explicit Task
+completion.
 
 ## Legacy context
 

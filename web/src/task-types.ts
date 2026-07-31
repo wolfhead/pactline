@@ -3,6 +3,7 @@
 export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancelled'
 export type TaskPriority = 'none' | 'low' | 'medium' | 'high' | 'urgent'
 export type TaskExecutionMode = 'human_only' | 'agent_allowed'
+export type TaskClaimStatus = 'active' | 'waiting_human' | 'submitted' | 'released' | 'expired'
 
 export const TASK_STATUSES: TaskStatus[] = ['todo', 'in_progress', 'in_review', 'done', 'cancelled']
 export const TASK_PRIORITIES: TaskPriority[] = ['none', 'low', 'medium', 'high', 'urgent']
@@ -62,6 +63,15 @@ export interface TaskRelationRef {
   milestone: TaskMilestoneRef | null
 }
 
+export interface TaskAgentWorkSummary {
+  claim_id: string
+  status: TaskClaimStatus
+  token_name: string
+  client_kind: string
+  updated_at: string
+  completed_at?: string
+}
+
 export interface Task {
   id: string
   number: number
@@ -73,6 +83,7 @@ export interface Task {
   status: TaskStatus
   priority: TaskPriority
   execution_mode?: TaskExecutionMode
+  agent_work?: TaskAgentWorkSummary | null
   assignee: UserRef | null
   creator: UserRef
   start_date: string | null
@@ -176,8 +187,6 @@ export interface CreateTaskBody {
   due_date?: string | null
   label_ids?: string[]
 }
-
-export type TaskClaimStatus = 'active' | 'waiting_human' | 'submitted' | 'released' | 'expired'
 
 export interface TaskClaim {
   id: string

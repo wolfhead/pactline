@@ -188,6 +188,117 @@ describe('TaskDetail', () => {
     await waitFor(() => expect(screen.queryByText('Agent 正在执行')).not.toBeInTheDocument())
   })
 
+  it('reviews an Agent submission criterion-by-criterion before explicitly completing', async () => {
+    const submittedTask = {
+      ...TASK,
+      status: 'in_review' as const,
+      version: 5,
+      execution_mode: 'agent_allowed' as const,
+      agent_work: {
+        claim_id: 'claim-submitted',
+        status: 'submitted' as const,
+        token_name: 'Codex worker',
+        client_kind: 'codex',
+        updated_at: '2026-07-31T03:00:00Z',
+        completed_at: '2026-07-31T03:00:00Z',
+      },
+    }
+    const agentCheck = {
+      id: 'agent-check',
+      criterion_id: 'criterion-1',
+      criterion_revision: 1,
+      outcome: 'passed' as const,
+      evidence: 'Focused regression passed',
+      checker_type: 'agent' as const,
+      checked_by_user_id: null,
+      checker_ref: 'Codex worker',
+      checked_at: '2026-07-31T02:55:00Z',
+    }
+    const criterion = {
+      id: 'criterion-1',
+      version: 1,
+      criterion: '回归测试通过',
+      verification_instructions: '运行目标测试并核对输出',
+      revision: 1,
+      position: 0,
+      current_check: agentCheck,
+    }
+    const claim = {
+      id: 'claim-submitted',
+      task_id: TASK.id,
+      task_number: TASK.number,
+      claimed_by_user_id: USERS[0].id,
+      token_name: 'Codex worker',
+      client_kind: 'codex',
+      status: 'submitted' as const,
+      version: 3,
+      expires_at: '2026-08-07T00:00:00Z',
+      created_at: '2026-07-31T00:00:00Z',
+      updated_at: '2026-07-31T03:00:00Z',
+      completed_at: '2026-07-31T03:00:00Z',
+    }
+    const submission = {
+      id: 'submission-1',
+      claim_id: claim.id,
+      task_id: TASK.id,
+      author_type: 'agent' as const,
+      kind: 'submission' as const,
+      body: '实现完成，并已运行目标测试。',
+      token_name: 'Codex worker',
+      created_at: '2026-07-31T03:00:00Z',
+    }
+    const humanCheck = {
+      ...agentCheck,
+      id: 'human-check',
+      evidence: '已核对本次 Agent 提交及其自检证据。',
+      checker_type: 'user' as const,
+      checked_by_user_id: USERS[0].id,
+      checker_ref: undefined,
+      checked_at: '2026-07-31T03:05:00Z',
+    }
+    vi.mocked(tasksApi.getTask).mockResolvedValue(submittedTask)
+    vi.mocked(tasksApi.listTaskAgentConversations)
+      .mockResolvedValue([{ claim, messages: [submission] }])
+    vi.mocked(acceptanceApi.listTaskCriteria)
+      .mockResolvedValueOnce([criterion])
+      .mockResolvedValue([{
+        ...criterion,
+        current_check: humanCheck,
+      }])
+    vi.mocked(acceptanceApi.checkCriterion).mockResolvedValue(humanCheck)
+    vi.mocked(tasksApi.updateTask).mockResolvedValue({
+      ...submittedTask,
+      status: 'done',
+      version: 6,
+      agent_work: null,
+    })
+
+    renderDetail()
+    await screen.findByText('实现完成，并已运行目标测试。')
+    fireEvent.click(screen.getByRole('button', { name: '验收本次提交' }))
+
+    const review = screen.getByRole('region', { name: '本次 Agent 提交验收' })
+    expect(review).toHaveTextContent('Focused regression passed')
+    expect(screen.getByRole('button', { name: '验收通过并完成任务' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: '确认通过：回归测试通过' }))
+    await waitFor(() => expect(acceptanceApi.checkCriterion).toHaveBeenCalledWith(
+      criterion.id,
+      criterion.version,
+      criterion.revision,
+      'passed',
+      '已核对本次 Agent 提交及其自检证据。',
+    ))
+
+    const completeButton = await screen.findByRole('button', { name: '验收通过并完成任务' })
+    await waitFor(() => expect(completeButton).toBeEnabled())
+    fireEvent.click(completeButton)
+
+    await waitFor(() => expect(tasksApi.updateTask).toHaveBeenCalledWith(
+      TASK.number, submittedTask.version, { status: 'done' },
+    ))
+  })
+
   it('tells the caller about a change so the list can follow it', async () => {
     const onPatched = vi.fn()
     const patched = { ...TASK, status: 'done' as const }
