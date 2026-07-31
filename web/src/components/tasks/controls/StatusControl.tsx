@@ -1,51 +1,65 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { STATUS_LABELS, TASK_STATUSES, type TaskStatus } from '@/task-types'
 import { cn } from '@/lib/utils'
+import { Circle, CircleCheck, CircleDot, CircleX, Eye } from 'lucide-react'
 import { CONTROL_TRIGGER_CLASS, PROPERTY_ICON_SLOT_CLASS } from './trigger'
 
-const DOT: Record<TaskStatus, string> = {
-  todo: 'border-status-todo',
-  in_progress: 'border-status-in-progress',
-  in_review: 'border-status-in-review',
-  done: 'border-status-done',
-  cancelled: 'border-status-cancelled',
+const STATUS_ICON_CLASS: Record<TaskStatus, string> = {
+  todo: 'text-status-todo',
+  in_progress: 'text-status-in-progress',
+  in_review: 'text-status-in-review',
+  done: 'text-status-done',
+  cancelled: 'text-status-cancelled',
 }
 
-/** Status as a permanently visible control. The dot is a redundant cue —
- * the label text beside it always carries the meaning — so colour alone is
- * never the signal, and the dot only needs the 3:1 non-text contrast bar.
+const STATUS_ICONS = {
+  todo: Circle,
+  in_progress: CircleDot,
+  in_review: Eye,
+  done: CircleCheck,
+  cancelled: CircleX,
+} satisfies Record<TaskStatus, typeof Circle>
+
+function StatusIcon({ status }: { status: TaskStatus }) {
+  const Icon = STATUS_ICONS[status]
+  return <Icon className={cn('size-4', STATUS_ICON_CLASS[status])} aria-hidden="true" />
+}
+
+/** Status as a permanently visible control. Each lifecycle state has a
+ * distinct shape as well as colour, and the trigger always has an accessible
+ * name. Compact task rows show only the icon; detail views keep icon + text.
  *
  * Every status may move to every other status: there is no status graph and
  * no terminal state (see internal/domain/task.go). Do not add gating here. */
 export default function StatusControl({
-  value, onChange, ariaLabel, disabled,
+  value, onChange, ariaLabel, disabled, compact = false,
 }: {
   value: TaskStatus
   onChange: (next: TaskStatus) => void
   ariaLabel: string
   disabled?: boolean
+  compact?: boolean
 }) {
   return (
     <Select value={value} onValueChange={(v) => onChange(v as TaskStatus)} disabled={disabled}>
       <SelectTrigger
         data-property-control
+        data-compact={compact ? 'true' : undefined}
         aria-label={ariaLabel}
-        className={CONTROL_TRIGGER_CLASS}
+        title={STATUS_LABELS[value]}
+        className={cn(
+          CONTROL_TRIGGER_CLASS,
+          compact && 'size-8 justify-center gap-0 px-0 [&>[data-select-chevron]]:hidden',
+        )}
       >
-        {/* No dot of its own here. Radix renders the *selected item's* own
-            children into SelectValue, dot included — a second one on the
-            trigger showed up as "○ ○ 待办" on every status control in the
-            app, on every tier and in both themes (found in Task 14's
-            screenshot pass; no test could see it, since both spans are
-            aria-hidden and the accessible name never changed). */}
-        <SelectValue />
+        {compact ? <StatusIcon status={value} /> : <SelectValue />}
       </SelectTrigger>
       <SelectContent>
         {TASK_STATUSES.map((s) => (
           <SelectItem key={s} value={s}>
             <span className="flex items-center gap-1.5">
               <span className={PROPERTY_ICON_SLOT_CLASS} aria-hidden="true">
-                <span className={cn('size-2.5 rounded-full border-[1.6px]', DOT[s])} />
+                <StatusIcon status={s} />
               </span>
               <span>{STATUS_LABELS[s]}</span>
             </span>

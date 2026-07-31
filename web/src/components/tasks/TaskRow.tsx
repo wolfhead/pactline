@@ -8,6 +8,7 @@ import DueDateControl from './controls/DueDateControl'
 import PriorityControl from './controls/PriorityControl'
 import StatusControl from './controls/StatusControl'
 import RowActionsMenu from './RowActionsMenu'
+import AgentWorkIndicator from './AgentWorkIndicator'
 
 interface TaskRowProps {
   task: Task
@@ -81,8 +82,14 @@ export default function TaskRow({
   }
 
   const statusControl = (
-    <StatusControl value={task.status} onChange={handleChangeStatus} ariaLabel={`任务 #${task.number} 状态`} />
+    <StatusControl
+      value={task.status}
+      onChange={handleChangeStatus}
+      ariaLabel={`任务 #${task.number} 状态`}
+      compact
+    />
   )
+  const agentWorkIndicator = <AgentWorkIndicator task={task} />
   const priorityControl = (
     <PriorityControl value={task.priority} onChange={handleChangePriority} ariaLabel={`任务 #${task.number} 优先级`} />
   )
@@ -151,6 +158,7 @@ export default function TaskRow({
             {task.title}
           </Link>
           <div className="flex shrink-0 items-center gap-1.5">
+            {agentWorkIndicator}
             {statusControl}
             {actionsMenu}
           </div>
@@ -211,7 +219,8 @@ export default function TaskRow({
         </span>
       )}
       {labelChips}
-      <div className="w-28 shrink-0">{statusControl}</div>
+      {agentWorkIndicator}
+      <div className="w-8 shrink-0">{statusControl}</div>
       <div className="w-24 shrink-0">{priorityControl}</div>
       <div className="w-28 shrink-0">{assigneeControl}</div>
       {/* Width-wrapped exactly like the three controls above. It used to be

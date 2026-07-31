@@ -94,6 +94,8 @@ production `X-User-Id` fallback.
   to any other valid status. Entering `done` is the sole readiness gate: a task
   with no active acceptance criteria completes directly; otherwise every
   active criterion's current revision must be `passed` or human-`waived`.
+  After an Agent submission, only post-submission human checks satisfy this
+  gate; Agent checks remain self-verification evidence for the reviewer.
 - A Project is a long-lived workspace, not a delivery lifecycle. It has no
   status, outcome, target date, or acceptance criteria. Administrator-only
   archive/restore controls visibility; archiving requires no active/planned

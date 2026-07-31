@@ -315,6 +315,22 @@ export default function TaskDetail({
     await reloadTaskAndAcceptance(forNumber)
   }
 
+  async function finishAgentReview() {
+    if (!task) return
+    const forNumber = task.number
+    const updated = await updateTask(forNumber, task.version, { status: 'done' })
+    if (!isStale(forNumber)) setTask(updated)
+    onPatched(updated)
+  }
+
+  async function returnAgentSubmissionForChanges() {
+    if (!task) return
+    const forNumber = task.number
+    const updated = await updateTask(forNumber, task.version, { status: 'todo' })
+    if (!isStale(forNumber)) setTask(updated)
+    onPatched(updated)
+  }
+
   if (error) {
     return (
       <p className="p-4 text-sm text-danger">
@@ -561,6 +577,11 @@ export default function TaskDetail({
       <CommentSection
         taskNumber={task.number}
         taskVersion={task.version}
+        taskStatus={task.status}
+        acceptanceCriteria={acceptanceCriteria}
+        onReviewCheck={recordAcceptanceCheck}
+        onCompleteReview={finishAgentReview}
+        onReturnForChanges={returnAgentSubmissionForChanges}
         onTaskChanged={() => reloadTaskAndAcceptance(task.number)}
       />
       <ActivityLog task={task} />

@@ -83,7 +83,7 @@ describe('TaskListPage', () => {
     setWidth(1440)
     renderAt('/tasks/142')
     await screen.findAllByText('修复竞价超时')
-    expect(screen.getByRole('dialog')).toHaveClass('sm:max-w-[36rem]')
+    expect(screen.getByRole('dialog')).toHaveClass('sm:max-w-[52rem]')
     expect(screen.queryByRole('complementary', { name: '任务详情' }))
       .not.toBeInTheDocument()
 
@@ -128,7 +128,7 @@ describe('TaskListPage', () => {
       expect(screen.getByRole('combobox', {
         name: '任务 #142 状态',
         hidden: true,
-      })).toHaveTextContent('已完成'),
+      })).toHaveAttribute('title', '已完成'),
     )
     // Shared state, not a re-fetch: the list must not hit the API again.
     expect(vi.mocked(tasksApi.listTasks).mock.calls.length).toBe(listCalls)
@@ -148,7 +148,7 @@ describe('TaskListPage', () => {
 
     await waitFor(() =>
       expect(screen.getByRole('combobox', { name: '任务 #142 状态' }))
-        .toHaveTextContent('已完成'),
+        .toHaveAttribute('title', '已完成'),
     )
     expect(vi.mocked(tasksApi.listTasks).mock.calls.length).toBe(listCalls)
     expect(vi.mocked(tasksApi.getTask).mock.calls.length).toBe(1)
@@ -160,15 +160,14 @@ describe('TaskListPage', () => {
     setWidth(1440)
     renderAt('/tasks')
 
-    // Re-queried rather than held: Radix fills a Select trigger's label by
-    // portalling the selected item's text into it, so a reference captured
-    // before a value change can go stale.
+    // Re-query after each change: the compact row trigger exposes its current
+    // icon meaning through `title`, while Radix may replace trigger internals.
     const statusTrigger = () => screen.getByRole('combobox', { name: '任务 #142 状态' })
 
     // Status is a permanently visible combobox — no reveal-on-interaction
     // step first.
     await screen.findByRole('combobox', { name: '任务 #142 状态' })
-    expect(statusTrigger()).toHaveTextContent('待办')
+    expect(statusTrigger()).toHaveAttribute('title', '待办')
 
     let rejectPatch!: (err: Error) => void
     vi.mocked(tasksApi.updateTask).mockReturnValue(
@@ -182,7 +181,7 @@ describe('TaskListPage', () => {
 
     // The optimistic value is on the row immediately, before the server has
     // answered at all.
-    await waitFor(() => expect(statusTrigger()).toHaveTextContent('已完成'))
+    await waitFor(() => expect(statusTrigger()).toHaveAttribute('title', '已完成'))
     expect(vi.mocked(tasksApi.updateTask)).toHaveBeenCalledWith(
       142, 1, { status: 'done' },
     )
@@ -193,7 +192,7 @@ describe('TaskListPage', () => {
     // Revert: back to the value it held before, plus a message naming what
     // went wrong. A refused PATCH that silently leaves the new value on
     // screen is the failure this guards.
-    await waitFor(() => expect(statusTrigger()).toHaveTextContent('待办'))
+    await waitFor(() => expect(statusTrigger()).toHaveAttribute('title', '待办'))
     expect(await screen.findByText(/cannot skip directly to done/)).toBeInTheDocument()
     expect(screen.getByText(/已恢复原状态/)).toBeInTheDocument()
   })
@@ -215,7 +214,7 @@ describe('TaskListPage', () => {
     expect(await screen.findByText('内容已被其他用户或 Agent 更新，已加载最新版本。'))
       .toBeVisible()
     expect(screen.getByRole('combobox', { name: '任务 #142 状态' }))
-      .toHaveTextContent('进行中')
+      .toHaveAttribute('title', '进行中')
     expect(tasksApi.updateTask).toHaveBeenCalledWith(142, 1, { status: 'done' })
   })
 })

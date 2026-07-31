@@ -43,7 +43,8 @@ const taskSelectColumns = taskColumns + `,
 	COALESCE(parent_rel.task, 'null'::json),
 	COALESCE(child_rel.tasks, '[]'::json),
 	COALESCE(dependency_rel.tasks, '[]'::json),
-	COALESCE(dependent_rel.tasks, '[]'::json)`
+	COALESCE(dependent_rel.tasks, '[]'::json),
+	COALESCE(agent_work.claim, 'null'::json)`
 
 const taskFromJoins = `FROM tasks t
 	JOIN users cu ON cu.id = t.creator_id
@@ -134,7 +135,28 @@ const taskFromJoins = `FROM tasks t
 		JOIN tasks related ON related.id = dependency.task_id
 		LEFT JOIN milestones related_milestone ON related_milestone.id = related.milestone_id
 		WHERE dependency.depends_on_task_id = t.id
-	) dependent_rel ON true`
+	) dependent_rel ON true
+	LEFT JOIN LATERAL (
+		SELECT json_build_object(
+			'claim_id', claim.id,
+			'status', claim.status,
+			'token_name', claim.token_name_snapshot,
+			'client_kind', claim.client_kind,
+			'updated_at', claim.updated_at,
+			'completed_at', claim.completed_at
+		) AS claim
+		FROM task_claims claim
+		WHERE claim.task_id = t.id
+		  AND (
+			claim.status IN ('active', 'waiting_human')
+			OR (claim.status = 'submitted' AND t.status = 'in_review')
+		  )
+		ORDER BY
+			CASE WHEN claim.status IN ('active', 'waiting_human') THEN 0 ELSE 1 END,
+			claim.updated_at DESC,
+			claim.id DESC
+		LIMIT 1
+	) agent_work ON true`
 
 // TaskWithRelations is a task together with the entities a frontend needs
 // alongside it in one response: the creator, required Project, the assignee
@@ -151,7 +173,21 @@ type TaskWithRelations struct {
 	Children     []TaskRelationRef
 	Dependencies []TaskRelationRef
 	Dependents   []TaskRelationRef
+	AgentWork    *TaskAgentWorkSummary
 	Blocked      bool
+}
+
+// TaskAgentWorkSummary is the read-model projection needed to show current
+// external Agent activity beside a Task. It deliberately excludes session
+// identity and Claim mutation fields: the list needs state, not ownership
+// credentials or a second Claim API.
+type TaskAgentWorkSummary struct {
+	ClaimID     uuid.UUID              `json:"claim_id"`
+	Status      domain.TaskClaimStatus `json:"status"`
+	TokenName   string                 `json:"token_name"`
+	ClientKind  string                 `json:"client_kind"`
+	UpdatedAt   time.Time              `json:"updated_at"`
+	CompletedAt *time.Time             `json:"completed_at"`
 }
 
 type ProjectRef struct {
@@ -187,6 +223,7 @@ func scanTaskWithRelations(s scanner) (TaskWithRelations, error) {
 		childrenJSON     []byte
 		dependenciesJSON []byte
 		dependentsJSON   []byte
+		agentWorkJSON    []byte
 	)
 	err := s.Scan(
 		&twr.Task.ID, &twr.Task.Number, &twr.Task.Version,
@@ -202,6 +239,7 @@ func scanTaskWithRelations(s scanner) (TaskWithRelations, error) {
 		&milestoneID, &milestoneName,
 		&labelsJSON,
 		&parentJSON, &childrenJSON, &dependenciesJSON, &dependentsJSON,
+		&agentWorkJSON,
 	)
 	if err != nil {
 		return TaskWithRelations{}, fmt.Errorf("scan task: %w", err)
@@ -232,6 +270,15 @@ func scanTaskWithRelations(s scanner) (TaskWithRelations, error) {
 	}
 	if err := unmarshalTaskRelationRefs(dependentsJSON, &twr.Dependents); err != nil {
 		return TaskWithRelations{}, fmt.Errorf("unmarshal dependents for task %s: %w", twr.Task.ID, err)
+	}
+	if len(agentWorkJSON) > 0 && string(agentWorkJSON) != "null" {
+		var agentWork TaskAgentWorkSummary
+		if err := json.Unmarshal(agentWorkJSON, &agentWork); err != nil {
+			return TaskWithRelations{}, fmt.Errorf(
+				"unmarshal Agent work summary for task %s: %w", twr.Task.ID, err,
+			)
+		}
+		twr.AgentWork = &agentWork
 	}
 	for _, dependency := range twr.Dependencies {
 		if dependency.Status != domain.TaskStatusDone && dependency.Status != domain.TaskStatusCancelled {
@@ -694,10 +741,25 @@ func (s *TaskStore) updateWithExpectedVersion(
 				   AND predecessor.status NOT IN ('done', 'cancelled'))
 			FROM acceptance_criteria ac
 			LEFT JOIN LATERAL (
+				SELECT claim.completed_at
+				FROM task_claims claim
+				WHERE claim.task_id=$1
+					AND claim.status='submitted'
+				ORDER BY claim.completed_at DESC, claim.id DESC
+				LIMIT 1
+			) submission ON true
+			LEFT JOIN LATERAL (
 				SELECT chk.outcome
 				FROM acceptance_checks chk
 				WHERE chk.criterion_id=ac.id
 					AND chk.criterion_revision=ac.revision
+					AND (
+						submission.completed_at IS NULL
+						OR (
+							chk.checker_type='user'
+							AND chk.checked_at >= submission.completed_at
+						)
+					)
 				ORDER BY chk.checked_at DESC, chk.id DESC
 				LIMIT 1
 			) latest ON true

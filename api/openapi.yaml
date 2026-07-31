@@ -1819,6 +1819,8 @@ components:
           $ref: "#/components/schemas/TaskPriority"
         execution_mode:
           $ref: "#/components/schemas/TaskExecutionMode"
+        agent_work:
+          $ref: "#/components/schemas/TaskAgentWorkSummary"
         assignee:
           $ref: "#/components/schemas/UserRef"
         creator:
@@ -1880,6 +1882,31 @@ components:
     TaskClaimStatus:
       type: string
       enum: [active, waiting_human, submitted, released, expired]
+    TaskAgentWorkSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - claim_id
+        - status
+        - token_name
+        - client_kind
+        - updated_at
+      properties:
+        claim_id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/TaskClaimStatus"
+        token_name:
+          type: string
+        client_kind:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
     TaskClaimSession:
       type: object
       additionalProperties: false

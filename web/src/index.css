@@ -104,6 +104,33 @@
  * from producing dark date/select controls inside the fixed-light app. */
 :root { color-scheme: light; }
 
+/* A waiting Agent needs to catch the assigned human's eye without turning a
+ * dense task list into a row of notifications. The ring breathes slowly and
+ * at low amplitude; users who request reduced motion receive the same state
+ * cue as a static ring. */
+@keyframes agent-attention-breathe {
+  0%, 100% {
+    opacity: 0.28;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 0.72;
+    transform: scale(1.08);
+  }
+}
+
+.agent-attention-breathe {
+  animation: agent-attention-breathe 2.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-attention-breathe {
+    animation: none;
+    opacity: 0.6;
+    transform: none;
+  }
+}
+
 /* Gantt bars keep a compact desktop profile while coarse pointers receive a
  * full-size direct-manipulation target. Edge resizing is intentionally a
  * precise-pointer interaction; touch users edit schedule endpoints through

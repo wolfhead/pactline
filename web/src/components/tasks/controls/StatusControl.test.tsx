@@ -29,6 +29,21 @@ describe('StatusControl', () => {
     expect(onChange).toHaveBeenCalledWith('in_progress')
   })
 
+  it('keeps the row variant icon-only without losing its accessible name', () => {
+    render(
+      <StatusControl
+        value="in_review"
+        onChange={() => {}}
+        ariaLabel="任务 #142 状态"
+        compact
+      />,
+    )
+    const trigger = screen.getByRole('combobox', { name: '任务 #142 状态' })
+    expect(trigger).toHaveAttribute('data-compact', 'true')
+    expect(trigger).toHaveAttribute('title', '待评审')
+    expect(trigger).not.toHaveTextContent('待评审')
+  })
+
   it('offers every status, including the current one', async () => {
     render(<StatusControl value="todo" onChange={() => {}} ariaLabel="状态" />)
     fireEvent.click(screen.getByRole('combobox', { name: '状态' }))

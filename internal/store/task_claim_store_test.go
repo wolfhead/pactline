@@ -37,6 +37,11 @@ func TestTaskClaimStoreRunsQuestionAnswerAndSubmitWorkflow(t *testing.T) {
 	currentTask, err := store.NewTaskStore(db).GetByNumber(ctx, task.Task.Number)
 	require.NoError(t, err)
 	require.Equal(t, domain.TaskStatusInProgress, currentTask.Task.Status)
+	require.NotNil(t, currentTask.AgentWork)
+	require.Equal(t, claim.ID, currentTask.AgentWork.ClaimID)
+	require.Equal(t, domain.TaskClaimStatusActive, currentTask.AgentWork.Status)
+	require.Equal(t, token.Name, currentTask.AgentWork.TokenName)
+	require.Equal(t, "codex", currentTask.AgentWork.ClientKind)
 
 	waiting, question, err := claims.Ask(
 		ctx,
@@ -51,6 +56,10 @@ func TestTaskClaimStoreRunsQuestionAnswerAndSubmitWorkflow(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, domain.TaskClaimStatusWaitingHuman, waiting.Status)
 	require.Equal(t, domain.TaskClaimMessageQuestion, question.Kind)
+	currentTask, err = store.NewTaskStore(db).GetByNumber(ctx, task.Task.Number)
+	require.NoError(t, err)
+	require.NotNil(t, currentTask.AgentWork)
+	require.Equal(t, domain.TaskClaimStatusWaitingHuman, currentTask.AgentWork.Status)
 
 	answerActor := domain.SessionOperation(userA, "answer-workflow")
 	active, answer, err := claims.Answer(
@@ -98,6 +107,32 @@ func TestTaskClaimStoreRunsQuestionAnswerAndSubmitWorkflow(t *testing.T) {
 	currentTask, err = store.NewTaskStore(db).GetByNumber(ctx, task.Task.Number)
 	require.NoError(t, err)
 	require.Equal(t, domain.TaskStatusInReview, currentTask.Task.Status)
+	require.NotNil(t, currentTask.AgentWork)
+	require.Equal(t, domain.TaskClaimStatusSubmitted, currentTask.AgentWork.Status)
+	require.NotNil(t, currentTask.AgentWork.CompletedAt)
+
+	done := domain.TaskStatusDone
+	_, err = store.NewTaskStore(db).Update(
+		ctx, task.Task.Number, domain.TaskPatch{Status: &done}, userA,
+	)
+	require.ErrorIs(t, err, domain.ErrConflict,
+		"an Agent self-check is evidence for review, not human acceptance")
+
+	_, err = acceptance.AddCheck(ctx, domain.AcceptanceCheck{
+		CriterionID: criterion.ID, CriterionRevision: criterion.Revision,
+		Outcome:   domain.AcceptanceOutcomePassed,
+		Evidence:  "Reviewed the Agent submission and reproduced the result",
+		Checker:   domain.Actor{Type: domain.ActorTypeUser, UserID: &userA},
+		CheckedAt: now.Add(4 * time.Hour),
+	})
+	require.NoError(t, err)
+	completed, err := store.NewTaskStore(db).Update(
+		ctx, task.Task.Number, domain.TaskPatch{Status: &done}, userA,
+	)
+	require.NoError(t, err)
+	require.Equal(t, domain.TaskStatusDone, completed.Task.Status)
+	require.Nil(t, completed.AgentWork,
+		"a submitted Claim is only task-list state while the Task remains in review")
 
 	messages, err := claims.ListMessages(ctx, claim.ID)
 	require.NoError(t, err)
@@ -207,6 +242,7 @@ func TestTaskClaimStoreReleaseAndExpiryReturnOnlyInProgressTaskToTodo(t *testing
 	current, err := tasks.GetByNumber(ctx, releasedTask.Task.Number)
 	require.NoError(t, err)
 	require.Equal(t, domain.TaskStatusTodo, current.Task.Status)
+	require.Nil(t, current.AgentWork, "released Claims must not appear as current Agent work")
 
 	humanChangedTask := createAgentReadyTask(t, db, userA)
 	claim, err = claims.Claim(

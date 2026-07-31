@@ -575,6 +575,19 @@ func taskFromDomain(task store.TaskWithRelations) generated.Task {
 	if task.Assignee != nil {
 		out.Assignee = generated.NewOptUserRef(userRefFromDomain(*task.Assignee))
 	}
+	if task.AgentWork != nil {
+		agentWork := generated.TaskAgentWorkSummary{
+			ClaimID:    task.AgentWork.ClaimID,
+			Status:     generated.TaskClaimStatus(task.AgentWork.Status),
+			TokenName:  task.AgentWork.TokenName,
+			ClientKind: task.AgentWork.ClientKind,
+			UpdatedAt:  task.AgentWork.UpdatedAt,
+		}
+		if task.AgentWork.CompletedAt != nil {
+			agentWork.CompletedAt = generated.NewOptDateTime(*task.AgentWork.CompletedAt)
+		}
+		out.AgentWork = generated.NewOptTaskAgentWorkSummary(agentWork)
+	}
 	if task.Task.StartDate != nil {
 		out.StartDate = generated.NewOptDate(*task.Task.StartDate)
 	}

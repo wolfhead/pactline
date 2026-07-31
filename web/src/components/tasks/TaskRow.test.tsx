@@ -47,6 +47,54 @@ describe('TaskRow', () => {
     expect(screen.getByRole('combobox', { name: '任务 #142 负责人' })).toBeVisible()
   })
 
+  it('shows Agent work separately from the editable task status', () => {
+    renderRow({
+      status: 'in_progress',
+      execution_mode: 'agent_allowed',
+      agent_work: {
+        claim_id: 'claim-1',
+        status: 'active',
+        token_name: 'Codex worker',
+        client_kind: 'codex',
+        updated_at: '2026-07-31T00:00:00Z',
+      },
+    })
+
+    expect(screen.getByRole('combobox', { name: '任务 #142 状态' })).toBeVisible()
+    expect(screen.getByRole('img', { name: 'Agent 执行中' })).toBeVisible()
+  })
+
+  it('uses a reduced-motion-safe attention ring while Agent waits for a reply', () => {
+    const { container } = render(
+      <MemoryRouter>
+        <TaskRow
+          task={{
+            ...TASK,
+            status: 'in_progress',
+            execution_mode: 'agent_allowed',
+            agent_work: {
+              claim_id: 'claim-2',
+              status: 'waiting_human',
+              token_name: 'Codex worker',
+              client_kind: 'codex',
+              updated_at: '2026-07-31T00:00:00Z',
+            },
+          }}
+          selected={false}
+          tier="xl"
+          users={USERS}
+          onPatch={vi.fn()}
+          onArchive={() => {}}
+          onRestore={() => {}}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('img', { name: 'Agent 等待你回复' })).toBeVisible()
+    expect(container.querySelector('[data-agent-attention]'))
+      .toHaveClass('agent-attention-breathe')
+  })
+
   it('sends an optimistic patch carrying both the wire value and the display value', async () => {
     const onPatch = renderRow()
     fireEvent.click(screen.getByRole('combobox', { name: '任务 #142 状态' }))
