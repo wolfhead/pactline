@@ -5,6 +5,14 @@ type ActivateMilestoneRes interface {
 	activateMilestoneRes()
 }
 
+type AddTaskClaimProgressRes interface {
+	addTaskClaimProgressRes()
+}
+
+type AnswerTaskClaimQuestionRes interface {
+	answerTaskClaimQuestionRes()
+}
+
 type ArchiveProjectRes interface {
 	archiveProjectRes()
 }
@@ -13,8 +21,16 @@ type ArchiveTaskRes interface {
 	archiveTaskRes()
 }
 
+type AskTaskClaimQuestionRes interface {
+	askTaskClaimQuestionRes()
+}
+
 type CancelMilestoneRes interface {
 	cancelMilestoneRes()
+}
+
+type ClaimTaskRes interface {
+	claimTaskRes()
 }
 
 type CompleteMilestoneRes interface {
@@ -65,12 +81,24 @@ type DeleteTaskCommentRes interface {
 	deleteTaskCommentRes()
 }
 
+type ExtendTaskClaimRes interface {
+	extendTaskClaimRes()
+}
+
 type GetCurrentPrincipalRes interface {
 	getCurrentPrincipalRes()
 }
 
+type GetCurrentTaskClaimRes interface {
+	getCurrentTaskClaimRes()
+}
+
 type GetProjectRes interface {
 	getProjectRes()
+}
+
+type GetTaskClaimRes interface {
+	getTaskClaimRes()
 }
 
 type GetTaskRes interface {
@@ -93,6 +121,14 @@ type ListTaskActivityRes interface {
 	listTaskActivityRes()
 }
 
+type ListTaskAgentConversationsRes interface {
+	listTaskAgentConversationsRes()
+}
+
+type ListTaskClaimMessagesRes interface {
+	listTaskClaimMessagesRes()
+}
+
 type ListTaskCommentsRes interface {
 	listTaskCommentsRes()
 }
@@ -109,6 +145,14 @@ type ListUsersRes interface {
 	listUsersRes()
 }
 
+type RecordTaskClaimAcceptanceCheckRes interface {
+	recordTaskClaimAcceptanceCheckRes()
+}
+
+type ReleaseTaskClaimRes interface {
+	releaseTaskClaimRes()
+}
+
 type ReopenMilestoneRes interface {
 	reopenMilestoneRes()
 }
@@ -119,6 +163,10 @@ type RestoreProjectRes interface {
 
 type RestoreTaskRes interface {
 	restoreTaskRes()
+}
+
+type SubmitTaskClaimRes interface {
+	submitTaskClaimRes()
 }
 
 type UpdateCriterionRes interface {

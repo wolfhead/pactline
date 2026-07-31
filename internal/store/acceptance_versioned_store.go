@@ -220,6 +220,63 @@ func (s *AcceptanceStore) AddCheckVersioned(
 	check domain.AcceptanceCheck,
 	actor domain.OperationActor,
 ) (AcceptanceCheckMutation, error) {
+	return s.addCheckVersioned(ctx, criterionID, expectedVersion, check, actor, nil)
+}
+
+func (s *AcceptanceStore) AddClaimCheckVersioned(
+	ctx context.Context,
+	claimID uuid.UUID,
+	clientKind, clientSessionID string,
+	criterionID uuid.UUID,
+	expectedVersion int64,
+	check domain.AcceptanceCheck,
+	actor domain.OperationActor,
+) (AcceptanceCheckMutation, error) {
+	guard := func(ctx context.Context, tx pgx.Tx) (*uuid.UUID, error) {
+		if actor.AuthMethod != domain.AuthenticationMethodAPIToken {
+			return nil, fmt.Errorf(
+				"%w: Claim checks require a personal API token", domain.ErrForbidden,
+			)
+		}
+		var taskID uuid.UUID
+		err := tx.QueryRow(ctx, `
+				SELECT c.task_id
+				FROM task_claims c
+				WHERE c.id=$1
+				  AND c.claimed_by_user_id=$2
+				  AND c.client_kind=$3
+				  AND c.client_session_id=$4
+				  AND c.status='active'
+				  AND c.expires_at > now()
+				FOR SHARE OF c`,
+			claimID,
+			actor.UserID,
+			strings.TrimSpace(clientKind),
+			strings.TrimSpace(clientSessionID),
+		).Scan(&taskID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf(
+				"%w: criterion is not owned by this active Claim", domain.ErrForbidden,
+			)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("authorize Claim acceptance check: %w", err)
+		}
+		return &taskID, nil
+	}
+	return s.addCheckVersioned(ctx, criterionID, expectedVersion, check, actor, guard)
+}
+
+type acceptanceCheckGuard func(context.Context, pgx.Tx) (*uuid.UUID, error)
+
+func (s *AcceptanceStore) addCheckVersioned(
+	ctx context.Context,
+	criterionID uuid.UUID,
+	expectedVersion int64,
+	check domain.AcceptanceCheck,
+	actor domain.OperationActor,
+	guard acceptanceCheckGuard,
+) (AcceptanceCheckMutation, error) {
 	if err := actor.Validate(); err != nil {
 		return AcceptanceCheckMutation{}, err
 	}
@@ -228,9 +285,22 @@ func (s *AcceptanceStore) AddCheckVersioned(
 		return AcceptanceCheckMutation{}, fmt.Errorf("begin versioned acceptance check: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
+	var guardedTaskID *uuid.UUID
+	if guard != nil {
+		guardedTaskID, err = guard(ctx, tx)
+		if err != nil {
+			return AcceptanceCheckMutation{}, err
+		}
+	}
 	criterion, versions, err := lockCriterionAndOwners(ctx, tx, criterionID)
 	if err != nil {
 		return AcceptanceCheckMutation{}, err
+	}
+	if guardedTaskID != nil &&
+		(criterion.TaskID == nil || *criterion.TaskID != *guardedTaskID) {
+		return AcceptanceCheckMutation{}, fmt.Errorf(
+			"%w: criterion is not owned by this active Claim", domain.ErrForbidden,
+		)
 	}
 	if criterion.Version != expectedVersion {
 		return AcceptanceCheckMutation{}, domain.VersionConflictError{CurrentVersion: criterion.Version}

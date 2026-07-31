@@ -15,8 +15,9 @@ import (
 type Scope string
 
 const (
-	ScopeWorkRead  Scope = "work:read"
-	ScopeWorkWrite Scope = "work:write"
+	ScopeWorkRead    Scope = "work:read"
+	ScopeWorkExecute Scope = "work:execute"
+	ScopeWorkWrite   Scope = "work:write"
 )
 
 type AuthenticationMethod = domain.AuthenticationMethod
@@ -114,7 +115,10 @@ func (p Principal) CredentialID() (uuid.UUID, bool) {
 
 func (p Principal) HasScope(required Scope) bool {
 	for _, scope := range p.Scopes {
-		if scope == required || (required == ScopeWorkRead && scope == ScopeWorkWrite) {
+		if scope == required ||
+			(required == ScopeWorkRead &&
+				(scope == ScopeWorkExecute || scope == ScopeWorkWrite)) ||
+			(required == ScopeWorkExecute && scope == ScopeWorkWrite) {
 			return true
 		}
 	}

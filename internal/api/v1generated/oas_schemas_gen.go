@@ -279,7 +279,8 @@ func (s *AcceptanceCheckCreatedHeaders) SetResponse(val AcceptanceCheck) {
 	s.Response = val
 }
 
-func (*AcceptanceCheckCreatedHeaders) createAcceptanceCheckRes() {}
+func (*AcceptanceCheckCreatedHeaders) createAcceptanceCheckRes()          {}
+func (*AcceptanceCheckCreatedHeaders) recordTaskClaimAcceptanceCheckRes() {}
 
 // Ref: #/components/schemas/AcceptanceCriterion
 type AcceptanceCriterion struct {
@@ -1251,8 +1252,9 @@ func (s *CurrentPrincipal) SetImpersonating(val bool) {
 type CurrentPrincipalAuthenticationMethod string
 
 const (
-	CurrentPrincipalAuthenticationMethodSession  CurrentPrincipalAuthenticationMethod = "session"
-	CurrentPrincipalAuthenticationMethodAPIToken CurrentPrincipalAuthenticationMethod = "api_token"
+	CurrentPrincipalAuthenticationMethodSession       CurrentPrincipalAuthenticationMethod = "session"
+	CurrentPrincipalAuthenticationMethodAPIToken      CurrentPrincipalAuthenticationMethod = "api_token"
+	CurrentPrincipalAuthenticationMethodAgentDelegate CurrentPrincipalAuthenticationMethod = "agent_delegate"
 )
 
 // AllValues returns all CurrentPrincipalAuthenticationMethod values.
@@ -1260,6 +1262,7 @@ func (CurrentPrincipalAuthenticationMethod) AllValues() []CurrentPrincipalAuthen
 	return []CurrentPrincipalAuthenticationMethod{
 		CurrentPrincipalAuthenticationMethodSession,
 		CurrentPrincipalAuthenticationMethodAPIToken,
+		CurrentPrincipalAuthenticationMethodAgentDelegate,
 	}
 }
 
@@ -1269,6 +1272,8 @@ func (s CurrentPrincipalAuthenticationMethod) MarshalText() ([]byte, error) {
 	case CurrentPrincipalAuthenticationMethodSession:
 		return []byte(s), nil
 	case CurrentPrincipalAuthenticationMethodAPIToken:
+		return []byte(s), nil
+	case CurrentPrincipalAuthenticationMethodAgentDelegate:
 		return []byte(s), nil
 	default:
 		return nil, errors.Errorf("invalid value: %q", s)
@@ -1283,6 +1288,9 @@ func (s *CurrentPrincipalAuthenticationMethod) UnmarshalText(data []byte) error 
 		return nil
 	case CurrentPrincipalAuthenticationMethodAPIToken:
 		*s = CurrentPrincipalAuthenticationMethodAPIToken
+		return nil
+	case CurrentPrincipalAuthenticationMethodAgentDelegate:
+		*s = CurrentPrincipalAuthenticationMethodAgentDelegate
 		return nil
 	default:
 		return errors.Errorf("invalid value: %q", data)
@@ -1353,14 +1361,16 @@ func (*CurrentPrincipalHeaders) getCurrentPrincipalRes() {}
 type CurrentPrincipalScopesItem string
 
 const (
-	CurrentPrincipalScopesItemWorkRead  CurrentPrincipalScopesItem = "work:read"
-	CurrentPrincipalScopesItemWorkWrite CurrentPrincipalScopesItem = "work:write"
+	CurrentPrincipalScopesItemWorkRead    CurrentPrincipalScopesItem = "work:read"
+	CurrentPrincipalScopesItemWorkExecute CurrentPrincipalScopesItem = "work:execute"
+	CurrentPrincipalScopesItemWorkWrite   CurrentPrincipalScopesItem = "work:write"
 )
 
 // AllValues returns all CurrentPrincipalScopesItem values.
 func (CurrentPrincipalScopesItem) AllValues() []CurrentPrincipalScopesItem {
 	return []CurrentPrincipalScopesItem{
 		CurrentPrincipalScopesItemWorkRead,
+		CurrentPrincipalScopesItemWorkExecute,
 		CurrentPrincipalScopesItemWorkWrite,
 	}
 }
@@ -1369,6 +1379,8 @@ func (CurrentPrincipalScopesItem) AllValues() []CurrentPrincipalScopesItem {
 func (s CurrentPrincipalScopesItem) MarshalText() ([]byte, error) {
 	switch s {
 	case CurrentPrincipalScopesItemWorkRead:
+		return []byte(s), nil
+	case CurrentPrincipalScopesItemWorkExecute:
 		return []byte(s), nil
 	case CurrentPrincipalScopesItemWorkWrite:
 		return []byte(s), nil
@@ -1382,6 +1394,9 @@ func (s *CurrentPrincipalScopesItem) UnmarshalText(data []byte) error {
 	switch CurrentPrincipalScopesItem(data) {
 	case CurrentPrincipalScopesItemWorkRead:
 		*s = CurrentPrincipalScopesItemWorkRead
+		return nil
+	case CurrentPrincipalScopesItemWorkExecute:
+		*s = CurrentPrincipalScopesItemWorkExecute
 		return nil
 	case CurrentPrincipalScopesItemWorkWrite:
 		*s = CurrentPrincipalScopesItemWorkWrite
@@ -3440,6 +3455,52 @@ func (o OptTaskActivityAuthenticationMethod) Or(d TaskActivityAuthenticationMeth
 	return d
 }
 
+// NewOptTaskExecutionMode returns new OptTaskExecutionMode with value set to v.
+func NewOptTaskExecutionMode(v TaskExecutionMode) OptTaskExecutionMode {
+	return OptTaskExecutionMode{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptTaskExecutionMode is optional TaskExecutionMode.
+type OptTaskExecutionMode struct {
+	Value TaskExecutionMode
+	Set   bool
+}
+
+// IsSet returns true if OptTaskExecutionMode was set.
+func (o OptTaskExecutionMode) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptTaskExecutionMode) Reset() {
+	var v TaskExecutionMode
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptTaskExecutionMode) SetTo(v TaskExecutionMode) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptTaskExecutionMode) Get() (v TaskExecutionMode, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptTaskExecutionMode) Or(d TaskExecutionMode) TaskExecutionMode {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptTaskPriority returns new OptTaskPriority with value set to v.
 func NewOptTaskPriority(v TaskPriority) OptTaskPriority {
 	return OptTaskPriority{
@@ -4065,42 +4126,54 @@ func (s *ProblemStatusCodeWithHeaders) SetResponse(val Problem) {
 	s.Response = val
 }
 
-func (*ProblemStatusCodeWithHeaders) activateMilestoneRes()        {}
-func (*ProblemStatusCodeWithHeaders) archiveProjectRes()           {}
-func (*ProblemStatusCodeWithHeaders) archiveTaskRes()              {}
-func (*ProblemStatusCodeWithHeaders) cancelMilestoneRes()          {}
-func (*ProblemStatusCodeWithHeaders) completeMilestoneRes()        {}
-func (*ProblemStatusCodeWithHeaders) createAcceptanceCheckRes()    {}
-func (*ProblemStatusCodeWithHeaders) createLabelRes()              {}
-func (*ProblemStatusCodeWithHeaders) createMilestoneCriterionRes() {}
-func (*ProblemStatusCodeWithHeaders) createMilestoneRes()          {}
-func (*ProblemStatusCodeWithHeaders) createProjectRes()            {}
-func (*ProblemStatusCodeWithHeaders) createTaskCommentRes()        {}
-func (*ProblemStatusCodeWithHeaders) createTaskCriterionRes()      {}
-func (*ProblemStatusCodeWithHeaders) createTaskRes()               {}
-func (*ProblemStatusCodeWithHeaders) deleteCriterionRes()          {}
-func (*ProblemStatusCodeWithHeaders) deleteLabelRes()              {}
-func (*ProblemStatusCodeWithHeaders) deleteTaskCommentRes()        {}
-func (*ProblemStatusCodeWithHeaders) getCurrentPrincipalRes()      {}
-func (*ProblemStatusCodeWithHeaders) getProjectRes()               {}
-func (*ProblemStatusCodeWithHeaders) getTaskRes()                  {}
-func (*ProblemStatusCodeWithHeaders) listLabelsRes()               {}
-func (*ProblemStatusCodeWithHeaders) listMilestoneCriteriaRes()    {}
-func (*ProblemStatusCodeWithHeaders) listProjectsRes()             {}
-func (*ProblemStatusCodeWithHeaders) listTaskActivityRes()         {}
-func (*ProblemStatusCodeWithHeaders) listTaskCommentsRes()         {}
-func (*ProblemStatusCodeWithHeaders) listTaskCriteriaRes()         {}
-func (*ProblemStatusCodeWithHeaders) listTasksRes()                {}
-func (*ProblemStatusCodeWithHeaders) listUsersRes()                {}
-func (*ProblemStatusCodeWithHeaders) reopenMilestoneRes()          {}
-func (*ProblemStatusCodeWithHeaders) restoreProjectRes()           {}
-func (*ProblemStatusCodeWithHeaders) restoreTaskRes()              {}
-func (*ProblemStatusCodeWithHeaders) updateCriterionRes()          {}
-func (*ProblemStatusCodeWithHeaders) updateLabelRes()              {}
-func (*ProblemStatusCodeWithHeaders) updateMilestoneRes()          {}
-func (*ProblemStatusCodeWithHeaders) updateProjectRes()            {}
-func (*ProblemStatusCodeWithHeaders) updateTaskCommentRes()        {}
-func (*ProblemStatusCodeWithHeaders) updateTaskRes()               {}
+func (*ProblemStatusCodeWithHeaders) activateMilestoneRes()              {}
+func (*ProblemStatusCodeWithHeaders) addTaskClaimProgressRes()           {}
+func (*ProblemStatusCodeWithHeaders) answerTaskClaimQuestionRes()        {}
+func (*ProblemStatusCodeWithHeaders) archiveProjectRes()                 {}
+func (*ProblemStatusCodeWithHeaders) archiveTaskRes()                    {}
+func (*ProblemStatusCodeWithHeaders) askTaskClaimQuestionRes()           {}
+func (*ProblemStatusCodeWithHeaders) cancelMilestoneRes()                {}
+func (*ProblemStatusCodeWithHeaders) claimTaskRes()                      {}
+func (*ProblemStatusCodeWithHeaders) completeMilestoneRes()              {}
+func (*ProblemStatusCodeWithHeaders) createAcceptanceCheckRes()          {}
+func (*ProblemStatusCodeWithHeaders) createLabelRes()                    {}
+func (*ProblemStatusCodeWithHeaders) createMilestoneCriterionRes()       {}
+func (*ProblemStatusCodeWithHeaders) createMilestoneRes()                {}
+func (*ProblemStatusCodeWithHeaders) createProjectRes()                  {}
+func (*ProblemStatusCodeWithHeaders) createTaskCommentRes()              {}
+func (*ProblemStatusCodeWithHeaders) createTaskCriterionRes()            {}
+func (*ProblemStatusCodeWithHeaders) createTaskRes()                     {}
+func (*ProblemStatusCodeWithHeaders) deleteCriterionRes()                {}
+func (*ProblemStatusCodeWithHeaders) deleteLabelRes()                    {}
+func (*ProblemStatusCodeWithHeaders) deleteTaskCommentRes()              {}
+func (*ProblemStatusCodeWithHeaders) extendTaskClaimRes()                {}
+func (*ProblemStatusCodeWithHeaders) getCurrentPrincipalRes()            {}
+func (*ProblemStatusCodeWithHeaders) getCurrentTaskClaimRes()            {}
+func (*ProblemStatusCodeWithHeaders) getProjectRes()                     {}
+func (*ProblemStatusCodeWithHeaders) getTaskClaimRes()                   {}
+func (*ProblemStatusCodeWithHeaders) getTaskRes()                        {}
+func (*ProblemStatusCodeWithHeaders) listLabelsRes()                     {}
+func (*ProblemStatusCodeWithHeaders) listMilestoneCriteriaRes()          {}
+func (*ProblemStatusCodeWithHeaders) listProjectsRes()                   {}
+func (*ProblemStatusCodeWithHeaders) listTaskActivityRes()               {}
+func (*ProblemStatusCodeWithHeaders) listTaskAgentConversationsRes()     {}
+func (*ProblemStatusCodeWithHeaders) listTaskClaimMessagesRes()          {}
+func (*ProblemStatusCodeWithHeaders) listTaskCommentsRes()               {}
+func (*ProblemStatusCodeWithHeaders) listTaskCriteriaRes()               {}
+func (*ProblemStatusCodeWithHeaders) listTasksRes()                      {}
+func (*ProblemStatusCodeWithHeaders) listUsersRes()                      {}
+func (*ProblemStatusCodeWithHeaders) recordTaskClaimAcceptanceCheckRes() {}
+func (*ProblemStatusCodeWithHeaders) releaseTaskClaimRes()               {}
+func (*ProblemStatusCodeWithHeaders) reopenMilestoneRes()                {}
+func (*ProblemStatusCodeWithHeaders) restoreProjectRes()                 {}
+func (*ProblemStatusCodeWithHeaders) restoreTaskRes()                    {}
+func (*ProblemStatusCodeWithHeaders) submitTaskClaimRes()                {}
+func (*ProblemStatusCodeWithHeaders) updateCriterionRes()                {}
+func (*ProblemStatusCodeWithHeaders) updateLabelRes()                    {}
+func (*ProblemStatusCodeWithHeaders) updateMilestoneRes()                {}
+func (*ProblemStatusCodeWithHeaders) updateProjectRes()                  {}
+func (*ProblemStatusCodeWithHeaders) updateTaskCommentRes()              {}
+func (*ProblemStatusCodeWithHeaders) updateTaskRes()                     {}
 
 // Ref: #/components/schemas/Project
 type Project struct {
@@ -4938,6 +5011,7 @@ type Task struct {
 	Description    string             `json:"description"`
 	Status         TaskStatus         `json:"status"`
 	Priority       TaskPriority       `json:"priority"`
+	ExecutionMode  TaskExecutionMode  `json:"execution_mode"`
 	Assignee       OptUserRef         `json:"assignee"`
 	Creator        UserRef            `json:"creator"`
 	StartDate      OptDate            `json:"start_date"`
@@ -5001,6 +5075,11 @@ func (s *Task) GetStatus() TaskStatus {
 // GetPriority returns the value of Priority.
 func (s *Task) GetPriority() TaskPriority {
 	return s.Priority
+}
+
+// GetExecutionMode returns the value of ExecutionMode.
+func (s *Task) GetExecutionMode() TaskExecutionMode {
+	return s.ExecutionMode
 }
 
 // GetAssignee returns the value of Assignee.
@@ -5126,6 +5205,11 @@ func (s *Task) SetStatus(val TaskStatus) {
 // SetPriority sets the value of Priority.
 func (s *Task) SetPriority(val TaskPriority) {
 	s.Priority = val
+}
+
+// SetExecutionMode sets the value of ExecutionMode.
+func (s *Task) SetExecutionMode(val TaskExecutionMode) {
+	s.ExecutionMode = val
 }
 
 // SetAssignee sets the value of Assignee.
@@ -5440,17 +5524,973 @@ func (s *TaskActivityListHeaders) SetResponse(val TaskActivityList) {
 
 func (*TaskActivityListHeaders) listTaskActivityRes() {}
 
+// Ref: #/components/schemas/TaskClaim
+type TaskClaim struct {
+	ID              uuid.UUID       `json:"id"`
+	TaskID          uuid.UUID       `json:"task_id"`
+	TaskNumber      int64           `json:"task_number"`
+	ClaimedByUserID uuid.UUID       `json:"claimed_by_user_id"`
+	TokenName       string          `json:"token_name"`
+	ClientKind      string          `json:"client_kind"`
+	Status          TaskClaimStatus `json:"status"`
+	Version         int64           `json:"version"`
+	ExpiresAt       time.Time       `json:"expires_at"`
+	TerminalReason  OptString       `json:"terminal_reason"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
+	CompletedAt     OptDateTime     `json:"completed_at"`
+}
+
+// GetID returns the value of ID.
+func (s *TaskClaim) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetTaskID returns the value of TaskID.
+func (s *TaskClaim) GetTaskID() uuid.UUID {
+	return s.TaskID
+}
+
+// GetTaskNumber returns the value of TaskNumber.
+func (s *TaskClaim) GetTaskNumber() int64 {
+	return s.TaskNumber
+}
+
+// GetClaimedByUserID returns the value of ClaimedByUserID.
+func (s *TaskClaim) GetClaimedByUserID() uuid.UUID {
+	return s.ClaimedByUserID
+}
+
+// GetTokenName returns the value of TokenName.
+func (s *TaskClaim) GetTokenName() string {
+	return s.TokenName
+}
+
+// GetClientKind returns the value of ClientKind.
+func (s *TaskClaim) GetClientKind() string {
+	return s.ClientKind
+}
+
+// GetStatus returns the value of Status.
+func (s *TaskClaim) GetStatus() TaskClaimStatus {
+	return s.Status
+}
+
+// GetVersion returns the value of Version.
+func (s *TaskClaim) GetVersion() int64 {
+	return s.Version
+}
+
+// GetExpiresAt returns the value of ExpiresAt.
+func (s *TaskClaim) GetExpiresAt() time.Time {
+	return s.ExpiresAt
+}
+
+// GetTerminalReason returns the value of TerminalReason.
+func (s *TaskClaim) GetTerminalReason() OptString {
+	return s.TerminalReason
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *TaskClaim) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *TaskClaim) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// GetCompletedAt returns the value of CompletedAt.
+func (s *TaskClaim) GetCompletedAt() OptDateTime {
+	return s.CompletedAt
+}
+
+// SetID sets the value of ID.
+func (s *TaskClaim) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetTaskID sets the value of TaskID.
+func (s *TaskClaim) SetTaskID(val uuid.UUID) {
+	s.TaskID = val
+}
+
+// SetTaskNumber sets the value of TaskNumber.
+func (s *TaskClaim) SetTaskNumber(val int64) {
+	s.TaskNumber = val
+}
+
+// SetClaimedByUserID sets the value of ClaimedByUserID.
+func (s *TaskClaim) SetClaimedByUserID(val uuid.UUID) {
+	s.ClaimedByUserID = val
+}
+
+// SetTokenName sets the value of TokenName.
+func (s *TaskClaim) SetTokenName(val string) {
+	s.TokenName = val
+}
+
+// SetClientKind sets the value of ClientKind.
+func (s *TaskClaim) SetClientKind(val string) {
+	s.ClientKind = val
+}
+
+// SetStatus sets the value of Status.
+func (s *TaskClaim) SetStatus(val TaskClaimStatus) {
+	s.Status = val
+}
+
+// SetVersion sets the value of Version.
+func (s *TaskClaim) SetVersion(val int64) {
+	s.Version = val
+}
+
+// SetExpiresAt sets the value of ExpiresAt.
+func (s *TaskClaim) SetExpiresAt(val time.Time) {
+	s.ExpiresAt = val
+}
+
+// SetTerminalReason sets the value of TerminalReason.
+func (s *TaskClaim) SetTerminalReason(val OptString) {
+	s.TerminalReason = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *TaskClaim) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *TaskClaim) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// SetCompletedAt sets the value of CompletedAt.
+func (s *TaskClaim) SetCompletedAt(val OptDateTime) {
+	s.CompletedAt = val
+}
+
+// Ref: #/components/schemas/TaskClaimAcceptanceCheckCreate
+type TaskClaimAcceptanceCheckCreate struct {
+	ClientKind        string            `json:"client_kind"`
+	ClientSessionID   string            `json:"client_session_id"`
+	CriterionRevision int               `json:"criterion_revision"`
+	Outcome           AcceptanceOutcome `json:"outcome"`
+	Evidence          string            `json:"evidence"`
+}
+
+// GetClientKind returns the value of ClientKind.
+func (s *TaskClaimAcceptanceCheckCreate) GetClientKind() string {
+	return s.ClientKind
+}
+
+// GetClientSessionID returns the value of ClientSessionID.
+func (s *TaskClaimAcceptanceCheckCreate) GetClientSessionID() string {
+	return s.ClientSessionID
+}
+
+// GetCriterionRevision returns the value of CriterionRevision.
+func (s *TaskClaimAcceptanceCheckCreate) GetCriterionRevision() int {
+	return s.CriterionRevision
+}
+
+// GetOutcome returns the value of Outcome.
+func (s *TaskClaimAcceptanceCheckCreate) GetOutcome() AcceptanceOutcome {
+	return s.Outcome
+}
+
+// GetEvidence returns the value of Evidence.
+func (s *TaskClaimAcceptanceCheckCreate) GetEvidence() string {
+	return s.Evidence
+}
+
+// SetClientKind sets the value of ClientKind.
+func (s *TaskClaimAcceptanceCheckCreate) SetClientKind(val string) {
+	s.ClientKind = val
+}
+
+// SetClientSessionID sets the value of ClientSessionID.
+func (s *TaskClaimAcceptanceCheckCreate) SetClientSessionID(val string) {
+	s.ClientSessionID = val
+}
+
+// SetCriterionRevision sets the value of CriterionRevision.
+func (s *TaskClaimAcceptanceCheckCreate) SetCriterionRevision(val int) {
+	s.CriterionRevision = val
+}
+
+// SetOutcome sets the value of Outcome.
+func (s *TaskClaimAcceptanceCheckCreate) SetOutcome(val AcceptanceOutcome) {
+	s.Outcome = val
+}
+
+// SetEvidence sets the value of Evidence.
+func (s *TaskClaimAcceptanceCheckCreate) SetEvidence(val string) {
+	s.Evidence = val
+}
+
+// Ref: #/components/schemas/TaskClaimAction
+type TaskClaimAction struct {
+	Claim   TaskClaim        `json:"claim"`
+	Message TaskClaimMessage `json:"message"`
+}
+
+// GetClaim returns the value of Claim.
+func (s *TaskClaimAction) GetClaim() TaskClaim {
+	return s.Claim
+}
+
+// GetMessage returns the value of Message.
+func (s *TaskClaimAction) GetMessage() TaskClaimMessage {
+	return s.Message
+}
+
+// SetClaim sets the value of Claim.
+func (s *TaskClaimAction) SetClaim(val TaskClaim) {
+	s.Claim = val
+}
+
+// SetMessage sets the value of Message.
+func (s *TaskClaimAction) SetMessage(val TaskClaimMessage) {
+	s.Message = val
+}
+
+// TaskClaimActionHeaders wraps TaskClaimAction with response headers.
+type TaskClaimActionHeaders struct {
+	Etag                OptString
+	IdempotencyReplayed OptBool
+	XRequestID          OptString
+	Response            TaskClaimAction
+}
+
+// GetEtag returns the value of Etag.
+func (s *TaskClaimActionHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *TaskClaimActionHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskClaimActionHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskClaimActionHeaders) GetResponse() TaskClaimAction {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *TaskClaimActionHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *TaskClaimActionHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskClaimActionHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskClaimActionHeaders) SetResponse(val TaskClaimAction) {
+	s.Response = val
+}
+
+func (*TaskClaimActionHeaders) answerTaskClaimQuestionRes() {}
+func (*TaskClaimActionHeaders) askTaskClaimQuestionRes()    {}
+func (*TaskClaimActionHeaders) submitTaskClaimRes()         {}
+
+// Ref: #/components/schemas/TaskClaimAgentMessage
+type TaskClaimAgentMessage struct {
+	ClientKind      string `json:"client_kind"`
+	ClientSessionID string `json:"client_session_id"`
+	Body            string `json:"body"`
+}
+
+// GetClientKind returns the value of ClientKind.
+func (s *TaskClaimAgentMessage) GetClientKind() string {
+	return s.ClientKind
+}
+
+// GetClientSessionID returns the value of ClientSessionID.
+func (s *TaskClaimAgentMessage) GetClientSessionID() string {
+	return s.ClientSessionID
+}
+
+// GetBody returns the value of Body.
+func (s *TaskClaimAgentMessage) GetBody() string {
+	return s.Body
+}
+
+// SetClientKind sets the value of ClientKind.
+func (s *TaskClaimAgentMessage) SetClientKind(val string) {
+	s.ClientKind = val
+}
+
+// SetClientSessionID sets the value of ClientSessionID.
+func (s *TaskClaimAgentMessage) SetClientSessionID(val string) {
+	s.ClientSessionID = val
+}
+
+// SetBody sets the value of Body.
+func (s *TaskClaimAgentMessage) SetBody(val string) {
+	s.Body = val
+}
+
+// Ref: #/components/schemas/TaskClaimConversation
+type TaskClaimConversation struct {
+	Claim    TaskClaim          `json:"claim"`
+	Messages []TaskClaimMessage `json:"messages"`
+}
+
+// GetClaim returns the value of Claim.
+func (s *TaskClaimConversation) GetClaim() TaskClaim {
+	return s.Claim
+}
+
+// GetMessages returns the value of Messages.
+func (s *TaskClaimConversation) GetMessages() []TaskClaimMessage {
+	return s.Messages
+}
+
+// SetClaim sets the value of Claim.
+func (s *TaskClaimConversation) SetClaim(val TaskClaim) {
+	s.Claim = val
+}
+
+// SetMessages sets the value of Messages.
+func (s *TaskClaimConversation) SetMessages(val []TaskClaimMessage) {
+	s.Messages = val
+}
+
+// Ref: #/components/schemas/TaskClaimConversationList
+type TaskClaimConversationList struct {
+	Items []TaskClaimConversation `json:"items"`
+}
+
+// GetItems returns the value of Items.
+func (s *TaskClaimConversationList) GetItems() []TaskClaimConversation {
+	return s.Items
+}
+
+// SetItems sets the value of Items.
+func (s *TaskClaimConversationList) SetItems(val []TaskClaimConversation) {
+	s.Items = val
+}
+
+// TaskClaimConversationListHeaders wraps TaskClaimConversationList with response headers.
+type TaskClaimConversationListHeaders struct {
+	XRequestID OptString
+	Response   TaskClaimConversationList
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskClaimConversationListHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskClaimConversationListHeaders) GetResponse() TaskClaimConversationList {
+	return s.Response
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskClaimConversationListHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskClaimConversationListHeaders) SetResponse(val TaskClaimConversationList) {
+	s.Response = val
+}
+
+func (*TaskClaimConversationListHeaders) listTaskAgentConversationsRes() {}
+
+// TaskClaimCreatedHeaders wraps TaskClaim with response headers.
+type TaskClaimCreatedHeaders struct {
+	Etag                OptString
+	IdempotencyReplayed OptBool
+	Location            OptString
+	XRequestID          OptString
+	Response            TaskClaim
+}
+
+// GetEtag returns the value of Etag.
+func (s *TaskClaimCreatedHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *TaskClaimCreatedHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetLocation returns the value of Location.
+func (s *TaskClaimCreatedHeaders) GetLocation() OptString {
+	return s.Location
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskClaimCreatedHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskClaimCreatedHeaders) GetResponse() TaskClaim {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *TaskClaimCreatedHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *TaskClaimCreatedHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetLocation sets the value of Location.
+func (s *TaskClaimCreatedHeaders) SetLocation(val OptString) {
+	s.Location = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskClaimCreatedHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskClaimCreatedHeaders) SetResponse(val TaskClaim) {
+	s.Response = val
+}
+
+func (*TaskClaimCreatedHeaders) claimTaskRes() {}
+
+// TaskClaimHeaders wraps TaskClaim with response headers.
+type TaskClaimHeaders struct {
+	Etag                OptString
+	IdempotencyReplayed OptBool
+	XRequestID          OptString
+	Response            TaskClaim
+}
+
+// GetEtag returns the value of Etag.
+func (s *TaskClaimHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *TaskClaimHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskClaimHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskClaimHeaders) GetResponse() TaskClaim {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *TaskClaimHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *TaskClaimHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskClaimHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskClaimHeaders) SetResponse(val TaskClaim) {
+	s.Response = val
+}
+
+func (*TaskClaimHeaders) extendTaskClaimRes()     {}
+func (*TaskClaimHeaders) getCurrentTaskClaimRes() {}
+func (*TaskClaimHeaders) getTaskClaimRes()        {}
+func (*TaskClaimHeaders) releaseTaskClaimRes()    {}
+
+// Ref: #/components/schemas/TaskClaimHumanAnswer
+type TaskClaimHumanAnswer struct {
+	Body string `json:"body"`
+}
+
+// GetBody returns the value of Body.
+func (s *TaskClaimHumanAnswer) GetBody() string {
+	return s.Body
+}
+
+// SetBody sets the value of Body.
+func (s *TaskClaimHumanAnswer) SetBody(val string) {
+	s.Body = val
+}
+
+// Ref: #/components/schemas/TaskClaimMessage
+type TaskClaimMessage struct {
+	ID               uuid.UUID                  `json:"id"`
+	ClaimID          uuid.UUID                  `json:"claim_id"`
+	TaskID           uuid.UUID                  `json:"task_id"`
+	AuthorType       TaskClaimMessageAuthorType `json:"author_type"`
+	AuthorUserID     OptUUID                    `json:"author_user_id"`
+	Kind             TaskClaimMessageKind       `json:"kind"`
+	Body             string                     `json:"body"`
+	ReplyToMessageID OptUUID                    `json:"reply_to_message_id"`
+	TokenName        OptString                  `json:"token_name"`
+	CreatedAt        time.Time                  `json:"created_at"`
+}
+
+// GetID returns the value of ID.
+func (s *TaskClaimMessage) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetClaimID returns the value of ClaimID.
+func (s *TaskClaimMessage) GetClaimID() uuid.UUID {
+	return s.ClaimID
+}
+
+// GetTaskID returns the value of TaskID.
+func (s *TaskClaimMessage) GetTaskID() uuid.UUID {
+	return s.TaskID
+}
+
+// GetAuthorType returns the value of AuthorType.
+func (s *TaskClaimMessage) GetAuthorType() TaskClaimMessageAuthorType {
+	return s.AuthorType
+}
+
+// GetAuthorUserID returns the value of AuthorUserID.
+func (s *TaskClaimMessage) GetAuthorUserID() OptUUID {
+	return s.AuthorUserID
+}
+
+// GetKind returns the value of Kind.
+func (s *TaskClaimMessage) GetKind() TaskClaimMessageKind {
+	return s.Kind
+}
+
+// GetBody returns the value of Body.
+func (s *TaskClaimMessage) GetBody() string {
+	return s.Body
+}
+
+// GetReplyToMessageID returns the value of ReplyToMessageID.
+func (s *TaskClaimMessage) GetReplyToMessageID() OptUUID {
+	return s.ReplyToMessageID
+}
+
+// GetTokenName returns the value of TokenName.
+func (s *TaskClaimMessage) GetTokenName() OptString {
+	return s.TokenName
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *TaskClaimMessage) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// SetID sets the value of ID.
+func (s *TaskClaimMessage) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetClaimID sets the value of ClaimID.
+func (s *TaskClaimMessage) SetClaimID(val uuid.UUID) {
+	s.ClaimID = val
+}
+
+// SetTaskID sets the value of TaskID.
+func (s *TaskClaimMessage) SetTaskID(val uuid.UUID) {
+	s.TaskID = val
+}
+
+// SetAuthorType sets the value of AuthorType.
+func (s *TaskClaimMessage) SetAuthorType(val TaskClaimMessageAuthorType) {
+	s.AuthorType = val
+}
+
+// SetAuthorUserID sets the value of AuthorUserID.
+func (s *TaskClaimMessage) SetAuthorUserID(val OptUUID) {
+	s.AuthorUserID = val
+}
+
+// SetKind sets the value of Kind.
+func (s *TaskClaimMessage) SetKind(val TaskClaimMessageKind) {
+	s.Kind = val
+}
+
+// SetBody sets the value of Body.
+func (s *TaskClaimMessage) SetBody(val string) {
+	s.Body = val
+}
+
+// SetReplyToMessageID sets the value of ReplyToMessageID.
+func (s *TaskClaimMessage) SetReplyToMessageID(val OptUUID) {
+	s.ReplyToMessageID = val
+}
+
+// SetTokenName sets the value of TokenName.
+func (s *TaskClaimMessage) SetTokenName(val OptString) {
+	s.TokenName = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *TaskClaimMessage) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+type TaskClaimMessageAuthorType string
+
+const (
+	TaskClaimMessageAuthorTypeAgent TaskClaimMessageAuthorType = "agent"
+	TaskClaimMessageAuthorTypeHuman TaskClaimMessageAuthorType = "human"
+)
+
+// AllValues returns all TaskClaimMessageAuthorType values.
+func (TaskClaimMessageAuthorType) AllValues() []TaskClaimMessageAuthorType {
+	return []TaskClaimMessageAuthorType{
+		TaskClaimMessageAuthorTypeAgent,
+		TaskClaimMessageAuthorTypeHuman,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s TaskClaimMessageAuthorType) MarshalText() ([]byte, error) {
+	switch s {
+	case TaskClaimMessageAuthorTypeAgent:
+		return []byte(s), nil
+	case TaskClaimMessageAuthorTypeHuman:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *TaskClaimMessageAuthorType) UnmarshalText(data []byte) error {
+	switch TaskClaimMessageAuthorType(data) {
+	case TaskClaimMessageAuthorTypeAgent:
+		*s = TaskClaimMessageAuthorTypeAgent
+		return nil
+	case TaskClaimMessageAuthorTypeHuman:
+		*s = TaskClaimMessageAuthorTypeHuman
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// TaskClaimMessageCreatedHeaders wraps TaskClaimMessage with response headers.
+type TaskClaimMessageCreatedHeaders struct {
+	IdempotencyReplayed OptBool
+	Location            OptString
+	XRequestID          OptString
+	Response            TaskClaimMessage
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *TaskClaimMessageCreatedHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetLocation returns the value of Location.
+func (s *TaskClaimMessageCreatedHeaders) GetLocation() OptString {
+	return s.Location
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskClaimMessageCreatedHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskClaimMessageCreatedHeaders) GetResponse() TaskClaimMessage {
+	return s.Response
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *TaskClaimMessageCreatedHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetLocation sets the value of Location.
+func (s *TaskClaimMessageCreatedHeaders) SetLocation(val OptString) {
+	s.Location = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskClaimMessageCreatedHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskClaimMessageCreatedHeaders) SetResponse(val TaskClaimMessage) {
+	s.Response = val
+}
+
+func (*TaskClaimMessageCreatedHeaders) addTaskClaimProgressRes() {}
+
+type TaskClaimMessageKind string
+
+const (
+	TaskClaimMessageKindProgress   TaskClaimMessageKind = "progress"
+	TaskClaimMessageKindQuestion   TaskClaimMessageKind = "question"
+	TaskClaimMessageKindAnswer     TaskClaimMessageKind = "answer"
+	TaskClaimMessageKindHandoff    TaskClaimMessageKind = "handoff"
+	TaskClaimMessageKindSubmission TaskClaimMessageKind = "submission"
+)
+
+// AllValues returns all TaskClaimMessageKind values.
+func (TaskClaimMessageKind) AllValues() []TaskClaimMessageKind {
+	return []TaskClaimMessageKind{
+		TaskClaimMessageKindProgress,
+		TaskClaimMessageKindQuestion,
+		TaskClaimMessageKindAnswer,
+		TaskClaimMessageKindHandoff,
+		TaskClaimMessageKindSubmission,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s TaskClaimMessageKind) MarshalText() ([]byte, error) {
+	switch s {
+	case TaskClaimMessageKindProgress:
+		return []byte(s), nil
+	case TaskClaimMessageKindQuestion:
+		return []byte(s), nil
+	case TaskClaimMessageKindAnswer:
+		return []byte(s), nil
+	case TaskClaimMessageKindHandoff:
+		return []byte(s), nil
+	case TaskClaimMessageKindSubmission:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *TaskClaimMessageKind) UnmarshalText(data []byte) error {
+	switch TaskClaimMessageKind(data) {
+	case TaskClaimMessageKindProgress:
+		*s = TaskClaimMessageKindProgress
+		return nil
+	case TaskClaimMessageKindQuestion:
+		*s = TaskClaimMessageKindQuestion
+		return nil
+	case TaskClaimMessageKindAnswer:
+		*s = TaskClaimMessageKindAnswer
+		return nil
+	case TaskClaimMessageKindHandoff:
+		*s = TaskClaimMessageKindHandoff
+		return nil
+	case TaskClaimMessageKindSubmission:
+		*s = TaskClaimMessageKindSubmission
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/TaskClaimMessageList
+type TaskClaimMessageList struct {
+	Items []TaskClaimMessage `json:"items"`
+}
+
+// GetItems returns the value of Items.
+func (s *TaskClaimMessageList) GetItems() []TaskClaimMessage {
+	return s.Items
+}
+
+// SetItems sets the value of Items.
+func (s *TaskClaimMessageList) SetItems(val []TaskClaimMessage) {
+	s.Items = val
+}
+
+// TaskClaimMessageListHeaders wraps TaskClaimMessageList with response headers.
+type TaskClaimMessageListHeaders struct {
+	XRequestID OptString
+	Response   TaskClaimMessageList
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskClaimMessageListHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskClaimMessageListHeaders) GetResponse() TaskClaimMessageList {
+	return s.Response
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskClaimMessageListHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskClaimMessageListHeaders) SetResponse(val TaskClaimMessageList) {
+	s.Response = val
+}
+
+func (*TaskClaimMessageListHeaders) listTaskClaimMessagesRes() {}
+
+// Ref: #/components/schemas/TaskClaimRelease
+type TaskClaimRelease struct {
+	ClientKind      OptString `json:"client_kind"`
+	ClientSessionID OptString `json:"client_session_id"`
+	Handoff         OptString `json:"handoff"`
+}
+
+// GetClientKind returns the value of ClientKind.
+func (s *TaskClaimRelease) GetClientKind() OptString {
+	return s.ClientKind
+}
+
+// GetClientSessionID returns the value of ClientSessionID.
+func (s *TaskClaimRelease) GetClientSessionID() OptString {
+	return s.ClientSessionID
+}
+
+// GetHandoff returns the value of Handoff.
+func (s *TaskClaimRelease) GetHandoff() OptString {
+	return s.Handoff
+}
+
+// SetClientKind sets the value of ClientKind.
+func (s *TaskClaimRelease) SetClientKind(val OptString) {
+	s.ClientKind = val
+}
+
+// SetClientSessionID sets the value of ClientSessionID.
+func (s *TaskClaimRelease) SetClientSessionID(val OptString) {
+	s.ClientSessionID = val
+}
+
+// SetHandoff sets the value of Handoff.
+func (s *TaskClaimRelease) SetHandoff(val OptString) {
+	s.Handoff = val
+}
+
+// Ref: #/components/schemas/TaskClaimSession
+type TaskClaimSession struct {
+	ClientKind      string `json:"client_kind"`
+	ClientSessionID string `json:"client_session_id"`
+}
+
+// GetClientKind returns the value of ClientKind.
+func (s *TaskClaimSession) GetClientKind() string {
+	return s.ClientKind
+}
+
+// GetClientSessionID returns the value of ClientSessionID.
+func (s *TaskClaimSession) GetClientSessionID() string {
+	return s.ClientSessionID
+}
+
+// SetClientKind sets the value of ClientKind.
+func (s *TaskClaimSession) SetClientKind(val string) {
+	s.ClientKind = val
+}
+
+// SetClientSessionID sets the value of ClientSessionID.
+func (s *TaskClaimSession) SetClientSessionID(val string) {
+	s.ClientSessionID = val
+}
+
+// Ref: #/components/schemas/TaskClaimStatus
+type TaskClaimStatus string
+
+const (
+	TaskClaimStatusActive       TaskClaimStatus = "active"
+	TaskClaimStatusWaitingHuman TaskClaimStatus = "waiting_human"
+	TaskClaimStatusSubmitted    TaskClaimStatus = "submitted"
+	TaskClaimStatusReleased     TaskClaimStatus = "released"
+	TaskClaimStatusExpired      TaskClaimStatus = "expired"
+)
+
+// AllValues returns all TaskClaimStatus values.
+func (TaskClaimStatus) AllValues() []TaskClaimStatus {
+	return []TaskClaimStatus{
+		TaskClaimStatusActive,
+		TaskClaimStatusWaitingHuman,
+		TaskClaimStatusSubmitted,
+		TaskClaimStatusReleased,
+		TaskClaimStatusExpired,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s TaskClaimStatus) MarshalText() ([]byte, error) {
+	switch s {
+	case TaskClaimStatusActive:
+		return []byte(s), nil
+	case TaskClaimStatusWaitingHuman:
+		return []byte(s), nil
+	case TaskClaimStatusSubmitted:
+		return []byte(s), nil
+	case TaskClaimStatusReleased:
+		return []byte(s), nil
+	case TaskClaimStatusExpired:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *TaskClaimStatus) UnmarshalText(data []byte) error {
+	switch TaskClaimStatus(data) {
+	case TaskClaimStatusActive:
+		*s = TaskClaimStatusActive
+		return nil
+	case TaskClaimStatusWaitingHuman:
+		*s = TaskClaimStatusWaitingHuman
+		return nil
+	case TaskClaimStatusSubmitted:
+		*s = TaskClaimStatusSubmitted
+		return nil
+	case TaskClaimStatusReleased:
+		*s = TaskClaimStatusReleased
+		return nil
+	case TaskClaimStatusExpired:
+		*s = TaskClaimStatusExpired
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
 // Ref: #/components/schemas/TaskCreate
 type TaskCreate struct {
 	Title string `json:"title"`
 	// Why the task is needed or what current problem it addresses.
 	Context string `json:"context"`
 	// The observable result expected when the task is complete.
-	ExpectedResult string          `json:"expected_result"`
-	Description    OptString       `json:"description"`
-	Status         OptTaskStatus   `json:"status"`
-	Priority       OptTaskPriority `json:"priority"`
-	AssigneeID     OptNilUUID      `json:"assignee_id"`
+	ExpectedResult string               `json:"expected_result"`
+	Description    OptString            `json:"description"`
+	Status         OptTaskStatus        `json:"status"`
+	Priority       OptTaskPriority      `json:"priority"`
+	ExecutionMode  OptTaskExecutionMode `json:"execution_mode"`
+	AssigneeID     OptNilUUID           `json:"assignee_id"`
 	// Optional first scheduled day. Must not be after due_date.
 	StartDate     OptNilDate  `json:"start_date"`
 	DueDate       OptNilDate  `json:"due_date"`
@@ -5492,6 +6532,11 @@ func (s *TaskCreate) GetStatus() OptTaskStatus {
 // GetPriority returns the value of Priority.
 func (s *TaskCreate) GetPriority() OptTaskPriority {
 	return s.Priority
+}
+
+// GetExecutionMode returns the value of ExecutionMode.
+func (s *TaskCreate) GetExecutionMode() OptTaskExecutionMode {
+	return s.ExecutionMode
 }
 
 // GetAssigneeID returns the value of AssigneeID.
@@ -5562,6 +6607,11 @@ func (s *TaskCreate) SetStatus(val OptTaskStatus) {
 // SetPriority sets the value of Priority.
 func (s *TaskCreate) SetPriority(val OptTaskPriority) {
 	s.Priority = val
+}
+
+// SetExecutionMode sets the value of ExecutionMode.
+func (s *TaskCreate) SetExecutionMode(val OptTaskExecutionMode) {
+	s.ExecutionMode = val
 }
 
 // SetAssigneeID sets the value of AssigneeID.
@@ -5697,6 +6747,48 @@ func (s *TaskCreatedHeaders) SetResponse(val Task) {
 }
 
 func (*TaskCreatedHeaders) createTaskRes() {}
+
+// Ref: #/components/schemas/TaskExecutionMode
+type TaskExecutionMode string
+
+const (
+	TaskExecutionModeHumanOnly    TaskExecutionMode = "human_only"
+	TaskExecutionModeAgentAllowed TaskExecutionMode = "agent_allowed"
+)
+
+// AllValues returns all TaskExecutionMode values.
+func (TaskExecutionMode) AllValues() []TaskExecutionMode {
+	return []TaskExecutionMode{
+		TaskExecutionModeHumanOnly,
+		TaskExecutionModeAgentAllowed,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s TaskExecutionMode) MarshalText() ([]byte, error) {
+	switch s {
+	case TaskExecutionModeHumanOnly:
+		return []byte(s), nil
+	case TaskExecutionModeAgentAllowed:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *TaskExecutionMode) UnmarshalText(data []byte) error {
+	switch TaskExecutionMode(data) {
+	case TaskExecutionModeHumanOnly:
+		*s = TaskExecutionModeHumanOnly
+		return nil
+	case TaskExecutionModeAgentAllowed:
+		*s = TaskExecutionModeAgentAllowed
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
 
 // TaskHeaders wraps Task with response headers.
 type TaskHeaders struct {
@@ -5874,13 +6966,14 @@ func (*TaskListHeaders) listTasksRes() {}
 
 // Ref: #/components/schemas/TaskPatch
 type TaskPatch struct {
-	Title          OptString       `json:"title"`
-	Context        OptString       `json:"context"`
-	ExpectedResult OptString       `json:"expected_result"`
-	Description    OptString       `json:"description"`
-	Status         OptTaskStatus   `json:"status"`
-	Priority       OptTaskPriority `json:"priority"`
-	AssigneeID     OptNilUUID      `json:"assignee_id"`
+	Title          OptString            `json:"title"`
+	Context        OptString            `json:"context"`
+	ExpectedResult OptString            `json:"expected_result"`
+	Description    OptString            `json:"description"`
+	Status         OptTaskStatus        `json:"status"`
+	Priority       OptTaskPriority      `json:"priority"`
+	ExecutionMode  OptTaskExecutionMode `json:"execution_mode"`
+	AssigneeID     OptNilUUID           `json:"assignee_id"`
 	// Set or clear the first scheduled day. Must not be after due_date.
 	StartDate     OptNilDate  `json:"start_date"`
 	DueDate       OptNilDate  `json:"due_date"`
@@ -5926,6 +7019,11 @@ func (s *TaskPatch) GetStatus() OptTaskStatus {
 // GetPriority returns the value of Priority.
 func (s *TaskPatch) GetPriority() OptTaskPriority {
 	return s.Priority
+}
+
+// GetExecutionMode returns the value of ExecutionMode.
+func (s *TaskPatch) GetExecutionMode() OptTaskExecutionMode {
+	return s.ExecutionMode
 }
 
 // GetAssigneeID returns the value of AssigneeID.
@@ -6001,6 +7099,11 @@ func (s *TaskPatch) SetStatus(val OptTaskStatus) {
 // SetPriority sets the value of Priority.
 func (s *TaskPatch) SetPriority(val OptTaskPriority) {
 	s.Priority = val
+}
+
+// SetExecutionMode sets the value of ExecutionMode.
+func (s *TaskPatch) SetExecutionMode(val OptTaskExecutionMode) {
+	s.ExecutionMode = val
 }
 
 // SetAssigneeID sets the value of AssigneeID.

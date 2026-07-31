@@ -153,6 +153,7 @@ describe('TaskComposer', () => {
       milestone_id: 'milestone-1',
       assignee_id: null,
       priority: 'none',
+      execution_mode: 'human_only',
     }))
     expect(onCreated).toHaveBeenCalledWith(CREATED_TASK)
   })

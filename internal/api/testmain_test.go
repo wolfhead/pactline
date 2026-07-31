@@ -80,6 +80,7 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 	projects := store.NewProjectStore(db)
 	milestones := store.NewMilestoneStore(db)
 	acceptance := store.NewAcceptanceStore(db)
+	claims := store.NewTaskClaimStore(db)
 	projectService := &application.ProjectService{
 		Projects: projects, Milestones: milestones, Acceptance: acceptance, Tasks: tasks,
 	}
@@ -104,6 +105,7 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 		Tasks: &application.TaskService{
 			Tasks: tasks, Comments: comments, Projects: projectService,
 		},
+		Claims:   claims,
 		Labels:   &application.LabelService{Labels: labels},
 		Projects: projectService,
 	})

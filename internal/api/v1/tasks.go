@@ -35,6 +35,9 @@ func (h *Handler) CreateTask(
 	if value, ok := req.Priority.Get(); ok {
 		task.Priority = domain.TaskPriority(value)
 	}
+	if value, ok := req.ExecutionMode.Get(); ok {
+		task.ExecutionMode = domain.TaskExecutionMode(value)
+	}
 	if value, ok := req.AssigneeID.Get(); ok {
 		task.AssigneeID = &value
 	}
@@ -108,6 +111,9 @@ func (h *Handler) ListTasks(
 	}
 	for _, value := range params.Priority {
 		filter.Priorities = append(filter.Priorities, domain.TaskPriority(value))
+	}
+	for _, value := range params.ExecutionMode {
+		filter.ExecutionModes = append(filter.ExecutionModes, domain.TaskExecutionMode(value))
 	}
 	if value, ok := params.Assignee.Get(); ok {
 		if value == "none" {
@@ -196,6 +202,10 @@ func (h *Handler) UpdateTask(
 	if value, ok := req.Priority.Get(); ok {
 		priority := domain.TaskPriority(value)
 		patch.Priority = &priority
+	}
+	if value, ok := req.ExecutionMode.Get(); ok {
+		executionMode := domain.TaskExecutionMode(value)
+		patch.ExecutionMode = &executionMode
 	}
 	if req.AssigneeID.IsSet() {
 		patch.AssigneeSet = true
@@ -548,15 +558,16 @@ func taskFromDomain(task store.TaskWithRelations) generated.Task {
 		ID: task.Task.ID, Number: task.Task.Number, Version: task.Task.Version,
 		Title: task.Task.Title, Context: task.Task.Context,
 		ExpectedResult: task.Task.ExpectedResult, Description: task.Task.Description,
-		Status:       generated.TaskStatus(task.Task.Status),
-		Priority:     generated.TaskPriority(task.Task.Priority),
-		Creator:      userRefFromDomain(task.Creator),
-		Labels:       make([]generated.Label, len(task.Labels)),
-		Children:     make([]generated.TaskRelationRef, len(task.Children)),
-		Dependencies: make([]generated.TaskRelationRef, len(task.Dependencies)),
-		Dependents:   make([]generated.TaskRelationRef, len(task.Dependents)),
-		Blocked:      task.Blocked,
-		CreatedAt:    task.Task.CreatedAt, UpdatedAt: task.Task.UpdatedAt,
+		Status:        generated.TaskStatus(task.Task.Status),
+		Priority:      generated.TaskPriority(task.Task.Priority),
+		ExecutionMode: generated.TaskExecutionMode(task.Task.ExecutionMode),
+		Creator:       userRefFromDomain(task.Creator),
+		Labels:        make([]generated.Label, len(task.Labels)),
+		Children:      make([]generated.TaskRelationRef, len(task.Children)),
+		Dependencies:  make([]generated.TaskRelationRef, len(task.Dependencies)),
+		Dependents:    make([]generated.TaskRelationRef, len(task.Dependents)),
+		Blocked:       task.Blocked,
+		CreatedAt:     task.Task.CreatedAt, UpdatedAt: task.Task.UpdatedAt,
 	}
 	for i, label := range task.Labels {
 		out.Labels[i] = labelFromDomain(label)

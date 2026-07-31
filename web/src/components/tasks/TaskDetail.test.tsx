@@ -36,6 +36,7 @@ const TASK = {
 beforeEach(() => {
   vi.mocked(tasksApi.getTask).mockResolvedValue(TASK)
   vi.mocked(tasksApi.listComments).mockResolvedValue([])
+  vi.mocked(tasksApi.listTaskAgentConversations).mockResolvedValue([])
   vi.mocked(tasksApi.listActivity).mockResolvedValue([])
   vi.mocked(tasksApi.listLabels).mockResolvedValue([])
   vi.mocked(projectsApi.listProjects).mockResolvedValue([])
@@ -87,6 +88,104 @@ describe('TaskDetail', () => {
     renderDetail()
     await screen.findByText('结果可被观察')
     expect(screen.getByRole('region', { name: '验收标准' })).toBeVisible()
+  })
+
+  it('keeps Agent questions in the communication timeline and resumes explicitly', async () => {
+    const claim = {
+      id: 'claim-1',
+      task_id: TASK.id,
+      task_number: TASK.number,
+      claimed_by_user_id: USERS[0].id,
+      token_name: 'Codex worker',
+      client_kind: 'codex',
+      status: 'waiting_human' as const,
+      version: 2,
+      expires_at: '2026-08-01T00:00:00Z',
+      created_at: '2026-07-31T00:00:00Z',
+      updated_at: '2026-07-31T00:01:00Z',
+    }
+    const question = {
+      id: 'message-1',
+      claim_id: claim.id,
+      task_id: TASK.id,
+      author_type: 'agent' as const,
+      kind: 'question' as const,
+      body: '需要兼容哪个稳定版本？',
+      token_name: 'Codex worker',
+      created_at: '2026-07-31T00:01:00Z',
+    }
+    vi.mocked(tasksApi.listTaskAgentConversations)
+      .mockResolvedValueOnce([{ claim, messages: [question] }])
+      .mockResolvedValueOnce([{
+        claim: { ...claim, status: 'active', version: 3 },
+        messages: [question, {
+          id: 'message-2',
+          claim_id: claim.id,
+          task_id: TASK.id,
+          author_type: 'human',
+          kind: 'answer',
+          body: '兼容当前支持的稳定版本。',
+          reply_to_message_id: question.id,
+          created_at: '2026-07-31T00:02:00Z',
+        }],
+      }])
+    vi.mocked(tasksApi.answerTaskClaimQuestion).mockResolvedValue({
+      ...claim, status: 'active', version: 3,
+    })
+
+    renderDetail()
+    await screen.findByText('需要兼容哪个稳定版本？')
+    fireEvent.change(screen.getByLabelText('回复 Agent 并恢复此任务'), {
+      target: { value: '兼容当前支持的稳定版本。' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '发送回复' }))
+
+    await waitFor(() => expect(tasksApi.answerTaskClaimQuestion).toHaveBeenCalledWith(
+      claim.id, claim.version, '兼容当前支持的稳定版本。',
+    ))
+    expect(await screen.findByText('兼容当前支持的稳定版本。')).toBeVisible()
+  })
+
+  it('shows an active Claim even without messages and lets the human release it', async () => {
+    const claim = {
+      id: 'claim-active',
+      task_id: TASK.id,
+      task_number: TASK.number,
+      claimed_by_user_id: USERS[0].id,
+      token_name: 'Codex worker',
+      client_kind: 'codex',
+      status: 'active' as const,
+      version: 1,
+      expires_at: '2026-08-07T00:00:00Z',
+      created_at: '2026-07-31T00:00:00Z',
+      updated_at: '2026-07-31T00:00:00Z',
+    }
+    vi.mocked(tasksApi.listTaskAgentConversations)
+      .mockResolvedValueOnce([{ claim, messages: [] }])
+      .mockResolvedValueOnce([{
+        claim: {
+          ...claim,
+          status: 'released',
+          version: 2,
+          completed_at: '2026-07-31T00:05:00Z',
+        },
+        messages: [],
+      }])
+    vi.mocked(tasksApi.releaseTaskClaim).mockResolvedValue({
+      ...claim,
+      status: 'released',
+      version: 2,
+      completed_at: '2026-07-31T00:05:00Z',
+    })
+
+    renderDetail()
+    expect(await screen.findByText('Agent 正在执行')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: '释放 Claim' }))
+
+    await waitFor(() => expect(tasksApi.releaseTaskClaim).toHaveBeenCalledWith(
+      claim.id, claim.version,
+    ))
+    await waitFor(() => expect(screen.queryByText('Agent 正在执行')).not.toBeInTheDocument())
   })
 
   it('tells the caller about a change so the list can follow it', async () => {

@@ -50,6 +50,25 @@ func (p TaskPriority) Valid() bool {
 	return false
 }
 
+// TaskExecutionMode expresses whether the assigned human has made a Task
+// available to their external coding Agent. It is independent from Task
+// status: status describes the work, while execution mode controls who may
+// claim it.
+type TaskExecutionMode string
+
+const (
+	TaskExecutionModeHumanOnly    TaskExecutionMode = "human_only"
+	TaskExecutionModeAgentAllowed TaskExecutionMode = "agent_allowed"
+)
+
+func (m TaskExecutionMode) Valid() bool {
+	switch m {
+	case TaskExecutionModeHumanOnly, TaskExecutionModeAgentAllowed:
+		return true
+	}
+	return false
+}
+
 // Task is a unit of work. Number is a short, sequential, human-facing
 // identifier ("look at 142") assigned once at creation and never reused —
 // tasks are never hard-deleted (only archived, via ArchivedAt), and Number
@@ -69,6 +88,7 @@ type Task struct {
 	Description    string
 	Status         TaskStatus
 	Priority       TaskPriority
+	ExecutionMode  TaskExecutionMode
 	AssigneeID     *uuid.UUID
 	CreatorID      uuid.UUID
 	StartDate      *time.Time
@@ -92,12 +112,21 @@ type TaskCompletionReadiness struct {
 	UnfinishedDependencies int
 }
 
+// ValidateAcceptance checks only the explicit acceptance contract. Agent
+// submission uses this gate because it moves work to in_review, not done.
+func (r TaskCompletionReadiness) ValidateAcceptance() error {
+	if r.ActiveCriteria > 0 && r.UnsatisfiedCriteria > 0 {
+		return fmt.Errorf("%w: task acceptance is not satisfied", ErrConflict)
+	}
+	return nil
+}
+
 // ValidateCompletion enforces the task's optional acceptance contract and
 // relationship readiness. Dependencies and children never prevent work from
 // starting; they only prevent the task from entering done.
 func (t Task) ValidateCompletion(readiness TaskCompletionReadiness) error {
-	if readiness.ActiveCriteria > 0 && readiness.UnsatisfiedCriteria > 0 {
-		return fmt.Errorf("%w: task acceptance is not satisfied", ErrConflict)
+	if err := readiness.ValidateAcceptance(); err != nil {
+		return err
 	}
 	if readiness.UnfinishedChildren > 0 {
 		return fmt.Errorf("%w: task has unfinished children", ErrConflict)
@@ -132,6 +161,7 @@ type TaskPatch struct {
 	Description    *string
 	Status         *TaskStatus
 	Priority       *TaskPriority
+	ExecutionMode  *TaskExecutionMode
 
 	AssigneeSet bool
 	AssigneeID  *uuid.UUID
@@ -165,6 +195,7 @@ type TaskPatch struct {
 func (p TaskPatch) IsEmpty() bool {
 	return p.Title == nil && p.Context == nil && p.ExpectedResult == nil &&
 		p.Description == nil && p.Status == nil && p.Priority == nil &&
+		p.ExecutionMode == nil &&
 		!p.AssigneeSet && !p.StartDateSet && !p.DueDateSet && !p.LabelsSet &&
 		!p.ProjectSet && !p.MilestoneSet && !p.ParentSet && !p.DependenciesSet &&
 		p.ScheduleShiftDays == nil

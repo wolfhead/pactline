@@ -59,12 +59,25 @@ func (Security) HandleSessionCookie(
 
 func requiredScope(operation generated.OperationName) access.Scope {
 	switch operation {
+	case generated.AddTaskClaimProgressOperation,
+		generated.AnswerTaskClaimQuestionOperation,
+		generated.AskTaskClaimQuestionOperation,
+		generated.ClaimTaskOperation,
+		generated.ExtendTaskClaimOperation,
+		generated.GetCurrentTaskClaimOperation,
+		generated.GetTaskClaimOperation,
+		generated.ListTaskClaimMessagesOperation,
+		generated.RecordTaskClaimAcceptanceCheckOperation,
+		generated.ReleaseTaskClaimOperation,
+		generated.SubmitTaskClaimOperation:
+		return access.ScopeWorkExecute
 	case generated.GetCurrentPrincipalOperation,
 		generated.GetProjectOperation,
 		generated.GetTaskOperation,
 		generated.ListLabelsOperation,
 		generated.ListMilestoneCriteriaOperation,
 		generated.ListProjectsOperation,
+		generated.ListTaskAgentConversationsOperation,
 		generated.ListTaskActivityOperation,
 		generated.ListTaskCommentsOperation,
 		generated.ListTaskCriteriaOperation,

@@ -46,6 +46,22 @@ func TestTaskValidateCompletionIncludesChildrenAndDependencies(t *testing.T) {
 	}
 }
 
+func TestTaskReadinessAcceptanceGateIgnoresCompletionRelationships(t *testing.T) {
+	readiness := domain.TaskCompletionReadiness{
+		ActiveCriteria:         2,
+		UnfinishedChildren:     1,
+		UnfinishedDependencies: 1,
+	}
+	if err := readiness.ValidateAcceptance(); err != nil {
+		t.Fatalf("ValidateAcceptance() error = %v, want nil", err)
+	}
+
+	readiness.UnsatisfiedCriteria = 1
+	if err := readiness.ValidateAcceptance(); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("ValidateAcceptance() error = %v, want ErrConflict", err)
+	}
+}
+
 func TestValidateSchedule(t *testing.T) {
 	start := time.Date(2026, 7, 30, 0, 0, 0, 0, time.UTC)
 	before := start.AddDate(0, 0, -1)

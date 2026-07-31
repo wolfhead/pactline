@@ -1,7 +1,15 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { createComment, deleteComment, listComments, updateComment } from '../../api/tasks'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import {
+  answerTaskClaimQuestion,
+  createComment,
+  deleteComment,
+  listComments,
+  listTaskAgentConversations,
+  releaseTaskClaim,
+  updateComment,
+} from '../../api/tasks'
 import { useIdentity } from '../../identity'
-import type { Comment } from '../../task-types'
+import type { Comment, TaskClaimConversation, TaskClaimMessage } from '../../task-types'
 import InlineEditable from './InlineEditable'
 
 interface CommentSectionProps {
@@ -20,7 +28,11 @@ export default function CommentSection({
 }: CommentSectionProps) {
   const { me } = useIdentity()
   const [comments, setComments] = useState<Comment[]>([])
+  const [conversations, setConversations] = useState<TaskClaimConversation[]>([])
   const [body, setBody] = useState('')
+  const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [answeringClaimID, setAnsweringClaimID] = useState('')
+  const [releasingClaimID, setReleasingClaimID] = useState('')
   const [posting, setPosting] = useState(false)
   const [error, setError] = useState('')
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({})
@@ -30,10 +42,11 @@ export default function CommentSection({
   // identity.tsx / WorkFeed.tsx.
   useEffect(() => {
     let cancelled = false
-    listComments(taskNumber)
-      .then((loaded) => {
+    Promise.all([listComments(taskNumber), listTaskAgentConversations(taskNumber)])
+      .then(([loadedComments, loadedConversations]) => {
         if (cancelled) return
-        setComments(loaded)
+        setComments(loadedComments)
+        setConversations(loadedConversations ?? [])
       })
       .catch((err) => {
         if (cancelled) return
@@ -43,6 +56,41 @@ export default function CommentSection({
       cancelled = true
     }
   }, [taskNumber, me?.id])
+
+  const timeline = useMemo(() => {
+    const entries: Array<
+      | { type: 'comment'; createdAt: string; comment: Comment }
+      | {
+        type: 'agent'
+        createdAt: string
+        message: TaskClaimMessage
+        conversation: TaskClaimConversation
+      }
+    > = comments.map((comment) => ({
+      type: 'comment' as const, createdAt: comment.created_at, comment,
+    }))
+    for (const conversation of conversations) {
+      for (const message of conversation.messages) {
+        entries.push({
+          type: 'agent', createdAt: message.created_at, message, conversation,
+        })
+      }
+    }
+    return entries.sort((left, right) => (
+      new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
+    ))
+  }, [comments, conversations])
+
+  const unfinishedConversation = useMemo(() => (
+    [...conversations].reverse().find(({ claim }) => (
+      claim.status === 'active' || claim.status === 'waiting_human'
+    ))
+  ), [conversations])
+
+  async function reloadConversations() {
+    const loaded = await listTaskAgentConversations(taskNumber)
+    setConversations(loaded ?? [])
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -87,16 +135,130 @@ export default function CommentSection({
     })
   }
 
+  async function answerQuestion(conversation: TaskClaimConversation) {
+    const answer = (answers[conversation.claim.id] ?? '').trim()
+    if (!answer || answeringClaimID) return
+    setAnsweringClaimID(conversation.claim.id)
+    setError('')
+    try {
+      await answerTaskClaimQuestion(conversation.claim.id, conversation.claim.version, answer)
+      await reloadConversations()
+      setAnswers((current) => ({ ...current, [conversation.claim.id]: '' }))
+    } catch (err) {
+      setError(`回复失败：${(err as Error).message}`)
+    } finally {
+      setAnsweringClaimID('')
+    }
+  }
+
+  async function releaseClaim(conversation: TaskClaimConversation) {
+    if (releasingClaimID) return
+    setReleasingClaimID(conversation.claim.id)
+    setError('')
+    try {
+      await releaseTaskClaim(conversation.claim.id, conversation.claim.version)
+      await Promise.all([reloadConversations(), onTaskChanged()])
+    } catch (err) {
+      setError(`释放失败：${(err as Error).message}`)
+    } finally {
+      setReleasingClaimID('')
+    }
+  }
+
   return (
     // role/aria-label rather than relying on the <h3> below: a landmark
     // with a stable name is what lets a caller (and the e2e suite) scope to
     // "the comments block" without walking the DOM upwards from a heading,
     // which breaks the moment this section grows a wrapper.
-    <section role="region" aria-label="评论" className="flex flex-col gap-3">
-      <h3 className="text-sm font-medium text-fg">评论</h3>
-      {comments.length === 0 && <p className="text-sm text-fg-muted">还没有评论。</p>}
+    <section role="region" aria-label="沟通时间线" className="flex flex-col gap-3">
+      <div>
+        <h3 className="text-sm font-medium text-fg">沟通时间线</h3>
+        <p className="mt-0.5 text-xs text-fg-muted">普通评论与 Agent 对话按发生时间共同呈现。</p>
+      </div>
+      {unfinishedConversation && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-secondary/25 bg-secondary/10 px-3 py-2.5">
+          <div>
+            <p className="text-sm font-medium text-fg">
+              {unfinishedConversation.claim.status === 'waiting_human'
+                ? 'Agent 正在等待回复'
+                : 'Agent 正在执行'}
+            </p>
+            <p className="mt-0.5 text-xs text-fg-muted">
+              {unfinishedConversation.claim.token_name || 'External Agent'}
+              {' · '}
+              {`有效至 ${new Date(unfinishedConversation.claim.expires_at).toLocaleString()}`}
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={Boolean(releasingClaimID)}
+            onClick={() => void releaseClaim(unfinishedConversation)}
+            className="rounded-md border border-border-strong bg-surface px-3 py-1.5 text-xs font-medium text-fg hover:bg-surface-subtle disabled:opacity-50"
+          >
+            {releasingClaimID === unfinishedConversation.claim.id ? '释放中…' : '释放 Claim'}
+          </button>
+        </div>
+      )}
+      {timeline.length === 0 && <p className="text-sm text-fg-muted">还没有评论或 Agent 对话。</p>}
       <ul className="flex flex-col gap-3">
-        {comments.map((c) => {
+        {timeline.map((entry) => {
+          if (entry.type === 'agent') {
+            const { message, conversation } = entry
+            const waitingForThisQuestion = message.kind === 'question'
+              && conversation.claim.status === 'waiting_human'
+              && !conversation.messages.some((candidate) => (
+                candidate.kind === 'answer' && candidate.reply_to_message_id === message.id
+              ))
+            return (
+              <li
+                key={message.id}
+                className={`rounded-md px-3 py-2.5 ${
+                  message.kind === 'question'
+                    ? 'bg-status-in-progress/10'
+                    : 'bg-secondary/10'
+                }`}
+              >
+                <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-muted">
+                  <span className="font-medium text-fg">
+                    {message.author_type === 'agent'
+                      ? (message.token_name || conversation.claim.token_name || 'Agent')
+                      : (me?.name ?? '人工回复')}
+                  </span>
+                  <span>{agentMessageLabel(message.kind)}</span>
+                  <span>· {new Date(message.created_at).toLocaleString()}</span>
+                </div>
+                <p className="whitespace-pre-wrap text-sm text-fg">{message.body}</p>
+                {waitingForThisQuestion && (
+                  <div className="mt-3 flex flex-col gap-2 border-t border-status-in-progress/20 pt-3">
+                    <label className="text-xs font-medium text-fg" htmlFor={`claim-answer-${conversation.claim.id}`}>
+                      回复 Agent 并恢复此任务
+                    </label>
+                    <textarea
+                      id={`claim-answer-${conversation.claim.id}`}
+                      rows={2}
+                      value={answers[conversation.claim.id] ?? ''}
+                      onChange={(event) => setAnswers((current) => ({
+                        ...current, [conversation.claim.id]: event.target.value,
+                      }))}
+                      className="rounded-md border border-border-strong bg-surface px-2 py-1.5 text-sm text-fg"
+                    />
+                    <button
+                      type="button"
+                      disabled={
+                        !(answers[conversation.claim.id] ?? '').trim()
+                        || answeringClaimID === conversation.claim.id
+                      }
+                      onClick={() => void answerQuestion(conversation)}
+                      className="self-end rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-fg disabled:opacity-50"
+                    >
+                      {answeringClaimID === conversation.claim.id ? '发送中…' : '发送回复'}
+                    </button>
+                  </div>
+                )}
+              </li>
+            )
+          }
+          const c = entry.comment
           const mine = me?.id === c.author_id
           return (
             <li key={c.id} className="rounded-md border border-border p-3">
@@ -129,6 +291,7 @@ export default function CommentSection({
         })}
       </ul>
 
+      <h4 className="text-xs font-medium text-fg-muted">添加普通评论</h4>
       <form className="flex flex-col gap-2 rounded-md border border-border bg-surface-subtle p-3" onSubmit={submit}>
         <textarea
           value={body}
@@ -149,4 +312,14 @@ export default function CommentSection({
       {error && <p className="text-sm text-danger">{error}</p>}
     </section>
   )
+}
+
+function agentMessageLabel(kind: TaskClaimMessage['kind']): string {
+  switch (kind) {
+    case 'progress': return '进展'
+    case 'question': return '需要确认'
+    case 'answer': return '人工回复'
+    case 'handoff': return '释放说明'
+    case 'submission': return '提交预验收'
+  }
 }

@@ -22,6 +22,24 @@ func (UnimplementedHandler) ActivateMilestone(ctx context.Context, params Activa
 	return r, ht.ErrNotImplemented
 }
 
+// AddTaskClaimProgress implements addTaskClaimProgress operation.
+//
+// Add an Agent progress message.
+//
+// POST /api/v1/claims/{id}/progress
+func (UnimplementedHandler) AddTaskClaimProgress(ctx context.Context, req *TaskClaimAgentMessage, params AddTaskClaimProgressParams) (r AddTaskClaimProgressRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// AnswerTaskClaimQuestion implements answerTaskClaimQuestion operation.
+//
+// Answer the pending Agent question and resume the Claim.
+//
+// POST /api/v1/claims/{id}/answer
+func (UnimplementedHandler) AnswerTaskClaimQuestion(ctx context.Context, req *TaskClaimHumanAnswer, params AnswerTaskClaimQuestionParams) (r AnswerTaskClaimQuestionRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // ArchiveProject implements archiveProject operation.
 //
 // Archive a project.
@@ -40,12 +58,30 @@ func (UnimplementedHandler) ArchiveTask(ctx context.Context, params ArchiveTaskP
 	return r, ht.ErrNotImplemented
 }
 
+// AskTaskClaimQuestion implements askTaskClaimQuestion operation.
+//
+// Ask a human question and pause the Claim.
+//
+// POST /api/v1/claims/{id}/ask
+func (UnimplementedHandler) AskTaskClaimQuestion(ctx context.Context, req *TaskClaimAgentMessage, params AskTaskClaimQuestionParams) (r AskTaskClaimQuestionRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // CancelMilestone implements cancelMilestone operation.
 //
 // Cancel a milestone.
 //
 // POST /api/v1/projects/{number}/milestones/{id}/cancel
 func (UnimplementedHandler) CancelMilestone(ctx context.Context, req OptLifecycleRequest, params CancelMilestoneParams) (r CancelMilestoneRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ClaimTask implements claimTask operation.
+//
+// Claim an eligible assigned task for this client session.
+//
+// POST /api/v1/tasks/{number}/claim
+func (UnimplementedHandler) ClaimTask(ctx context.Context, req *TaskClaimSession, params ClaimTaskParams) (r ClaimTaskRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -157,12 +193,30 @@ func (UnimplementedHandler) DeleteTaskComment(ctx context.Context, params Delete
 	return r, ht.ErrNotImplemented
 }
 
+// ExtendTaskClaim implements extendTaskClaim operation.
+//
+// Extend an active Claim.
+//
+// POST /api/v1/claims/{id}/extend
+func (UnimplementedHandler) ExtendTaskClaim(ctx context.Context, req *TaskClaimSession, params ExtendTaskClaimParams) (r ExtendTaskClaimRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetCurrentPrincipal implements getCurrentPrincipal operation.
 //
 // Get the authenticated principal.
 //
 // GET /api/v1/me
 func (UnimplementedHandler) GetCurrentPrincipal(ctx context.Context) (r GetCurrentPrincipalRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetCurrentTaskClaim implements getCurrentTaskClaim operation.
+//
+// Get the unfinished Claim owned by this client session.
+//
+// GET /api/v1/agent/claims/current
+func (UnimplementedHandler) GetCurrentTaskClaim(ctx context.Context, params GetCurrentTaskClaimParams) (r GetCurrentTaskClaimRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -181,6 +235,15 @@ func (UnimplementedHandler) GetProject(ctx context.Context, params GetProjectPar
 //
 // GET /api/v1/tasks/{number}
 func (UnimplementedHandler) GetTask(ctx context.Context, params GetTaskParams) (r GetTaskRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetTaskClaim implements getTaskClaim operation.
+//
+// Get a Claim.
+//
+// GET /api/v1/claims/{id}
+func (UnimplementedHandler) GetTaskClaim(ctx context.Context, params GetTaskClaimParams) (r GetTaskClaimRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -220,6 +283,24 @@ func (UnimplementedHandler) ListTaskActivity(ctx context.Context, params ListTas
 	return r, ht.ErrNotImplemented
 }
 
+// ListTaskAgentConversations implements listTaskAgentConversations operation.
+//
+// List Agent conversations for the task timeline.
+//
+// GET /api/v1/tasks/{number}/agent-conversations
+func (UnimplementedHandler) ListTaskAgentConversations(ctx context.Context, params ListTaskAgentConversationsParams) (r ListTaskAgentConversationsRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListTaskClaimMessages implements listTaskClaimMessages operation.
+//
+// List the immutable Agent conversation for a Claim.
+//
+// GET /api/v1/claims/{id}/messages
+func (UnimplementedHandler) ListTaskClaimMessages(ctx context.Context, params ListTaskClaimMessagesParams) (r ListTaskClaimMessagesRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // ListTaskComments implements listTaskComments operation.
 //
 // List task comments.
@@ -256,6 +337,24 @@ func (UnimplementedHandler) ListUsers(ctx context.Context, params ListUsersParam
 	return r, ht.ErrNotImplemented
 }
 
+// RecordTaskClaimAcceptanceCheck implements recordTaskClaimAcceptanceCheck operation.
+//
+// Record an acceptance check owned by the active Claim.
+//
+// POST /api/v1/claims/{id}/criteria/{criterion_id}/checks
+func (UnimplementedHandler) RecordTaskClaimAcceptanceCheck(ctx context.Context, req *TaskClaimAcceptanceCheckCreate, params RecordTaskClaimAcceptanceCheckParams) (r RecordTaskClaimAcceptanceCheckRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ReleaseTaskClaim implements releaseTaskClaim operation.
+//
+// Release a Claim.
+//
+// POST /api/v1/claims/{id}/release
+func (UnimplementedHandler) ReleaseTaskClaim(ctx context.Context, req *TaskClaimRelease, params ReleaseTaskClaimParams) (r ReleaseTaskClaimRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // ReopenMilestone implements reopenMilestone operation.
 //
 // Reopen a milestone.
@@ -280,6 +379,15 @@ func (UnimplementedHandler) RestoreProject(ctx context.Context, params RestorePr
 //
 // POST /api/v1/tasks/{number}/restore
 func (UnimplementedHandler) RestoreTask(ctx context.Context, params RestoreTaskParams) (r RestoreTaskRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// SubmitTaskClaim implements submitTaskClaim operation.
+//
+// Submit verified Agent work for human review.
+//
+// POST /api/v1/claims/{id}/submit
+func (UnimplementedHandler) SubmitTaskClaim(ctx context.Context, req *TaskClaimAgentMessage, params SubmitTaskClaimParams) (r SubmitTaskClaimRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

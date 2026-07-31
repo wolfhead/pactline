@@ -1,4 +1,12 @@
-import { PRIORITY_LABELS, STATUS_LABELS, type Activity, type TaskPriority, type TaskStatus } from '../../task-types'
+import {
+  EXECUTION_MODE_LABELS,
+  PRIORITY_LABELS,
+  STATUS_LABELS,
+  type Activity,
+  type TaskExecutionMode,
+  type TaskPriority,
+  type TaskStatus,
+} from '../../task-types'
 
 /**
  * Turns one activity_log row into a plain-language sentence. The store
@@ -31,6 +39,15 @@ export function describeActivity(activity: Activity, actorName: string, userName
       const from = activity.old_value ? PRIORITY_LABELS[activity.old_value as TaskPriority] ?? activity.old_value : '无'
       const to = activity.new_value ? PRIORITY_LABELS[activity.new_value as TaskPriority] ?? activity.new_value : '无'
       return `${who} 将优先级从「${from}」改为「${to}」`
+    }
+    case 'execution_mode': {
+      const from = activity.old_value
+        ? EXECUTION_MODE_LABELS[activity.old_value as TaskExecutionMode] ?? activity.old_value
+        : '仅人工执行'
+      const to = activity.new_value
+        ? EXECUTION_MODE_LABELS[activity.new_value as TaskExecutionMode] ?? activity.new_value
+        : '仅人工执行'
+      return `${who} 将执行方式从「${from}」改为「${to}」`
     }
     case 'assignee': {
       const from = activity.old_value ? (userNameById[activity.old_value] ?? '未知用户') : '未分配'

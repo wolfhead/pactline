@@ -106,6 +106,16 @@ production `X-User-Id` fallback.
   `planned | active | completed | cancelled` lifecycle states. Multiple
   milestones may be active in one Project.
 - Priorities are labels, not scheduling constraints.
+- `execution_mode` is explicit delegation: only an assigned, unarchived
+  `agent_allowed` Task in `todo` may be claimed by an external Codex session.
+- A third-party `TaskClaim` is bound to the real client session ID. One session
+  may hold at most one unfinished Claim; Claims are never transferred between
+  sessions. Claiming moves `todo` to `in_progress`, submission moves
+  `in_progress` to `in_review`, and only a human may finish the Task.
+- Agent conversation messages are immutable and separate from ordinary
+  comments, although the task communication timeline presents both streams.
+- The `work:execute` scope permits Claim-owned transitions and acceptance
+  checks but not task-definition, criterion, Project, or comment mutation.
 - Tasks are archived/restored, never hard-deleted. Their sequential numbers are
   stable and never reused.
 - An unassigned task and a missing due date are valid first-class states.
