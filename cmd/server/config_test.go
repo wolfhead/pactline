@@ -84,7 +84,7 @@ func TestRabbitMQConfiguration(t *testing.T) {
 	cfg := validProductionConfig()
 	cfg.RabbitMQURL = "https://rabbit.example.test"
 	require.ErrorContains(t, cfg.Validate(), "RABBITMQ_URL")
-	cfg.RabbitMQURL = "amqps://pactline:secret@rabbit.example.test/vhost"
+	cfg.RabbitMQURL = "amqps://pactline:secret@example.test/vhost"
 	require.NoError(t, cfg.Validate())
 }
 
