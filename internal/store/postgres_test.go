@@ -531,7 +531,7 @@ func TestIdentityMigrationConsolidatesSeedAttribution(t *testing.T) {
 		{"tasks.creator_id", `SELECT creator_id FROM tasks WHERE id = $1`, []any{taskID}, 1},
 		{"task_comments.author_id", `SELECT author_id FROM task_comments WHERE id = $1`, []any{commentID}, 1},
 		{"task_activity.actor_id", `SELECT actor_id FROM task_activity WHERE id = $1`, []any{taskActivityID}, 1},
-		{"projects.owner_id", `SELECT owner_id FROM projects WHERE id = $1`, []any{projectID}, 1},
+		{"project_memberships.admin", `SELECT user_id FROM project_memberships WHERE project_id = $1 AND role = 'admin'`, []any{projectID}, 1},
 		{"projects.creator_id", `SELECT creator_id FROM projects WHERE id = $1`, []any{projectID}, 1},
 		{"acceptance_checks.checked_by_user_id", `SELECT checked_by_user_id FROM acceptance_checks WHERE id = $1`, []any{acceptanceCheckID}, 1},
 		{"project_activity.actor_id", `SELECT actor_id FROM project_activity WHERE id = $1`, []any{projectActivityID}, 1},

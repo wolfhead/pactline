@@ -26,6 +26,7 @@ output/playwright/
 .env
 .env.local
 *.local
+.data/
 .worktrees/
 
 # Brainstorming mockups (the sdd/ reports alongside them are tracked)

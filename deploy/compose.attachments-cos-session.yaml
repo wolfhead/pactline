@@ -1,0 +1,10 @@
+services:
+  api:
+    environment:
+      ATTACHMENT_COS_SESSION_TOKEN_FILE: /run/secrets/attachment_cos_session_token
+    secrets:
+      - attachment_cos_session_token
+
+secrets:
+  attachment_cos_session_token:
+    file: ${PACTLINE_SECRETS_DIR:-./deploy/secrets}/attachment_cos_session_token

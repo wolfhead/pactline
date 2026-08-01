@@ -127,7 +127,6 @@ func TestMovingParentMovesChildrenAtomically(t *testing.T) {
 
 	project, err := projects.Create(ctx, domain.Project{
 		Name:      "Relationship movement test",
-		OwnerID:   userA,
 		CreatorID: userA,
 	})
 	require.NoError(t, err)

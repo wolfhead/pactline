@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "reaction-image-not-evidence",
+  "name": "A reaction image must not consume artifact inspection",
+  "business_context": "A clear operational follow-up is followed by a celebratory reaction image that contains no task evidence.",
+  "judge_context": "The text uniquely supports one investigation Task. The reaction image is irrelevant and should not be inspected or mentioned as evidence. Priority must remain none because urgency or a priority label was never assigned.",
+  "trigger": {
+    "message_id": "reaction-trigger",
+    "text": "请根据以上讨论在 Media Integration 项目创建一个任务。",
+    "sender": "Team Lead",
+    "at": "2026-07-31T21:10:00+08:00"
+  },
+  "messages": [
+    {
+      "message_id": "reaction-decision",
+      "sender": "Service Engineer",
+      "role": "service",
+      "text": "今天的发布后发现媒体预算缓存没有按新配置刷新，请建项排查失效链路，并给出可复现的根因和修复建议。",
+      "at": "2026-07-31T21:00:00+08:00"
+    },
+    {
+      "message_id": "reaction-image",
+      "sender": "Developer",
+      "role": "developer",
+      "text": "庆祝表情包，与问题无关。",
+      "artifacts": [
+        {
+          "id": "celebration-reaction-image",
+          "kind": "image",
+          "name": "great-job.png",
+          "media_type": "image/png",
+          "fixture": "celebration-reaction.image.json"
+        }
+      ],
+      "at": "2026-07-31T21:02:00+08:00"
+    }
+  ],
+  "projects": [{"number": 12, "name": "Media Integration"}]
+}

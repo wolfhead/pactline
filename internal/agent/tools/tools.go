@@ -4,6 +4,7 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -16,6 +17,7 @@ import (
 	"unicode/utf8"
 
 	pactagent "github.com/wolfhead/pactline/internal/agent"
+	"github.com/wolfhead/pactline/internal/agent/artifact"
 	"github.com/wolfhead/pactline/internal/agent/channel"
 	generated "github.com/wolfhead/pactline/internal/api/v1generated"
 
@@ -27,6 +29,7 @@ import (
 
 const (
 	ToolGetConversationContext = "get_conversation_context"
+	ToolInspectArtifact        = "inspect_artifact"
 	ToolSearchProjects         = "search_projects"
 	ToolSearchUsers            = "search_users"
 	ToolAskUser                = "ask_user"
@@ -71,13 +74,15 @@ type RunRepository interface {
 }
 
 type Config struct {
-	Run        pactagent.Run
-	WorkerID   string
-	Client     OpenAPIClient
-	Channel    channel.ChannelAdapter
-	Repository RunRepository
-	Now        func() time.Time
-	Timezone   *time.Location
+	Run               pactagent.Run
+	WorkerID          string
+	Client            OpenAPIClient
+	Channel           channel.ChannelAdapter
+	Repository        RunRepository
+	Now               func() time.Time
+	Timezone          *time.Location
+	Artifacts         artifact.Resolver
+	ArtifactDescriber artifact.Describer
 }
 
 type Set struct {
@@ -89,6 +94,9 @@ type Set struct {
 func NewSet(config Config) (Set, error) {
 	if config.Run.ID == uuid.Nil || config.WorkerID == "" ||
 		config.Client == nil || config.Repository == nil {
+		return Set{}, ErrToolConfiguration
+	}
+	if (config.Artifacts == nil) != (config.ArtifactDescriber == nil) {
 		return Set{}, ErrToolConfiguration
 	}
 	if config.Now == nil {
@@ -114,6 +122,11 @@ func NewSet(config Config) (Set, error) {
 			return Set{}, fmt.Errorf("configure conversation context tool: %w", err)
 		}
 		tools = append(tools, contextTool)
+	}
+	if config.Artifacts != nil {
+		tools = append(tools, &InspectArtifactTool{
+			config: config, responseState: responseState,
+		})
 	}
 	projectTool, err := toolutils.InferTool(
 		ToolSearchProjects,
@@ -194,7 +207,7 @@ func NewSet(config Config) (Set, error) {
 		return Set{}, fmt.Errorf("configure Milestone overview tool: %w", err)
 	}
 	createTask := &CreateTaskTool{config: config, responseState: responseState}
-	respond := &RespondTool{config: config, state: responseState}
+	respond := &RespondTool{config: config, state: responseState, createTask: createTask}
 	tools = append(
 		tools,
 		projectTool,
@@ -331,8 +344,83 @@ func searchUsers(
 }
 
 type GetConversationContextInput struct {
-	BeforeCursor string `json:"before_cursor" jsonschema:"description=Opaque cursor returned by the preceding context page; omit for the first older page"`
+	BeforeCursor string `json:"before_cursor" jsonschema:"description=Opaque cursor returned by the preceding context page; omit for the first older page; never pass a message ID"`
 	PageSize     int    `json:"page_size" jsonschema:"required,description=Number of messages from 1 through 20"`
+}
+
+type InspectArtifactInput struct {
+	ArtifactID   string `json:"artifact_id" jsonschema:"required,description=Opaque artifact ID from a bounded conversation message"`
+	AnalysisGoal string `json:"analysis_goal" jsonschema:"required,description=Specific decision question the attachment description must answer"`
+}
+
+type InspectArtifactTool struct {
+	config        Config
+	responseState *responseState
+}
+
+func (t *InspectArtifactTool) Info(context.Context) (*schema.ToolInfo, error) {
+	return toolutils.GoStruct2ToolInfo[InspectArtifactInput](
+		ToolInspectArtifact,
+		"Describe one decision-relevant conversation artifact once for a specific analysis_goal. The result is a one-shot LLM description of bounded attachment evidence, not raw parser output. Large CSV and XLSX results describe only bounded samples. Do not call this tool twice for the same artifact.",
+	)
+}
+
+func (t *InspectArtifactTool) InvokableRun(
+	ctx context.Context,
+	arguments string,
+	_ ...tool.Option,
+) (string, error) {
+	if err := t.responseState.ensureOpen(); err != nil {
+		return "", err
+	}
+	var input InspectArtifactInput
+	if err := json.Unmarshal([]byte(arguments), &input); err != nil {
+		return "", fmt.Errorf("%w: decode inspect_artifact: %w", ErrToolInput, err)
+	}
+	description, err := inspectArtifact(ctx, t.config, input)
+	if err != nil {
+		return "", err
+	}
+	encoded, err := json.Marshal(description)
+	if err != nil {
+		return "", fmt.Errorf("encode artifact description: %w", err)
+	}
+	return string(encoded), nil
+}
+
+func inspectArtifact(
+	ctx context.Context,
+	config Config,
+	input InspectArtifactInput,
+) (string, error) {
+	artifactID := strings.TrimSpace(input.ArtifactID)
+	if artifactID == "" {
+		return "", fmt.Errorf("%w: artifact_id is required", ErrToolInput)
+	}
+	analysisGoal := strings.TrimSpace(input.AnalysisGoal)
+	if analysisGoal == "" {
+		return "", fmt.Errorf("%w: analysis_goal is required", ErrToolInput)
+	}
+	local, err := config.Artifacts.Resolve(ctx, artifact.Scope{
+		RunID:          config.Run.ID,
+		TenantID:       config.Run.TenantID,
+		ConversationID: config.Run.ConversationID,
+		NotBefore:      config.Run.TriggerOccurredAt.Add(-channel.MaxContextAge),
+		NotAfter:       config.Run.TriggerOccurredAt,
+	}, artifactID)
+	if err != nil {
+		return "", fmt.Errorf("inspect conversation artifact: %w", err)
+	}
+	result, inspectErr := config.ArtifactDescriber.Describe(ctx, local, analysisGoal)
+	if local.Cleanup != nil {
+		if cleanupErr := local.Cleanup(); cleanupErr != nil {
+			inspectErr = errors.Join(inspectErr, fmt.Errorf("clean conversation artifact: %w", cleanupErr))
+		}
+	}
+	if inspectErr != nil {
+		return "", inspectErr
+	}
+	return result, nil
 }
 
 type ConversationContextResult struct {
@@ -455,14 +543,60 @@ func askUser(ctx context.Context, input AskUserInput) (AskUserResult, error) {
 }
 
 type CreateTaskInput struct {
-	Title          string     `json:"title" jsonschema:"required,description=Concise Task title"`
-	Context        string     `json:"context" jsonschema:"required,description=Why the Task is needed"`
-	ExpectedResult string     `json:"expected_result" jsonschema:"required,description=Observable result expected at completion"`
-	ProjectNumber  int64      `json:"project_number" jsonschema:"required,description=Resolved Pactline Project number"`
-	MilestoneID    *uuid.UUID `json:"milestone_id" jsonschema:"description=Resolved milestone UUID or null for Project Backlog"`
-	AssigneeID     *uuid.UUID `json:"assignee_id" jsonschema:"description=Resolved user UUID or null when unassigned"`
-	DueDate        *string    `json:"due_date" jsonschema:"description=Unambiguous YYYY-MM-DD date or null"`
-	Priority       string     `json:"priority" jsonschema:"required,description=One of none low medium high urgent"`
+	Title          string  `json:"title" jsonschema:"required,description=Concise Task title"`
+	Context        string  `json:"context" jsonschema:"required,description=Why the Task is needed"`
+	ExpectedResult string  `json:"expected_result" jsonschema:"required,description=Observable result expected at completion"`
+	ProjectNumber  int64   `json:"project_number" jsonschema:"required,description=Resolved Pactline Project number"`
+	MilestoneID    *string `json:"milestone_id" jsonschema:"description=Resolved milestone UUID string or null for Project Backlog"`
+	AssigneeID     *string `json:"assignee_id" jsonschema:"description=Resolved user UUID string or null when unassigned"`
+	DueDate        *string `json:"due_date" jsonschema:"description=Unambiguous YYYY-MM-DD date or null"`
+	Priority       string  `json:"priority" jsonschema:"required,description=One of none low medium high urgent; use none unless the conversation explicitly assigns priority"`
+}
+
+// UnmarshalJSON accepts an empty array as null for nullable scalar IDs. Some
+// tool-calling models emit [] for an unset optional field even when the schema
+// says UUID or null. Non-empty arrays and all other invalid shapes still fail.
+func (i *CreateTaskInput) UnmarshalJSON(encoded []byte) error {
+	type plainCreateTaskInput CreateTaskInput
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &object); err != nil || object == nil {
+		if err != nil {
+			return err
+		}
+		return errors.New("create_task input must be a JSON object")
+	}
+	for _, field := range []string{"milestone_id", "assignee_id"} {
+		value := bytes.TrimSpace(object[field])
+		if bytes.Equal(value, []byte("[]")) {
+			object[field] = json.RawMessage("null")
+			continue
+		}
+		if len(value) > 0 && value[0] == '[' {
+			var octets []int
+			if err := json.Unmarshal(value, &octets); err != nil || len(octets) != len(uuid.UUID{}) {
+				return fmt.Errorf("%s must be a UUID string or null", field)
+			}
+			var id uuid.UUID
+			for index, octet := range octets {
+				if octet < 0 || octet > 255 {
+					return fmt.Errorf("%s must be a UUID string or null", field)
+				}
+				id[index] = byte(octet)
+			}
+			encodedID, _ := json.Marshal(id.String())
+			object[field] = encodedID
+		}
+	}
+	normalized, err := json.Marshal(object)
+	if err != nil {
+		return err
+	}
+	var decoded plainCreateTaskInput
+	if err := json.Unmarshal(normalized, &decoded); err != nil {
+		return err
+	}
+	*i = CreateTaskInput(decoded)
+	return nil
 }
 
 type CreatedTask struct {
@@ -547,17 +681,31 @@ func (t *CreateTaskTool) create(ctx context.Context, input CreateTaskInput) (Cre
 		ProjectNumber:  input.ProjectNumber,
 	}
 	if input.MilestoneID != nil {
-		request.MilestoneID = generated.NewOptNilUUID(*input.MilestoneID)
+		milestoneID, present, parseErr := parseOptionalUUID(*input.MilestoneID)
+		if parseErr != nil {
+			return CreatedTask{}, fmt.Errorf("%w: milestone_id must be a UUID", ErrToolInput)
+		}
+		if present {
+			request.MilestoneID = generated.NewOptNilUUID(milestoneID)
+		}
 	}
 	if input.AssigneeID != nil {
-		request.AssigneeID = generated.NewOptNilUUID(*input.AssigneeID)
+		assigneeID, present, parseErr := parseOptionalUUID(*input.AssigneeID)
+		if parseErr != nil {
+			return CreatedTask{}, fmt.Errorf("%w: assignee_id must be a UUID", ErrToolInput)
+		}
+		if present {
+			request.AssigneeID = generated.NewOptNilUUID(assigneeID)
+		}
 	}
 	if input.DueDate != nil {
-		dueDate, parseErr := time.Parse("2006-01-02", strings.TrimSpace(*input.DueDate))
+		dueDate, present, parseErr := parseOptionalDueDate(*input.DueDate)
 		if parseErr != nil {
 			return CreatedTask{}, fmt.Errorf("%w: due_date must use YYYY-MM-DD", ErrToolInput)
 		}
-		request.DueDate = generated.NewOptNilDate(dueDate)
+		if present {
+			request.DueDate = generated.NewOptNilDate(dueDate)
+		}
 	}
 	response, err := t.config.Client.CreateTask(ctx, request, generated.CreateTaskParams{
 		IdempotencyKey: generated.NewOptString(
@@ -592,6 +740,30 @@ func (t *CreateTaskTool) create(ctx context.Context, input CreateTaskInput) (Cre
 	t.last = &taskResult
 	t.mu.Unlock()
 	return taskResult, nil
+}
+
+func parseOptionalDueDate(value string) (time.Time, bool, error) {
+	value = strings.TrimSpace(value)
+	if value == "" || strings.EqualFold(value, "null") {
+		return time.Time{}, false, nil
+	}
+	parsed, err := time.Parse("2006-01-02", value)
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	return parsed, true, nil
+}
+
+func parseOptionalUUID(value string) (uuid.UUID, bool, error) {
+	value = strings.TrimSpace(value)
+	if value == "" || strings.EqualFold(value, "null") {
+		return uuid.Nil, false, nil
+	}
+	id, err := uuid.Parse(value)
+	if err != nil || id == uuid.Nil {
+		return uuid.Nil, false, errors.New("invalid UUID")
+	}
+	return id, true, nil
 }
 
 func taskPriority(value string) (generated.TaskPriority, error) {

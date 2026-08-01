@@ -1,0 +1,12 @@
+{
+  "width": 760,
+  "height": 280,
+  "lines": [
+    "Budget timeout report",
+    "account_id    timeout_rate",
+    "acct-101      37.6%",
+    "acct-102      38.2%",
+    "acct-103      49.4%",
+    "Traffic release is blocked"
+  ]
+}

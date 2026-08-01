@@ -18,6 +18,10 @@ func cleanupProject(t *testing.T, db *store.DB, projectID uuid.UUID) {
 		ctx := context.Background()
 		statements := []string{
 			`DELETE FROM business_audit_events
+			WHERE entity_type='project_membership' AND entity_id IN (
+				SELECT id FROM project_memberships WHERE project_id=$1
+			)`,
+			`DELETE FROM business_audit_events
 			WHERE (entity_type='project' AND entity_id=$1)
 			   OR (entity_type='milestone' AND entity_id IN (
 					SELECT id FROM milestones WHERE project_id=$1
@@ -55,6 +59,58 @@ func cleanupProject(t *testing.T, db *store.DB, projectID uuid.UUID) {
 	})
 }
 
+func TestProjectMembershipsProtectLastActiveAdministrator(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	projects := store.NewProjectStore(db)
+	memberships := store.NewProjectMembershipStore(db)
+
+	project, err := projects.Create(ctx, domain.Project{
+		Name: "Membership invariants", CreatorID: userA,
+	})
+	require.NoError(t, err)
+	cleanupProject(t, db, project.Project.ID)
+
+	creatorMembership, err := memberships.Get(ctx, project.Project.ID, userA)
+	require.NoError(t, err)
+	require.Equal(t, domain.ProjectRoleAdmin, creatorMembership.Role)
+
+	_, err = memberships.ChangeRole(
+		ctx, project.Project.ID, userA, domain.ProjectRoleMember, 1,
+		domain.SessionOperation(userA, "membership-test"),
+	)
+	require.ErrorIs(t, err, domain.ErrConflict)
+
+	var wasActive bool
+	require.NoError(t, db.Pool.QueryRow(ctx, `SELECT active FROM users WHERE id=$1`, userB).Scan(&wasActive))
+	if !wasActive {
+		require.NoError(t, store.NewUserStore(db).SetActive(ctx, userB, true))
+		t.Cleanup(func() {
+			require.NoError(t, store.NewUserStore(db).SetActive(context.Background(), userB, false))
+		})
+	}
+
+	added, err := memberships.Add(
+		ctx, project.Project.ID, userB, domain.ProjectRoleAdmin, 1,
+		domain.SessionOperation(userA, "membership-test"),
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), added.ProjectVersion)
+
+	demoted, err := memberships.ChangeRole(
+		ctx, project.Project.ID, userA, domain.ProjectRoleMember, 2,
+		domain.SessionOperation(userA, "membership-test"),
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(3), demoted.ProjectVersion)
+
+	_, err = memberships.Remove(
+		ctx, project.Project.ID, userB, 3,
+		domain.SessionOperation(userA, "membership-test"),
+	)
+	require.ErrorIs(t, err, domain.ErrConflict)
+}
+
 func TestProjectArchiveRequiresConcludedMilestonesAndTasks(t *testing.T) {
 	db := newTestDB(t)
 	projects := store.NewProjectStore(db)
@@ -64,7 +120,7 @@ func TestProjectArchiveRequiresConcludedMilestonesAndTasks(t *testing.T) {
 	actor := domain.Actor{Type: domain.ActorTypeUser, UserID: &userA}
 
 	project, err := projects.Create(ctx, domain.Project{
-		Name: "Task Manager", OwnerID: userA, CreatorID: userA,
+		Name: "Task Manager", CreatorID: userA,
 	})
 	require.NoError(t, err)
 	cleanupProject(t, db, project.Project.ID)
@@ -107,12 +163,12 @@ func TestTaskRejectsMilestoneFromAnotherProject(t *testing.T) {
 	ctx := context.Background()
 
 	first, err := projects.Create(ctx, domain.Project{
-		Name: "First", OwnerID: userA, CreatorID: userA,
+		Name: "First", CreatorID: userA,
 	})
 	require.NoError(t, err)
 	cleanupProject(t, db, first.Project.ID)
 	second, err := projects.Create(ctx, domain.Project{
-		Name: "Second", OwnerID: userA, CreatorID: userA,
+		Name: "Second", CreatorID: userA,
 	})
 	require.NoError(t, err)
 	cleanupProject(t, db, second.Project.ID)
@@ -139,7 +195,7 @@ func TestAcceptanceExternalCheckerRequiresDatabaseReference(t *testing.T) {
 	ctx := context.Background()
 
 	project, err := projects.Create(ctx, domain.Project{
-		Name: "Agent checks", OwnerID: userA, CreatorID: userA,
+		Name: "Agent checks", CreatorID: userA,
 	})
 	require.NoError(t, err)
 	cleanupProject(t, db, project.Project.ID)
@@ -171,7 +227,7 @@ func TestRemovingActiveMilestoneCriterionRequiresReasonAndRetainsOne(t *testing.
 	actor := domain.Actor{Type: domain.ActorTypeUser, UserID: &userA}
 
 	project, err := projects.Create(ctx, domain.Project{
-		Name: "Scope audit", OwnerID: userA, CreatorID: userA,
+		Name: "Scope audit", CreatorID: userA,
 	})
 	require.NoError(t, err)
 	cleanupProject(t, db, project.Project.ID)

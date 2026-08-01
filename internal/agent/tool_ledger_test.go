@@ -75,6 +75,27 @@ func TestToolLedgerRecordsAndReplaysJSONResult(t *testing.T) {
 	require.JSONEq(t, `{"ok":true,"evidence_id":"call-1"}`, output.Result)
 }
 
+func TestToolLedgerPreservesNaturalLanguageStringResult(t *testing.T) {
+	repository := &ledgerRepositoryStub{
+		claim: ToolCallClaim{Kind: ToolCallClaimAcquired},
+	}
+	endpoint := ToolLedger{
+		RunID: uuid.New(), Repository: repository,
+	}.Middleware().Invokable(
+		func(_ context.Context, _ *compose.ToolInput) (*compose.ToolOutput, error) {
+			return &compose.ToolOutput{Result: `"The attachment describes a bounded sample."`}, nil
+		},
+	)
+
+	output, err := endpoint(context.Background(), &compose.ToolInput{
+		CallID: "inspect-1", Name: "inspect_artifact", Arguments: `{}`,
+	})
+
+	require.NoError(t, err)
+	require.JSONEq(t, `"The attachment describes a bounded sample."`, output.Result)
+	require.JSONEq(t, `"The attachment describes a bounded sample."`, string(repository.completed))
+}
+
 func TestToolLedgerReexecutesIncompleteCallAfterWorkerRecovery(t *testing.T) {
 	repository := &ledgerRepositoryStub{
 		claim: ToolCallClaim{Kind: ToolCallClaimRunning},

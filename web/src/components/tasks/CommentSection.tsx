@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import {
   answerTaskClaimQuestion,
   createComment,
@@ -8,6 +8,7 @@ import {
   releaseTaskClaim,
   updateComment,
 } from '../../api/tasks'
+import { listProjectMembers, type ProjectMembership } from '@/api/projects'
 import { useIdentity } from '../../identity'
 import type {
   Comment,
@@ -21,6 +22,7 @@ import SubmissionReview from './SubmissionReview'
 
 interface CommentSectionProps {
   taskNumber: number
+  projectNumber: number
   taskVersion: number
   taskStatus: TaskStatus
   acceptanceCriteria: AcceptanceCriterion[]
@@ -39,6 +41,7 @@ interface CommentSectionProps {
  * button to click that would just 403. */
 export default function CommentSection({
   taskNumber,
+  projectNumber,
   taskVersion,
   taskStatus,
   acceptanceCriteria,
@@ -49,8 +52,12 @@ export default function CommentSection({
 }: CommentSectionProps) {
   const { me } = useIdentity()
   const [comments, setComments] = useState<Comment[]>([])
+  const [members, setMembers] = useState<ProjectMembership[]>([])
   const [conversations, setConversations] = useState<TaskClaimConversation[]>([])
   const [body, setBody] = useState('')
+  const [replyToCommentID, setReplyToCommentID] = useState('')
+  const [mentionedUserIDs, setMentionedUserIDs] = useState<string[]>([])
+  const composerRef = useRef<HTMLTextAreaElement>(null)
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [answeringClaimID, setAnsweringClaimID] = useState('')
   const [releasingClaimID, setReleasingClaimID] = useState('')
@@ -64,11 +71,16 @@ export default function CommentSection({
   // identity.tsx / WorkFeed.tsx.
   useEffect(() => {
     let cancelled = false
-    Promise.all([listComments(taskNumber), listTaskAgentConversations(taskNumber)])
-      .then(([loadedComments, loadedConversations]) => {
+    Promise.all([
+      listComments(taskNumber),
+      listTaskAgentConversations(taskNumber),
+      listProjectMembers(projectNumber),
+    ])
+      .then(([loadedComments, loadedConversations, loadedMembers]) => {
         if (cancelled) return
         setComments(loadedComments)
         setConversations(loadedConversations ?? [])
+        setMembers(loadedMembers.filter(({ active }) => active))
       })
       .catch((err) => {
         if (cancelled) return
@@ -77,7 +89,9 @@ export default function CommentSection({
     return () => {
       cancelled = true
     }
-  }, [taskNumber, me?.id])
+  }, [taskNumber, projectNumber, me?.id])
+
+  const memberByID = useMemo(() => new Map(members.map((member) => [member.user.id, member])), [members])
 
   const timeline = useMemo(() => {
     const entries: Array<
@@ -137,9 +151,17 @@ export default function CommentSection({
     setPosting(true)
     setError('')
     try {
-      const created = await createComment(taskNumber, taskVersion, trimmed)
+      const created = await createComment(
+        taskNumber,
+        taskVersion,
+        trimmed,
+        replyToCommentID || undefined,
+        mentionedUserIDs,
+      )
       setComments((cs) => [...cs, created])
       setBody('')
+      setReplyToCommentID('')
+      setMentionedUserIDs([])
       await onTaskChanged()
     } catch (err) {
       setError(String((err as Error).message))
@@ -154,7 +176,7 @@ export default function CommentSection({
     if (!current) return
     const previous = comments
     setComments((cs) => cs.map((c) => (c.id === id ? { ...c, body: next } : c)))
-    updateComment(taskNumber, id, current.version, next)
+    updateComment(taskNumber, id, current.version, next, current.mentioned_user_ids ?? [])
       .then((updated) => setComments((cs) => cs.map((c) => (c.id === id ? updated : c))))
       .catch((err) => {
         setComments(previous)
@@ -166,11 +188,28 @@ export default function CommentSection({
     const current = comments.find((comment) => comment.id === id)
     if (!current) return
     const previous = comments
-    setComments((cs) => cs.filter((c) => c.id !== id))
+    setComments((cs) => cs.map((comment) => (
+      comment.id === id
+        ? { ...comment, body: '', deleted: true, mentioned_user_ids: [] }
+        : comment
+    )))
     deleteComment(taskNumber, id, current.version).catch((err) => {
       setComments(previous)
       setRowErrors((r) => ({ ...r, [id]: `删除失败：${(err as Error).message}` }))
     })
+  }
+
+  function startReply(comment: Comment) {
+    setReplyToCommentID(comment.id)
+    window.requestAnimationFrame(() => composerRef.current?.focus())
+  }
+
+  function toggleMention(userID: string) {
+    setMentionedUserIDs((current) => (
+      current.includes(userID)
+        ? current.filter((id) => id !== userID)
+        : [...current, userID]
+    ))
   }
 
   async function answerQuestion(conversation: TaskClaimConversation) {
@@ -323,9 +362,22 @@ export default function CommentSection({
           }
           const c = entry.comment
           const mine = me?.id === c.author_id
+          const isReply = Boolean(c.reply_to_comment_id)
+          const authorName = memberByID.get(c.author_id)?.user.name
+            ?? (mine ? me?.name : undefined)
+            ?? '项目成员'
           return (
-            <li key={c.id} className="rounded-md border border-border p-3">
-              {mine ? (
+            <li
+              key={c.id}
+              className={`rounded-md border border-border p-3 ${isReply ? 'ml-6 border-l-2 border-l-accent/35' : ''}`}
+            >
+              <div className="mb-1 flex items-center gap-2 text-xs text-fg-muted">
+                <span className="font-medium text-fg">{authorName}</span>
+                {isReply && <span>回复了评论</span>}
+              </div>
+              {c.deleted ? (
+                <p className="mb-2 text-sm italic text-fg-muted">该评论已删除</p>
+              ) : mine ? (
                 <InlineEditable
                   value={c.body}
                   onCommit={(next) => editComment(c.id, next)}
@@ -334,11 +386,29 @@ export default function CommentSection({
                   className="mb-2 w-full text-sm text-fg"
                 />
               ) : (
-                <p className="mb-2 text-sm text-fg">{c.body}</p>
+                <p className="mb-2 whitespace-pre-wrap text-sm text-fg">{c.body}</p>
+              )}
+              {!c.deleted && (c.mentioned_user_ids ?? []).length > 0 && (
+                <div className="mb-2 flex flex-wrap gap-1">
+                  {(c.mentioned_user_ids ?? []).map((userID) => (
+                    <span key={userID} className="rounded-full bg-accent/10 px-2 py-0.5 text-xs text-accent">
+                      @{memberByID.get(userID)?.user.name ?? '项目成员'}
+                    </span>
+                  ))}
+                </div>
               )}
               <div className="flex items-center gap-2">
                 <span className="text-xs text-fg-muted">{new Date(c.created_at).toLocaleString()}</span>
-                {mine && (
+                {!c.deleted && (
+                  <button
+                    type="button"
+                    className="text-xs text-fg-muted hover:text-accent"
+                    onClick={() => startReply(c)}
+                  >
+                    回复
+                  </button>
+                )}
+                {mine && !c.deleted && (
                   <button
                     type="button"
                     className="text-xs text-fg-muted hover:text-danger"
@@ -356,7 +426,14 @@ export default function CommentSection({
 
       <h4 className="text-xs font-medium text-fg-muted">添加普通评论</h4>
       <form className="flex flex-col gap-2 rounded-md border border-border bg-surface-subtle p-3" onSubmit={submit}>
+        {replyToCommentID && (
+          <div className="flex items-center justify-between gap-3 rounded bg-accent/10 px-2 py-1.5 text-xs text-fg">
+            <span>正在回复 {memberByID.get(comments.find(({ id }) => id === replyToCommentID)?.author_id ?? '')?.user.name ?? '项目成员'}</span>
+            <button type="button" className="text-fg-muted hover:text-fg" onClick={() => setReplyToCommentID('')}>取消</button>
+          </div>
+        )}
         <textarea
+          ref={composerRef}
           value={body}
           onChange={(e) => setBody(e.target.value)}
           placeholder="添加评论…"
@@ -364,6 +441,31 @@ export default function CommentSection({
           rows={2}
           className="rounded-md border border-border-strong bg-surface px-2 py-1.5 text-sm text-fg placeholder:text-fg-muted"
         />
+        {members.length > 0 && (
+          <div>
+            <p className="mb-1.5 text-xs text-fg-muted">通知项目成员</p>
+            <div className="flex flex-wrap gap-1.5">
+              {members.filter(({ user }) => user.id !== me?.id).map(({ user }) => {
+                const selected = mentionedUserIDs.includes(user.id)
+                return (
+                  <button
+                    key={user.id}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => toggleMention(user.id)}
+                    className={`rounded-full border px-2 py-0.5 text-xs ${
+                      selected
+                        ? 'border-accent bg-accent/10 text-accent'
+                        : 'border-border bg-surface text-fg-muted hover:text-fg'
+                    }`}
+                  >
+                    @{user.name}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
         <button
           type="submit"
           disabled={!body.trim() || posting}

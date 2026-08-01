@@ -16,13 +16,20 @@ or acceptance criteria.
 A Project:
 
 - owns its Backlog, Milestones, and Tasks;
-- has one active Member as owner and one creator;
+- records one immutable creator and has one or more Project administrators;
+- grants Project-scoped access only to explicit `admin` or `member` memberships;
 - may contain multiple active Milestones;
-- may be archived and restored only by the Administrator; and
+- may be archived and restored by a Project administrator or the platform
+  Administrator; and
 - may be archived only when it has no active or planned Milestones and no
   unfinished Tasks.
 
 Archiving controls visibility. It does not delete the Project or its history.
+The platform Administrator has an operational override. Other users receive a
+not-found response for Projects where they have no membership. Project members
+may read and change ordinary work; membership management and Project lifecycle
+operations require a Project administrator. Archived Projects remain readable
+but reject ordinary writes.
 
 ## Milestone
 
@@ -54,6 +61,15 @@ Every Task:
 - declares `human_only` or `agent_allowed` execution mode;
 - requires context and an expected result when created; and
 - is archived or restored rather than hard-deleted.
+
+A Task may own up to 100 active private attachments, each no larger than 100
+MiB. Attachment authorization always follows the Task's Project membership;
+storage object addresses are not public authority. Local disk, private Aliyun
+OSS, and private Tencent COS implement one upload-session contract. Completing
+an upload revalidates access, expiry, size, media safety, Task version, and the
+active attachment limit. Deletion is soft first and physical object cleanup is
+asynchronous. Images and safe Markdown are viewable inline, HTML runs only in
+a sandboxed standalone page, and spreadsheet/CSV files are download-only.
 
 Task status and priority are labels, not scheduling constraints. Any valid
 status may move to any other valid status. Moving to `done` is the only
@@ -150,6 +166,21 @@ conversation messages separate from ordinary comments. The task UI presents
 both streams together in chronological order. The latest submitted message is
 also the entry point for human, criterion-by-criterion review and explicit Task
 completion.
+
+Ordinary Task comments form one visually flattened thread. Each reply retains
+its exact reply target and canonical root so context is not lost. Deleting a
+comment preserves a placeholder whenever replies may still refer to it.
+Mentions are structured user identifiers, not names parsed from comment text,
+and may target only active members of the Task's Project. A reply notifies its
+target author; an explicit mention of the same person wins over the implicit
+reply notification. Self-notifications are omitted, and edits notify only
+newly added mentions.
+
+Comment notification intents are committed atomically with the comment through
+a PostgreSQL outbox. A confirmed publisher relays them to durable RabbitMQ
+topic/retry/dead-letter topology. Consumers are idempotent by event ID. The
+initial consumer intentionally acknowledges without external delivery; IM and
+inbox delivery are later consumers of the same event contract.
 
 ## Legacy context
 

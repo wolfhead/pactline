@@ -15,6 +15,7 @@ import (
 	contract "github.com/wolfhead/pactline/api"
 	"github.com/wolfhead/pactline/internal/access"
 	pactagent "github.com/wolfhead/pactline/internal/agent"
+	"github.com/wolfhead/pactline/internal/agent/artifact"
 	"github.com/wolfhead/pactline/internal/agent/channel"
 	"github.com/wolfhead/pactline/internal/agent/ingress"
 	agentopenapi "github.com/wolfhead/pactline/internal/agent/openapi"
@@ -23,6 +24,7 @@ import (
 	"github.com/wolfhead/pactline/internal/api"
 	apiv1 "github.com/wolfhead/pactline/internal/api/v1"
 	"github.com/wolfhead/pactline/internal/application"
+	"github.com/wolfhead/pactline/internal/blob"
 	"github.com/wolfhead/pactline/internal/identity"
 	"github.com/wolfhead/pactline/internal/integrations/deepseek"
 	"github.com/wolfhead/pactline/internal/integrations/devauth"
@@ -30,6 +32,7 @@ import (
 	legacyapi "github.com/wolfhead/pactline/internal/legacy/api"
 	legacystore "github.com/wolfhead/pactline/internal/legacy/store"
 	"github.com/wolfhead/pactline/internal/logging"
+	"github.com/wolfhead/pactline/internal/messaging"
 	"github.com/wolfhead/pactline/internal/store"
 
 	"github.com/cloudwego/eino/components/model"
@@ -70,11 +73,41 @@ func main() {
 	comments := store.NewCommentStore(db)
 	labels := store.NewLabelStore(db)
 	projects := store.NewProjectStore(db)
+	memberships := store.NewProjectMembershipStore(db)
 	milestones := store.NewMilestoneStore(db)
 	acceptance := store.NewAcceptanceStore(db)
 	claims := store.NewTaskClaimStore(db)
+	attachments := store.NewAttachmentStore(db)
+	var attachmentObjects blob.Store
+	switch cfg.AttachmentStorageProvider {
+	case "local":
+		attachmentObjects, err = blob.NewLocalStore(cfg.AttachmentLocalRoot)
+	case "oss":
+		attachmentObjects, err = blob.NewOSSStore(blob.OSSConfig{
+			Region: cfg.AttachmentOSSRegion, Endpoint: cfg.AttachmentOSSEndpoint,
+			Bucket: cfg.AttachmentOSSBucket, AccessKeyID: cfg.AttachmentOSSAccessKeyID,
+			AccessKeySecret: cfg.AttachmentOSSAccessKeySecret,
+		})
+	case "cos":
+		attachmentObjects, err = blob.NewCOSStore(blob.COSConfig{
+			BucketURL: cfg.AttachmentCOSBucketURL, ServiceURL: cfg.AttachmentCOSServiceURL,
+			AccessKeyID: cfg.AttachmentCOSSecretID, AccessSecret: cfg.AttachmentCOSSecretKey,
+			SessionToken: cfg.AttachmentCOSSessionToken,
+		})
+	}
+	if err != nil {
+		slog.Error("configure private attachment storage",
+			"provider", cfg.AttachmentStorageProvider, "error", err)
+		os.Exit(1)
+	}
+	attachmentService := &application.AttachmentService{
+		Attachments: attachments, Objects: attachmentObjects,
+	}
 	projectService := &application.ProjectService{
 		Projects: projects, Milestones: milestones, Acceptance: acceptance, Tasks: tasks,
+	}
+	projectAccess := &application.ProjectAccessService{
+		Projects: projects, Tasks: tasks, Memberships: memberships,
 	}
 	identityStore := store.NewIdentityStore(db)
 	identityService, err := identity.NewService(
@@ -93,6 +126,18 @@ func main() {
 	maintenanceContext, stopMaintenance := context.WithCancel(context.Background())
 	defer stopMaintenance()
 	go (application.Maintenance{Store: accessAuditStore, Claims: claims}).Run(maintenanceContext)
+	go (application.AttachmentCleanup{
+		Attachments: attachments, Objects: attachmentObjects,
+	}).Run(maintenanceContext)
+	outboxStore := store.NewOutboxStore(db)
+	rabbitMQ, err := messaging.NewRecoveringPublisher(cfg.RabbitMQURL)
+	if err != nil {
+		slog.Error("configure RabbitMQ event delivery", "error", err)
+		os.Exit(1)
+	}
+	defer rabbitMQ.Close()
+	go (application.OutboxRelay{Store: outboxStore, Publisher: rabbitMQ}).Run(maintenanceContext)
+	go messaging.ConsumeNoopForever(maintenanceContext, cfg.RabbitMQURL, outboxStore)
 	var larkClient *lark.Client
 	if cfg.AuthProvider == AuthProviderLark {
 		cipher, cipherErr := identity.NewCredentialCipher(map[string][]byte{
@@ -157,9 +202,11 @@ func main() {
 		Tasks: &application.TaskService{
 			Tasks: tasks, Comments: comments, Projects: projectService,
 		},
-		Claims:   claims,
-		Labels:   &application.LabelService{Labels: labels},
-		Projects: projectService,
+		Claims:      claims,
+		Labels:      &application.LabelService{Labels: labels},
+		Projects:    projectService,
+		Access:      projectAccess,
+		Attachments: attachmentService,
 	})
 	if err != nil {
 		slog.Error("configure OpenAPI v1 server", "error", err)
@@ -260,6 +307,19 @@ func main() {
 	})
 	var agentWorker *agentruntime.Worker
 	if cfg.AgentEnabled {
+		var visionAnalyzer artifact.VisionAnalyzer
+		if cfg.AgentVisionModel != "" {
+			configuredVision, visionErr := artifact.NewOpenAICompatibleVision(artifact.VisionConfig{
+				APIKey:  cfg.AgentVisionAPIKey,
+				BaseURL: cfg.AgentVisionBaseURL,
+				Model:   cfg.AgentVisionModel,
+			})
+			if visionErr != nil {
+				slog.Error("configure Agent vision model", "error", visionErr)
+				os.Exit(1)
+			}
+			visionAnalyzer = configuredVision
+		}
 		clientFactory, factoryErr := agentopenapi.NewFactory(delegateService, applicationHandler)
 		if factoryErr != nil {
 			slog.Error("configure Agent OpenAPI client", "error", factoryErr)
@@ -277,6 +337,7 @@ func main() {
 			WorkerID:        "pactline",
 			Concurrency:     cfg.AgentWorkerConcurrency,
 			Timezone:        agentTimezone,
+			ArtifactVision:  visionAnalyzer,
 			Model: func(ctx context.Context, run pactagent.Run) (model.ToolCallingChatModel, error) {
 				return deepseek.NewChatModel(ctx, deepseek.Config{
 					APIKey:  cfg.DeepSeekAPIKey,

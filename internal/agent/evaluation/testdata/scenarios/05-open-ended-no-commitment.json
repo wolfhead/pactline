@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "id": "open-ended-no-commitment",
+  "name": "An open discussion has no commitment yet",
+  "business_context": "The team is comparing several ways to make internal technical knowledge easier to find.",
+  "judge_context": "There is no decision, owner, or concrete next step. Assess whether creating a Task is genuinely useful or whether the Agent should ask what the user wants to preserve.",
+  "trigger": {
+    "message_id": "trigger-5",
+    "text": "请根据上述讨论看看要不要创建任务。",
+    "sender": "Team Lead",
+    "at": "2026-07-31T20:00:00+08:00"
+  },
+  "messages": [
+    {
+      "message_id": "m51",
+      "sender": "Developer A",
+      "role": "developer",
+      "text": "大家找历史设计很慢，要不要做一个自动整理的知识库？",
+      "at": "2026-07-31T19:30:00+08:00"
+    },
+    {
+      "message_id": "m52",
+      "sender": "Developer B",
+      "role": "developer",
+      "text": "也许不用新系统，先把现有文档目录和搜索整理好就够了。",
+      "at": "2026-07-31T19:34:00+08:00"
+    },
+    {
+      "message_id": "m53",
+      "sender": "Product Manager",
+      "role": "product",
+      "text": "还可以让 AI 从群聊里生成 FAQ，但准确率和权限不好评估。",
+      "at": "2026-07-31T19:38:00+08:00"
+    },
+    {
+      "message_id": "m54",
+      "sender": "Team Lead",
+      "role": "engineering",
+      "text": "先继续想想，后面找时间再聊。",
+      "at": "2026-07-31T19:42:00+08:00"
+    }
+  ],
+  "projects": [
+    {"number": 16, "name": "Developer Experience"}
+  ],
+  "users": []
+}

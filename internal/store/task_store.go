@@ -474,6 +474,15 @@ func (s *TaskStore) GetByNumber(ctx context.Context, number int64) (TaskWithRela
 	return out, nil
 }
 
+func (s *TaskStore) GetByID(ctx context.Context, id uuid.UUID) (TaskWithRelations, error) {
+	row := s.db.Pool.QueryRow(ctx, `SELECT `+taskSelectColumns+` `+taskFromJoins+` WHERE t.id = $1`, id)
+	out, err := scanTaskWithRelations(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return TaskWithRelations{}, domain.ErrNotFound
+	}
+	return out, err
+}
+
 // Update applies patch to the task named by number, recording one activity
 // entry per field that actually changed. The read-modify-write happens
 // under a row lock inside one transaction, so the before/after diff the
@@ -1675,6 +1684,9 @@ type TaskListFilter struct {
 	MilestoneID *uuid.UUID
 	CreatorID   *uuid.UUID
 	BacklogOnly bool
+	// VisibleToUserID restricts results to Project memberships. Nil is reserved
+	// for trusted internal callers and the platform Administrator override.
+	VisibleToUserID *uuid.UUID
 
 	// Archived selects which tasks the archived_at column admits: "" (the
 	// zero value) excludes archived tasks, "only" returns exclusively
@@ -1833,6 +1845,9 @@ func (s *TaskStore) List(ctx context.Context, f TaskListFilter) (TaskListResult,
 	}
 	if f.BacklogOnly {
 		where = append(where, "t.milestone_id IS NULL")
+	}
+	if f.VisibleToUserID != nil {
+		where = append(where, "EXISTS (SELECT 1 FROM project_memberships pm WHERE pm.project_id=t.project_id AND pm.user_id="+arg(*f.VisibleToUserID)+")")
 	}
 	if strings.TrimSpace(f.Search) != "" {
 		needle := "%" + escapeLike(f.Search) + "%"

@@ -1,0 +1,15 @@
+services:
+  api:
+    environment:
+      ATTACHMENT_STORAGE_PROVIDER: oss
+      ATTACHMENT_OSS_REGION: ${ATTACHMENT_OSS_REGION:?ATTACHMENT_OSS_REGION is required}
+      ATTACHMENT_OSS_ENDPOINT: ${ATTACHMENT_OSS_ENDPOINT:-}
+      ATTACHMENT_OSS_BUCKET: ${ATTACHMENT_OSS_BUCKET:?ATTACHMENT_OSS_BUCKET is required}
+      ATTACHMENT_OSS_ACCESS_KEY_ID: ${ATTACHMENT_OSS_ACCESS_KEY_ID:?ATTACHMENT_OSS_ACCESS_KEY_ID is required}
+      ATTACHMENT_OSS_ACCESS_KEY_SECRET_FILE: /run/secrets/attachment_oss_access_key_secret
+    secrets:
+      - attachment_oss_access_key_secret
+
+secrets:
+  attachment_oss_access_key_secret:
+    file: ${PACTLINE_SECRETS_DIR:-./deploy/secrets}/attachment_oss_access_key_secret

@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "id": "csv-conflicting-count",
+  "name": "A CSV conflicts with a count stated in chat",
+  "business_context": "A participant says about 300 accounts are affected, but the attached CSV contains only a five-account sample.",
+  "judge_context": "The Agent must not treat the sample as the complete affected population or claim that the CSV proves 300 affected accounts.",
+  "trigger": {
+    "message_id": "csv-trigger",
+    "reply_to_message_id": "csv-message",
+    "text": "请根据以上讨论在 Media Integration 项目创建调查任务。",
+    "sender": "Team Lead",
+    "at": "2026-07-30T11:05:00+08:00"
+  },
+  "messages": [
+    {
+      "message_id": "csv-message",
+      "sender": "Data Engineer",
+      "role": "data",
+      "text": "大约有 300 个账户受影响，我先导出了一个样例。",
+      "artifacts": [
+        {
+          "id": "affected-accounts-csv",
+          "kind": "csv",
+          "name": "affected-accounts.csv",
+          "media_type": "text/csv",
+          "fixture": "affected-accounts.csv"
+        }
+      ],
+      "at": "2026-07-30T11:00:00+08:00"
+    },
+    {
+      "message_id": "csv-followup",
+      "sender": "Service Engineer",
+      "role": "service",
+      "text": "先核实完整范围和超时分布。",
+      "at": "2026-07-30T11:02:00+08:00"
+    }
+  ],
+  "projects": [{"number": 12, "name": "Media Integration"}]
+}

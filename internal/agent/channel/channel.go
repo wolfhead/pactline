@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/wolfhead/pactline/internal/agent/artifact"
 )
 
 const (
@@ -65,6 +67,7 @@ type IncomingMessage struct {
 	SenderSubjectID      string
 	MessageType          string
 	Text                 string
+	Artifacts            []artifact.Reference
 	Mentions             []Mention
 	CreatedAt            time.Time
 	BotMentioned         bool
@@ -76,6 +79,7 @@ type ChannelMessage struct {
 	SenderSubjectID string
 	SenderName      string
 	Text            string
+	Artifacts       []artifact.Reference
 	CreatedAt       time.Time
 	IsBot           bool
 }

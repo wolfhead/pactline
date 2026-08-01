@@ -23,7 +23,6 @@ const PROJECTS = Array.from({ length: 8 }, (_, index) => ({
   version: 1,
   name: `Project ${index + 1}`,
   description: '',
-  owner: { id: 'admin', name: 'Admin', email: null },
   creator: { id: 'admin', name: 'Admin', email: null },
   archived_at: null,
   created_at: '',

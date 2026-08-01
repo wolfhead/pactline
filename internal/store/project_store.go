@@ -19,7 +19,6 @@ func NewProjectStore(db *DB) *ProjectStore { return &ProjectStore{db: db} }
 
 type ProjectWithRelations struct {
 	Project        domain.Project
-	Owner          domain.UserRef
 	Creator        domain.UserRef
 	CompletedTasks int
 	EligibleTasks  int
@@ -28,17 +27,15 @@ type ProjectWithRelations struct {
 type ProjectPatch struct {
 	Name        *string
 	Description *string
-	OwnerID     *uuid.UUID
 }
 
 const projectSelectColumns = `p.id, p.number, p.version, p.name, p.description,
-	p.owner_id, p.creator_id, p.archived_at, p.created_at, p.updated_at,
-	ou.id, ou.name, ou.email, cu.id, cu.name, cu.email,
+	p.creator_id, p.archived_at, p.created_at, p.updated_at,
+	cu.id, cu.name, cu.email,
 	(SELECT count(*) FROM tasks t WHERE t.project_id = p.id AND t.archived_at IS NULL AND t.status = 'done'),
 	(SELECT count(*) FROM tasks t WHERE t.project_id = p.id AND t.archived_at IS NULL AND t.status <> 'cancelled')`
 
 const projectFromJoins = `FROM projects p
-	JOIN users ou ON ou.id = p.owner_id
 	JOIN users cu ON cu.id = p.creator_id`
 
 func scanProject(s scanner) (ProjectWithRelations, error) {
@@ -46,9 +43,8 @@ func scanProject(s scanner) (ProjectWithRelations, error) {
 	if err := s.Scan(
 		&out.Project.ID, &out.Project.Number, &out.Project.Version,
 		&out.Project.Name, &out.Project.Description,
-		&out.Project.OwnerID, &out.Project.CreatorID, &out.Project.ArchivedAt,
+		&out.Project.CreatorID, &out.Project.ArchivedAt,
 		&out.Project.CreatedAt, &out.Project.UpdatedAt,
-		&out.Owner.ID, &out.Owner.Name, &out.Owner.Email,
 		&out.Creator.ID, &out.Creator.Name, &out.Creator.Email,
 		&out.CompletedTasks, &out.EligibleTasks,
 	); err != nil {
@@ -90,22 +86,26 @@ func (s *ProjectStore) CreateWithOperation(
 	row := tx.QueryRow(ctx, `
 		WITH inserted AS (
 			INSERT INTO projects
-				(id, name, description, owner_id, creator_id)
-			VALUES ($1,$2,$3,$4,$5)
+				(id, name, description, creator_id)
+			VALUES ($1,$2,$3,$4)
 			RETURNING *
 		)
 		SELECT `+projectSelectColumns+`
 		FROM inserted p
-		JOIN users ou ON ou.id = p.owner_id
 		JOIN users cu ON cu.id = p.creator_id`,
-		project.ID, project.Name, project.Description, project.OwnerID, project.CreatorID,
+		project.ID, project.Name, project.Description, project.CreatorID,
 	)
 	out, err := scanProject(row)
 	if err != nil {
 		return ProjectWithRelations{}, mapPgError(err)
 	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO project_memberships (id, project_id, user_id, role)
+		VALUES ($1,$2,$3,'admin')`, uuid.New(), project.ID, project.CreatorID); err != nil {
+		return ProjectWithRelations{}, mapPgError(err)
+	}
 	newValue, _ := json.Marshal(map[string]any{
-		"name": project.Name, "description": project.Description, "owner_id": project.OwnerID,
+		"name": project.Name, "description": project.Description,
 	})
 	number := out.Project.Number
 	if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
@@ -124,6 +124,15 @@ func (s *ProjectStore) CreateWithOperation(
 func (s *ProjectStore) GetByNumber(ctx context.Context, number int64) (ProjectWithRelations, error) {
 	out, err := scanProject(s.db.Pool.QueryRow(ctx,
 		`SELECT `+projectSelectColumns+` `+projectFromJoins+` WHERE p.number = $1`, number))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ProjectWithRelations{}, domain.ErrNotFound
+	}
+	return out, err
+}
+
+func (s *ProjectStore) GetByID(ctx context.Context, id uuid.UUID) (ProjectWithRelations, error) {
+	out, err := scanProject(s.db.Pool.QueryRow(ctx,
+		`SELECT `+projectSelectColumns+` `+projectFromJoins+` WHERE p.id = $1`, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ProjectWithRelations{}, domain.ErrNotFound
 	}
@@ -151,6 +160,37 @@ func (s *ProjectStore) List(ctx context.Context, includeArchived bool) ([]Projec
 		out = append(out, project)
 	}
 	return out, rows.Err()
+}
+
+func (s *ProjectStore) ListForSubject(
+	ctx context.Context,
+	includeArchived bool,
+	subject domain.ProjectAccessSubject,
+) ([]ProjectWithRelations, error) {
+	if subject.IsPlatformAdministrator() {
+		return s.List(ctx, includeArchived)
+	}
+	archivedClause := "AND p.archived_at IS NULL"
+	if includeArchived {
+		archivedClause = ""
+	}
+	rows, err := s.db.Pool.Query(ctx, `SELECT `+projectSelectColumns+` `+projectFromJoins+`
+		JOIN project_memberships pm ON pm.project_id = p.id AND pm.user_id = $1
+		WHERE true `+archivedClause+`
+		ORDER BY p.archived_at NULLS FIRST, lower(p.name), p.number`, subject.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("list visible projects: %w", err)
+	}
+	defer rows.Close()
+	projects := []ProjectWithRelations{}
+	for rows.Next() {
+		project, err := scanProject(rows)
+		if err != nil {
+			return nil, err
+		}
+		projects = append(projects, project)
+	}
+	return projects, rows.Err()
 }
 
 func (s *ProjectStore) Update(
@@ -200,11 +240,11 @@ func (s *ProjectStore) updateWithExpectedVersion(
 
 	var project domain.Project
 	err = tx.QueryRow(ctx, `
-		SELECT id, number, version, name, description, owner_id, creator_id,
+		SELECT id, number, version, name, description, creator_id,
 			archived_at, created_at, updated_at
 		FROM projects WHERE number=$1 FOR UPDATE`, number).
 		Scan(&project.ID, &project.Number, &project.Version, &project.Name,
-			&project.Description, &project.OwnerID, &project.CreatorID,
+			&project.Description, &project.CreatorID,
 			&project.ArchivedAt, &project.CreatedAt, &project.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ProjectWithRelations{}, domain.ErrNotFound
@@ -223,18 +263,15 @@ func (s *ProjectStore) updateWithExpectedVersion(
 	if patch.Description != nil {
 		project.Description = *patch.Description
 	}
-	if patch.OwnerID != nil {
-		project.OwnerID = *patch.OwnerID
-	}
 	if err := project.Validate(); err != nil {
 		return ProjectWithRelations{}, err
 	}
 	err = tx.QueryRow(ctx, `
-		UPDATE projects SET name=$2, description=$3, owner_id=$4,
+		UPDATE projects SET name=$2, description=$3,
 			version=version+1, updated_at=now()
-		WHERE id=$1 AND version=$5
+		WHERE id=$1 AND version=$4
 		RETURNING version`,
-		project.ID, project.Name, project.Description, project.OwnerID, project.Version,
+		project.ID, project.Name, project.Description, project.Version,
 	).Scan(&project.Version)
 	if err != nil {
 		return ProjectWithRelations{}, mapPgError(err)
@@ -247,7 +284,6 @@ func (s *ProjectStore) updateWithExpectedVersion(
 	}{
 		{"project_name_changed", old.Name, project.Name},
 		{"project_description_changed", old.Description, project.Description},
-		{"project_owner_changed", old.OwnerID.String(), project.OwnerID.String()},
 	}
 	for _, change := range changes {
 		if change.old == change.new {
@@ -267,10 +303,10 @@ func (s *ProjectStore) updateWithExpectedVersion(
 		}
 	}
 	oldValue, _ := json.Marshal(map[string]any{
-		"name": old.Name, "description": old.Description, "owner_id": old.OwnerID,
+		"name": old.Name, "description": old.Description,
 	})
 	newValue, _ := json.Marshal(map[string]any{
-		"name": project.Name, "description": project.Description, "owner_id": project.OwnerID,
+		"name": project.Name, "description": project.Description,
 	})
 	if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
 		OccurredAt: time.Now().UTC(), Actor: actor, EntityType: "project",
@@ -362,11 +398,11 @@ func (s *ProjectStore) applyLifecycleWithExpectedVersion(
 
 	var project domain.Project
 	err = tx.QueryRow(ctx, `
-		SELECT id, number, version, name, description, owner_id, creator_id,
+		SELECT id, number, version, name, description, creator_id,
 			archived_at, created_at, updated_at
 		FROM projects WHERE number=$1 FOR UPDATE`, number).
 		Scan(&project.ID, &project.Number, &project.Version, &project.Name,
-			&project.Description, &project.OwnerID, &project.CreatorID,
+			&project.Description, &project.CreatorID,
 			&project.ArchivedAt, &project.CreatedAt, &project.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ProjectWithRelations{}, domain.ErrNotFound

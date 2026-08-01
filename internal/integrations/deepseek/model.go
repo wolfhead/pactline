@@ -17,6 +17,7 @@ import (
 
 const (
 	DefaultModel           = "deepseek-v4-flash"
+	ProModel               = "deepseek-v4-pro"
 	DefaultReasoningEffort = "high"
 	DefaultTimeout         = 5 * time.Minute
 

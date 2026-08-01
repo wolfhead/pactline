@@ -15,6 +15,7 @@ test: up
 run: up
 	APP_ENV=development AUTH_PROVIDER=development APP_BASE_URL=http://localhost:5173 \
 	SESSION_SECRET=ZGV2ZWxvcG1lbnQtc2Vzc2lvbi1zZWNyZXQtMzJieXQ= \
+	RABBITMQ_URL=amqp://guest:guest@localhost:5673/ \
 	DATABASE_URL="$(DSN)" go run ./cmd/server
 
 web-install:
@@ -55,4 +56,7 @@ e2e:
 agent-api-e2e:
 	cd web && npx playwright test e2e/26-agent-api.spec.ts
 
-.PHONY: up down test run web-install web-dev web-test web-build stack-up stack-down stack-logs openapi-generate openapi-check e2e agent-api-e2e
+agent-eval:
+	go run ./cmd/agent-eval --scenario all --judge=true --format markdown
+
+.PHONY: up down test run web-install web-dev web-test web-build stack-up stack-down stack-logs openapi-generate openapi-check e2e agent-api-e2e agent-eval

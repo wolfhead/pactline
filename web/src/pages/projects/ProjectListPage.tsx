@@ -4,14 +4,14 @@ import { createProject, listProjects, type Project } from '@/api/projects'
 import { useIdentity } from '@/identity'
 
 export default function ProjectListPage() {
-  const { me, users, actor, impersonation } = useIdentity()
+  const { me, impersonation } = useIdentity()
   const navigate = useNavigate()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [creating, setCreating] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
-  const canAdminister = actor?.platform_role === 'ADMIN' && !impersonation
+
 
   useEffect(() => {
     let cancelled = false
@@ -31,7 +31,6 @@ export default function ProjectListPage() {
       const project = await createProject({
         name: String(data.get('name') ?? ''),
         description: String(data.get('description') ?? ''),
-        owner_id: String(data.get('owner_id') ?? ''),
       })
       navigate(`/projects/${project.number}/overview`)
     } catch (reason) {
@@ -50,7 +49,7 @@ export default function ProjectListPage() {
           <button type="button" data-read-only-allowed="true" onClick={() => setShowArchived((value) => !value)} className="rounded-md border border-border-strong px-3 py-2 text-sm">
             {showArchived ? '隐藏已归档' : '显示已归档'}
           </button>
-          {canAdminister && (
+          {!impersonation && (
             <button type="button" onClick={() => setCreating((value) => !value)} className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white">
               新建项目
             </button>
@@ -63,12 +62,6 @@ export default function ProjectListPage() {
           <label className="flex flex-col gap-1 text-sm">
             项目名称
             <input name="name" required className="rounded-md border border-border-strong bg-surface px-3 py-2" />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            负责人
-            <select name="owner_id" defaultValue={me?.id} className="rounded-md border border-border-strong bg-surface px-3 py-2">
-              {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
-            </select>
           </label>
           <label className="flex flex-col gap-1 text-sm md:col-span-2">
             项目说明
@@ -98,7 +91,7 @@ export default function ProjectListPage() {
               </div>
               <p className="mt-3 line-clamp-2 text-sm text-fg-muted">{project.description || '暂无项目说明'}</p>
               <div className="mt-4 flex gap-4 text-xs text-fg-muted">
-                <span>负责人：{project.owner.name}</span>
+                <span>创建者：{project.creator.name}</span>
                 <span>任务：{project.completed_tasks}/{project.eligible_tasks}</span>
               </div>
             </Link>

@@ -9,14 +9,18 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/wolfhead/pactline/internal/agent/artifact"
 )
 
 const (
-	EnvironmentDevelopment  = "development"
-	EnvironmentTest         = "test"
-	EnvironmentProduction   = "production"
-	AuthProviderDevelopment = "development"
-	AuthProviderLark        = "lark"
+	EnvironmentDevelopment    = "development"
+	EnvironmentTest           = "test"
+	EnvironmentProduction     = "production"
+	AuthProviderDevelopment   = "development"
+	AuthProviderLark          = "lark"
+	DefaultAgentVisionBaseURL = artifact.DefaultVisionBaseURL
+	DefaultAgentVisionModel   = artifact.DefaultVisionModel
 )
 
 type Config struct {
@@ -34,12 +38,28 @@ type Config struct {
 	DeepSeekAPIKey                 string
 	DeepSeekBaseURL                string
 	DeepSeekModel                  string
+	AgentVisionAPIKey              string
+	AgentVisionBaseURL             string
+	AgentVisionModel               string
 	AgentDelegationSigningKey      []byte
 	AgentDelegationSigningKeyID    string
 	AgentCheckpointEncryptionKey   []byte
 	AgentCheckpointEncryptionKeyID string
 	AgentWorkerConcurrency         int
 	AgentTenantTimezone            string
+	AttachmentStorageProvider      string
+	AttachmentLocalRoot            string
+	AttachmentOSSRegion            string
+	AttachmentOSSEndpoint          string
+	AttachmentOSSBucket            string
+	AttachmentOSSAccessKeyID       string
+	AttachmentOSSAccessKeySecret   string
+	AttachmentCOSBucketURL         string
+	AttachmentCOSServiceURL        string
+	AttachmentCOSSecretID          string
+	AttachmentCOSSecretKey         string
+	AttachmentCOSSessionToken      string
+	RabbitMQURL                    string
 }
 
 func LoadConfig() (Config, error) {
@@ -59,11 +79,31 @@ func LoadConfig() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	visionAPIKey, err := readConfigurationValue("AGENT_VISION_API_KEY")
+	if err != nil {
+		return Config{}, err
+	}
 	delegationSigningKey, err := readConfigurationValue("AGENT_DELEGATION_SIGNING_KEY")
 	if err != nil {
 		return Config{}, err
 	}
 	checkpointEncryptionKey, err := readConfigurationValue("AGENT_CHECKPOINT_ENCRYPTION_KEY")
+	if err != nil {
+		return Config{}, err
+	}
+	ossAccessKeySecret, err := readConfigurationValue("ATTACHMENT_OSS_ACCESS_KEY_SECRET")
+	if err != nil {
+		return Config{}, err
+	}
+	cosSecretKey, err := readConfigurationValue("ATTACHMENT_COS_SECRET_KEY")
+	if err != nil {
+		return Config{}, err
+	}
+	cosSessionToken, err := readConfigurationValue("ATTACHMENT_COS_SESSION_TOKEN")
+	if err != nil {
+		return Config{}, err
+	}
+	rabbitMQURL, err := readConfigurationValue("RABBITMQ_URL")
 	if err != nil {
 		return Config{}, err
 	}
@@ -88,16 +128,49 @@ func LoadConfig() (Config, error) {
 		DeepSeekAPIKey:                 strings.TrimSpace(deepSeekAPIKey),
 		DeepSeekBaseURL:                strings.TrimSpace(os.Getenv("DEEPSEEK_BASE_URL")),
 		DeepSeekModel:                  strings.TrimSpace(os.Getenv("DEEPSEEK_MODEL")),
+		AgentVisionAPIKey:              strings.TrimSpace(visionAPIKey),
+		AgentVisionBaseURL:             strings.TrimSpace(os.Getenv("AGENT_VISION_BASE_URL")),
+		AgentVisionModel:               strings.TrimSpace(os.Getenv("AGENT_VISION_MODEL")),
 		AgentDelegationSigningKeyID:    strings.TrimSpace(os.Getenv("AGENT_DELEGATION_SIGNING_KEY_ID")),
 		AgentCheckpointEncryptionKeyID: strings.TrimSpace(os.Getenv("AGENT_CHECKPOINT_ENCRYPTION_KEY_ID")),
 		AgentWorkerConcurrency:         agentConcurrency,
 		AgentTenantTimezone:            strings.TrimSpace(os.Getenv("AGENT_TENANT_TIMEZONE")),
+		AttachmentStorageProvider:      strings.ToLower(strings.TrimSpace(os.Getenv("ATTACHMENT_STORAGE_PROVIDER"))),
+		AttachmentLocalRoot:            strings.TrimSpace(os.Getenv("ATTACHMENT_LOCAL_ROOT")),
+		AttachmentOSSRegion:            strings.TrimSpace(os.Getenv("ATTACHMENT_OSS_REGION")),
+		AttachmentOSSEndpoint:          strings.TrimSpace(os.Getenv("ATTACHMENT_OSS_ENDPOINT")),
+		AttachmentOSSBucket:            strings.TrimSpace(os.Getenv("ATTACHMENT_OSS_BUCKET")),
+		AttachmentOSSAccessKeyID:       strings.TrimSpace(os.Getenv("ATTACHMENT_OSS_ACCESS_KEY_ID")),
+		AttachmentOSSAccessKeySecret:   strings.TrimSpace(ossAccessKeySecret),
+		AttachmentCOSBucketURL:         strings.TrimSpace(os.Getenv("ATTACHMENT_COS_BUCKET_URL")),
+		AttachmentCOSServiceURL:        strings.TrimSpace(os.Getenv("ATTACHMENT_COS_SERVICE_URL")),
+		AttachmentCOSSecretID:          strings.TrimSpace(os.Getenv("ATTACHMENT_COS_SECRET_ID")),
+		AttachmentCOSSecretKey:         strings.TrimSpace(cosSecretKey),
+		AttachmentCOSSessionToken:      strings.TrimSpace(cosSessionToken),
+		RabbitMQURL:                    strings.TrimSpace(rabbitMQURL),
 	}
 	if cfg.DeepSeekModel == "" {
 		cfg.DeepSeekModel = "deepseek-v4-flash"
 	}
+	if cfg.AgentVisionAPIKey != "" {
+		if cfg.AgentVisionBaseURL == "" {
+			cfg.AgentVisionBaseURL = DefaultAgentVisionBaseURL
+		}
+		if cfg.AgentVisionModel == "" {
+			cfg.AgentVisionModel = DefaultAgentVisionModel
+		}
+	}
 	if cfg.AgentTenantTimezone == "" {
 		cfg.AgentTenantTimezone = "Asia/Shanghai"
+	}
+	if cfg.AttachmentStorageProvider == "" {
+		cfg.AttachmentStorageProvider = "local"
+	}
+	if cfg.AttachmentLocalRoot == "" {
+		cfg.AttachmentLocalRoot = ".data/attachments"
+	}
+	if cfg.RabbitMQURL == "" {
+		cfg.RabbitMQURL = "amqp://guest:guest@localhost:5673/"
 	}
 	cfg.SessionSecret, err = decodeSecret("SESSION_SECRET", sessionSecret)
 	if err != nil {
@@ -211,6 +284,11 @@ func (c Config) Validate() error {
 		if c.DeepSeekAPIKey == "" {
 			return errors.New("DEEPSEEK_API_KEY is required when AGENT_ENABLED=true")
 		}
+		visionConfigured := c.AgentVisionAPIKey != "" || c.AgentVisionBaseURL != "" || c.AgentVisionModel != ""
+		if visionConfigured &&
+			(c.AgentVisionAPIKey == "" || c.AgentVisionBaseURL == "" || c.AgentVisionModel == "") {
+			return errors.New("AGENT_VISION_API_KEY, AGENT_VISION_BASE_URL, and AGENT_VISION_MODEL must be configured together")
+		}
 		if len(c.AgentDelegationSigningKey) != 32 ||
 			c.AgentDelegationSigningKeyID == "" {
 			return errors.New("AGENT_DELEGATION_SIGNING_KEY and AGENT_DELEGATION_SIGNING_KEY_ID are required")
@@ -224,6 +302,36 @@ func (c Config) Validate() error {
 		}
 		if _, err := time.LoadLocation(c.AgentTenantTimezone); err != nil {
 			return fmt.Errorf("AGENT_TENANT_TIMEZONE is invalid: %w", err)
+		}
+	}
+	provider := c.AttachmentStorageProvider
+	if provider == "" {
+		provider = "local"
+	}
+	switch provider {
+	case "local":
+		// LoadConfig supplies the default. Direct Config values used by focused
+		// validation tests may omit it without changing unrelated semantics.
+	case "oss":
+		if c.AttachmentOSSRegion == "" || c.AttachmentOSSBucket == "" ||
+			c.AttachmentOSSAccessKeyID == "" || c.AttachmentOSSAccessKeySecret == "" {
+			return errors.New("OSS attachment storage requires region, bucket, access key ID, and access key secret")
+		}
+	case "cos":
+		if c.AttachmentCOSBucketURL == "" || c.AttachmentCOSSecretID == "" || c.AttachmentCOSSecretKey == "" {
+			return errors.New("COS attachment storage requires bucket URL, secret ID, and secret key")
+		}
+		if _, err := parseConfiguredURL("ATTACHMENT_COS_BUCKET_URL", c.AttachmentCOSBucketURL); err != nil {
+			return err
+		}
+	case "":
+	default:
+		return fmt.Errorf("unsupported ATTACHMENT_STORAGE_PROVIDER %q", c.AttachmentStorageProvider)
+	}
+	if c.RabbitMQURL != "" {
+		rabbitURL, err := url.Parse(c.RabbitMQURL)
+		if err != nil || (rabbitURL.Scheme != "amqp" && rabbitURL.Scheme != "amqps") || rabbitURL.Host == "" {
+			return errors.New("RABBITMQ_URL must be an absolute amqp or amqps URL")
 		}
 	}
 	return nil

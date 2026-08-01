@@ -103,16 +103,20 @@ func (l ToolLedger) Middleware() compose.ToolMiddleware {
 
 func addToolEvidenceID(result []byte, toolCallID string) ([]byte, error) {
 	var object map[string]json.RawMessage
-	if err := json.Unmarshal(result, &object); err != nil || object == nil {
-		return nil, fmt.Errorf("%w: tool result must be a JSON object", ErrToolCallProtocol)
+	if err := json.Unmarshal(result, &object); err == nil && object != nil {
+		encodedID, _ := json.Marshal(toolCallID)
+		object["evidence_id"] = encodedID
+		encoded, marshalErr := json.Marshal(object)
+		if marshalErr != nil {
+			return nil, fmt.Errorf("%w: encode tool evidence: %v", ErrToolCallProtocol, marshalErr)
+		}
+		return encoded, nil
 	}
-	encodedID, _ := json.Marshal(toolCallID)
-	object["evidence_id"] = encodedID
-	encoded, err := json.Marshal(object)
-	if err != nil {
-		return nil, fmt.Errorf("%w: encode tool evidence: %v", ErrToolCallProtocol, err)
+	var description string
+	if err := json.Unmarshal(result, &description); err == nil {
+		return result, nil
 	}
-	return encoded, nil
+	return nil, fmt.Errorf("%w: tool result must be a JSON object or string", ErrToolCallProtocol)
 }
 
 func ValidateToolArguments(_ context.Context, _ string, arguments string) (string, error) {

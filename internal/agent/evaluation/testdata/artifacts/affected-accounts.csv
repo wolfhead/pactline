@@ -1,0 +1,6 @@
+account_id,timeout_rate,observation
+acct-101,0.376,blocked from traffic release
+acct-102,0.382,blocked from traffic release
+acct-103,0.494,highest observed rate
+acct-104,0.206,requires investigation
+acct-105,0.331,requires investigation

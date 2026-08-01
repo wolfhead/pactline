@@ -18,16 +18,13 @@ func (h *Handler) CreateProject(
 	req *generated.ProjectCreate,
 	_ generated.CreateProjectParams,
 ) (generated.CreateProjectRes, error) {
-	if err := requireAdministrator(ctx); err != nil {
-		return nil, err
-	}
 	actor, subjectID, err := operationContext(ctx)
 	if err != nil {
 		return nil, err
 	}
 	project := domain.Project{
 		Name: req.Name, Description: req.Description.Or(""),
-		OwnerID: req.OwnerID, CreatorID: subjectID,
+		CreatorID: subjectID,
 	}
 	created, err := h.Projects.Projects.CreateWithOperation(ctx, project, actor)
 	if err != nil {
@@ -46,6 +43,15 @@ func (h *Handler) GetProject(
 	ctx context.Context,
 	params generated.GetProjectParams,
 ) (generated.GetProjectRes, error) {
+	subject, err := accessSubject(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := h.Access.RequireProjectByNumber(
+		ctx, params.Number, subject, application.ProjectPermissionRead,
+	); err != nil {
+		return nil, err
+	}
 	detail, err := h.Projects.GetDetail(ctx, params.Number)
 	if err != nil {
 		return nil, err
@@ -66,7 +72,11 @@ func (h *Handler) ListProjects(
 	if value, ok := params.Archived.Get(); ok {
 		includeArchived = value == generated.ListProjectsArchivedAll
 	}
-	projects, err := h.Projects.Projects.List(ctx, includeArchived)
+	subject, err := accessSubject(ctx)
+	if err != nil {
+		return nil, err
+	}
+	projects, err := h.Projects.Projects.ListForSubject(ctx, includeArchived, subject)
 	if err != nil {
 		return nil, err
 	}
@@ -101,15 +111,21 @@ func (h *Handler) UpdateProject(
 	if err != nil {
 		return nil, err
 	}
+	subject, err := accessSubject(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := h.Access.RequireProjectByNumber(
+		ctx, params.Number, subject, application.ProjectPermissionAdmin,
+	); err != nil {
+		return nil, err
+	}
 	var patch store.ProjectPatch
 	if value, ok := req.Name.Get(); ok {
 		patch.Name = &value
 	}
 	if value, ok := req.Description.Get(); ok {
 		patch.Description = &value
-	}
-	if value, ok := req.OwnerID.Get(); ok {
-		patch.OwnerID = &value
 	}
 	updated, err := h.Projects.Projects.UpdateVersionedWithOperation(
 		ctx, params.Number, expectedVersion, patch, actor,
@@ -145,15 +161,21 @@ func (h *Handler) applyProjectLifecycle(
 	action store.ProjectLifecycleAction,
 	reason string,
 ) (*generated.ProjectHeaders, error) {
-	if err := requireAdministrator(ctx); err != nil {
-		return nil, err
-	}
 	expectedVersion, err := parseIfMatch(ifMatch)
 	if err != nil {
 		return nil, err
 	}
 	actor, _, err := operationContext(ctx)
 	if err != nil {
+		return nil, err
+	}
+	subject, err := accessSubject(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := h.Access.RequireProjectByNumber(
+		ctx, number, subject, application.ProjectPermissionAdmin,
+	); err != nil {
 		return nil, err
 	}
 	userID := actor.UserID
@@ -181,7 +203,13 @@ func (h *Handler) CreateMilestone(
 	if err != nil {
 		return nil, err
 	}
-	project, err := h.Projects.Projects.GetByNumber(ctx, params.Number)
+	subject, err := accessSubject(ctx)
+	if err != nil {
+		return nil, err
+	}
+	project, err := h.Access.RequireProjectByNumber(
+		ctx, params.Number, subject, application.ProjectPermissionWrite,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -224,7 +252,13 @@ func (h *Handler) UpdateMilestone(
 	if err != nil {
 		return nil, err
 	}
-	project, err := h.Projects.Projects.GetByNumber(ctx, params.Number)
+	subject, err := accessSubject(ctx)
+	if err != nil {
+		return nil, err
+	}
+	project, err := h.Access.RequireProjectByNumber(
+		ctx, params.Number, subject, application.ProjectPermissionWrite,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -322,7 +356,13 @@ func (h *Handler) applyMilestoneLifecycle(
 	if err != nil {
 		return nil, err
 	}
-	project, err := h.Projects.Projects.GetByNumber(ctx, projectNumber)
+	subject, err := accessSubject(ctx)
+	if err != nil {
+		return nil, err
+	}
+	project, err := h.Access.RequireProjectByNumber(
+		ctx, projectNumber, subject, application.ProjectPermissionWrite,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -340,7 +380,13 @@ func (h *Handler) ListTaskCriteria(
 	ctx context.Context,
 	params generated.ListTaskCriteriaParams,
 ) (generated.ListTaskCriteriaRes, error) {
-	task, err := h.Projects.Tasks.GetByNumber(ctx, params.Number)
+	subject, err := accessSubject(ctx)
+	if err != nil {
+		return nil, err
+	}
+	task, err := h.Access.RequireTaskByNumber(
+		ctx, params.Number, subject, application.ProjectPermissionRead,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -364,7 +410,13 @@ func (h *Handler) CreateTaskCriterion(
 	if err != nil {
 		return nil, err
 	}
-	task, err := h.Projects.Tasks.GetByNumber(ctx, params.Number)
+	subject, err := accessSubject(ctx)
+	if err != nil {
+		return nil, err
+	}
+	task, err := h.Access.RequireTaskByNumber(
+		ctx, params.Number, subject, application.ProjectPermissionWrite,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -384,7 +436,13 @@ func (h *Handler) ListMilestoneCriteria(
 	ctx context.Context,
 	params generated.ListMilestoneCriteriaParams,
 ) (generated.ListMilestoneCriteriaRes, error) {
-	project, err := h.Projects.Projects.GetByNumber(ctx, params.Number)
+	subject, err := accessSubject(ctx)
+	if err != nil {
+		return nil, err
+	}
+	project, err := h.Access.RequireProjectByNumber(
+		ctx, params.Number, subject, application.ProjectPermissionRead,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -413,7 +471,13 @@ func (h *Handler) CreateMilestoneCriterion(
 	if err != nil {
 		return nil, err
 	}
-	project, err := h.Projects.Projects.GetByNumber(ctx, params.Number)
+	subject, err := accessSubject(ctx)
+	if err != nil {
+		return nil, err
+	}
+	project, err := h.Access.RequireProjectByNumber(
+		ctx, params.Number, subject, application.ProjectPermissionWrite,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -444,6 +508,11 @@ func (h *Handler) UpdateCriterion(
 	}
 	actor, _, err := operationContext(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := h.requireCriterionAccess(
+		ctx, params.ID, application.ProjectPermissionWrite,
+	); err != nil {
 		return nil, err
 	}
 	var criterionText, instructions *string
@@ -486,6 +555,11 @@ func (h *Handler) DeleteCriterion(
 	if err != nil {
 		return nil, err
 	}
+	if err := h.requireCriterionAccess(
+		ctx, params.ID, application.ProjectPermissionWrite,
+	); err != nil {
+		return nil, err
+	}
 	if err := h.Projects.Acceptance.RemoveCriterionVersioned(
 		ctx, params.ID, expectedVersion, actor, optionalReason(req),
 	); err != nil {
@@ -507,6 +581,11 @@ func (h *Handler) CreateAcceptanceCheck(
 	}
 	actor, subjectID, err := operationContext(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := h.requireCriterionAccess(
+		ctx, params.ID, application.ProjectPermissionWrite,
+	); err != nil {
 		return nil, err
 	}
 	checker := domain.Actor{Type: domain.ActorTypeUser, UserID: &subjectID}
@@ -566,8 +645,8 @@ func projectFromDomain(project store.ProjectWithRelations) generated.Project {
 		ID: project.Project.ID, Number: project.Project.Number,
 		Version: project.Project.Version, Name: project.Project.Name,
 		Description: project.Project.Description,
-		Owner:       userRefFromDomain(project.Owner), Creator: userRefFromDomain(project.Creator),
-		CreatedAt: project.Project.CreatedAt, UpdatedAt: project.Project.UpdatedAt,
+		Creator:     userRefFromDomain(project.Creator),
+		CreatedAt:   project.Project.CreatedAt, UpdatedAt: project.Project.UpdatedAt,
 		CompletedTasks: project.CompletedTasks, EligibleTasks: project.EligibleTasks,
 	}
 	if project.Project.ArchivedAt != nil {

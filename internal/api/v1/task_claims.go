@@ -7,6 +7,7 @@ import (
 
 	baseapi "github.com/wolfhead/pactline/internal/api"
 	generated "github.com/wolfhead/pactline/internal/api/v1generated"
+	"github.com/wolfhead/pactline/internal/application"
 	"github.com/wolfhead/pactline/internal/domain"
 	"github.com/wolfhead/pactline/internal/identity"
 )
@@ -25,6 +26,11 @@ func (h *Handler) GetCurrentTaskClaim(
 	if err != nil {
 		return nil, err
 	}
+	if err := h.requireClaimProjectAccess(
+		ctx, claim, application.ProjectPermissionWrite,
+	); err != nil {
+		return nil, err
+	}
 	return taskClaimResponse(ctx, claim), nil
 }
 
@@ -35,6 +41,15 @@ func (h *Handler) ClaimTask(
 ) (generated.ClaimTaskRes, error) {
 	actor, _, err := operationContext(ctx)
 	if err != nil {
+		return nil, err
+	}
+	subject, err := accessSubject(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := h.Access.RequireTaskByNumber(
+		ctx, params.Number, subject, application.ProjectPermissionWrite,
+	); err != nil {
 		return nil, err
 	}
 	claim, err := h.Claims.Claim(
@@ -88,7 +103,13 @@ func (h *Handler) ListTaskAgentConversations(
 	ctx context.Context,
 	params generated.ListTaskAgentConversationsParams,
 ) (generated.ListTaskAgentConversationsRes, error) {
-	if _, err := h.Tasks.Tasks.GetByNumber(ctx, params.Number); err != nil {
+	subject, err := accessSubject(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := h.Access.RequireTaskByNumber(
+		ctx, params.Number, subject, application.ProjectPermissionRead,
+	); err != nil {
 		return nil, err
 	}
 	claims, err := h.Claims.ListForTaskNumber(ctx, params.Number)
@@ -135,6 +156,9 @@ func (h *Handler) ExtendTaskClaim(
 	if err != nil {
 		return nil, err
 	}
+	if _, err := h.authorizedClaim(ctx, params.ID); err != nil {
+		return nil, err
+	}
 	claim, err := h.Claims.Extend(
 		ctx, params.ID, expectedVersion, req.ClientKind, req.ClientSessionID,
 		actor, time.Now().UTC(),
@@ -152,6 +176,9 @@ func (h *Handler) AddTaskClaimProgress(
 ) (generated.AddTaskClaimProgressRes, error) {
 	actor, _, err := operationContext(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if _, err := h.authorizedClaim(ctx, params.ID); err != nil {
 		return nil, err
 	}
 	message, err := h.Claims.AddProgress(
@@ -184,6 +211,9 @@ func (h *Handler) AskTaskClaimQuestion(
 	if err != nil {
 		return nil, err
 	}
+	if _, err := h.authorizedClaim(ctx, params.ID); err != nil {
+		return nil, err
+	}
 	claim, message, err := h.Claims.Ask(
 		ctx, params.ID, expectedVersion, req.ClientKind, req.ClientSessionID,
 		req.Body, actor, time.Now().UTC(),
@@ -207,6 +237,15 @@ func (h *Handler) AnswerTaskClaimQuestion(
 	if err != nil {
 		return nil, err
 	}
+	claimAccess, err := h.Claims.Get(ctx, params.ID)
+	if err != nil {
+		return nil, err
+	}
+	if err := h.requireClaimProjectAccess(
+		ctx, claimAccess, application.ProjectPermissionWrite,
+	); err != nil {
+		return nil, err
+	}
 	claim, message, err := h.Claims.Answer(
 		ctx, params.ID, expectedVersion, req.Body, actor, time.Now().UTC(),
 	)
@@ -227,6 +266,9 @@ func (h *Handler) ReleaseTaskClaim(
 	}
 	actor, _, err := operationContext(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if _, err := h.authorizedClaim(ctx, params.ID); err != nil {
 		return nil, err
 	}
 	claim, err := h.Claims.Release(
@@ -253,6 +295,9 @@ func (h *Handler) SubmitTaskClaim(
 	if err != nil {
 		return nil, err
 	}
+	if _, err := h.authorizedClaim(ctx, params.ID); err != nil {
+		return nil, err
+	}
 	claim, message, err := h.Claims.Submit(
 		ctx, params.ID, expectedVersion, req.ClientKind, req.ClientSessionID,
 		req.Body, actor, time.Now().UTC(),
@@ -274,6 +319,9 @@ func (h *Handler) RecordTaskClaimAcceptanceCheck(
 	}
 	actor, _, err := operationContext(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if _, err := h.authorizedClaim(ctx, params.ID); err != nil {
 		return nil, err
 	}
 	checker := domain.Actor{Type: domain.ActorTypeAgent, Ref: actor.TokenName}
@@ -318,7 +366,25 @@ func (h *Handler) authorizedClaim(ctx context.Context, id [16]byte) (domain.Task
 	if claim.ClaimedByUserID != current.Subject.ID {
 		return domain.TaskClaim{}, domain.ErrNotFound
 	}
+	if err := h.requireClaimProjectAccess(
+		ctx, claim, application.ProjectPermissionWrite,
+	); err != nil {
+		return domain.TaskClaim{}, err
+	}
 	return claim, nil
+}
+
+func (h *Handler) requireClaimProjectAccess(
+	ctx context.Context,
+	claim domain.TaskClaim,
+	permission application.ProjectPermission,
+) error {
+	subject, err := accessSubject(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = h.Access.RequireTaskByNumber(ctx, claim.TaskNumber, subject, permission)
+	return err
 }
 
 func taskClaimResponse(ctx context.Context, claim domain.TaskClaim) *generated.TaskClaimHeaders {

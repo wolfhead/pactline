@@ -22,6 +22,15 @@ func (UnimplementedHandler) ActivateMilestone(ctx context.Context, params Activa
 	return r, ht.ErrNotImplemented
 }
 
+// AddProjectMember implements addProjectMember operation.
+//
+// Add a Project member.
+//
+// POST /api/v1/projects/{number}/members
+func (UnimplementedHandler) AddProjectMember(ctx context.Context, req *ProjectMembershipCreate, params AddProjectMemberParams) (r AddProjectMemberRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // AddTaskClaimProgress implements addTaskClaimProgress operation.
 //
 // Add an Agent progress message.
@@ -94,6 +103,15 @@ func (UnimplementedHandler) CompleteMilestone(ctx context.Context, req OptLifecy
 	return r, ht.ErrNotImplemented
 }
 
+// CompleteTaskAttachmentUpload implements completeTaskAttachmentUpload operation.
+//
+// Verify an uploaded object and create the Task attachment.
+//
+// POST /api/v1/tasks/{number}/attachments/uploads/{id}/complete
+func (UnimplementedHandler) CompleteTaskAttachmentUpload(ctx context.Context, params CompleteTaskAttachmentUploadParams) (r CompleteTaskAttachmentUploadRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // CreateAcceptanceCheck implements createAcceptanceCheck operation.
 //
 // Record an immutable acceptance check.
@@ -148,12 +166,21 @@ func (UnimplementedHandler) CreateTask(ctx context.Context, req *TaskCreate, par
 	return r, ht.ErrNotImplemented
 }
 
+// CreateTaskAttachmentUpload implements createTaskAttachmentUpload operation.
+//
+// Create a private attachment upload session.
+//
+// POST /api/v1/tasks/{number}/attachments/uploads
+func (UnimplementedHandler) CreateTaskAttachmentUpload(ctx context.Context, req *TaskAttachmentUploadWrite, params CreateTaskAttachmentUploadParams) (r CreateTaskAttachmentUploadRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // CreateTaskComment implements createTaskComment operation.
 //
 // Add a task comment.
 //
 // POST /api/v1/tasks/{number}/comments
-func (UnimplementedHandler) CreateTaskComment(ctx context.Context, req *CommentWrite, params CreateTaskCommentParams) (r CreateTaskCommentRes, _ error) {
+func (UnimplementedHandler) CreateTaskComment(ctx context.Context, req *CommentCreateWrite, params CreateTaskCommentParams) (r CreateTaskCommentRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -181,6 +208,15 @@ func (UnimplementedHandler) DeleteCriterion(ctx context.Context, req OptLifecycl
 //
 // DELETE /api/v1/labels/{id}
 func (UnimplementedHandler) DeleteLabel(ctx context.Context, params DeleteLabelParams) (r DeleteLabelRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// DeleteTaskAttachment implements deleteTaskAttachment operation.
+//
+// Soft-delete a Task attachment.
+//
+// DELETE /api/v1/tasks/{number}/attachments/{id}
+func (UnimplementedHandler) DeleteTaskAttachment(ctx context.Context, params DeleteTaskAttachmentParams) (r DeleteTaskAttachmentRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -238,6 +274,15 @@ func (UnimplementedHandler) GetTask(ctx context.Context, params GetTaskParams) (
 	return r, ht.ErrNotImplemented
 }
 
+// GetTaskAttachmentContent implements getTaskAttachmentContent operation.
+//
+// Read authorized private attachment content.
+//
+// GET /api/v1/tasks/{number}/attachments/{id}/content
+func (UnimplementedHandler) GetTaskAttachmentContent(ctx context.Context, params GetTaskAttachmentContentParams) (r GetTaskAttachmentContentRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetTaskClaim implements getTaskClaim operation.
 //
 // Get a Claim.
@@ -265,6 +310,15 @@ func (UnimplementedHandler) ListMilestoneCriteria(ctx context.Context, params Li
 	return r, ht.ErrNotImplemented
 }
 
+// ListProjectMembers implements listProjectMembers operation.
+//
+// List Project members.
+//
+// GET /api/v1/projects/{number}/members
+func (UnimplementedHandler) ListProjectMembers(ctx context.Context, params ListProjectMembersParams) (r ListProjectMembersRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // ListProjects implements listProjects operation.
 //
 // List projects.
@@ -289,6 +343,15 @@ func (UnimplementedHandler) ListTaskActivity(ctx context.Context, params ListTas
 //
 // GET /api/v1/tasks/{number}/agent-conversations
 func (UnimplementedHandler) ListTaskAgentConversations(ctx context.Context, params ListTaskAgentConversationsParams) (r ListTaskAgentConversationsRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListTaskAttachments implements listTaskAttachments operation.
+//
+// List active Task attachments.
+//
+// GET /api/v1/tasks/{number}/attachments
+func (UnimplementedHandler) ListTaskAttachments(ctx context.Context, params ListTaskAttachmentsParams) (r ListTaskAttachmentsRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -352,6 +415,15 @@ func (UnimplementedHandler) RecordTaskClaimAcceptanceCheck(ctx context.Context, 
 //
 // POST /api/v1/claims/{id}/release
 func (UnimplementedHandler) ReleaseTaskClaim(ctx context.Context, req *TaskClaimRelease, params ReleaseTaskClaimParams) (r ReleaseTaskClaimRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// RemoveProjectMember implements removeProjectMember operation.
+//
+// Remove a Project member.
+//
+// DELETE /api/v1/projects/{number}/members/{user_id}
+func (UnimplementedHandler) RemoveProjectMember(ctx context.Context, params RemoveProjectMemberParams) (r RemoveProjectMemberRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -427,6 +499,15 @@ func (UnimplementedHandler) UpdateProject(ctx context.Context, req *ProjectPatch
 	return r, ht.ErrNotImplemented
 }
 
+// UpdateProjectMember implements updateProjectMember operation.
+//
+// Change a Project member role.
+//
+// PATCH /api/v1/projects/{number}/members/{user_id}
+func (UnimplementedHandler) UpdateProjectMember(ctx context.Context, req *ProjectMembershipPatch, params UpdateProjectMemberParams) (r UpdateProjectMemberRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // UpdateTask implements updateTask operation.
 //
 // Update a task.
@@ -441,6 +522,15 @@ func (UnimplementedHandler) UpdateTask(ctx context.Context, req *TaskPatch, para
 // Update a task comment.
 //
 // PATCH /api/v1/tasks/{number}/comments/{id}
-func (UnimplementedHandler) UpdateTaskComment(ctx context.Context, req *CommentWrite, params UpdateTaskCommentParams) (r UpdateTaskCommentRes, _ error) {
+func (UnimplementedHandler) UpdateTaskComment(ctx context.Context, req *CommentUpdateWrite, params UpdateTaskCommentParams) (r UpdateTaskCommentRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UploadTaskAttachmentContent implements uploadTaskAttachmentContent operation.
+//
+// Stream content into a Local storage upload session.
+//
+// PUT /api/v1/tasks/{number}/attachments/uploads/{id}/content
+func (UnimplementedHandler) UploadTaskAttachmentContent(ctx context.Context, req UploadTaskAttachmentContentReq, params UploadTaskAttachmentContentParams) (r UploadTaskAttachmentContentRes, _ error) {
 	return r, ht.ErrNotImplemented
 }

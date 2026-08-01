@@ -107,7 +107,6 @@ test('a human can provision, inspect, and revoke an Agent that completes version
       data: {
         name: projectName,
         description: 'A human-visible Agent workflow is managed in a durable workspace',
-        owner_id: adminID,
       },
     })
     expect(projectCreate.status()).toBe(201)
@@ -121,7 +120,6 @@ test('a human can provision, inspect, and revoke an Agent that completes version
       data: {
         name: projectName,
         description: 'A human-visible Agent workflow is managed in a durable workspace',
-        owner_id: adminID,
       },
     })
     expect(projectReplay.status()).toBe(201)

@@ -79,7 +79,6 @@ func mustCreateTask(
 				domain.Project{
 					Name:        "Store test workspace",
 					Description: "Workspace fixture for Task store tests",
-					OwnerID:     userA,
 					CreatorID:   userA,
 				},
 			)

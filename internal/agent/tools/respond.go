@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"unicode/utf8"
@@ -83,8 +84,9 @@ func (s *responseState) last() (ResponseSelection, bool) {
 }
 
 type RespondTool struct {
-	config Config
-	state  *responseState
+	config     Config
+	state      *responseState
+	createTask *CreateTaskTool
 }
 
 func (t *RespondTool) Info(context.Context) (*schema.ToolInfo, error) {
@@ -162,7 +164,25 @@ func (t *RespondTool) selectResponse(
 	case ResponseTaskCreated:
 		call, err := t.compatibleEvidence(ctx, input.SourceToolCallIDs, ToolCreateTask)
 		if err != nil {
-			return ResponseSelection{}, err
+			created, ok := CreatedTask{}, false
+			if t.createTask != nil {
+				created, ok = t.createTask.LastCreated()
+			}
+			if !ok {
+				return ResponseSelection{}, err
+			}
+			run, runErr := t.config.Repository.GetRun(ctx, t.config.Run.ID)
+			if runErr != nil {
+				return ResponseSelection{}, runErr
+			}
+			if run.CreatedTaskID == nil || run.CreatedTaskNumber == nil ||
+				*run.CreatedTaskID != created.ID || *run.CreatedTaskNumber != created.Number {
+				return ResponseSelection{}, err
+			}
+			slog.Warn("Agent task response recovered from local mutation receipt",
+				"run_id", t.config.Run.ID, "evidence_error", err)
+			selection.CreatedTask = &created
+			break
 		}
 		var result CreatedTask
 		if err := json.Unmarshal(call.Result, &result); err != nil || result.Number <= 0 {

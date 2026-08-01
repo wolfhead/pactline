@@ -10,6 +10,20 @@ import (
 	ht "github.com/ogen-go/ogen/http"
 )
 
+func encodeAddProjectMemberRequest(
+	req *ProjectMembershipCreate,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
 func encodeAddTaskClaimProgressRequest(
 	req *TaskClaimAgentMessage,
 	r *http.Request,
@@ -190,8 +204,22 @@ func encodeCreateTaskRequest(
 	return nil
 }
 
+func encodeCreateTaskAttachmentUploadRequest(
+	req *TaskAttachmentUploadWrite,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
 func encodeCreateTaskCommentRequest(
-	req *CommentWrite,
+	req *CommentCreateWrite,
 	r *http.Request,
 ) error {
 	const contentType = "application/json"
@@ -364,6 +392,20 @@ func encodeUpdateProjectRequest(
 	return nil
 }
 
+func encodeUpdateProjectMemberRequest(
+	req *ProjectMembershipPatch,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
 func encodeUpdateTaskRequest(
 	req *TaskPatch,
 	r *http.Request,
@@ -379,7 +421,7 @@ func encodeUpdateTaskRequest(
 }
 
 func encodeUpdateTaskCommentRequest(
-	req *CommentWrite,
+	req *CommentUpdateWrite,
 	r *http.Request,
 ) error {
 	const contentType = "application/json"
@@ -389,5 +431,15 @@ func encodeUpdateTaskCommentRequest(
 	}
 	encoded := e.Bytes()
 	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
+func encodeUploadTaskAttachmentContentRequest(
+	req UploadTaskAttachmentContentReq,
+	r *http.Request,
+) error {
+	const contentType = "application/octet-stream"
+	body := req
+	ht.SetBody(r, body, contentType)
 	return nil
 }

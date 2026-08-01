@@ -56,9 +56,7 @@ func TestGeneratedClientAgentWorkflow(t *testing.T) {
 	require.NoError(t, err)
 	ctx := context.Background()
 
-	projectRequest := &generated.ProjectCreate{
-		Name: "Generated Agent workflow", OwnerID: uuid.MustParse(userA),
-	}
+	projectRequest := &generated.ProjectCreate{Name: "Generated Agent workflow"}
 	projectKey := generated.NewOptString("create-project-" + uuid.NewString())
 	projectResult, err := client.CreateProject(
 		ctx, projectRequest,

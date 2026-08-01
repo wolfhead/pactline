@@ -107,7 +107,7 @@ func TestProjectOverviewComputesStatusBacklogAndAttentionDeterministically(t *te
 	milestoneID := uuid.New()
 	client := &readClientStub{project: generated.ProjectDetail{
 		Project: generated.Project{
-			Number: 7, Name: "Launch", Owner: generated.UserRef{Name: "Ada"},
+			Number: 7, Name: "Launch", Creator: generated.UserRef{Name: "Ada"},
 		},
 		Milestones: []generated.Milestone{{
 			ID: milestoneID, Name: "Beta", Status: generated.MilestoneStatusActive,

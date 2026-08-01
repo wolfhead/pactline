@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/wolfhead/pactline/internal/agent/artifact"
 	"github.com/wolfhead/pactline/internal/agent/channel"
 	"github.com/wolfhead/pactline/internal/identity"
 
@@ -117,7 +118,7 @@ func (c *Client) NormalizeMessageEvent(
 		return channel.IncomingMessage{}, channel.ErrInvalidEvent
 	}
 	messageType := stringValue(message.MessageType)
-	text, err := extractMessageText(messageType, stringValue(message.Content))
+	text, rawArtifacts, err := extractMessageContent(messageType, stringValue(message.Content))
 	if err != nil {
 		return channel.IncomingMessage{}, err
 	}
@@ -148,6 +149,13 @@ func (c *Client) NormalizeMessageEvent(
 	if err != nil {
 		return channel.IncomingMessage{}, channel.ErrInvalidEvent
 	}
+	artifacts := c.registerArtifacts(
+		header.TenantKey,
+		stringValue(message.ChatId),
+		stringValue(message.MessageId),
+		createdAt,
+		rawArtifacts,
+	)
 	return channel.IncomingMessage{
 		Provider:             "lark",
 		TenantID:             header.TenantKey,
@@ -159,6 +167,7 @@ func (c *Client) NormalizeMessageEvent(
 		SenderSubjectID:      stringValue(sender.SenderId.OpenId),
 		MessageType:          messageType,
 		Text:                 strings.TrimSpace(text),
+		Artifacts:            artifacts,
 		Mentions:             mentions,
 		CreatedAt:            createdAt,
 		BotMentioned:         botMentioned,
@@ -221,7 +230,7 @@ func (c *Client) FetchContext(
 			!createdAt.Before(request.NotAfter) {
 			continue
 		}
-		text, parseErr := extractMessageText(item.MessageType, item.Body.Content)
+		text, rawArtifacts, parseErr := extractMessageContent(item.MessageType, item.Body.Content)
 		if parseErr != nil {
 			continue
 		}
@@ -232,10 +241,18 @@ func (c *Client) FetchContext(
 				"@"+strings.TrimSpace(mention.Name),
 			)
 		}
+		artifacts := c.registerArtifacts(
+			request.TenantID,
+			request.ConversationID,
+			item.MessageID,
+			createdAt,
+			rawArtifacts,
+		)
 		messages = append(messages, channel.ChannelMessage{
 			MessageID:       item.MessageID,
 			SenderSubjectID: item.Sender.ID,
 			Text:            strings.TrimSpace(text),
+			Artifacts:       artifacts,
 			CreatedAt:       createdAt,
 		})
 		if len(messages) == request.PageSize {
@@ -450,16 +467,19 @@ func providerMillis(value string) (time.Time, error) {
 	return time.UnixMilli(milliseconds).UTC(), nil
 }
 
-func extractMessageText(messageType string, rawContent string) (string, error) {
+func extractMessageContent(
+	messageType string,
+	rawContent string,
+) (string, []rawMessageArtifact, error) {
 	switch messageType {
 	case "text":
 		var content struct {
 			Text string `json:"text"`
 		}
 		if json.Unmarshal([]byte(rawContent), &content) != nil {
-			return "", channel.ErrInvalidEvent
+			return "", nil, channel.ErrInvalidEvent
 		}
-		return content.Text, nil
+		return content.Text, nil, nil
 	case "post":
 		var content struct {
 			Title     string              `json:"title"`
@@ -467,13 +487,14 @@ func extractMessageText(messageType string, rawContent string) (string, error) {
 			ContentV2 [][]larkPostElement `json:"content_v2"`
 		}
 		if json.Unmarshal([]byte(rawContent), &content) != nil {
-			return "", channel.ErrInvalidEvent
+			return "", nil, channel.ErrInvalidEvent
 		}
 		paragraphs := content.ContentV2
 		if len(paragraphs) == 0 {
 			paragraphs = content.Content
 		}
 		lines := make([]string, 0, len(paragraphs)+1)
+		var artifacts []rawMessageArtifact
 		if title := strings.TrimSpace(content.Title); title != "" {
 			lines = append(lines, title)
 		}
@@ -485,22 +506,70 @@ func extractMessageText(messageType string, rawContent string) (string, error) {
 					line.WriteString(element.Text)
 				case "at":
 					line.WriteString(element.UserID)
+				case "img":
+					if element.ImageKey != "" {
+						artifacts = append(artifacts, rawMessageArtifact{
+							ProviderKey:  element.ImageKey,
+							Kind:         artifact.KindImage,
+							MediaType:    "image/*",
+							ResourceType: "image",
+						})
+					}
+				case "file", "media":
+					if element.FileKey != "" {
+						artifacts = append(artifacts, rawMessageArtifact{
+							ProviderKey:  element.FileKey,
+							Kind:         artifactKindForName(element.FileName),
+							Name:         element.FileName,
+							ResourceType: "file",
+						})
+					}
 				}
 			}
 			if value := strings.TrimSpace(line.String()); value != "" {
 				lines = append(lines, value)
 			}
 		}
-		return strings.Join(lines, "\n"), nil
+		return strings.Join(lines, "\n"), artifacts, nil
+	case "image":
+		var content struct {
+			ImageKey string `json:"image_key"`
+		}
+		if json.Unmarshal([]byte(rawContent), &content) != nil || strings.TrimSpace(content.ImageKey) == "" {
+			return "", nil, channel.ErrInvalidEvent
+		}
+		return "", []rawMessageArtifact{{
+			ProviderKey: content.ImageKey, Kind: artifact.KindImage,
+			MediaType: "image/*", ResourceType: "image",
+		}}, nil
+	case "file":
+		var content struct {
+			FileKey  string `json:"file_key"`
+			FileName string `json:"file_name"`
+		}
+		if json.Unmarshal([]byte(rawContent), &content) != nil || strings.TrimSpace(content.FileKey) == "" {
+			return "", nil, channel.ErrInvalidEvent
+		}
+		return "", []rawMessageArtifact{{
+			ProviderKey: content.FileKey, Kind: artifactKindForName(content.FileName),
+			Name: content.FileName, ResourceType: "file",
+		}}, nil
+	case "sticker":
+		// Stickers are reactions, not business evidence. Keep them out of the
+		// artifact registry so the Agent cannot spend a vision call on them.
+		return "", nil, channel.ErrUnsupportedMessage
 	default:
-		return "", channel.ErrUnsupportedMessage
+		return "", nil, channel.ErrUnsupportedMessage
 	}
 }
 
 type larkPostElement struct {
-	Tag    string `json:"tag"`
-	Text   string `json:"text"`
-	UserID string `json:"user_id"`
+	Tag      string `json:"tag"`
+	Text     string `json:"text"`
+	UserID   string `json:"user_id"`
+	ImageKey string `json:"image_key"`
+	FileKey  string `json:"file_key"`
+	FileName string `json:"file_name"`
 }
 
 func stringValue(value *string) string {

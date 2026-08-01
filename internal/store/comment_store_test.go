@@ -49,7 +49,9 @@ func TestCommentCreateListAndOnlyAuthorMayEditOrDelete(t *testing.T) {
 
 	list, err = cs.List(ctx, task.Task.ID)
 	require.NoError(t, err)
-	require.Empty(t, list)
+	require.Len(t, list, 1)
+	require.NotNil(t, list[0].DeletedAt, "deleted roots remain as thread placeholders")
+	require.Empty(t, list[0].Body)
 }
 
 func TestCommentCreateRejectsBlankBody(t *testing.T) {

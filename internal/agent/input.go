@@ -4,14 +4,56 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/google/uuid"
+	"github.com/wolfhead/pactline/internal/agent/artifact"
 )
 
 var ErrRunInputDecrypt = errors.New("agent run input cannot be decrypted")
+
+const commandEnvelopeVersion = 1
+
+type CommandEnvelope struct {
+	Version   int                  `json:"version"`
+	Text      string               `json:"text"`
+	Artifacts []artifact.Reference `json:"artifacts,omitempty"`
+}
+
+func EncodeCommandEnvelope(text string, artifacts []artifact.Reference) ([]byte, error) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return nil, ErrCheckpointConfiguration
+	}
+	encoded, err := json.Marshal(CommandEnvelope{
+		Version: commandEnvelopeVersion, Text: text,
+		Artifacts: artifacts,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("encode Agent command envelope: %w", err)
+	}
+	return encoded, nil
+}
+
+func DecodeCommandEnvelope(encoded []byte) (CommandEnvelope, error) {
+	var envelope CommandEnvelope
+	if json.Unmarshal(encoded, &envelope) == nil &&
+		envelope.Version == commandEnvelopeVersion && strings.TrimSpace(envelope.Text) != "" {
+		envelope.Text = strings.TrimSpace(envelope.Text)
+		return envelope, nil
+	}
+	// Runs accepted before artifact-aware command envelopes stored only the
+	// command text. Keep them executable across a rolling deployment.
+	legacy := strings.TrimSpace(string(encoded))
+	if legacy == "" {
+		return CommandEnvelope{}, ErrRunInputDecrypt
+	}
+	return CommandEnvelope{Version: commandEnvelopeVersion, Text: legacy}, nil
+}
 
 type RunInput struct {
 	RunID                   uuid.UUID

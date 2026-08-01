@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "id": "immediate-and-long-term",
+  "name": "Immediate diagnosis and a longer-term timeout fix",
+  "business_context": "A media integration cannot increase traffic because budget lookup timeout rates are high.",
+  "judge_context": "The conversation contains an immediate diagnostic request and a proposed longer-term preload change. Assess whether the current one-Task contract loses one of them, merges them misleadingly, or asks a useful clarification.",
+  "trigger": {
+    "message_id": "trigger-2",
+    "reply_to_message_id": "m24",
+    "text": "请根据上述讨论创建任务，把现在需要推进的事情记录下来。",
+    "sender": "Integration Owner",
+    "at": "2026-07-31T14:20:00+08:00"
+  },
+  "messages": [
+    {
+      "message_id": "m21",
+      "sender": "Integration Owner",
+      "role": "business",
+      "text": "媒体反馈预算超时率很高，明细数据稍后下发，现在还不能开放流量。",
+      "at": "2026-07-31T14:00:00+08:00"
+    },
+    {
+      "message_id": "m22",
+      "sender": "Service Engineer",
+      "role": "backend",
+      "text": "样例里多个账户的超时率在 20% 到 50% 之间。",
+      "at": "2026-07-31T14:03:00+08:00"
+    },
+    {
+      "message_id": "m23",
+      "sender": "Integration Owner",
+      "role": "business",
+      "text": "那这个媒体需要考虑预算预加载，否则流量跑不起来。",
+      "at": "2026-07-31T14:06:00+08:00"
+    },
+    {
+      "message_id": "m24",
+      "sender": "Service Engineer",
+      "role": "backend",
+      "text": "先请数据同学把受影响账户转换成统一 ID 发出来，我们确认具体范围。",
+      "at": "2026-07-31T14:08:00+08:00"
+    },
+    {
+      "message_id": "m25",
+      "sender": "Data Engineer",
+      "role": "data",
+      "text": "可以，等完整明细到齐后处理。",
+      "at": "2026-07-31T14:10:00+08:00"
+    }
+  ],
+  "projects": [
+    {"number": 12, "name": "Media Integration"}
+  ],
+  "users": [
+    {"name": "Service Engineer", "role": "backend"},
+    {"name": "Data Engineer", "role": "data"}
+  ]
+}

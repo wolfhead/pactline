@@ -26,6 +26,29 @@ services:
     networks:
       - data
 
+  rabbitmq:
+    image: rabbitmq:4.1-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-pactline}
+      RABBITMQ_DEFAULT_PASS_FILE: /run/secrets/rabbitmq_password
+    secrets:
+      - rabbitmq_password
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+    networks:
+      - data
+
   api:
     image: ${PACTLINE_API_IMAGE:-ghcr.io/wolfhead/pactline-api}:${PACTLINE_VERSION:?PACTLINE_VERSION is required}
     environment:
@@ -42,6 +65,9 @@ services:
       OAUTH_TOKEN_ENCRYPTION_KEY_FILE: /run/secrets/oauth_token_encryption_key
       OAUTH_TOKEN_ENCRYPTION_KEY_ID: ${OAUTH_TOKEN_ENCRYPTION_KEY_ID:-primary}
       SESSION_SECRET_FILE: /run/secrets/session_secret
+      RABBITMQ_URL_FILE: /run/secrets/rabbitmq_url
+      ATTACHMENT_STORAGE_PROVIDER: ${ATTACHMENT_STORAGE_PROVIDER:-local}
+      ATTACHMENT_LOCAL_ROOT: /var/lib/pactline/attachments
       AGENT_ENABLED: ${AGENT_ENABLED:-false}
       DEEPSEEK_API_KEY_FILE: /run/secrets/deepseek_api_key
       DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
@@ -60,8 +86,11 @@ services:
       - deepseek_api_key
       - agent_delegation_signing_key
       - agent_checkpoint_encryption_key
+      - rabbitmq_url
     depends_on:
       postgres:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/readyz"]
@@ -75,6 +104,8 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+    volumes:
+      - attachment_data:/var/lib/pactline/attachments
     cap_drop:
       - ALL
     security_opt:
@@ -135,9 +166,15 @@ secrets:
     file: ${PACTLINE_SECRETS_DIR:-./deploy/secrets}/agent_delegation_signing_key
   agent_checkpoint_encryption_key:
     file: ${PACTLINE_SECRETS_DIR:-./deploy/secrets}/agent_checkpoint_encryption_key
+  rabbitmq_password:
+    file: ${PACTLINE_SECRETS_DIR:-./deploy/secrets}/rabbitmq_password
+  rabbitmq_url:
+    file: ${PACTLINE_SECRETS_DIR:-./deploy/secrets}/rabbitmq_url
 
 volumes:
   postgres_data:
+  rabbitmq_data:
+  attachment_data:
 
 networks:
   app:

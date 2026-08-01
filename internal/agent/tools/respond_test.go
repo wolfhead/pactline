@@ -95,6 +95,35 @@ func TestRespondRequiresCompatibleEvidenceAndStoresStructuredSelection(t *testin
 	require.Equal(t, "Work is active.", selection.Summary)
 }
 
+func TestRespondRecoversTaskReceiptWhenModelReferencesWrongEvidenceID(t *testing.T) {
+	runID := uuid.New()
+	taskID := uuid.New()
+	taskNumber := int64(42)
+	repository := &responseRepositoryStub{
+		run: pactagent.Run{
+			ID: runID, CreatedTaskID: &taskID, CreatedTaskNumber: &taskNumber,
+		},
+		calls: map[string]pactagent.ToolCall{},
+	}
+	created := CreatedTask{ID: taskID, Number: taskNumber, Title: "Investigate refresh"}
+	createTask := &CreateTaskTool{last: &created}
+	respond := &RespondTool{
+		config: Config{Run: repository.run, Repository: repository},
+		state:  &responseState{}, createTask: createTask,
+	}
+
+	_, err := respond.InvokableRun(context.Background(), `{
+		"response_type":"task_created",
+		"source_tool_call_ids":["wrong-call-id"],
+		"summary":"Created the investigation Task."
+	}`)
+
+	require.NoError(t, err)
+	selection, ok := respond.LastResponse()
+	require.True(t, ok)
+	require.Equal(t, created, *selection.CreatedTask)
+}
+
 func TestRespondRejectsMismatchedEvidenceAndSecondTerminalResponse(t *testing.T) {
 	runID := uuid.New()
 	result, err := json.Marshal(ProjectOverview{ProjectNumber: 7, ProjectName: "Launch"})

@@ -23,6 +23,15 @@ func (h *Handler) CreateTask(
 	if err != nil {
 		return nil, err
 	}
+	subject, err := accessSubject(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := h.Access.RequireProjectByNumber(
+		ctx, req.ProjectNumber, subject, application.ProjectPermissionWrite,
+	); err != nil {
+		return nil, err
+	}
 	task := domain.Task{
 		Title: req.Title, Context: req.Context,
 		ExpectedResult: req.ExpectedResult,
@@ -76,7 +85,13 @@ func (h *Handler) GetTask(
 	ctx context.Context,
 	params generated.GetTaskParams,
 ) (generated.GetTaskRes, error) {
-	task, err := h.Tasks.Tasks.GetByNumber(ctx, params.Number)
+	subject, err := accessSubject(ctx)
+	if err != nil {
+		return nil, err
+	}
+	task, err := h.Access.RequireTaskByNumber(
+		ctx, params.Number, subject, application.ProjectPermissionRead,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -96,6 +111,13 @@ func (h *Handler) ListTasks(
 		LabelIDs: params.Label,
 		Sort:     "updated_at",
 		Order:    "desc",
+	}
+	subject, err := accessSubject(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !subject.IsPlatformAdministrator() {
+		filter.VisibleToUserID = &subject.UserID
 	}
 	if value, ok := params.Cursor.Get(); ok {
 		filter.Cursor = value
@@ -127,7 +149,9 @@ func (h *Handler) ListTasks(
 		}
 	}
 	if value, ok := params.ProjectNumber.Get(); ok {
-		project, err := h.Tasks.Projects.Projects.GetByNumber(ctx, value)
+		project, err := h.Access.RequireProjectByNumber(
+			ctx, value, subject, application.ProjectPermissionRead,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -180,6 +204,15 @@ func (h *Handler) UpdateTask(
 	}
 	actor, _, err := operationContext(ctx)
 	if err != nil {
+		return nil, err
+	}
+	subject, err := accessSubject(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := h.Access.RequireTaskByNumber(
+		ctx, params.Number, subject, application.ProjectPermissionWrite,
+	); err != nil {
 		return nil, err
 	}
 	var patch domain.TaskPatch
@@ -235,6 +268,11 @@ func (h *Handler) UpdateTask(
 	}
 	if value, ok := req.ProjectNumber.Get(); ok {
 		association.ProjectNumber = &value
+		if _, err := h.Access.RequireProjectByNumber(
+			ctx, value, subject, application.ProjectPermissionWrite,
+		); err != nil {
+			return nil, err
+		}
 	}
 	if value, ok := req.MilestoneID.Get(); ok {
 		association.MilestoneID = &value
@@ -289,6 +327,15 @@ func (h *Handler) setTaskArchived(
 	if err != nil {
 		return nil, err
 	}
+	subject, err := accessSubject(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := h.Access.RequireTaskByNumber(
+		ctx, number, subject, application.ProjectPermissionWrite,
+	); err != nil {
+		return nil, err
+	}
 	updated, err := h.Tasks.SetArchived(
 		ctx, number, expectedVersion, archived, actor,
 	)
@@ -302,7 +349,13 @@ func (h *Handler) ListTaskComments(
 	ctx context.Context,
 	params generated.ListTaskCommentsParams,
 ) (generated.ListTaskCommentsRes, error) {
-	task, err := h.Tasks.Tasks.GetByNumber(ctx, params.Number)
+	subject, err := accessSubject(ctx)
+	if err != nil {
+		return nil, err
+	}
+	task, err := h.Access.RequireTaskByNumber(
+		ctx, params.Number, subject, application.ProjectPermissionRead,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -330,7 +383,7 @@ func (h *Handler) ListTaskComments(
 
 func (h *Handler) CreateTaskComment(
 	ctx context.Context,
-	req *generated.CommentWrite,
+	req *generated.CommentCreateWrite,
 	params generated.CreateTaskCommentParams,
 ) (generated.CreateTaskCommentRes, error) {
 	expectedVersion, err := parseIfMatch(params.IfMatch)
@@ -341,8 +394,22 @@ func (h *Handler) CreateTaskComment(
 	if err != nil {
 		return nil, err
 	}
+	subject, err := accessSubject(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := h.Access.RequireTaskByNumber(
+		ctx, params.Number, subject, application.ProjectPermissionWrite,
+	); err != nil {
+		return nil, err
+	}
+	var replyToCommentID *uuid.UUID
+	if value, ok := req.ReplyToCommentID.Get(); ok {
+		replyToCommentID = &value
+	}
 	created, err := h.Tasks.CreateComment(
-		ctx, params.Number, expectedVersion, subjectID, req.Body, actor,
+		ctx, params.Number, expectedVersion, subjectID, req.Body,
+		replyToCommentID, req.MentionedUserIds, actor,
 	)
 	if err != nil {
 		return nil, err
@@ -360,7 +427,7 @@ func (h *Handler) CreateTaskComment(
 
 func (h *Handler) UpdateTaskComment(
 	ctx context.Context,
-	req *generated.CommentWrite,
+	req *generated.CommentUpdateWrite,
 	params generated.UpdateTaskCommentParams,
 ) (generated.UpdateTaskCommentRes, error) {
 	expectedVersion, err := parseIfMatch(params.IfMatch)
@@ -371,8 +438,18 @@ func (h *Handler) UpdateTaskComment(
 	if err != nil {
 		return nil, err
 	}
+	subject, err := accessSubject(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := h.Access.RequireTaskByNumber(
+		ctx, params.Number, subject, application.ProjectPermissionWrite,
+	); err != nil {
+		return nil, err
+	}
 	updated, err := h.Tasks.UpdateComment(
-		ctx, params.Number, params.ID, expectedVersion, req.Body, actor,
+		ctx, params.Number, params.ID, expectedVersion, req.Body,
+		req.MentionedUserIds, actor,
 	)
 	if err != nil {
 		return nil, err
@@ -397,6 +474,15 @@ func (h *Handler) DeleteTaskComment(
 	if err != nil {
 		return nil, err
 	}
+	subject, err := accessSubject(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := h.Access.RequireTaskByNumber(
+		ctx, params.Number, subject, application.ProjectPermissionWrite,
+	); err != nil {
+		return nil, err
+	}
 	if err := h.Tasks.DeleteComment(
 		ctx, params.Number, params.ID, expectedVersion, actor,
 	); err != nil {
@@ -411,7 +497,13 @@ func (h *Handler) ListTaskActivity(
 	ctx context.Context,
 	params generated.ListTaskActivityParams,
 ) (generated.ListTaskActivityRes, error) {
-	task, err := h.Tasks.Tasks.GetByNumber(ctx, params.Number)
+	subject, err := accessSubject(ctx)
+	if err != nil {
+		return nil, err
+	}
+	task, err := h.Access.RequireTaskByNumber(
+		ctx, params.Number, subject, application.ProjectPermissionRead,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -649,11 +741,21 @@ func userRefFromDomain(user domain.UserRef) generated.UserRef {
 }
 
 func commentFromDomain(comment domain.Comment) generated.Comment {
-	return generated.Comment{
+	mentionedUserIDs := comment.MentionedUserIDs
+	if mentionedUserIDs == nil {
+		mentionedUserIDs = []uuid.UUID{}
+	}
+	out := generated.Comment{
 		ID: comment.ID, TaskID: comment.TaskID, AuthorID: comment.AuthorID,
-		Body: comment.Body, Version: comment.Version,
+		Body: comment.Body, ThreadRootID: comment.ThreadRootID,
+		MentionedUserIds: mentionedUserIDs, Deleted: comment.DeletedAt != nil,
+		Version:   comment.Version,
 		CreatedAt: comment.CreatedAt, UpdatedAt: comment.UpdatedAt,
 	}
+	if comment.ReplyToCommentID != nil {
+		out.ReplyToCommentID = generated.NewOptUUID(*comment.ReplyToCommentID)
+	}
+	return out
 }
 
 func labelFromDomain(label domain.Label) generated.Label {

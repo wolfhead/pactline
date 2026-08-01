@@ -16,16 +16,12 @@ func TestProjectValidationRequiresDurableWorkspaceIdentity(t *testing.T) {
 		project domain.Project
 	}{
 		{
-			name:    "missing owner",
-			project: domain.Project{Name: "Task Manager", CreatorID: userID},
-		},
-		{
 			name:    "missing creator",
-			project: domain.Project{Name: "Task Manager", OwnerID: userID},
+			project: domain.Project{Name: "Task Manager"},
 		},
 		{
 			name:    "blank name",
-			project: domain.Project{Name: " ", OwnerID: userID, CreatorID: userID},
+			project: domain.Project{Name: " ", CreatorID: userID},
 		},
 	}
 	for _, tt := range tests {
@@ -36,7 +32,7 @@ func TestProjectValidationRequiresDurableWorkspaceIdentity(t *testing.T) {
 		})
 	}
 
-	valid := domain.Project{Name: "Task Manager", OwnerID: userID, CreatorID: userID}
+	valid := domain.Project{Name: "Task Manager", CreatorID: userID}
 	if err := valid.Validate(); err != nil {
 		t.Fatalf("Validate() error = %v", err)
 	}
