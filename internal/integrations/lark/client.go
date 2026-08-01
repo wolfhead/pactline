@@ -47,6 +47,8 @@ type Client struct {
 	tenantMu                    sync.RWMutex
 	botMu                       sync.RWMutex
 	botOpenID                   string
+	artifactMu                  sync.RWMutex
+	artifacts                   map[string]registeredArtifact
 }
 
 func NewClient(config Config) (*Client, error) {
@@ -82,6 +84,7 @@ func NewClient(config Config) (*Client, error) {
 		cipher:      config.Cipher, encryptionKeyID: config.EncryptionKeyID,
 		httpClient: config.HTTPClient,
 		now:        func() time.Time { return time.Now().UTC() },
+		artifacts:  make(map[string]registeredArtifact),
 	}, nil
 }
 

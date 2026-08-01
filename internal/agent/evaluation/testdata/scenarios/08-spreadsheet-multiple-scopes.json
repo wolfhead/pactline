@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "id": "spreadsheet-multiple-scopes",
+  "name": "An XLSX separates an immediate experiment from future automation",
+  "business_context": "The workbook contains one sheet for a short preview experiment and another sheet for unapproved future automation.",
+  "judge_context": "The Agent should inspect both sheets and avoid silently merging the immediate experiment with automation that has not been agreed.",
+  "trigger": {
+    "message_id": "xlsx-trigger",
+    "reply_to_message_id": "xlsx-message",
+    "text": "请根据以上讨论在 Model Delivery 项目把当前确定的工作创建成任务。",
+    "sender": "Release Lead",
+    "at": "2026-07-30T12:05:00+08:00"
+  },
+  "messages": [
+    {
+      "message_id": "xlsx-message",
+      "sender": "ML Engineer",
+      "role": "engineering",
+      "text": "我把预发布实验和以后可能做的自动化分别放在两个 Sheet 里。当前先验证预发布。",
+      "artifacts": [
+        {
+          "id": "release-plan-xlsx",
+          "kind": "spreadsheet",
+          "name": "release-plan.xlsx",
+          "media_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "fixture": "release-plan.workbook.json"
+        }
+      ],
+      "at": "2026-07-30T12:00:00+08:00"
+    }
+  ],
+  "projects": [{"number": 14, "name": "Model Delivery"}]
+}

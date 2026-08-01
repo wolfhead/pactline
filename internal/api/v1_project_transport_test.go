@@ -45,21 +45,40 @@ type v1AcceptanceCheckJSON struct {
 	CheckerType string    `json:"checker_type"`
 }
 
-func TestV1ProjectAdministrationRejectsMember(t *testing.T) {
+func TestV1ProjectMembershipControlsVisibilityAndAdministration(t *testing.T) {
 	handler, db := newTaskTestServer(t)
 
 	memberCreate := do(t, handler, http.MethodPost, "/api/v1/projects", userB, map[string]any{
-		"name": "Member-owned Project attempt", "owner_id": userB,
+		"name": "Member-created Project",
 	})
-	require.Equal(t, http.StatusForbidden, memberCreate.Code, memberCreate.Body.String())
+	require.Equal(t, http.StatusCreated, memberCreate.Code, memberCreate.Body.String())
+	var memberProject v1ProjectJSON
+	decodeJSON(t, memberCreate, &memberProject)
+	cleanupProjectRows(t, db, memberProject.ID)
 
 	createdProject := do(t, handler, http.MethodPost, "/api/v1/projects", userA, map[string]any{
-		"name": "Admin-controlled Project", "owner_id": userA,
+		"name": "Project-scoped administration",
 	})
 	require.Equal(t, http.StatusCreated, createdProject.Code, createdProject.Body.String())
 	var project v1ProjectJSON
 	decodeJSON(t, createdProject, &project)
 	cleanupProjectRows(t, db, project.ID)
+
+	hidden := do(t, handler, http.MethodGet,
+		fmt.Sprintf("/api/v1/projects/%d", project.Number), userB, nil)
+	require.Equal(t, http.StatusNotFound, hidden.Code, hidden.Body.String())
+
+	addMember := doWithHeaders(
+		t, handler, http.MethodPost,
+		fmt.Sprintf("/api/v1/projects/%d/members", project.Number), userA,
+		http.Header{"If-Match": {`"1"`}},
+		map[string]any{"user_id": userB, "role": "member"},
+	)
+	require.Equal(t, http.StatusCreated, addMember.Code, addMember.Body.String())
+
+	visible := do(t, handler, http.MethodGet,
+		fmt.Sprintf("/api/v1/projects/%d", project.Number), userB, nil)
+	require.Equal(t, http.StatusOK, visible.Code, visible.Body.String())
 
 	memberArchive := doWithHeaders(
 		t,
@@ -67,7 +86,7 @@ func TestV1ProjectAdministrationRejectsMember(t *testing.T) {
 		http.MethodPost,
 		fmt.Sprintf("/api/v1/projects/%d/archive", project.Number),
 		userB,
-		http.Header{"If-Match": {`"1"`}},
+		http.Header{"If-Match": {`"2"`}},
 		nil,
 	)
 	require.Equal(t, http.StatusForbidden, memberArchive.Code, memberArchive.Body.String())
@@ -77,7 +96,7 @@ func TestV1ProjectMilestoneAndAcceptanceVersions(t *testing.T) {
 	handler, db := newTaskTestServer(t)
 
 	createdProject := do(t, handler, http.MethodPost, "/api/v1/projects", userA, map[string]any{
-		"name": "Versioned Project", "owner_id": userA,
+		"name": "Versioned Project",
 	})
 	require.Equal(t, http.StatusCreated, createdProject.Code, createdProject.Body.String())
 	require.Equal(t, `"1"`, createdProject.Header().Get("ETag"))

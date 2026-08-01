@@ -6,12 +6,15 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
+	"github.com/wolfhead/pactline/internal/agent/artifact"
 	"github.com/wolfhead/pactline/internal/agent/channel"
 	"github.com/wolfhead/pactline/internal/identity"
 
+	"github.com/google/uuid"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	"github.com/stretchr/testify/require"
 )
@@ -71,7 +74,7 @@ func TestAgentChannelNormalizesLarkPostAsPlainText(t *testing.T) {
 				"create_time":"1785420486741",
 				"chat_id":"chat-1",
 				"message_type":"post",
-				"content":"{\"title\":\"\",\"content\":[[{\"tag\":\"at\",\"user_id\":\"@_user_1\",\"user_name\":\"Pactline\",\"style\":[]},{\"tag\":\"text\",\"text\":\"  \",\"style\":[]},{\"tag\":\"text\",\"text\":\"查看 Task #1 的状态\",\"style\":[]}]],\"content_v2\":[[{\"tag\":\"at\",\"user_id\":\"@_user_1\",\"user_name\":\"Pactline\",\"style\":[]},{\"tag\":\"text\",\"text\":\"  \",\"style\":[]},{\"tag\":\"text\",\"text\":\"查看 Task #1 的状态\",\"style\":[]}]]}",
+				"content":"{\"title\":\"\",\"content\":[[{\"tag\":\"at\",\"user_id\":\"@_user_1\",\"user_name\":\"Pactline\",\"style\":[]},{\"tag\":\"text\",\"text\":\"  \",\"style\":[]},{\"tag\":\"text\",\"text\":\"查看 Task #1 的状态\",\"style\":[]},{\"tag\":\"img\",\"image_key\":\"post-image-key\"}]],\"content_v2\":[[{\"tag\":\"at\",\"user_id\":\"@_user_1\",\"user_name\":\"Pactline\",\"style\":[]},{\"tag\":\"text\",\"text\":\"  \",\"style\":[]},{\"tag\":\"text\",\"text\":\"查看 Task #1 的状态\",\"style\":[]},{\"tag\":\"img\",\"image_key\":\"post-image-key\"}]]}",
 				"mentions":[{"key":"@_user_1","id":{"open_id":"ou_bot"},"name":"Pactline"}]
 			}
 		}
@@ -85,9 +88,11 @@ func TestAgentChannelNormalizesLarkPostAsPlainText(t *testing.T) {
 	require.True(t, incoming.BotMentioned)
 	require.Equal(t, "post", incoming.MessageType)
 	require.Equal(t, "查看 Task #1 的状态", incoming.Text)
+	require.Len(t, incoming.Artifacts, 1)
+	require.Equal(t, "image", string(incoming.Artifacts[0].Kind))
 }
 
-func TestAgentChannelRejectsUnsupportedMessageType(t *testing.T) {
+func TestAgentChannelNormalizesImageAsArtifact(t *testing.T) {
 	server := newAgentChannelInitializationServer(t)
 	defer server.Close()
 	client := newAgentChannelTestClient(t, server.URL, server.Client())
@@ -113,9 +118,22 @@ func TestAgentChannelRejectsUnsupportedMessageType(t *testing.T) {
 	var event larkim.P2MessageReceiveV1
 	require.NoError(t, json.Unmarshal(payload, &event))
 
-	_, err := client.NormalizeMessageEvent(&event)
+	incoming, err := client.NormalizeMessageEvent(&event)
+
+	require.NoError(t, err)
+	require.Empty(t, incoming.Text)
+	require.False(t, incoming.BotMentioned)
+	require.Len(t, incoming.Artifacts, 1)
+	require.Equal(t, "image", string(incoming.Artifacts[0].Kind))
+	require.NotEmpty(t, incoming.Artifacts[0].ID)
+}
+
+func TestExtractMessageContentRejectsStickerWithoutRegisteringArtifact(t *testing.T) {
+	text, artifacts, err := extractMessageContent("sticker", `{"file_key":"sticker-key"}`)
 
 	require.ErrorIs(t, err, channel.ErrUnsupportedMessage)
+	require.Empty(t, text)
+	require.Empty(t, artifacts)
 }
 
 func TestAgentChannelFetchesBoundedContextAndReplies(t *testing.T) {
@@ -228,6 +246,54 @@ func TestAgentChannelFetchesBoundedContextAndReplies(t *testing.T) {
 		TargetMessageID: "message-1",
 	}))
 	require.Equal(t, "OnIt", reactionBody["reaction_type"]["emoji_type"])
+}
+
+func TestAgentArtifactResolverDownloadsOnlyRegisteredRunScope(t *testing.T) {
+	createdAt := time.Date(2026, 7, 30, 8, 0, 0, 0, time.UTC)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/open-apis/auth/v3/tenant_access_token/internal":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"code":0,"tenant_access_token":"tenant-token","expire":7200}`)
+		case "/open-apis/tenant/v2/tenant/query":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"code":0,"data":{"tenant":{"tenant_key":"tenant"}}}`)
+		case "/open-apis/bot/v3/info":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"code":0,"msg":"ok","bot":{"activate_status":2,"open_id":"ou_bot"}}`)
+		case "/open-apis/im/v1/messages/message-1/resources/file-key":
+			require.Equal(t, "file", r.URL.Query().Get("type"))
+			require.Equal(t, "Bearer tenant-token", r.Header.Get("Authorization"))
+			w.Header().Set("Content-Type", "text/csv")
+			_, _ = io.WriteString(w, "id,rate\na,0.2\n")
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	client := newAgentChannelTestClient(t, server.URL, server.Client())
+	references := client.registerArtifacts("tenant", "chat-1", "message-1", createdAt, []rawMessageArtifact{{
+		ProviderKey: "file-key", ResourceType: "file", Kind: artifact.KindCSV,
+		Name: "accounts.csv", MediaType: "text/csv",
+	}})
+	require.Len(t, references, 1)
+	scope := artifact.Scope{
+		RunID: uuid.New(), TenantID: "tenant", ConversationID: "chat-1",
+		NotBefore: createdAt.Add(-time.Hour), NotAfter: createdAt,
+	}
+
+	local, err := client.Resolve(context.Background(), scope, references[0].ID)
+	require.NoError(t, err)
+	encoded, err := os.ReadFile(local.Path)
+	require.NoError(t, err)
+	require.Equal(t, "id,rate\na,0.2\n", string(encoded))
+	require.NoError(t, local.Cleanup())
+	_, err = os.Stat(local.Path)
+	require.ErrorIs(t, err, os.ErrNotExist)
+
+	scope.ConversationID = "other-chat"
+	_, err = client.Resolve(context.Background(), scope, references[0].ID)
+	require.ErrorIs(t, err, artifact.ErrScope)
 }
 
 func TestBuildAgentMarkdownCardPromotesFirstHeading(t *testing.T) {

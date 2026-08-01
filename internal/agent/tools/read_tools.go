@@ -194,7 +194,7 @@ type ProjectOverviewInput struct {
 type ProjectOverview struct {
 	ProjectNumber       int64              `json:"project_number"`
 	ProjectName         string             `json:"project_name"`
-	OwnerName           string             `json:"owner_name"`
+	CreatorName         string             `json:"creator_name"`
 	Archived            bool               `json:"archived"`
 	TaskCount           int                `json:"task_count"`
 	StatusCounts        TaskStatusCounts   `json:"status_counts"`
@@ -320,7 +320,7 @@ func projectOverview(
 	result := ProjectOverview{
 		ProjectNumber: detail.Project.Number,
 		ProjectName:   detail.Project.Name,
-		OwnerName:     detail.Project.Owner.Name,
+		CreatorName:   detail.Project.Creator.Name,
 		Archived:      detail.Project.ArchivedAt.IsSet(),
 		Milestones:    make([]MilestoneSummary, 0, len(detail.Milestones)),
 	}

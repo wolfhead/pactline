@@ -18,6 +18,7 @@ The test environment uses:
   `.github/workflows/release-images.yml`;
 - `compose.production.yaml` as the base deployment;
 - `deploy/compose.preview-lark.yaml` as the test-only override;
+- `deploy/compose.agent-vision.yaml` to enable screenshot inspection;
 - a stable Docker Compose project name so upgrades reuse the existing
   PostgreSQL volume;
 - a host-level reverse proxy forwarding the public test origin to the Web
@@ -72,10 +73,10 @@ The helper performs these operations:
 1. Resolves the selected ref from `origin`.
 2. Reuses a successful image-publication run for that commit, or dispatches and
    waits for one.
-3. Exports the two Compose files from that exact commit and copies them to the
+3. Exports the three Compose files from that exact commit and copies them to the
    deployment directory.
 4. Updates only `PACTLINE_VERSION` in the remote environment file.
-5. Validates the effective two-file Compose configuration.
+5. Validates the effective three-file Compose configuration.
 6. Creates a PostgreSQL custom-format backup when the database is running.
 7. Pulls the immutable images and starts the stack with `--wait`.
 8. Checks `/healthz` and `/readyz` inside the containers and through the public
@@ -97,6 +98,7 @@ Follow the host preparation and secret generation sections in
    URL, bootstrap Administrator email, and Agent settings in `deploy/.env`.
 5. Create every secret file listed in
    `deploy/secrets.example/README.md` with mode `0600`.
+   Screenshot evaluation specifically requires `agent_vision_api_key`.
 6. Install or update the host reverse proxy only after checking other
    applications and listeners on the shared host.
 7. Register the exact callback below in the Lark application and publish the
@@ -124,6 +126,11 @@ After every deployment, verify:
 - `GET /api/admin/agent/status` reports the Lark channel and worker as ready;
 - an `@bot` Task detail or Project status request receives the immediate emoji
   acknowledgement and a final Card; and
+- an `@bot` discussion conversion with a screenshot uses its visible evidence,
+  while a CSV explicitly described as a sample is not treated as the complete
+  population;
+- an unrelated sticker or reaction image in the preceding discussion does not
+  trigger attachment inspection; and
 - API logs contain no repeated worker, outbox, migration, or Lark reconnect
   failures.
 

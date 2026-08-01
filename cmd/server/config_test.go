@@ -58,6 +58,36 @@ func TestUnsupportedProviderIsRejected(t *testing.T) {
 	require.ErrorContains(t, cfg.Validate(), "unsupported AUTH_PROVIDER")
 }
 
+func TestAttachmentStorageConfiguration(t *testing.T) {
+	cfg := validProductionConfig()
+	cfg.AttachmentStorageProvider = "unknown"
+	require.ErrorContains(t, cfg.Validate(), "unsupported ATTACHMENT_STORAGE_PROVIDER")
+
+	cfg = validProductionConfig()
+	cfg.AttachmentStorageProvider = "oss"
+	require.ErrorContains(t, cfg.Validate(), "OSS attachment storage requires")
+	cfg.AttachmentOSSRegion = "cn-hangzhou"
+	cfg.AttachmentOSSBucket = "private-bucket"
+	cfg.AttachmentOSSAccessKeyID = "id"
+	cfg.AttachmentOSSAccessKeySecret = "secret"
+	require.NoError(t, cfg.Validate())
+
+	cfg = validProductionConfig()
+	cfg.AttachmentStorageProvider = "cos"
+	cfg.AttachmentCOSBucketURL = "not-a-url"
+	cfg.AttachmentCOSSecretID = "id"
+	cfg.AttachmentCOSSecretKey = "secret"
+	require.ErrorContains(t, cfg.Validate(), "must be an absolute URL")
+}
+
+func TestRabbitMQConfiguration(t *testing.T) {
+	cfg := validProductionConfig()
+	cfg.RabbitMQURL = "https://rabbit.example.test"
+	require.ErrorContains(t, cfg.Validate(), "RABBITMQ_URL")
+	cfg.RabbitMQURL = "amqps://pactline:secret@rabbit.example.test/vhost"
+	require.NoError(t, cfg.Validate())
+}
+
 func TestLoadConfigDecodesEncryptionKey(t *testing.T) {
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("AUTH_PROVIDER", "lark")
@@ -69,10 +99,13 @@ func TestLoadConfigDecodesEncryptionKey(t *testing.T) {
 	t.Setenv("LARK_APP_SECRET", "secret")
 	t.Setenv("LARK_REDIRECT_URI", "https://tasks.example.test/api/auth/lark/callback")
 	t.Setenv("BOOTSTRAP_ADMIN_EMAIL", "admin@example.test")
+	t.Setenv("AGENT_VISION_API_KEY", "vision-test-key")
 	cfg, err := LoadConfig()
 	require.NoError(t, err)
 	require.Len(t, cfg.TokenEncryptionKey, 32)
 	require.Equal(t, "deepseek-v4-flash", cfg.DeepSeekModel)
+	require.Equal(t, DefaultAgentVisionBaseURL, cfg.AgentVisionBaseURL)
+	require.Equal(t, DefaultAgentVisionModel, cfg.AgentVisionModel)
 
 	t.Setenv("OAUTH_TOKEN_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(make([]byte, 31)))
 	_, err = LoadConfig()
@@ -183,4 +216,23 @@ func TestAgentConfigRequiresLarkAndDedicatedSecrets(t *testing.T) {
 	config.DeepSeekAPIKey = "test-only-key"
 	config.AuthProvider = AuthProviderDevelopment
 	require.EqualError(t, config.Validate(), "development authentication is not allowed in production")
+}
+
+func TestAgentVisionConfigurationIsAllOrNothing(t *testing.T) {
+	config := validProductionConfig()
+	config.AgentEnabled = true
+	config.DeepSeekAPIKey = "test-only-key"
+	config.AgentDelegationSigningKey = make([]byte, 32)
+	config.AgentDelegationSigningKeyID = "delegate-key"
+	config.AgentCheckpointEncryptionKey = make([]byte, 32)
+	config.AgentCheckpointEncryptionKeyID = "checkpoint-key"
+	config.AgentWorkerConcurrency = 1
+	config.AgentTenantTimezone = "Asia/Shanghai"
+	config.AgentVisionModel = "vision-model"
+
+	require.ErrorContains(t, config.Validate(), "AGENT_VISION_API_KEY")
+
+	config.AgentVisionAPIKey = "vision-key"
+	config.AgentVisionBaseURL = "https://vision.example.test/v1"
+	require.NoError(t, config.Validate())
 }

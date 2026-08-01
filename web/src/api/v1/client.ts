@@ -36,6 +36,40 @@ function cookieValue(name: string): string | null {
   return null
 }
 
+export async function v1Upload(
+  path: string,
+  body: Blob,
+  uploadHeaders: Record<string, string> = {},
+): Promise<void> {
+  const headers = new Headers(uploadHeaders)
+  if (!headers.has('Content-Type') && body.type) headers.set('Content-Type', body.type)
+  const csrfToken = cookieValue('bb_csrf')
+  if (csrfToken && new URL(path, window.location.href).origin === window.location.origin) {
+    headers.set('X-CSRF-Token', csrfToken)
+  }
+  const response = await fetch(path, {
+    method: 'PUT', credentials: 'same-origin', headers, body,
+  })
+  if (response.ok) return
+  let parsed: unknown = null
+  try {
+    parsed = await response.json()
+  } catch {
+    // Cloud object stores can return XML or text; the HTTP status remains
+    // useful even when they do not speak Pactline Problem Details.
+  }
+  const problem = parsed && typeof parsed === 'object'
+    ? parsed as { code?: unknown; request_id?: unknown }
+    : {}
+  const code = typeof problem.code === 'string' ? problem.code : 'UPLOAD_FAILED'
+  const requestId = typeof problem.request_id === 'string'
+    ? problem.request_id
+    : (response.headers.get('X-Request-ID') ?? '')
+  const error = new ProblemError(response.status, code, requestId)
+  error.message = problemMessage(parsed, response.statusText || code)
+  throw error
+}
+
 function problemMessage(value: unknown, fallback: string): string {
   if (!value || typeof value !== 'object') return fallback
   const problem = value as { title?: unknown; detail?: unknown }
@@ -126,11 +160,11 @@ export function v1Patch<T>(
   return request<T>('PATCH', path, options)
 }
 
-export function v1Delete(
+export function v1Delete<T = void>(
   path: string,
   options: V1RequestOptions,
-): Promise<V1Response<void>> {
-  return request<void>('DELETE', path, options)
+): Promise<V1Response<T>> {
+  return request<T>('DELETE', path, options)
 }
 
 export function requireVersioned<T>(response: V1Response<T>): Versioned<T> {

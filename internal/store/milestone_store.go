@@ -119,6 +119,15 @@ func (s *MilestoneStore) Get(ctx context.Context, projectID, milestoneID uuid.UU
 	return out, err
 }
 
+func (s *MilestoneStore) GetByID(ctx context.Context, milestoneID uuid.UUID) (domain.Milestone, error) {
+	out, err := scanMilestone(s.db.Pool.QueryRow(ctx,
+		`SELECT `+milestoneColumns+` FROM milestones WHERE id=$1`, milestoneID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.Milestone{}, domain.ErrNotFound
+	}
+	return out, err
+}
+
 func (s *MilestoneStore) List(ctx context.Context, projectID uuid.UUID) ([]domain.Milestone, error) {
 	rows, err := s.db.Pool.Query(ctx,
 		`SELECT `+milestoneColumns+` FROM milestones WHERE project_id=$1 ORDER BY position, created_at, id`,

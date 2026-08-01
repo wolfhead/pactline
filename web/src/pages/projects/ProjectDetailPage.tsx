@@ -3,16 +3,22 @@ import { flushSync } from 'react-dom'
 import { Link, NavLink, useParams, useSearchParams } from 'react-router-dom'
 import { ChevronDown, ListChecks, Plus } from 'lucide-react'
 import {
+  addProjectMember,
   applyMilestoneLifecycle,
   applyProjectArchive,
   createMilestone,
   createMilestoneCriterion,
   getProject,
+  listProjectMembers,
+  removeProjectMember,
   updateProject,
+  updateProjectMember,
   updateMilestone,
   type Milestone,
   type ProjectActivity,
   type ProjectDetail,
+  type ProjectMembership,
+  type ProjectRole,
 } from '@/api/projects'
 import {
   checkCriterion,
@@ -23,6 +29,7 @@ import {
 } from '@/api/acceptance'
 import { ProblemError } from '@/api/v1/client'
 import AcceptanceChecklist from '@/components/projects/AcceptanceChecklist'
+import ProjectMembersPanel from '@/components/projects/ProjectMembersPanel'
 import TaskCollection from '@/components/tasks/TaskCollection'
 import TaskInspector from '@/components/tasks/TaskInspector'
 import { useTaskCollection } from '@/components/tasks/useTaskCollection'
@@ -46,7 +53,9 @@ const ACTIVITY_LABELS: Record<string, string> = {
   restored: '恢复了项目',
   project_name_changed: '修改了项目名称',
   project_description_changed: '修改了项目说明',
-  project_owner_changed: '修改了项目负责人',
+  project_membership_add: '添加了项目成员',
+  project_membership_change: '调整了项目成员角色',
+  project_membership_remove: '移除了项目成员',
   milestone_updated: '更新了里程碑',
   milestone_activated: '激活了里程碑',
   milestone_completed: '完成了里程碑',
@@ -59,22 +68,29 @@ export default function ProjectDetailPage({ view = 'overview' }: { view?: Projec
   const selectedMilestoneID = useParams().milestoneID
   const { me, users, actor, impersonation } = useIdentity()
   const [detail, setDetail] = useState<ProjectDetail | null>(null)
+  const [memberships, setMemberships] = useState<ProjectMembership[]>([])
   const [error, setError] = useState('')
   const [addingMilestone, setAddingMilestone] = useState(false)
   const [projectDetailsOpen, setProjectDetailsOpen] = useState(false)
   const [editingProject, setEditingProject] = useState(false)
   const [mutationPending, setMutationPending] = useState(false)
-  const canAdminister = actor?.platform_role === 'ADMIN' && !impersonation
+  const isPlatformAdmin = actor?.platform_role === 'ADMIN' && !impersonation
 
   const reload = useCallback(async () => {
     setError('')
     try {
-      const loaded = await getProject(number)
+      const [loaded, loadedMemberships] = await Promise.all([
+        getProject(number),
+        listProjectMembers(number),
+      ])
       // Dependent versioned actions may become clickable as soon as reload
       // resolves. Commit the new aggregate versions before returning so a
       // fast follow-up action never submits the stale ETags from the previous
       // render.
-      flushSync(() => setDetail(loaded))
+      flushSync(() => {
+        setDetail(loaded)
+        setMemberships(loadedMemberships)
+      })
     } catch (reason) {
       setError((reason as Error).message)
     }
@@ -106,6 +122,15 @@ export default function ProjectDetailPage({ view = 'overview' }: { view?: Projec
   if (!detail) return <p role="alert" className="p-6 text-sm text-danger">加载失败：{error}</p>
 
   const { project } = detail
+  const canManageProject = !impersonation && (
+    isPlatformAdmin
+    || memberships.some((membership) => (
+      membership.user.id === me?.id && membership.active && membership.role === 'admin'
+    ))
+  )
+  const projectUsers = memberships
+    .filter((membership) => membership.active)
+    .map((membership) => membership.user)
   const base = `/projects/${project.number}`
   const selectedMilestone = selectedMilestoneID
     ? detail.milestones.find((item) => item.id === selectedMilestoneID)
@@ -164,19 +189,21 @@ export default function ProjectDetailPage({ view = 'overview' }: { view?: Projec
               <div className="max-w-3xl">
                 <p className="text-sm leading-6 text-fg-muted">{project.description || '暂无项目说明'}</p>
                 <p className="mt-2 text-xs text-fg-subtle">
-                  项目 #{project.number} · 负责人：{project.owner.name}
+                  项目 #{project.number} · 创建者：{project.creator.name}
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  disabled={mutationPending}
-                  onClick={() => setEditingProject((value) => !value)}
-                  className="rounded-md border border-border-strong px-3 py-1.5 text-sm disabled:cursor-wait disabled:opacity-50"
-                >
-                  编辑项目
-                </button>
-                {canAdminister && (
+                {canManageProject && (
+                  <button
+                    type="button"
+                    disabled={mutationPending}
+                    onClick={() => setEditingProject((value) => !value)}
+                    className="rounded-md border border-border-strong px-3 py-1.5 text-sm disabled:cursor-wait disabled:opacity-50"
+                  >
+                    编辑项目
+                  </button>
+                )}
+                {canManageProject && (
                   <button
                     type="button"
                     disabled={mutationPending}
@@ -197,7 +224,6 @@ export default function ProjectDetailPage({ view = 'overview' }: { view?: Projec
                   const updated = await mutate(() => updateProject(project.number, project.version, {
                     name: String(data.get('name') ?? ''),
                     description: String(data.get('description') ?? ''),
-                    owner_id: String(data.get('owner_id') ?? ''),
                   }))
                   if (updated) setEditingProject(false)
                 }}
@@ -209,26 +235,33 @@ export default function ProjectDetailPage({ view = 'overview' }: { view?: Projec
                   aria-label="项目名称"
                   className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm"
                 />
-                <select
-                  name="owner_id"
-                  defaultValue={project.owner.id}
-                  aria-label="项目负责人"
-                  className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm"
-                >
-                  {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
-                </select>
                 <textarea
                   name="description"
                   defaultValue={project.description}
                   aria-label="项目说明"
                   rows={3}
-                  className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm md:col-span-2"
+                  className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm"
                 />
                 <div className="flex justify-end md:col-span-2">
                   <button className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white">保存</button>
                 </div>
               </form>
             )}
+            <ProjectMembersPanel
+              memberships={memberships}
+              users={users}
+              canManage={canManageProject}
+              pending={mutationPending}
+              onAdd={(userID: string, role: ProjectRole) => mutate(() => (
+                addProjectMember(project.number, project.version, userID, role)
+              ))}
+              onChangeRole={(userID: string, role: ProjectRole) => mutate(() => (
+                updateProjectMember(project.number, project.version, userID, role)
+              ))}
+              onRemove={(userID: string) => mutate(() => (
+                removeProjectMember(project.number, project.version, userID)
+              ))}
+            />
           </div>
         )}
         {error && <p role="alert" className="border-t border-border py-2 text-sm text-danger">操作失败：{error}</p>}
@@ -238,15 +271,16 @@ export default function ProjectDetailPage({ view = 'overview' }: { view?: Projec
         'flex min-h-0 flex-1 flex-col gap-4 p-4 sm:p-5',
         view === 'overview' && 'mx-auto w-full max-w-7xl',
       )}>
-        {view === 'overview' && <Overview detail={detail} users={users} />}
-        {view === 'backlog' && <Backlog detail={detail} users={users} />}
+        {view === 'overview' && <Overview detail={detail} users={projectUsers} />}
+        {view === 'backlog' && <Backlog detail={detail} users={projectUsers} />}
         {view === 'milestones' && (
           <Milestones
             detail={detail}
             selected={selectedMilestone}
             adding={addingMilestone}
             setAdding={setAddingMilestone}
-            users={users}
+            users={projectUsers}
+            defaultOwnerID={me?.id ?? project.creator.id}
             onMutate={mutate}
             onReload={reload}
           />
@@ -357,13 +391,14 @@ function Backlog({
 }
 
 function Milestones({
-  detail, selected, adding, setAdding, users, onMutate, onReload,
+  detail, selected, adding, setAdding, users, defaultOwnerID, onMutate, onReload,
 }: {
   detail: ProjectDetail
   selected?: Milestone
   adding: boolean
   setAdding: (value: boolean) => void
   users: UserRef[]
+  defaultOwnerID: string
   onMutate: (operation: () => Promise<unknown>) => Promise<boolean>
   onReload: () => Promise<void>
 }) {
@@ -634,7 +669,7 @@ function Milestones({
       {adding && (
         <form onSubmit={submit} className="grid gap-3 rounded-lg border border-border bg-surface-raised p-4 md:grid-cols-2">
           <input name="name" required placeholder="里程碑名称" className="rounded-md border border-border-strong bg-surface px-3 py-2" />
-          <select name="owner_id" defaultValue={project.owner.id} className="rounded-md border border-border-strong bg-surface px-3 py-2">
+          <select name="owner_id" defaultValue={defaultOwnerID} className="rounded-md border border-border-strong bg-surface px-3 py-2">
             {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
           </select>
           <textarea name="outcome" required placeholder="可验证的阶段成果" className="rounded-md border border-border-strong bg-surface px-3 py-2 md:col-span-2" />

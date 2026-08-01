@@ -14,6 +14,8 @@ acceptance criteria.
 
 - A Project is a long-lived workspace.
 - A Project may have multiple concurrently active Milestones.
+- Projects are private workspaces with multiple administrators and ordinary
+  members; the creator is the initial administrator.
 - Every Task belongs to one Project; a Task without a Milestone is in the
   Project Backlog.
 - Task creation requires context and an expected result. Acceptance criteria
@@ -26,6 +28,9 @@ acceptance criteria.
 - Tasks explicitly opt into external execution. A real Codex session claims
   one assigned eligible Task, records a separate Agent conversation and
   acceptance evidence, then submits it for human review.
+- Tasks support private attachments and threaded comments with structured
+  Project-member mentions. Reliable notification intents flow through a
+  PostgreSQL outbox and RabbitMQ without coupling comments to one IM provider.
 - Production identity is invitation-only, single-tenant Lark OAuth with one
   Administrator.
 - Administrative impersonation is read-only and keeps the Administrator as the
@@ -38,6 +43,7 @@ The durable entity semantics and invariants are documented in
 
 - Go 1.24 HTTP API
 - PostgreSQL 16
+- RabbitMQ 4
 - React 18, TypeScript, Vite, Tailwind CSS, and Radix UI
 - ogen-generated OpenAPI transport
 - CloudWeGo Eino with DeepSeek for the built-in Agent Harness
@@ -135,6 +141,8 @@ are intentionally not part of the Pactline domain.
   publication controls
 - [`docs/operations/agent-api.md`](docs/operations/agent-api.md) — Agent API
   operation
+- [`docs/operations/agent-evaluation.md`](docs/operations/agent-evaluation.md) —
+  isolated evaluation of explicit-mention conversation conversion
 - [`docs/operations/lark-identity.md`](docs/operations/lark-identity.md) —
   identity operation
 - [`docs/operations/deployment.md`](docs/operations/deployment.md) —

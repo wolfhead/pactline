@@ -14,7 +14,6 @@ beforeEach(() => {
   vi.mocked(projectsApi.listProjects).mockResolvedValue([
     {
       id: 'p1', number: 12, version: 1, name: 'Launch', description: '',
-      owner: { id: 'u1', name: 'Alex', email: 'a@example.com' },
       creator: { id: 'u1', name: 'Alex', email: 'a@example.com' },
       archived_at: null, created_at: '', updated_at: '', completed_tasks: 0,
       eligible_tasks: 0,
@@ -36,7 +35,6 @@ beforeEach(() => {
 function awaitProject() {
   return {
     id: 'p1', number: 12, version: 1, name: 'Launch', description: '',
-    owner: { id: 'u1', name: 'Alex', email: 'a@example.com' },
     creator: { id: 'u1', name: 'Alex', email: 'a@example.com' },
     archived_at: null, created_at: '', updated_at: '', completed_tasks: 0,
     eligible_tasks: 0,

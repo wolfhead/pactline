@@ -18,7 +18,9 @@ FROM alpine:3.22
 
 RUN apk add --no-cache ca-certificates tzdata \
     && addgroup -S -g 10001 pactline \
-    && adduser -S -D -H -u 10001 -G pactline pactline
+    && adduser -S -D -H -u 10001 -G pactline pactline \
+    && mkdir -p /var/lib/pactline/attachments \
+    && chown -R pactline:pactline /var/lib/pactline
 
 COPY --from=build /out/pactline /usr/local/bin/pactline
 

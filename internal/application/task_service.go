@@ -162,14 +162,17 @@ func (s *TaskService) CreateComment(
 	number, expectedTaskVersion int64,
 	authorID uuid.UUID,
 	body string,
+	replyToCommentID *uuid.UUID,
+	mentionedUserIDs []uuid.UUID,
 	actor domain.OperationActor,
 ) (store.CommentCreation, error) {
 	task, err := s.Tasks.GetByNumber(ctx, number)
 	if err != nil {
 		return store.CommentCreation{}, err
 	}
-	return s.Comments.CreateVersionedWithOperation(
-		ctx, task.Task.ID, expectedTaskVersion, authorID, body, actor,
+	return s.Comments.CreateVersionedThreadedWithOperation(
+		ctx, task.Task.ID, expectedTaskVersion, authorID, body,
+		replyToCommentID, mentionedUserIDs, actor,
 	)
 }
 
@@ -179,14 +182,15 @@ func (s *TaskService) UpdateComment(
 	id uuid.UUID,
 	expectedVersion int64,
 	body string,
+	mentionedUserIDs []uuid.UUID,
 	actor domain.OperationActor,
 ) (domain.Comment, error) {
 	task, err := s.Tasks.GetByNumber(ctx, number)
 	if err != nil {
 		return domain.Comment{}, err
 	}
-	return s.Comments.UpdateVersionedWithOperation(
-		ctx, task.Task.ID, id, expectedVersion, body, actor,
+	return s.Comments.UpdateVersionedMentionedWithOperation(
+		ctx, task.Task.ID, id, expectedVersion, body, mentionedUserIDs, actor,
 	)
 }
 

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link2, XIcon } from 'lucide-react'
 import AcceptanceChecklist from '@/components/projects/AcceptanceChecklist'
 import ActivityLog from './ActivityLog'
+import AttachmentSection from './AttachmentSection'
 import CommentSection from './CommentSection'
 import InlineEditable from './InlineEditable'
 import AssigneeControl from './controls/AssigneeControl'
@@ -574,8 +575,16 @@ export default function TaskDetail({
         创建者：{task.creator.name} · 创建于 {new Date(task.created_at).toLocaleString()}
       </p>
 
+      <AttachmentSection
+        taskNumber={task.number}
+        taskVersion={task.version}
+        readOnly={Boolean(task.archived_at)}
+        onTaskChanged={() => reloadTaskAndAcceptance(task.number)}
+      />
+
       <CommentSection
         taskNumber={task.number}
+        projectNumber={task.project.number}
         taskVersion={task.version}
         taskStatus={task.status}
         acceptanceCriteria={acceptanceCriteria}

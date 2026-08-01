@@ -117,7 +117,7 @@ func TestProjectOperationProvenanceAndBusinessAuditCommitTogether(t *testing.T) 
 	tokenID := createOperationToken(t, db, userA)
 	projects := store.NewProjectStore(db)
 	project, err := projects.Create(ctx, domain.Project{
-		Name: "Audited project", OwnerID: userA, CreatorID: userA,
+		Name: "Audited project", CreatorID: userA,
 	})
 	require.NoError(t, err)
 	cleanupProject(t, db, project.Project.ID)
@@ -178,7 +178,7 @@ func TestSecondaryWorkMutationsRecordBusinessAudit(t *testing.T) {
 
 	projects := store.NewProjectStore(db)
 	project, err := projects.Create(ctx, domain.Project{
-		Name: "Secondary audit project", OwnerID: userA, CreatorID: userA,
+		Name: "Secondary audit project", CreatorID: userA,
 	})
 	require.NoError(t, err)
 	cleanupProject(t, db, project.Project.ID)

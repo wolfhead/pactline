@@ -12,6 +12,8 @@ The production stack contains:
   fallback, and proxies `/api/*`, `/healthz`, and `/readyz`;
 - one non-root Go API container;
 - one PostgreSQL 16 container with a durable named volume; and
+- one RabbitMQ container with a durable named volume for reliable domain-event
+  delivery; and
 - separate application and database networks. PostgreSQL is not published on a
   host port.
 
@@ -22,6 +24,34 @@ without first reviewing the other applications on that host.
 
 Pactline does not currently need Kubernetes, multiple API replicas, a service
 mesh, or an automated deployment agent.
+
+Task attachment objects are private. The default deployment stores them in the
+API container's `attachment_data` volume. `ATTACHMENT_STORAGE_PROVIDER=oss` or
+`cos` switches to a private cloud bucket; never enable anonymous bucket access.
+Cloud credentials use the matching `*_FILE` secret variables. OSS requires
+region, bucket, access key ID, and access key secret. COS requires an absolute
+bucket URL, secret ID, and secret key; service URL and session token are
+optional. Authorization remains in Pactline even when a short-lived upload URL
+is issued.
+
+Enable exactly one cloud-storage override when needed:
+
+```bash
+docker compose --env-file deploy/.env \
+  -f compose.production.yaml \
+  -f deploy/compose.attachments-oss.yaml config --quiet
+
+docker compose --env-file deploy/.env \
+  -f compose.production.yaml \
+  -f deploy/compose.attachments-cos.yaml config --quiet
+```
+
+Temporary COS credentials additionally include
+`deploy/compose.attachments-cos-session.yaml` and its session-token secret.
+
+Configure the private bucket's CORS rule to permit `PUT` from the exact
+`PACTLINE_APP_BASE_URL` origin with `Content-Type` and `Content-Length` request
+headers. Do not permit wildcard origins with credentials.
 
 ## Local workflows
 
@@ -84,6 +114,25 @@ signing, and checkpoint encryption secrets. Its Lark WebSocket connection
 reuses the application ID and secret; it does not require callback secrets.
 Keep `AGENT_ENABLED=false` until the Lark bot application version and
 permissions described in `docs/operations/lark-identity.md` are published.
+
+DeepSeek V4 is the Agent's text and tool model. To let the Agent understand
+conversation screenshots, configure a separate OpenAI-compatible multimodal
+model and include the optional Compose override:
+
+```bash
+docker compose \
+  --env-file deploy/.env \
+  -f compose.production.yaml \
+  -f deploy/compose.agent-vision.yaml \
+  config --quiet
+```
+
+Create `deploy/secrets/agent_vision_api_key` with mode `0600`. The override
+defaults to JieKou AI at `https://api.jiekou.ai/openai` with
+`gemini-2.5-flash-lite`; set `AGENT_VISION_BASE_URL` or `AGENT_VISION_MODEL` in
+`deploy/.env` only to override them. Omitting the Compose override keeps image
+inspection safe but unavailable, and never falls back to OCR. Markdown, CSV,
+and XLSX inspection do not require the vision override.
 
 ## Host preparation
 
@@ -186,7 +235,7 @@ https://<application-origin>/api/auth/lark/callback
    deploy/deploy.sh
    ```
 
-6. Confirm all three services are healthy.
+6. Confirm PostgreSQL, RabbitMQ, API, and Web services are healthy.
 7. Confirm the edge endpoint returns `ok` from `/healthz` and `ready` from
    `/readyz`.
 8. Sign in with the configured bootstrap account and confirm `/api/me` reports
@@ -272,7 +321,7 @@ Inspect status and recent logs:
 
 ```bash
 docker compose --env-file deploy/.env -f compose.production.yaml ps
-docker compose --env-file deploy/.env -f compose.production.yaml logs --tail=200 api web postgres
+docker compose --env-file deploy/.env -f compose.production.yaml logs --tail=200 api web postgres rabbitmq
 ```
 
 Never paste raw production logs into the public repository. Remove personal

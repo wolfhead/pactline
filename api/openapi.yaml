@@ -212,7 +212,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CommentWrite"
+              $ref: "#/components/schemas/CommentCreateWrite"
       responses:
         "201":
           $ref: "#/components/responses/CommentCreated"
@@ -233,7 +233,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CommentWrite"
+              $ref: "#/components/schemas/CommentUpdateWrite"
       responses:
         "200":
           $ref: "#/components/responses/Comment"
@@ -248,6 +248,112 @@ paths:
       responses:
         "204":
           $ref: "#/components/responses/NoContent"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/attachments:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+    get:
+      operationId: listTaskAttachments
+      summary: List active Task attachments
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskAttachmentList"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/attachments/uploads:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+    post:
+      operationId: createTaskAttachmentUpload
+      summary: Create a private attachment upload session
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskAttachmentUploadWrite"
+      responses:
+        "201":
+          $ref: "#/components/responses/TaskAttachmentUploadCreated"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/attachments/uploads/{id}/content:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+      - $ref: "#/components/parameters/ResourceID"
+    put:
+      operationId: uploadTaskAttachmentContent
+      summary: Stream content into a Local storage upload session
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/attachments/uploads/{id}/complete:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+      - $ref: "#/components/parameters/ResourceID"
+    post:
+      operationId: completeTaskAttachmentUpload
+      summary: Verify an uploaded object and create the Task attachment
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201":
+          $ref: "#/components/responses/TaskAttachmentCreated"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/attachments/{id}:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+      - $ref: "#/components/parameters/ResourceID"
+    delete:
+      operationId: deleteTaskAttachment
+      summary: Soft-delete a Task attachment
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/attachments/{id}/content:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+      - $ref: "#/components/parameters/ResourceID"
+    get:
+      operationId: getTaskAttachmentContent
+      summary: Read authorized private attachment content
+      parameters:
+        - name: disposition
+          in: query
+          schema:
+            type: string
+            enum: [inline, attachment]
+            default: inline
+      responses:
+        "200":
+          description: Attachment content
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
         default:
           $ref: "#/components/responses/Problem"
   /api/v1/tasks/{number}/activity:
@@ -593,6 +699,71 @@ paths:
     $ref: "#/components/pathItems/ProjectArchive"
   /api/v1/projects/{number}/restore:
     $ref: "#/components/pathItems/ProjectRestore"
+  /api/v1/projects/{number}/members:
+    parameters:
+      - $ref: "#/components/parameters/ProjectNumber"
+    get:
+      operationId: listProjectMembers
+      summary: List Project members
+      responses:
+        "200":
+          $ref: "#/components/responses/ProjectMembershipList"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      operationId: addProjectMember
+      summary: Add a Project member
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectMembershipCreate"
+      responses:
+        "201":
+          $ref: "#/components/responses/ProjectMembershipChanged"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/projects/{number}/members/{user_id}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectNumber"
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      operationId: updateProjectMember
+      summary: Change a Project member role
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectMembershipPatch"
+      responses:
+        "200":
+          $ref: "#/components/responses/ProjectMembershipChanged"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      operationId: removeProjectMember
+      summary: Remove a Project member
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          $ref: "#/components/responses/ProjectMembershipMutation"
+        default:
+          $ref: "#/components/responses/Problem"
   /api/v1/projects/{number}/milestones:
     parameters:
       - $ref: "#/components/parameters/ProjectNumber"
@@ -1151,6 +1322,43 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Comment"
+    TaskAttachmentList:
+      description: Active Task attachment collection
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TaskAttachmentList"
+    TaskAttachmentUploadCreated:
+      description: Private attachment upload session created
+      headers:
+        Location:
+          $ref: "#/components/headers/Location"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TaskAttachmentUpload"
+    TaskAttachmentCreated:
+      description: Task attachment created
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        Location:
+          $ref: "#/components/headers/Location"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TaskAttachment"
     TaskActivityList:
       description: Task activity collection
       headers:
@@ -1365,6 +1573,41 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Project"
+    ProjectMembershipList:
+      description: Project membership collection
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProjectMembershipList"
+    ProjectMembershipChanged:
+      description: Project membership changed
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProjectMembershipMutation"
+    ProjectMembershipMutation:
+      description: Project membership removed
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProjectMembershipMutation"
     Milestone:
       description: Milestone
       headers:
@@ -2113,7 +2356,7 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TaskClaimConversation"
-    CommentWrite:
+    CommentCreateWrite:
       type: object
       additionalProperties: false
       required: [body]
@@ -2121,10 +2364,35 @@ components:
         body:
           type: string
           minLength: 1
+        reply_to_comment_id:
+          type: string
+          format: uuid
+        mentioned_user_ids:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+    CommentUpdateWrite:
+      type: object
+      additionalProperties: false
+      required: [body]
+      properties:
+        body:
+          type: string
+          minLength: 1
+        mentioned_user_ids:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
     Comment:
       type: object
       additionalProperties: false
-      required: [id, task_id, author_id, body, version, created_at, updated_at]
+      required: [id, task_id, author_id, body, thread_root_id, mentioned_user_ids, deleted, version, created_at, updated_at]
       properties:
         id:
           type: string
@@ -2137,6 +2405,19 @@ components:
           format: uuid
         body:
           type: string
+        reply_to_comment_id:
+          type: string
+          format: uuid
+        thread_root_id:
+          type: string
+          format: uuid
+        mentioned_user_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        deleted:
+          type: boolean
         version:
           type: integer
           format: int64
@@ -2158,6 +2439,106 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/Comment"
+    TaskAttachmentUploadWrite:
+      type: object
+      additionalProperties: false
+      required: [filename, media_type, size_bytes]
+      properties:
+        filename:
+          type: string
+          minLength: 1
+          maxLength: 255
+        media_type:
+          type: string
+          minLength: 1
+          maxLength: 255
+        size_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 104857600
+    TaskAttachmentUpload:
+      type: object
+      additionalProperties: false
+      required: [id, provider, filename, media_type, size_bytes, direct, method, upload_url, headers, expires_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+          enum: [local, oss, cos]
+        filename:
+          type: string
+        media_type:
+          type: string
+        size_bytes:
+          type: integer
+          format: int64
+        direct:
+          type: boolean
+        method:
+          type: string
+          enum: [PUT]
+        upload_url:
+          type: string
+          format: uri-reference
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        expires_at:
+          type: string
+          format: date-time
+    TaskAttachment:
+      type: object
+      additionalProperties: false
+      required: [id, task_id, uploader_id, filename, media_type, size_bytes, preview_kind, version, content_url, download_url, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        task_id:
+          type: string
+          format: uuid
+        uploader_id:
+          type: string
+          format: uuid
+        filename:
+          type: string
+        media_type:
+          type: string
+        size_bytes:
+          type: integer
+          format: int64
+        preview_kind:
+          type: string
+          enum: [image, markdown, html, download]
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        content_url:
+          type: string
+          format: uri-reference
+        download_url:
+          type: string
+          format: uri-reference
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    TaskAttachmentList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaskAttachment"
     TaskActivity:
       type: object
       additionalProperties: false
@@ -2236,7 +2617,7 @@ components:
     ProjectCreate:
       type: object
       additionalProperties: false
-      required: [name, owner_id]
+      required: [name]
       properties:
         name:
           type: string
@@ -2244,9 +2625,6 @@ components:
           maxLength: 500
         description:
           type: string
-        owner_id:
-          type: string
-          format: uuid
     ProjectPatch:
       type: object
       additionalProperties: false
@@ -2258,9 +2636,6 @@ components:
           maxLength: 500
         description:
           type: string
-        owner_id:
-          type: string
-          format: uuid
     Project:
       type: object
       additionalProperties: false
@@ -2270,7 +2645,6 @@ components:
         - version
         - name
         - description
-        - owner
         - creator
         - created_at
         - updated_at
@@ -2292,8 +2666,6 @@ components:
           type: string
         description:
           type: string
-        owner:
-          $ref: "#/components/schemas/UserRef"
         creator:
           $ref: "#/components/schemas/UserRef"
         archived_at:
@@ -2322,6 +2694,69 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/Project"
+    ProjectRole:
+      type: string
+      enum: [admin, member]
+    ProjectMembershipCreate:
+      type: object
+      additionalProperties: false
+      required: [user_id, role]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        role:
+          $ref: "#/components/schemas/ProjectRole"
+    ProjectMembershipPatch:
+      type: object
+      additionalProperties: false
+      required: [role]
+      properties:
+        role:
+          $ref: "#/components/schemas/ProjectRole"
+    ProjectMembership:
+      type: object
+      additionalProperties: false
+      required: [id, project_id, user, role, active, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        user:
+          $ref: "#/components/schemas/UserRef"
+        role:
+          $ref: "#/components/schemas/ProjectRole"
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ProjectMembershipList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectMembership"
+    ProjectMembershipMutation:
+      type: object
+      additionalProperties: false
+      required: [project_version]
+      properties:
+        project_version:
+          type: integer
+          format: int64
+          minimum: 1
+        membership:
+          $ref: "#/components/schemas/ProjectMembership"
     MilestoneCreate:
       type: object
       additionalProperties: false

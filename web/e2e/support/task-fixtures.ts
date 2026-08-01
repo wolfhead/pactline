@@ -24,6 +24,7 @@ interface TestFixtures {
   trackTask: (taskId: string) => void
   trackLabel: (labelId: string) => void
   trackProject: (projectId: string) => void
+  ensureProjectMember: (projectId: string, userId: string) => Promise<void>
   tasksApi: TrackedTasksApi
 }
 
@@ -116,6 +117,56 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       await taskDbPool.query('DELETE FROM project_activity WHERE project_id=$1', [id])
       await taskDbPool.query('DELETE FROM milestones WHERE project_id=$1', [id])
       await taskDbPool.query('DELETE FROM projects WHERE id=$1', [id])
+    }
+  },
+
+  ensureProjectMember: async ({ taskDbPool }, use) => {
+    const snapshots: Array<{
+      projectId: string
+      userId: string
+      userActive: boolean
+      membershipRole: string | null
+    }> = []
+    await use(async (projectId, userId) => {
+      const user = (await taskDbPool.query<{ active: boolean }>(
+        'SELECT active FROM users WHERE id=$1',
+        [userId],
+      )).rows[0]
+      if (!user) throw new Error(`project member fixture user ${userId} does not exist`)
+      const membership = (await taskDbPool.query<{ role: string }>(
+        'SELECT role FROM project_memberships WHERE project_id=$1 AND user_id=$2',
+        [projectId, userId],
+      )).rows[0]
+      snapshots.push({
+        projectId,
+        userId,
+        userActive: user.active,
+        membershipRole: membership?.role ?? null,
+      })
+      await taskDbPool.query('UPDATE users SET active=true, updated_at=now() WHERE id=$1', [userId])
+      await taskDbPool.query(
+        `INSERT INTO project_memberships (id, project_id, user_id, role)
+         VALUES (gen_random_uuid(), $1, $2, 'member')
+         ON CONFLICT (project_id, user_id) DO NOTHING`,
+        [projectId, userId],
+      )
+    })
+    for (const snapshot of snapshots.reverse()) {
+      if (snapshot.membershipRole === null) {
+        await taskDbPool.query(
+          'DELETE FROM project_memberships WHERE project_id=$1 AND user_id=$2',
+          [snapshot.projectId, snapshot.userId],
+        )
+      } else {
+        await taskDbPool.query(
+          'UPDATE project_memberships SET role=$3, updated_at=now() WHERE project_id=$1 AND user_id=$2',
+          [snapshot.projectId, snapshot.userId, snapshot.membershipRole],
+        )
+      }
+      await taskDbPool.query(
+        'UPDATE users SET active=$2, updated_at=now() WHERE id=$1',
+        [snapshot.userId, snapshot.userActive],
+      )
     }
   },
 

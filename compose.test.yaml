@@ -12,3 +12,12 @@ services:
       interval: 2s
       timeout: 3s
       retries: 20
+  rabbitmq:
+    image: rabbitmq:4.1-alpine
+    ports:
+      - "127.0.0.1:5673:5672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 3s
+      timeout: 5s
+      retries: 20

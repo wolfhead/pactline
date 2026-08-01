@@ -14,7 +14,6 @@ type Project struct {
 	Version     int64
 	Name        string
 	Description string
-	OwnerID     uuid.UUID
 	CreatorID   uuid.UUID
 	ArchivedAt  *time.Time
 	CreatedAt   time.Time
@@ -41,9 +40,6 @@ type ProjectActivity struct {
 func (p Project) Validate() error {
 	if strings.TrimSpace(p.Name) == "" {
 		return fmt.Errorf("%w: project name is required", ErrInvalidInput)
-	}
-	if p.OwnerID == uuid.Nil {
-		return fmt.Errorf("%w: project owner is required", ErrInvalidInput)
 	}
 	if p.CreatorID == uuid.Nil {
 		return fmt.Errorf("%w: project creator is required", ErrInvalidInput)

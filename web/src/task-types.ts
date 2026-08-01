@@ -114,8 +114,42 @@ export interface Comment {
   author_id: string
   version: number
   body: string
+  reply_to_comment_id?: string
+  thread_root_id?: string
+  mentioned_user_ids?: string[]
+  deleted?: boolean
   created_at: string
   updated_at: string
+}
+
+export type AttachmentPreviewKind = 'image' | 'markdown' | 'html' | 'download'
+
+export interface TaskAttachment {
+  id: string
+  task_id: string
+  uploader_id: string
+  filename: string
+  media_type: string
+  size_bytes: number
+  preview_kind: AttachmentPreviewKind
+  version: number
+  content_url: string
+  download_url: string
+  created_at: string
+  updated_at: string
+}
+
+export interface TaskAttachmentUpload {
+  id: string
+  provider: 'local' | 'oss' | 'cos'
+  filename: string
+  media_type: string
+  size_bytes: number
+  direct: boolean
+  method: 'PUT'
+  upload_url: string
+  headers: Record<string, string>
+  expires_at: string
 }
 
 export type ActivityField =

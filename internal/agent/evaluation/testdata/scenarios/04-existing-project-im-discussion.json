@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "id": "existing-project-im-discussion",
+  "name": "A mature Project still makes release decisions in IM",
+  "business_context": "A model delivery Project already exists, but the team continues to design its release validation flow in group chat.",
+  "judge_context": "Assess whether the conversion captures the pre-release validation direction, its uncertainty, and the distinction between a short experiment and eventual automation.",
+  "trigger": {
+    "message_id": "trigger-4",
+    "reply_to_message_id": "m44",
+    "text": "请根据以上讨论在 Model Delivery 项目创建一个任务。",
+    "sender": "Model Owner",
+    "at": "2026-07-31T18:00:00+08:00"
+  },
+  "messages": [
+    {
+      "message_id": "m41",
+      "sender": "Model Owner",
+      "role": "model",
+      "text": "上线前的 AB 验证要补完整，以后模型更新都先做快速预验证，再全量。",
+      "at": "2026-07-31T17:30:00+08:00"
+    },
+    {
+      "message_id": "m42",
+      "sender": "Platform Engineer",
+      "role": "platform",
+      "text": "流程可以是离线评估、预发布、正式上线。每日模型更新以后也可以走固定流程。",
+      "at": "2026-07-31T17:33:00+08:00"
+    },
+    {
+      "message_id": "m43",
+      "sender": "Release Engineer",
+      "role": "release",
+      "text": "离线可以加强，但预发布会不会拖得太长？晚上样本量也比较少。",
+      "at": "2026-07-31T17:36:00+08:00"
+    },
+    {
+      "message_id": "m44",
+      "sender": "Model Owner",
+      "role": "model",
+      "text": "先推一个预发布版本跑半小时，没有明显波动再切正式环境，这样安全一点。",
+      "at": "2026-07-31T17:40:00+08:00"
+    },
+    {
+      "message_id": "m45",
+      "sender": "Platform Engineer",
+      "role": "platform",
+      "text": "可以先改造，不过明显波动的指标和阈值还没定。",
+      "at": "2026-07-31T17:43:00+08:00"
+    }
+  ],
+  "projects": [
+    {"number": 14, "name": "Model Delivery"},
+    {"number": 15, "name": "Data Quality"}
+  ],
+  "users": [
+    {"name": "Model Owner", "role": "model"},
+    {"name": "Platform Engineer", "role": "platform"},
+    {"name": "Release Engineer", "role": "release"}
+  ]
+}

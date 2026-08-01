@@ -5,6 +5,10 @@ type ActivateMilestoneRes interface {
 	activateMilestoneRes()
 }
 
+type AddProjectMemberRes interface {
+	addProjectMemberRes()
+}
+
 type AddTaskClaimProgressRes interface {
 	addTaskClaimProgressRes()
 }
@@ -37,6 +41,10 @@ type CompleteMilestoneRes interface {
 	completeMilestoneRes()
 }
 
+type CompleteTaskAttachmentUploadRes interface {
+	completeTaskAttachmentUploadRes()
+}
+
 type CreateAcceptanceCheckRes interface {
 	createAcceptanceCheckRes()
 }
@@ -55,6 +63,10 @@ type CreateMilestoneRes interface {
 
 type CreateProjectRes interface {
 	createProjectRes()
+}
+
+type CreateTaskAttachmentUploadRes interface {
+	createTaskAttachmentUploadRes()
 }
 
 type CreateTaskCommentRes interface {
@@ -77,6 +89,10 @@ type DeleteLabelRes interface {
 	deleteLabelRes()
 }
 
+type DeleteTaskAttachmentRes interface {
+	deleteTaskAttachmentRes()
+}
+
 type DeleteTaskCommentRes interface {
 	deleteTaskCommentRes()
 }
@@ -97,6 +113,10 @@ type GetProjectRes interface {
 	getProjectRes()
 }
 
+type GetTaskAttachmentContentRes interface {
+	getTaskAttachmentContentRes()
+}
+
 type GetTaskClaimRes interface {
 	getTaskClaimRes()
 }
@@ -113,6 +133,10 @@ type ListMilestoneCriteriaRes interface {
 	listMilestoneCriteriaRes()
 }
 
+type ListProjectMembersRes interface {
+	listProjectMembersRes()
+}
+
 type ListProjectsRes interface {
 	listProjectsRes()
 }
@@ -123,6 +147,10 @@ type ListTaskActivityRes interface {
 
 type ListTaskAgentConversationsRes interface {
 	listTaskAgentConversationsRes()
+}
+
+type ListTaskAttachmentsRes interface {
+	listTaskAttachmentsRes()
 }
 
 type ListTaskClaimMessagesRes interface {
@@ -153,6 +181,10 @@ type ReleaseTaskClaimRes interface {
 	releaseTaskClaimRes()
 }
 
+type RemoveProjectMemberRes interface {
+	removeProjectMemberRes()
+}
+
 type ReopenMilestoneRes interface {
 	reopenMilestoneRes()
 }
@@ -181,6 +213,10 @@ type UpdateMilestoneRes interface {
 	updateMilestoneRes()
 }
 
+type UpdateProjectMemberRes interface {
+	updateProjectMemberRes()
+}
+
 type UpdateProjectRes interface {
 	updateProjectRes()
 }
@@ -191,4 +227,8 @@ type UpdateTaskCommentRes interface {
 
 type UpdateTaskRes interface {
 	updateTaskRes()
+}
+
+type UploadTaskAttachmentContentRes interface {
+	uploadTaskAttachmentContentRes()
 }

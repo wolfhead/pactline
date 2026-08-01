@@ -3,6 +3,7 @@
 package api
 
 import (
+	"io"
 	"net/url"
 	"time"
 
@@ -490,13 +491,17 @@ func (s *BearerAuth) SetRoles(val []string) {
 
 // Ref: #/components/schemas/Comment
 type Comment struct {
-	ID        uuid.UUID `json:"id"`
-	TaskID    uuid.UUID `json:"task_id"`
-	AuthorID  uuid.UUID `json:"author_id"`
-	Body      string    `json:"body"`
-	Version   int64     `json:"version"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID               uuid.UUID   `json:"id"`
+	TaskID           uuid.UUID   `json:"task_id"`
+	AuthorID         uuid.UUID   `json:"author_id"`
+	Body             string      `json:"body"`
+	ReplyToCommentID OptUUID     `json:"reply_to_comment_id"`
+	ThreadRootID     uuid.UUID   `json:"thread_root_id"`
+	MentionedUserIds []uuid.UUID `json:"mentioned_user_ids"`
+	Deleted          bool        `json:"deleted"`
+	Version          int64       `json:"version"`
+	CreatedAt        time.Time   `json:"created_at"`
+	UpdatedAt        time.Time   `json:"updated_at"`
 }
 
 // GetID returns the value of ID.
@@ -517,6 +522,26 @@ func (s *Comment) GetAuthorID() uuid.UUID {
 // GetBody returns the value of Body.
 func (s *Comment) GetBody() string {
 	return s.Body
+}
+
+// GetReplyToCommentID returns the value of ReplyToCommentID.
+func (s *Comment) GetReplyToCommentID() OptUUID {
+	return s.ReplyToCommentID
+}
+
+// GetThreadRootID returns the value of ThreadRootID.
+func (s *Comment) GetThreadRootID() uuid.UUID {
+	return s.ThreadRootID
+}
+
+// GetMentionedUserIds returns the value of MentionedUserIds.
+func (s *Comment) GetMentionedUserIds() []uuid.UUID {
+	return s.MentionedUserIds
+}
+
+// GetDeleted returns the value of Deleted.
+func (s *Comment) GetDeleted() bool {
+	return s.Deleted
 }
 
 // GetVersion returns the value of Version.
@@ -554,6 +579,26 @@ func (s *Comment) SetBody(val string) {
 	s.Body = val
 }
 
+// SetReplyToCommentID sets the value of ReplyToCommentID.
+func (s *Comment) SetReplyToCommentID(val OptUUID) {
+	s.ReplyToCommentID = val
+}
+
+// SetThreadRootID sets the value of ThreadRootID.
+func (s *Comment) SetThreadRootID(val uuid.UUID) {
+	s.ThreadRootID = val
+}
+
+// SetMentionedUserIds sets the value of MentionedUserIds.
+func (s *Comment) SetMentionedUserIds(val []uuid.UUID) {
+	s.MentionedUserIds = val
+}
+
+// SetDeleted sets the value of Deleted.
+func (s *Comment) SetDeleted(val bool) {
+	s.Deleted = val
+}
+
 // SetVersion sets the value of Version.
 func (s *Comment) SetVersion(val int64) {
 	s.Version = val
@@ -567,6 +612,43 @@ func (s *Comment) SetCreatedAt(val time.Time) {
 // SetUpdatedAt sets the value of UpdatedAt.
 func (s *Comment) SetUpdatedAt(val time.Time) {
 	s.UpdatedAt = val
+}
+
+// Ref: #/components/schemas/CommentCreateWrite
+type CommentCreateWrite struct {
+	Body             string      `json:"body"`
+	ReplyToCommentID OptUUID     `json:"reply_to_comment_id"`
+	MentionedUserIds []uuid.UUID `json:"mentioned_user_ids"`
+}
+
+// GetBody returns the value of Body.
+func (s *CommentCreateWrite) GetBody() string {
+	return s.Body
+}
+
+// GetReplyToCommentID returns the value of ReplyToCommentID.
+func (s *CommentCreateWrite) GetReplyToCommentID() OptUUID {
+	return s.ReplyToCommentID
+}
+
+// GetMentionedUserIds returns the value of MentionedUserIds.
+func (s *CommentCreateWrite) GetMentionedUserIds() []uuid.UUID {
+	return s.MentionedUserIds
+}
+
+// SetBody sets the value of Body.
+func (s *CommentCreateWrite) SetBody(val string) {
+	s.Body = val
+}
+
+// SetReplyToCommentID sets the value of ReplyToCommentID.
+func (s *CommentCreateWrite) SetReplyToCommentID(val OptUUID) {
+	s.ReplyToCommentID = val
+}
+
+// SetMentionedUserIds sets the value of MentionedUserIds.
+func (s *CommentCreateWrite) SetMentionedUserIds(val []uuid.UUID) {
+	s.MentionedUserIds = val
 }
 
 // CommentCreatedHeaders wraps Comment with response headers.
@@ -834,19 +916,30 @@ func (s *CommentListHeaders) SetResponse(val CommentList) {
 
 func (*CommentListHeaders) listTaskCommentsRes() {}
 
-// Ref: #/components/schemas/CommentWrite
-type CommentWrite struct {
-	Body string `json:"body"`
+// Ref: #/components/schemas/CommentUpdateWrite
+type CommentUpdateWrite struct {
+	Body             string      `json:"body"`
+	MentionedUserIds []uuid.UUID `json:"mentioned_user_ids"`
 }
 
 // GetBody returns the value of Body.
-func (s *CommentWrite) GetBody() string {
+func (s *CommentUpdateWrite) GetBody() string {
 	return s.Body
 }
 
+// GetMentionedUserIds returns the value of MentionedUserIds.
+func (s *CommentUpdateWrite) GetMentionedUserIds() []uuid.UUID {
+	return s.MentionedUserIds
+}
+
 // SetBody sets the value of Body.
-func (s *CommentWrite) SetBody(val string) {
+func (s *CommentUpdateWrite) SetBody(val string) {
 	s.Body = val
+}
+
+// SetMentionedUserIds sets the value of MentionedUserIds.
+func (s *CommentUpdateWrite) SetMentionedUserIds(val []uuid.UUID) {
+	s.MentionedUserIds = val
 }
 
 // Ref: #/components/schemas/CriterionCreate
@@ -1405,6 +1498,89 @@ func (s *CurrentPrincipalScopesItem) UnmarshalText(data []byte) error {
 		return errors.Errorf("invalid value: %q", data)
 	}
 }
+
+type GetTaskAttachmentContentDisposition string
+
+const (
+	GetTaskAttachmentContentDispositionInline     GetTaskAttachmentContentDisposition = "inline"
+	GetTaskAttachmentContentDispositionAttachment GetTaskAttachmentContentDisposition = "attachment"
+)
+
+// AllValues returns all GetTaskAttachmentContentDisposition values.
+func (GetTaskAttachmentContentDisposition) AllValues() []GetTaskAttachmentContentDisposition {
+	return []GetTaskAttachmentContentDisposition{
+		GetTaskAttachmentContentDispositionInline,
+		GetTaskAttachmentContentDispositionAttachment,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s GetTaskAttachmentContentDisposition) MarshalText() ([]byte, error) {
+	switch s {
+	case GetTaskAttachmentContentDispositionInline:
+		return []byte(s), nil
+	case GetTaskAttachmentContentDispositionAttachment:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *GetTaskAttachmentContentDisposition) UnmarshalText(data []byte) error {
+	switch GetTaskAttachmentContentDisposition(data) {
+	case GetTaskAttachmentContentDispositionInline:
+		*s = GetTaskAttachmentContentDispositionInline
+		return nil
+	case GetTaskAttachmentContentDispositionAttachment:
+		*s = GetTaskAttachmentContentDispositionAttachment
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+type GetTaskAttachmentContentOK struct {
+	Data io.Reader
+}
+
+// Read reads data from the Data reader.
+//
+// Kept to satisfy the io.Reader interface.
+func (s GetTaskAttachmentContentOK) Read(p []byte) (n int, err error) {
+	if s.Data == nil {
+		return 0, io.EOF
+	}
+	return s.Data.Read(p)
+}
+
+// GetTaskAttachmentContentOKHeaders wraps GetTaskAttachmentContentOK with response headers.
+type GetTaskAttachmentContentOKHeaders struct {
+	XRequestID OptString
+	Response   GetTaskAttachmentContentOK
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *GetTaskAttachmentContentOKHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *GetTaskAttachmentContentOKHeaders) GetResponse() GetTaskAttachmentContentOK {
+	return s.Response
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *GetTaskAttachmentContentOKHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *GetTaskAttachmentContentOKHeaders) SetResponse(val GetTaskAttachmentContentOK) {
+	s.Response = val
+}
+
+func (*GetTaskAttachmentContentOKHeaders) getTaskAttachmentContentRes() {}
 
 // Ref: #/components/schemas/Label
 type Label struct {
@@ -2572,9 +2748,11 @@ func (s *NoContent) SetXRequestID(val OptString) {
 	s.XRequestID = val
 }
 
-func (*NoContent) deleteCriterionRes()   {}
-func (*NoContent) deleteLabelRes()       {}
-func (*NoContent) deleteTaskCommentRes() {}
+func (*NoContent) deleteCriterionRes()             {}
+func (*NoContent) deleteLabelRes()                 {}
+func (*NoContent) deleteTaskAttachmentRes()        {}
+func (*NoContent) deleteTaskCommentRes()           {}
+func (*NoContent) uploadTaskAttachmentContentRes() {}
 
 // NewOptAcceptanceCheck returns new OptAcceptanceCheck with value set to v.
 func NewOptAcceptanceCheck(v AcceptanceCheck) OptAcceptanceCheck {
@@ -2754,6 +2932,52 @@ func (o OptDateTime) Get() (v time.Time, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptDateTime) Or(d time.Time) time.Time {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptGetTaskAttachmentContentDisposition returns new OptGetTaskAttachmentContentDisposition with value set to v.
+func NewOptGetTaskAttachmentContentDisposition(v GetTaskAttachmentContentDisposition) OptGetTaskAttachmentContentDisposition {
+	return OptGetTaskAttachmentContentDisposition{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptGetTaskAttachmentContentDisposition is optional GetTaskAttachmentContentDisposition.
+type OptGetTaskAttachmentContentDisposition struct {
+	Value GetTaskAttachmentContentDisposition
+	Set   bool
+}
+
+// IsSet returns true if OptGetTaskAttachmentContentDisposition was set.
+func (o OptGetTaskAttachmentContentDisposition) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptGetTaskAttachmentContentDisposition) Reset() {
+	var v GetTaskAttachmentContentDisposition
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptGetTaskAttachmentContentDisposition) SetTo(v GetTaskAttachmentContentDisposition) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptGetTaskAttachmentContentDisposition) Get() (v GetTaskAttachmentContentDisposition, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptGetTaskAttachmentContentDisposition) Or(d GetTaskAttachmentContentDisposition) GetTaskAttachmentContentDisposition {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -3357,6 +3581,52 @@ func (o OptProjectActivityAuthenticationMethod) Get() (v ProjectActivityAuthenti
 
 // Or returns value if set, or given parameter if does not.
 func (o OptProjectActivityAuthenticationMethod) Or(d ProjectActivityAuthenticationMethod) ProjectActivityAuthenticationMethod {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptProjectMembership returns new OptProjectMembership with value set to v.
+func NewOptProjectMembership(v ProjectMembership) OptProjectMembership {
+	return OptProjectMembership{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptProjectMembership is optional ProjectMembership.
+type OptProjectMembership struct {
+	Value ProjectMembership
+	Set   bool
+}
+
+// IsSet returns true if OptProjectMembership was set.
+func (o OptProjectMembership) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptProjectMembership) Reset() {
+	var v ProjectMembership
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptProjectMembership) SetTo(v ProjectMembership) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptProjectMembership) Get() (v ProjectMembership, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptProjectMembership) Or(d ProjectMembership) ProjectMembership {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -4173,6 +4443,7 @@ func (s *ProblemStatusCodeWithHeaders) SetResponse(val Problem) {
 }
 
 func (*ProblemStatusCodeWithHeaders) activateMilestoneRes()              {}
+func (*ProblemStatusCodeWithHeaders) addProjectMemberRes()               {}
 func (*ProblemStatusCodeWithHeaders) addTaskClaimProgressRes()           {}
 func (*ProblemStatusCodeWithHeaders) answerTaskClaimQuestionRes()        {}
 func (*ProblemStatusCodeWithHeaders) archiveProjectRes()                 {}
@@ -4181,28 +4452,34 @@ func (*ProblemStatusCodeWithHeaders) askTaskClaimQuestionRes()           {}
 func (*ProblemStatusCodeWithHeaders) cancelMilestoneRes()                {}
 func (*ProblemStatusCodeWithHeaders) claimTaskRes()                      {}
 func (*ProblemStatusCodeWithHeaders) completeMilestoneRes()              {}
+func (*ProblemStatusCodeWithHeaders) completeTaskAttachmentUploadRes()   {}
 func (*ProblemStatusCodeWithHeaders) createAcceptanceCheckRes()          {}
 func (*ProblemStatusCodeWithHeaders) createLabelRes()                    {}
 func (*ProblemStatusCodeWithHeaders) createMilestoneCriterionRes()       {}
 func (*ProblemStatusCodeWithHeaders) createMilestoneRes()                {}
 func (*ProblemStatusCodeWithHeaders) createProjectRes()                  {}
+func (*ProblemStatusCodeWithHeaders) createTaskAttachmentUploadRes()     {}
 func (*ProblemStatusCodeWithHeaders) createTaskCommentRes()              {}
 func (*ProblemStatusCodeWithHeaders) createTaskCriterionRes()            {}
 func (*ProblemStatusCodeWithHeaders) createTaskRes()                     {}
 func (*ProblemStatusCodeWithHeaders) deleteCriterionRes()                {}
 func (*ProblemStatusCodeWithHeaders) deleteLabelRes()                    {}
+func (*ProblemStatusCodeWithHeaders) deleteTaskAttachmentRes()           {}
 func (*ProblemStatusCodeWithHeaders) deleteTaskCommentRes()              {}
 func (*ProblemStatusCodeWithHeaders) extendTaskClaimRes()                {}
 func (*ProblemStatusCodeWithHeaders) getCurrentPrincipalRes()            {}
 func (*ProblemStatusCodeWithHeaders) getCurrentTaskClaimRes()            {}
 func (*ProblemStatusCodeWithHeaders) getProjectRes()                     {}
+func (*ProblemStatusCodeWithHeaders) getTaskAttachmentContentRes()       {}
 func (*ProblemStatusCodeWithHeaders) getTaskClaimRes()                   {}
 func (*ProblemStatusCodeWithHeaders) getTaskRes()                        {}
 func (*ProblemStatusCodeWithHeaders) listLabelsRes()                     {}
 func (*ProblemStatusCodeWithHeaders) listMilestoneCriteriaRes()          {}
+func (*ProblemStatusCodeWithHeaders) listProjectMembersRes()             {}
 func (*ProblemStatusCodeWithHeaders) listProjectsRes()                   {}
 func (*ProblemStatusCodeWithHeaders) listTaskActivityRes()               {}
 func (*ProblemStatusCodeWithHeaders) listTaskAgentConversationsRes()     {}
+func (*ProblemStatusCodeWithHeaders) listTaskAttachmentsRes()            {}
 func (*ProblemStatusCodeWithHeaders) listTaskClaimMessagesRes()          {}
 func (*ProblemStatusCodeWithHeaders) listTaskCommentsRes()               {}
 func (*ProblemStatusCodeWithHeaders) listTaskCriteriaRes()               {}
@@ -4210,6 +4487,7 @@ func (*ProblemStatusCodeWithHeaders) listTasksRes()                      {}
 func (*ProblemStatusCodeWithHeaders) listUsersRes()                      {}
 func (*ProblemStatusCodeWithHeaders) recordTaskClaimAcceptanceCheckRes() {}
 func (*ProblemStatusCodeWithHeaders) releaseTaskClaimRes()               {}
+func (*ProblemStatusCodeWithHeaders) removeProjectMemberRes()            {}
 func (*ProblemStatusCodeWithHeaders) reopenMilestoneRes()                {}
 func (*ProblemStatusCodeWithHeaders) restoreProjectRes()                 {}
 func (*ProblemStatusCodeWithHeaders) restoreTaskRes()                    {}
@@ -4217,9 +4495,11 @@ func (*ProblemStatusCodeWithHeaders) submitTaskClaimRes()                {}
 func (*ProblemStatusCodeWithHeaders) updateCriterionRes()                {}
 func (*ProblemStatusCodeWithHeaders) updateLabelRes()                    {}
 func (*ProblemStatusCodeWithHeaders) updateMilestoneRes()                {}
+func (*ProblemStatusCodeWithHeaders) updateProjectMemberRes()            {}
 func (*ProblemStatusCodeWithHeaders) updateProjectRes()                  {}
 func (*ProblemStatusCodeWithHeaders) updateTaskCommentRes()              {}
 func (*ProblemStatusCodeWithHeaders) updateTaskRes()                     {}
+func (*ProblemStatusCodeWithHeaders) uploadTaskAttachmentContentRes()    {}
 
 // Ref: #/components/schemas/Project
 type Project struct {
@@ -4228,7 +4508,6 @@ type Project struct {
 	Version        int64       `json:"version"`
 	Name           string      `json:"name"`
 	Description    string      `json:"description"`
-	Owner          UserRef     `json:"owner"`
 	Creator        UserRef     `json:"creator"`
 	ArchivedAt     OptDateTime `json:"archived_at"`
 	CreatedAt      time.Time   `json:"created_at"`
@@ -4260,11 +4539,6 @@ func (s *Project) GetName() string {
 // GetDescription returns the value of Description.
 func (s *Project) GetDescription() string {
 	return s.Description
-}
-
-// GetOwner returns the value of Owner.
-func (s *Project) GetOwner() UserRef {
-	return s.Owner
 }
 
 // GetCreator returns the value of Creator.
@@ -4320,11 +4594,6 @@ func (s *Project) SetName(val string) {
 // SetDescription sets the value of Description.
 func (s *Project) SetDescription(val string) {
 	s.Description = val
-}
-
-// SetOwner sets the value of Owner.
-func (s *Project) SetOwner(val UserRef) {
-	s.Owner = val
 }
 
 // SetCreator sets the value of Creator.
@@ -4527,7 +4796,6 @@ func (s *ProjectActivityAuthenticationMethod) UnmarshalText(data []byte) error {
 type ProjectCreate struct {
 	Name        string    `json:"name"`
 	Description OptString `json:"description"`
-	OwnerID     uuid.UUID `json:"owner_id"`
 }
 
 // GetName returns the value of Name.
@@ -4540,11 +4808,6 @@ func (s *ProjectCreate) GetDescription() OptString {
 	return s.Description
 }
 
-// GetOwnerID returns the value of OwnerID.
-func (s *ProjectCreate) GetOwnerID() uuid.UUID {
-	return s.OwnerID
-}
-
 // SetName sets the value of Name.
 func (s *ProjectCreate) SetName(val string) {
 	s.Name = val
@@ -4553,11 +4816,6 @@ func (s *ProjectCreate) SetName(val string) {
 // SetDescription sets the value of Description.
 func (s *ProjectCreate) SetDescription(val OptString) {
 	s.Description = val
-}
-
-// SetOwnerID sets the value of OwnerID.
-func (s *ProjectCreate) SetOwnerID(val uuid.UUID) {
-	s.OwnerID = val
 }
 
 // ProjectCreatedHeaders wraps Project with response headers.
@@ -4947,11 +5205,302 @@ func (s *ProjectListHeaders) SetResponse(val ProjectList) {
 
 func (*ProjectListHeaders) listProjectsRes() {}
 
+// Ref: #/components/schemas/ProjectMembership
+type ProjectMembership struct {
+	ID        uuid.UUID   `json:"id"`
+	ProjectID uuid.UUID   `json:"project_id"`
+	User      UserRef     `json:"user"`
+	Role      ProjectRole `json:"role"`
+	Active    bool        `json:"active"`
+	CreatedAt time.Time   `json:"created_at"`
+	UpdatedAt time.Time   `json:"updated_at"`
+}
+
+// GetID returns the value of ID.
+func (s *ProjectMembership) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetProjectID returns the value of ProjectID.
+func (s *ProjectMembership) GetProjectID() uuid.UUID {
+	return s.ProjectID
+}
+
+// GetUser returns the value of User.
+func (s *ProjectMembership) GetUser() UserRef {
+	return s.User
+}
+
+// GetRole returns the value of Role.
+func (s *ProjectMembership) GetRole() ProjectRole {
+	return s.Role
+}
+
+// GetActive returns the value of Active.
+func (s *ProjectMembership) GetActive() bool {
+	return s.Active
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *ProjectMembership) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *ProjectMembership) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// SetID sets the value of ID.
+func (s *ProjectMembership) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetProjectID sets the value of ProjectID.
+func (s *ProjectMembership) SetProjectID(val uuid.UUID) {
+	s.ProjectID = val
+}
+
+// SetUser sets the value of User.
+func (s *ProjectMembership) SetUser(val UserRef) {
+	s.User = val
+}
+
+// SetRole sets the value of Role.
+func (s *ProjectMembership) SetRole(val ProjectRole) {
+	s.Role = val
+}
+
+// SetActive sets the value of Active.
+func (s *ProjectMembership) SetActive(val bool) {
+	s.Active = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *ProjectMembership) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *ProjectMembership) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// ProjectMembershipChangedHeaders wraps ProjectMembershipMutation with response headers.
+type ProjectMembershipChangedHeaders struct {
+	Etag                OptString
+	IdempotencyReplayed OptBool
+	XRequestID          OptString
+	Response            ProjectMembershipMutation
+}
+
+// GetEtag returns the value of Etag.
+func (s *ProjectMembershipChangedHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *ProjectMembershipChangedHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *ProjectMembershipChangedHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *ProjectMembershipChangedHeaders) GetResponse() ProjectMembershipMutation {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *ProjectMembershipChangedHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *ProjectMembershipChangedHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *ProjectMembershipChangedHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *ProjectMembershipChangedHeaders) SetResponse(val ProjectMembershipMutation) {
+	s.Response = val
+}
+
+func (*ProjectMembershipChangedHeaders) addProjectMemberRes()    {}
+func (*ProjectMembershipChangedHeaders) updateProjectMemberRes() {}
+
+// Ref: #/components/schemas/ProjectMembershipCreate
+type ProjectMembershipCreate struct {
+	UserID uuid.UUID   `json:"user_id"`
+	Role   ProjectRole `json:"role"`
+}
+
+// GetUserID returns the value of UserID.
+func (s *ProjectMembershipCreate) GetUserID() uuid.UUID {
+	return s.UserID
+}
+
+// GetRole returns the value of Role.
+func (s *ProjectMembershipCreate) GetRole() ProjectRole {
+	return s.Role
+}
+
+// SetUserID sets the value of UserID.
+func (s *ProjectMembershipCreate) SetUserID(val uuid.UUID) {
+	s.UserID = val
+}
+
+// SetRole sets the value of Role.
+func (s *ProjectMembershipCreate) SetRole(val ProjectRole) {
+	s.Role = val
+}
+
+// Ref: #/components/schemas/ProjectMembershipList
+type ProjectMembershipList struct {
+	Items []ProjectMembership `json:"items"`
+}
+
+// GetItems returns the value of Items.
+func (s *ProjectMembershipList) GetItems() []ProjectMembership {
+	return s.Items
+}
+
+// SetItems sets the value of Items.
+func (s *ProjectMembershipList) SetItems(val []ProjectMembership) {
+	s.Items = val
+}
+
+// ProjectMembershipListHeaders wraps ProjectMembershipList with response headers.
+type ProjectMembershipListHeaders struct {
+	XRequestID OptString
+	Response   ProjectMembershipList
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *ProjectMembershipListHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *ProjectMembershipListHeaders) GetResponse() ProjectMembershipList {
+	return s.Response
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *ProjectMembershipListHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *ProjectMembershipListHeaders) SetResponse(val ProjectMembershipList) {
+	s.Response = val
+}
+
+func (*ProjectMembershipListHeaders) listProjectMembersRes() {}
+
+// Ref: #/components/schemas/ProjectMembershipMutation
+type ProjectMembershipMutation struct {
+	ProjectVersion int64                `json:"project_version"`
+	Membership     OptProjectMembership `json:"membership"`
+}
+
+// GetProjectVersion returns the value of ProjectVersion.
+func (s *ProjectMembershipMutation) GetProjectVersion() int64 {
+	return s.ProjectVersion
+}
+
+// GetMembership returns the value of Membership.
+func (s *ProjectMembershipMutation) GetMembership() OptProjectMembership {
+	return s.Membership
+}
+
+// SetProjectVersion sets the value of ProjectVersion.
+func (s *ProjectMembershipMutation) SetProjectVersion(val int64) {
+	s.ProjectVersion = val
+}
+
+// SetMembership sets the value of Membership.
+func (s *ProjectMembershipMutation) SetMembership(val OptProjectMembership) {
+	s.Membership = val
+}
+
+// ProjectMembershipMutationHeaders wraps ProjectMembershipMutation with response headers.
+type ProjectMembershipMutationHeaders struct {
+	Etag                OptString
+	IdempotencyReplayed OptBool
+	XRequestID          OptString
+	Response            ProjectMembershipMutation
+}
+
+// GetEtag returns the value of Etag.
+func (s *ProjectMembershipMutationHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *ProjectMembershipMutationHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *ProjectMembershipMutationHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *ProjectMembershipMutationHeaders) GetResponse() ProjectMembershipMutation {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *ProjectMembershipMutationHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *ProjectMembershipMutationHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *ProjectMembershipMutationHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *ProjectMembershipMutationHeaders) SetResponse(val ProjectMembershipMutation) {
+	s.Response = val
+}
+
+func (*ProjectMembershipMutationHeaders) removeProjectMemberRes() {}
+
+// Ref: #/components/schemas/ProjectMembershipPatch
+type ProjectMembershipPatch struct {
+	Role ProjectRole `json:"role"`
+}
+
+// GetRole returns the value of Role.
+func (s *ProjectMembershipPatch) GetRole() ProjectRole {
+	return s.Role
+}
+
+// SetRole sets the value of Role.
+func (s *ProjectMembershipPatch) SetRole(val ProjectRole) {
+	s.Role = val
+}
+
 // Ref: #/components/schemas/ProjectPatch
 type ProjectPatch struct {
 	Name        OptString `json:"name"`
 	Description OptString `json:"description"`
-	OwnerID     OptUUID   `json:"owner_id"`
 }
 
 // GetName returns the value of Name.
@@ -4964,11 +5513,6 @@ func (s *ProjectPatch) GetDescription() OptString {
 	return s.Description
 }
 
-// GetOwnerID returns the value of OwnerID.
-func (s *ProjectPatch) GetOwnerID() OptUUID {
-	return s.OwnerID
-}
-
 // SetName sets the value of Name.
 func (s *ProjectPatch) SetName(val OptString) {
 	s.Name = val
@@ -4977,11 +5521,6 @@ func (s *ProjectPatch) SetName(val OptString) {
 // SetDescription sets the value of Description.
 func (s *ProjectPatch) SetDescription(val OptString) {
 	s.Description = val
-}
-
-// SetOwnerID sets the value of OwnerID.
-func (s *ProjectPatch) SetOwnerID(val OptUUID) {
-	s.OwnerID = val
 }
 
 // Ref: #/components/schemas/ProjectRef
@@ -5019,6 +5558,48 @@ func (s *ProjectRef) SetNumber(val int64) {
 // SetName sets the value of Name.
 func (s *ProjectRef) SetName(val string) {
 	s.Name = val
+}
+
+// Ref: #/components/schemas/ProjectRole
+type ProjectRole string
+
+const (
+	ProjectRoleAdmin  ProjectRole = "admin"
+	ProjectRoleMember ProjectRole = "member"
+)
+
+// AllValues returns all ProjectRole values.
+func (ProjectRole) AllValues() []ProjectRole {
+	return []ProjectRole{
+		ProjectRoleAdmin,
+		ProjectRoleMember,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s ProjectRole) MarshalText() ([]byte, error) {
+	switch s {
+	case ProjectRoleAdmin:
+		return []byte(s), nil
+	case ProjectRoleMember:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *ProjectRole) UnmarshalText(data []byte) error {
+	switch ProjectRole(data) {
+	case ProjectRoleAdmin:
+		*s = ProjectRoleAdmin
+		return nil
+	case ProjectRoleMember:
+		*s = ProjectRoleMember
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
 }
 
 type SessionCookie struct {
@@ -5649,6 +6230,595 @@ func (s *TaskAgentWorkSummary) SetUpdatedAt(val time.Time) {
 // SetCompletedAt sets the value of CompletedAt.
 func (s *TaskAgentWorkSummary) SetCompletedAt(val OptDateTime) {
 	s.CompletedAt = val
+}
+
+// Ref: #/components/schemas/TaskAttachment
+type TaskAttachment struct {
+	ID          uuid.UUID                 `json:"id"`
+	TaskID      uuid.UUID                 `json:"task_id"`
+	UploaderID  uuid.UUID                 `json:"uploader_id"`
+	Filename    string                    `json:"filename"`
+	MediaType   string                    `json:"media_type"`
+	SizeBytes   int64                     `json:"size_bytes"`
+	PreviewKind TaskAttachmentPreviewKind `json:"preview_kind"`
+	Version     int64                     `json:"version"`
+	ContentURL  string                    `json:"content_url"`
+	DownloadURL string                    `json:"download_url"`
+	CreatedAt   time.Time                 `json:"created_at"`
+	UpdatedAt   time.Time                 `json:"updated_at"`
+}
+
+// GetID returns the value of ID.
+func (s *TaskAttachment) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetTaskID returns the value of TaskID.
+func (s *TaskAttachment) GetTaskID() uuid.UUID {
+	return s.TaskID
+}
+
+// GetUploaderID returns the value of UploaderID.
+func (s *TaskAttachment) GetUploaderID() uuid.UUID {
+	return s.UploaderID
+}
+
+// GetFilename returns the value of Filename.
+func (s *TaskAttachment) GetFilename() string {
+	return s.Filename
+}
+
+// GetMediaType returns the value of MediaType.
+func (s *TaskAttachment) GetMediaType() string {
+	return s.MediaType
+}
+
+// GetSizeBytes returns the value of SizeBytes.
+func (s *TaskAttachment) GetSizeBytes() int64 {
+	return s.SizeBytes
+}
+
+// GetPreviewKind returns the value of PreviewKind.
+func (s *TaskAttachment) GetPreviewKind() TaskAttachmentPreviewKind {
+	return s.PreviewKind
+}
+
+// GetVersion returns the value of Version.
+func (s *TaskAttachment) GetVersion() int64 {
+	return s.Version
+}
+
+// GetContentURL returns the value of ContentURL.
+func (s *TaskAttachment) GetContentURL() string {
+	return s.ContentURL
+}
+
+// GetDownloadURL returns the value of DownloadURL.
+func (s *TaskAttachment) GetDownloadURL() string {
+	return s.DownloadURL
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *TaskAttachment) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *TaskAttachment) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// SetID sets the value of ID.
+func (s *TaskAttachment) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetTaskID sets the value of TaskID.
+func (s *TaskAttachment) SetTaskID(val uuid.UUID) {
+	s.TaskID = val
+}
+
+// SetUploaderID sets the value of UploaderID.
+func (s *TaskAttachment) SetUploaderID(val uuid.UUID) {
+	s.UploaderID = val
+}
+
+// SetFilename sets the value of Filename.
+func (s *TaskAttachment) SetFilename(val string) {
+	s.Filename = val
+}
+
+// SetMediaType sets the value of MediaType.
+func (s *TaskAttachment) SetMediaType(val string) {
+	s.MediaType = val
+}
+
+// SetSizeBytes sets the value of SizeBytes.
+func (s *TaskAttachment) SetSizeBytes(val int64) {
+	s.SizeBytes = val
+}
+
+// SetPreviewKind sets the value of PreviewKind.
+func (s *TaskAttachment) SetPreviewKind(val TaskAttachmentPreviewKind) {
+	s.PreviewKind = val
+}
+
+// SetVersion sets the value of Version.
+func (s *TaskAttachment) SetVersion(val int64) {
+	s.Version = val
+}
+
+// SetContentURL sets the value of ContentURL.
+func (s *TaskAttachment) SetContentURL(val string) {
+	s.ContentURL = val
+}
+
+// SetDownloadURL sets the value of DownloadURL.
+func (s *TaskAttachment) SetDownloadURL(val string) {
+	s.DownloadURL = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *TaskAttachment) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *TaskAttachment) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// TaskAttachmentCreatedHeaders wraps TaskAttachment with response headers.
+type TaskAttachmentCreatedHeaders struct {
+	Etag                OptString
+	IdempotencyReplayed OptBool
+	Location            OptString
+	XRequestID          OptString
+	Response            TaskAttachment
+}
+
+// GetEtag returns the value of Etag.
+func (s *TaskAttachmentCreatedHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *TaskAttachmentCreatedHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetLocation returns the value of Location.
+func (s *TaskAttachmentCreatedHeaders) GetLocation() OptString {
+	return s.Location
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskAttachmentCreatedHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskAttachmentCreatedHeaders) GetResponse() TaskAttachment {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *TaskAttachmentCreatedHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *TaskAttachmentCreatedHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetLocation sets the value of Location.
+func (s *TaskAttachmentCreatedHeaders) SetLocation(val OptString) {
+	s.Location = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskAttachmentCreatedHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskAttachmentCreatedHeaders) SetResponse(val TaskAttachment) {
+	s.Response = val
+}
+
+func (*TaskAttachmentCreatedHeaders) completeTaskAttachmentUploadRes() {}
+
+// Ref: #/components/schemas/TaskAttachmentList
+type TaskAttachmentList struct {
+	Items []TaskAttachment `json:"items"`
+}
+
+// GetItems returns the value of Items.
+func (s *TaskAttachmentList) GetItems() []TaskAttachment {
+	return s.Items
+}
+
+// SetItems sets the value of Items.
+func (s *TaskAttachmentList) SetItems(val []TaskAttachment) {
+	s.Items = val
+}
+
+// TaskAttachmentListHeaders wraps TaskAttachmentList with response headers.
+type TaskAttachmentListHeaders struct {
+	XRequestID OptString
+	Response   TaskAttachmentList
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskAttachmentListHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskAttachmentListHeaders) GetResponse() TaskAttachmentList {
+	return s.Response
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskAttachmentListHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskAttachmentListHeaders) SetResponse(val TaskAttachmentList) {
+	s.Response = val
+}
+
+func (*TaskAttachmentListHeaders) listTaskAttachmentsRes() {}
+
+type TaskAttachmentPreviewKind string
+
+const (
+	TaskAttachmentPreviewKindImage    TaskAttachmentPreviewKind = "image"
+	TaskAttachmentPreviewKindMarkdown TaskAttachmentPreviewKind = "markdown"
+	TaskAttachmentPreviewKindHTML     TaskAttachmentPreviewKind = "html"
+	TaskAttachmentPreviewKindDownload TaskAttachmentPreviewKind = "download"
+)
+
+// AllValues returns all TaskAttachmentPreviewKind values.
+func (TaskAttachmentPreviewKind) AllValues() []TaskAttachmentPreviewKind {
+	return []TaskAttachmentPreviewKind{
+		TaskAttachmentPreviewKindImage,
+		TaskAttachmentPreviewKindMarkdown,
+		TaskAttachmentPreviewKindHTML,
+		TaskAttachmentPreviewKindDownload,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s TaskAttachmentPreviewKind) MarshalText() ([]byte, error) {
+	switch s {
+	case TaskAttachmentPreviewKindImage:
+		return []byte(s), nil
+	case TaskAttachmentPreviewKindMarkdown:
+		return []byte(s), nil
+	case TaskAttachmentPreviewKindHTML:
+		return []byte(s), nil
+	case TaskAttachmentPreviewKindDownload:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *TaskAttachmentPreviewKind) UnmarshalText(data []byte) error {
+	switch TaskAttachmentPreviewKind(data) {
+	case TaskAttachmentPreviewKindImage:
+		*s = TaskAttachmentPreviewKindImage
+		return nil
+	case TaskAttachmentPreviewKindMarkdown:
+		*s = TaskAttachmentPreviewKindMarkdown
+		return nil
+	case TaskAttachmentPreviewKindHTML:
+		*s = TaskAttachmentPreviewKindHTML
+		return nil
+	case TaskAttachmentPreviewKindDownload:
+		*s = TaskAttachmentPreviewKindDownload
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/TaskAttachmentUpload
+type TaskAttachmentUpload struct {
+	ID        uuid.UUID                    `json:"id"`
+	Provider  TaskAttachmentUploadProvider `json:"provider"`
+	Filename  string                       `json:"filename"`
+	MediaType string                       `json:"media_type"`
+	SizeBytes int64                        `json:"size_bytes"`
+	Direct    bool                         `json:"direct"`
+	Method    TaskAttachmentUploadMethod   `json:"method"`
+	UploadURL string                       `json:"upload_url"`
+	Headers   TaskAttachmentUploadHeaders  `json:"headers"`
+	ExpiresAt time.Time                    `json:"expires_at"`
+}
+
+// GetID returns the value of ID.
+func (s *TaskAttachmentUpload) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetProvider returns the value of Provider.
+func (s *TaskAttachmentUpload) GetProvider() TaskAttachmentUploadProvider {
+	return s.Provider
+}
+
+// GetFilename returns the value of Filename.
+func (s *TaskAttachmentUpload) GetFilename() string {
+	return s.Filename
+}
+
+// GetMediaType returns the value of MediaType.
+func (s *TaskAttachmentUpload) GetMediaType() string {
+	return s.MediaType
+}
+
+// GetSizeBytes returns the value of SizeBytes.
+func (s *TaskAttachmentUpload) GetSizeBytes() int64 {
+	return s.SizeBytes
+}
+
+// GetDirect returns the value of Direct.
+func (s *TaskAttachmentUpload) GetDirect() bool {
+	return s.Direct
+}
+
+// GetMethod returns the value of Method.
+func (s *TaskAttachmentUpload) GetMethod() TaskAttachmentUploadMethod {
+	return s.Method
+}
+
+// GetUploadURL returns the value of UploadURL.
+func (s *TaskAttachmentUpload) GetUploadURL() string {
+	return s.UploadURL
+}
+
+// GetHeaders returns the value of Headers.
+func (s *TaskAttachmentUpload) GetHeaders() TaskAttachmentUploadHeaders {
+	return s.Headers
+}
+
+// GetExpiresAt returns the value of ExpiresAt.
+func (s *TaskAttachmentUpload) GetExpiresAt() time.Time {
+	return s.ExpiresAt
+}
+
+// SetID sets the value of ID.
+func (s *TaskAttachmentUpload) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetProvider sets the value of Provider.
+func (s *TaskAttachmentUpload) SetProvider(val TaskAttachmentUploadProvider) {
+	s.Provider = val
+}
+
+// SetFilename sets the value of Filename.
+func (s *TaskAttachmentUpload) SetFilename(val string) {
+	s.Filename = val
+}
+
+// SetMediaType sets the value of MediaType.
+func (s *TaskAttachmentUpload) SetMediaType(val string) {
+	s.MediaType = val
+}
+
+// SetSizeBytes sets the value of SizeBytes.
+func (s *TaskAttachmentUpload) SetSizeBytes(val int64) {
+	s.SizeBytes = val
+}
+
+// SetDirect sets the value of Direct.
+func (s *TaskAttachmentUpload) SetDirect(val bool) {
+	s.Direct = val
+}
+
+// SetMethod sets the value of Method.
+func (s *TaskAttachmentUpload) SetMethod(val TaskAttachmentUploadMethod) {
+	s.Method = val
+}
+
+// SetUploadURL sets the value of UploadURL.
+func (s *TaskAttachmentUpload) SetUploadURL(val string) {
+	s.UploadURL = val
+}
+
+// SetHeaders sets the value of Headers.
+func (s *TaskAttachmentUpload) SetHeaders(val TaskAttachmentUploadHeaders) {
+	s.Headers = val
+}
+
+// SetExpiresAt sets the value of ExpiresAt.
+func (s *TaskAttachmentUpload) SetExpiresAt(val time.Time) {
+	s.ExpiresAt = val
+}
+
+// TaskAttachmentUploadCreatedHeaders wraps TaskAttachmentUpload with response headers.
+type TaskAttachmentUploadCreatedHeaders struct {
+	IdempotencyReplayed OptBool
+	Location            OptString
+	XRequestID          OptString
+	Response            TaskAttachmentUpload
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *TaskAttachmentUploadCreatedHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetLocation returns the value of Location.
+func (s *TaskAttachmentUploadCreatedHeaders) GetLocation() OptString {
+	return s.Location
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskAttachmentUploadCreatedHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskAttachmentUploadCreatedHeaders) GetResponse() TaskAttachmentUpload {
+	return s.Response
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *TaskAttachmentUploadCreatedHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetLocation sets the value of Location.
+func (s *TaskAttachmentUploadCreatedHeaders) SetLocation(val OptString) {
+	s.Location = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskAttachmentUploadCreatedHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskAttachmentUploadCreatedHeaders) SetResponse(val TaskAttachmentUpload) {
+	s.Response = val
+}
+
+func (*TaskAttachmentUploadCreatedHeaders) createTaskAttachmentUploadRes() {}
+
+type TaskAttachmentUploadHeaders map[string]string
+
+func (s *TaskAttachmentUploadHeaders) init() TaskAttachmentUploadHeaders {
+	m := *s
+	if m == nil {
+		m = map[string]string{}
+		*s = m
+	}
+	return m
+}
+
+type TaskAttachmentUploadMethod string
+
+const (
+	TaskAttachmentUploadMethodPUT TaskAttachmentUploadMethod = "PUT"
+)
+
+// AllValues returns all TaskAttachmentUploadMethod values.
+func (TaskAttachmentUploadMethod) AllValues() []TaskAttachmentUploadMethod {
+	return []TaskAttachmentUploadMethod{
+		TaskAttachmentUploadMethodPUT,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s TaskAttachmentUploadMethod) MarshalText() ([]byte, error) {
+	switch s {
+	case TaskAttachmentUploadMethodPUT:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *TaskAttachmentUploadMethod) UnmarshalText(data []byte) error {
+	switch TaskAttachmentUploadMethod(data) {
+	case TaskAttachmentUploadMethodPUT:
+		*s = TaskAttachmentUploadMethodPUT
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+type TaskAttachmentUploadProvider string
+
+const (
+	TaskAttachmentUploadProviderLocal TaskAttachmentUploadProvider = "local"
+	TaskAttachmentUploadProviderOss   TaskAttachmentUploadProvider = "oss"
+	TaskAttachmentUploadProviderCos   TaskAttachmentUploadProvider = "cos"
+)
+
+// AllValues returns all TaskAttachmentUploadProvider values.
+func (TaskAttachmentUploadProvider) AllValues() []TaskAttachmentUploadProvider {
+	return []TaskAttachmentUploadProvider{
+		TaskAttachmentUploadProviderLocal,
+		TaskAttachmentUploadProviderOss,
+		TaskAttachmentUploadProviderCos,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s TaskAttachmentUploadProvider) MarshalText() ([]byte, error) {
+	switch s {
+	case TaskAttachmentUploadProviderLocal:
+		return []byte(s), nil
+	case TaskAttachmentUploadProviderOss:
+		return []byte(s), nil
+	case TaskAttachmentUploadProviderCos:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *TaskAttachmentUploadProvider) UnmarshalText(data []byte) error {
+	switch TaskAttachmentUploadProvider(data) {
+	case TaskAttachmentUploadProviderLocal:
+		*s = TaskAttachmentUploadProviderLocal
+		return nil
+	case TaskAttachmentUploadProviderOss:
+		*s = TaskAttachmentUploadProviderOss
+		return nil
+	case TaskAttachmentUploadProviderCos:
+		*s = TaskAttachmentUploadProviderCos
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/TaskAttachmentUploadWrite
+type TaskAttachmentUploadWrite struct {
+	Filename  string `json:"filename"`
+	MediaType string `json:"media_type"`
+	SizeBytes int64  `json:"size_bytes"`
+}
+
+// GetFilename returns the value of Filename.
+func (s *TaskAttachmentUploadWrite) GetFilename() string {
+	return s.Filename
+}
+
+// GetMediaType returns the value of MediaType.
+func (s *TaskAttachmentUploadWrite) GetMediaType() string {
+	return s.MediaType
+}
+
+// GetSizeBytes returns the value of SizeBytes.
+func (s *TaskAttachmentUploadWrite) GetSizeBytes() int64 {
+	return s.SizeBytes
+}
+
+// SetFilename sets the value of Filename.
+func (s *TaskAttachmentUploadWrite) SetFilename(val string) {
+	s.Filename = val
+}
+
+// SetMediaType sets the value of MediaType.
+func (s *TaskAttachmentUploadWrite) SetMediaType(val string) {
+	s.MediaType = val
+}
+
+// SetSizeBytes sets the value of SizeBytes.
+func (s *TaskAttachmentUploadWrite) SetSizeBytes(val int64) {
+	s.SizeBytes = val
 }
 
 // Ref: #/components/schemas/TaskClaim
@@ -7472,6 +8642,20 @@ func (s *TaskStatus) UnmarshalText(data []byte) error {
 	default:
 		return errors.Errorf("invalid value: %q", data)
 	}
+}
+
+type UploadTaskAttachmentContentReq struct {
+	Data io.Reader
+}
+
+// Read reads data from the Data reader.
+//
+// Kept to satisfy the io.Reader interface.
+func (s UploadTaskAttachmentContentReq) Read(p []byte) (n int, err error) {
+	if s.Data == nil {
+		return 0, io.EOF
+	}
+	return s.Data.Read(p)
 }
 
 // Ref: #/components/schemas/User

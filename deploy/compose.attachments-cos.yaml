@@ -1,0 +1,14 @@
+services:
+  api:
+    environment:
+      ATTACHMENT_STORAGE_PROVIDER: cos
+      ATTACHMENT_COS_BUCKET_URL: ${ATTACHMENT_COS_BUCKET_URL:?ATTACHMENT_COS_BUCKET_URL is required}
+      ATTACHMENT_COS_SERVICE_URL: ${ATTACHMENT_COS_SERVICE_URL:-}
+      ATTACHMENT_COS_SECRET_ID: ${ATTACHMENT_COS_SECRET_ID:?ATTACHMENT_COS_SECRET_ID is required}
+      ATTACHMENT_COS_SECRET_KEY_FILE: /run/secrets/attachment_cos_secret_key
+    secrets:
+      - attachment_cos_secret_key
+
+secrets:
+  attachment_cos_secret_key:
+    file: ${PACTLINE_SECRETS_DIR:-./deploy/secrets}/attachment_cos_secret_key

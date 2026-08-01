@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "id": "buried-retirement-problem",
+  "name": "A lifecycle problem is buried by later report discussion",
+  "business_context": "A delivery engine labels devices during package installation. The team is discussing how stale labels should leave the active population.",
+  "judge_context": "The explicit mention replies to the first lifecycle message after unrelated report discussion has followed. Assess whether the conversion keeps the unresolved retirement mechanism in focus instead of absorbing later report chatter.",
+  "trigger": {
+    "message_id": "trigger-1",
+    "reply_to_message_id": "m1",
+    "text": "请根据以上讨论创建一个任务，重点是还没有解决的问题。",
+    "sender": "Product Lead",
+    "at": "2026-07-31T09:20:00+08:00"
+  },
+  "messages": [
+    {
+      "message_id": "m1",
+      "sender": "Backend Engineer",
+      "role": "backend",
+      "text": "可以由引擎给符合条件的设备自动打上安装标签，但后续审批失败或者标签废弃时，已经打标的设备怎么退出还没有方案。标签短期失效还好，长期有效就必须清理。",
+      "at": "2026-07-31T09:00:00+08:00"
+    },
+    {
+      "message_id": "m2",
+      "sender": "Platform Engineer",
+      "role": "platform",
+      "text": "如果直接写进安装包，没有推出机制，时间久了设备信息会被污染。",
+      "at": "2026-07-31T09:02:00+08:00"
+    },
+    {
+      "message_id": "m3",
+      "sender": "Data Engineer",
+      "role": "data",
+      "text": "退出机制确实是问题。一个粗略想法是按近 30 日请求判断，但还没有验证。",
+      "at": "2026-07-31T09:04:00+08:00"
+    },
+    {
+      "message_id": "m4",
+      "sender": "Analyst",
+      "role": "analytics",
+      "text": "效果查询和命中报表已经放到测试库，默认展示供应方维度。",
+      "at": "2026-07-31T09:10:00+08:00"
+    },
+    {
+      "message_id": "m5",
+      "sender": "Product Lead",
+      "role": "product",
+      "text": "报表的时间筛选先保留最近七天。",
+      "at": "2026-07-31T09:12:00+08:00"
+    },
+    {
+      "message_id": "m6",
+      "sender": "Analyst",
+      "role": "analytics",
+      "text": "收到，我再补一个按渠道筛选。",
+      "at": "2026-07-31T09:13:00+08:00"
+    }
+  ],
+  "projects": [
+    {"number": 11, "name": "Delivery Engine"}
+  ],
+  "users": [
+    {"name": "Backend Engineer", "role": "backend"},
+    {"name": "Platform Engineer", "role": "platform"},
+    {"name": "Data Engineer", "role": "data"}
+  ]
+}

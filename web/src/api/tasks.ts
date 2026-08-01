@@ -15,11 +15,14 @@ import type {
   TaskClaim,
   TaskClaimConversation,
   TaskExecutionMode,
+  TaskAttachment,
+  TaskAttachmentUpload,
   TaskListResponse,
   TaskPatchBody,
   TaskPriority,
   TaskStatus,
 } from '../task-types'
+import { v1Upload } from './v1/client'
 
 export interface TaskListParams {
   status?: TaskStatus[]
@@ -109,9 +112,16 @@ export function createComment(
   number: number,
   taskVersion: number,
   body: string,
+  replyToCommentID?: string,
+  mentionedUserIDs: string[] = [],
 ): Promise<Comment> {
   return v1Post<Comment>(`/api/v1/tasks/${number}/comments`, {
-    ifMatch: etagForVersion(taskVersion), body: { body },
+    ifMatch: etagForVersion(taskVersion),
+    body: {
+      body,
+      ...(replyToCommentID ? { reply_to_comment_id: replyToCommentID } : {}),
+      mentioned_user_ids: mentionedUserIDs,
+    },
   }).then((response) => requireVersioned(response).value)
 }
 
@@ -120,10 +130,54 @@ export function updateComment(
   id: string,
   version: number,
   body: string,
+  mentionedUserIDs: string[] = [],
 ): Promise<Comment> {
   return v1Patch<Comment>(`/api/v1/tasks/${number}/comments/${id}`, {
-    ifMatch: etagForVersion(version), body: { body },
+    ifMatch: etagForVersion(version), body: { body, mentioned_user_ids: mentionedUserIDs },
   }).then((response) => requireVersioned(response).value)
+}
+
+export function listTaskAttachments(number: number): Promise<TaskAttachment[]> {
+  return v1Get<{ items: TaskAttachment[] }>(`/api/v1/tasks/${number}/attachments`)
+    .then(({ value }) => value.items)
+}
+
+export function createTaskAttachmentUpload(
+  number: number,
+  file: File,
+): Promise<TaskAttachmentUpload> {
+  return v1Post<TaskAttachmentUpload>(`/api/v1/tasks/${number}/attachments/uploads`, {
+    body: {
+      filename: file.name,
+      media_type: file.type || 'application/octet-stream',
+      size_bytes: file.size,
+    },
+  }).then(({ value }) => value)
+}
+
+export function uploadTaskAttachment(upload: TaskAttachmentUpload, file: File): Promise<void> {
+  return v1Upload(upload.upload_url, file, upload.headers)
+}
+
+export function completeTaskAttachmentUpload(
+  number: number,
+  uploadID: string,
+  taskVersion: number,
+): Promise<TaskAttachment> {
+  return v1Post<TaskAttachment>(
+    `/api/v1/tasks/${number}/attachments/uploads/${uploadID}/complete`,
+    { ifMatch: etagForVersion(taskVersion) },
+  ).then(({ value }) => value)
+}
+
+export function deleteTaskAttachment(
+  number: number,
+  attachmentID: string,
+  version: number,
+): Promise<void> {
+  return v1Delete(`/api/v1/tasks/${number}/attachments/${attachmentID}`, {
+    ifMatch: etagForVersion(version),
+  }).then(() => undefined)
 }
 
 export function deleteComment(number: number, id: string, version: number): Promise<void> {

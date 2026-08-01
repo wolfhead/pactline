@@ -2,6 +2,7 @@ import {
   etagForVersion,
   requireVersioned,
   v1Get,
+  v1Delete,
   v1Patch,
   v1Post,
 } from './v1/client'
@@ -34,7 +35,6 @@ export interface Project {
   version: number
   name: string
   description: string
-  owner: UserRef
   creator: UserRef
   archived_at: string | null
   created_at: string
@@ -67,7 +67,23 @@ export interface ProjectActivity {
 export interface CreateProjectBody {
   name: string
   description?: string
-  owner_id: string
+}
+
+export type ProjectRole = 'admin' | 'member'
+
+export interface ProjectMembership {
+  id: string
+  project_id: string
+  user: UserRef
+  role: ProjectRole
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ProjectMembershipMutation {
+  project_version: number
+  membership?: ProjectMembership
 }
 
 export interface CreateMilestoneBody {
@@ -102,6 +118,43 @@ export function updateProject(
 ): Promise<Project> {
   return v1Patch<Project>(`/api/v1/projects/${number}`, {
     ifMatch: etagForVersion(version), body,
+  }).then((response) => requireVersioned(response).value)
+}
+
+export function listProjectMembers(number: number): Promise<ProjectMembership[]> {
+  return v1Get<{ items: ProjectMembership[] }>(`/api/v1/projects/${number}/members`)
+    .then(({ value }) => value.items)
+}
+
+export function addProjectMember(
+  number: number,
+  projectVersion: number,
+  userID: string,
+  role: ProjectRole,
+): Promise<ProjectMembershipMutation> {
+  return v1Post<ProjectMembershipMutation>(`/api/v1/projects/${number}/members`, {
+    ifMatch: etagForVersion(projectVersion), body: { user_id: userID, role },
+  }).then((response) => requireVersioned(response).value)
+}
+
+export function updateProjectMember(
+  number: number,
+  projectVersion: number,
+  userID: string,
+  role: ProjectRole,
+): Promise<ProjectMembershipMutation> {
+  return v1Patch<ProjectMembershipMutation>(`/api/v1/projects/${number}/members/${userID}`, {
+    ifMatch: etagForVersion(projectVersion), body: { role },
+  }).then((response) => requireVersioned(response).value)
+}
+
+export function removeProjectMember(
+  number: number,
+  projectVersion: number,
+  userID: string,
+): Promise<ProjectMembershipMutation> {
+  return v1Delete<ProjectMembershipMutation>(`/api/v1/projects/${number}/members/${userID}`, {
+    ifMatch: etagForVersion(projectVersion),
   }).then((response) => requireVersioned(response).value)
 }
 

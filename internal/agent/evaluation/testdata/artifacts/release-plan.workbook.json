@@ -1,0 +1,21 @@
+{
+  "sheets": [
+    {
+      "name": "Preview Experiment",
+      "rows": [
+        ["Step", "Duration", "Decision"],
+        ["Offline evaluation", "", "Required"],
+        ["Preview", "30 minutes", "Threshold not defined"],
+        ["Full rollout", "", "Only after review"]
+      ]
+    },
+    {
+      "name": "Future Automation",
+      "rows": [
+        ["Idea", "Status", "Risk"],
+        ["Run preview for every model update", "Brainstorm", "Night sample volume may be too low"],
+        ["Automatic promotion", "Not agreed", "No rollback threshold"]
+      ]
+    }
+  ]
+}

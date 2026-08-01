@@ -67,10 +67,14 @@ it, publish a Lark application version that:
 - enables the bot capability;
 - selects **Use long connection to receive events** and subscribes
   `im.message.receive_v1`;
-- allows receiving group mentions and replying as the bot; and
+- grants `im:message.group_at_msg:readonly` to receive group mentions;
+- grants `im:message.group_msg:readonly` and `im:message:readonly` to read the
+  bounded history of groups in which the bot participates;
+- grants `im:resource` so the bot can download image and file resources from
+  those messages;
+- grants `im:message:send_as_bot` to reply as the bot; and
 - grants `im:message.reactions:write_only` so the bot can acknowledge accepted
-  commands with an `OnIt` reaction; and
-- allows reading messages from groups in which the bot participates.
+  commands with an `OnIt` reaction.
 
 The API uses Lark's official Go SDK to establish the WebSocket connection with
 `LARK_APP_ID` and `LARK_APP_SECRET`. No public event callback URL,
@@ -105,6 +109,14 @@ Operational smoke test:
    is created until the initiating user replies with one specific Task.
 6. Repeat the original Lark message and confirm no second Task or duplicate
    acknowledgement appears.
+7. Mention the bot after a discussion containing a screenshot; confirm the
+   Task uses visible facts only after `inspect_artifact` succeeds.
+8. Repeat with a small CSV explicitly described as a sample; confirm the Task
+   does not treat the file row count as the complete business population.
+9. Confirm a discussion without an explicit priority creates a Task with
+   priority `none`.
+10. Put an unrelated sticker or reaction image before a clear conversion
+    request; confirm it is not downloaded or inspected as Task evidence.
 
 If event delivery fails, check the startup bot-initialization log and the
 administrator-only `GET /api/admin/agent/status` endpoint. The status reports

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	pactagent "github.com/wolfhead/pactline/internal/agent"
+	"github.com/wolfhead/pactline/internal/agent/artifact"
 	"github.com/wolfhead/pactline/internal/agent/channel"
 	"github.com/wolfhead/pactline/internal/domain"
 	"github.com/wolfhead/pactline/internal/identity"
@@ -131,6 +132,10 @@ func TestServiceQueuesMentionOnceAndEncryptsCommand(t *testing.T) {
 		ConversationID: "chat-1", MessageID: "message-1",
 		SenderSubjectID: "ou_user", MessageType: "text",
 		Text: "帮我创建一个 Task", CreatedAt: now, BotMentioned: true,
+		Artifacts: []artifact.Reference{{
+			ID: "trigger-image", Kind: artifact.KindImage, Name: "report.png",
+			Availability: artifact.AvailabilityAvailable,
+		}},
 	}
 
 	require.NoError(t, service.Accept(context.Background(), incoming))
@@ -150,7 +155,10 @@ func TestServiceQueuesMentionOnceAndEncryptsCommand(t *testing.T) {
 		repository.input.CommandCiphertext,
 	)
 	require.NoError(t, err)
-	require.Equal(t, "帮我创建一个 Task", string(plaintext))
+	envelope, err := pactagent.DecodeCommandEnvelope(plaintext)
+	require.NoError(t, err)
+	require.Equal(t, "帮我创建一个 Task", envelope.Text)
+	require.Equal(t, incoming.Artifacts, envelope.Artifacts)
 	acknowledger.mu.Lock()
 	defer acknowledger.mu.Unlock()
 	require.Equal(t, []channel.AcknowledgeRequest{{

@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "id": "brainstorming-todo",
+  "name": "A brainstorm may need a discovery TODO",
+  "business_context": "The team is exploring how to make production incidents easier to reproduce without committing to an implementation.",
+  "judge_context": "The group agrees the problem matters but has not selected an architecture. Assess whether the conversion preserves exploration instead of fabricating an implementation result.",
+  "trigger": {
+    "message_id": "trigger-3",
+    "thread_root_message_id": "m31",
+    "text": "请根据前面的讨论创建一个任务，先把这个事情接住。",
+    "sender": "Engineering Lead",
+    "at": "2026-07-31T16:30:00+08:00"
+  },
+  "messages": [
+    {
+      "message_id": "m31",
+      "sender": "SRE",
+      "role": "operations",
+      "text": "线上偶发问题现在很难复现，我们是不是应该做一个请求回放能力？",
+      "at": "2026-07-31T16:00:00+08:00"
+    },
+    {
+      "message_id": "m32",
+      "sender": "Backend Engineer",
+      "role": "backend",
+      "text": "可以录完整请求，也可以只保存关键输入后在隔离环境重建，两种方案的安全成本差很多。",
+      "at": "2026-07-31T16:04:00+08:00"
+    },
+    {
+      "message_id": "m33",
+      "sender": "Security Engineer",
+      "role": "security",
+      "text": "完整请求可能包含敏感数据，必须先明确脱敏、权限和保留时间。",
+      "at": "2026-07-31T16:07:00+08:00"
+    },
+    {
+      "message_id": "m34",
+      "sender": "Engineering Lead",
+      "role": "engineering",
+      "text": "这个方向值得研究，先梳理场景、风险和可行方案，再决定做哪一种。",
+      "at": "2026-07-31T16:10:00+08:00"
+    }
+  ],
+  "projects": [
+    {"number": 13, "name": "Reliability Platform"}
+  ],
+  "users": [
+    {"name": "SRE", "role": "operations"},
+    {"name": "Backend Engineer", "role": "backend"},
+    {"name": "Security Engineer", "role": "security"}
+  ]
+}

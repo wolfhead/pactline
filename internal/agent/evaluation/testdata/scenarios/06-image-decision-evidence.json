@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "id": "image-decision-evidence",
+  "name": "A screenshot contains the decision-relevant numbers",
+  "business_context": "The discussion text says the timeout is high, while the attached screenshot contains the affected sample and shows that traffic release is blocked.",
+  "judge_context": "A useful conversion must inspect the screenshot before quoting numbers. If image analysis is unavailable, it should preserve the investigation need without pretending to know the screenshot contents.",
+  "trigger": {
+    "message_id": "image-trigger",
+    "reply_to_message_id": "image-message",
+    "text": "请根据以上讨论在 Media Integration 项目创建一个任务。",
+    "sender": "Team Lead",
+    "at": "2026-07-30T10:05:00+08:00"
+  },
+  "messages": [
+    {
+      "message_id": "image-message",
+      "sender": "Data Engineer",
+      "role": "data",
+      "text": "预算超时率很高，暂时不能开放流量，样例在截图里。",
+      "artifacts": [
+        {
+          "id": "timeout-report-image",
+          "kind": "image",
+          "name": "timeout-report.png",
+          "media_type": "image/png",
+          "fixture": "timeout-report.image.json"
+        }
+      ],
+      "at": "2026-07-30T10:00:00+08:00"
+    },
+    {
+      "message_id": "image-followup",
+      "sender": "Service Engineer",
+      "role": "service",
+      "text": "先确认受影响范围，再决定是否做预算预加载。",
+      "at": "2026-07-30T10:02:00+08:00"
+    }
+  ],
+  "projects": [{"number": 12, "name": "Media Integration"}]
+}

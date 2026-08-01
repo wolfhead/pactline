@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import AppShell from './components/tasks/AppShell'
 import { TaskComposerProvider } from './components/tasks/TaskComposer'
 import TaskListPage from './pages/tasks/TaskListPage'
+import AttachmentPreviewPage from './pages/tasks/AttachmentPreviewPage'
 import ProjectListPage from './pages/projects/ProjectListPage'
 import ProjectDetailPage from './pages/projects/ProjectDetailPage'
 import LoginPage from './pages/auth/LoginPage'
@@ -27,6 +28,14 @@ function ProtectedApplication() {
   }
   if (status === 'unauthenticated') {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  }
+
+  if (/^\/tasks\/\d+\/attachments\/[^/]+\/preview$/.test(location.pathname)) {
+    return (
+      <Routes>
+        <Route path="/tasks/:number/attachments/:attachmentID/preview" element={<AttachmentPreviewPage />} />
+      </Routes>
+    )
   }
 
   const adminVisible = actor?.platform_role === 'ADMIN' && !impersonation

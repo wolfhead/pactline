@@ -131,14 +131,18 @@ func (s *Service) Accept(ctx context.Context, incoming channel.IncomingMessage) 
 		TriggerOccurredAt:    incoming.CreatedAt,
 		InitiatingUserID:     user.ID,
 		InitiatingSubjectID:  incoming.SenderSubjectID,
-		CommandKind:          classifyCommand(incoming.Text),
+		CommandKind:          ClassifyCommand(incoming.Text),
 		Model:                s.model,
 		PromptVersion:        s.promptVersion,
 	}, now)
 	if err != nil {
 		return fmt.Errorf("normalize Agent command: %w", err)
 	}
-	ciphertext, err := s.inputs.Encrypt(run.ID, "command", []byte(incoming.Text))
+	commandEnvelope, err := pactagent.EncodeCommandEnvelope(incoming.Text, incoming.Artifacts)
+	if err != nil {
+		return fmt.Errorf("encode Agent command: %w", err)
+	}
+	ciphertext, err := s.inputs.Encrypt(run.ID, "command", commandEnvelope)
 	if err != nil {
 		return fmt.Errorf("encrypt Agent command: %w", err)
 	}
@@ -252,7 +256,9 @@ func (s *Service) tryResume(
 	return true, nil
 }
 
-func classifyCommand(command string) pactagent.CommandKind {
+// ClassifyCommand applies the production trigger-language policy. The
+// evaluation harness calls the same function for explicit-mention scenarios.
+func ClassifyCommand(command string) pactagent.CommandKind {
 	normalized := strings.ToLower(command)
 	for _, marker := range []string{
 		"以上讨论", "上述讨论", "前面的讨论", "above discussion", "previous discussion",

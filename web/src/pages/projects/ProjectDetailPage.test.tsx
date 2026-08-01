@@ -54,7 +54,6 @@ const TASK: Task = {
 const DETAIL: ProjectDetail = {
   project: {
     id: 'p1', number: 12, version: 1, name: 'Launch', description: 'Long-lived workspace',
-    owner: { id: 'u1', name: 'Alex', email: 'a@example.com' },
     creator: { id: 'u1', name: 'Alex', email: 'a@example.com' },
     archived_at: null, created_at: '', updated_at: '',
     completed_tasks: 0, eligible_tasks: 0,
@@ -89,12 +88,18 @@ const MILESTONE_DETAIL: ProjectDetail = {
 describe('ProjectDetailPage', () => {
   beforeEach(() => {
     vi.mocked(projectsApi.getProject).mockResolvedValue(DETAIL)
+    vi.mocked(projectsApi.listProjectMembers).mockResolvedValue([{
+      id: 'pm1', project_id: 'p1', user: { id: 'u1', name: 'Alex', email: 'a@example.com' },
+      role: 'admin', active: true, created_at: '', updated_at: '',
+    }])
     vi.mocked(projectsApi.listProjects).mockResolvedValue([DETAIL.project])
     vi.mocked(tasksApi.listTasks).mockResolvedValue({ items: [TASK], has_more: false })
     vi.mocked(tasksApi.listLabels).mockResolvedValue([])
     vi.mocked(tasksApi.getTask).mockResolvedValue(TASK)
     vi.mocked(tasksApi.listComments).mockResolvedValue([])
     vi.mocked(tasksApi.listActivity).mockResolvedValue([])
+    vi.mocked(tasksApi.listTaskAttachments).mockResolvedValue([])
+    vi.mocked(tasksApi.listTaskAgentConversations).mockResolvedValue([])
     vi.mocked(acceptanceApi.listTaskCriteria).mockResolvedValue([])
   })
   afterEach(() => {

@@ -14,6 +14,12 @@ type Handler interface {
 	//
 	// POST /api/v1/projects/{number}/milestones/{id}/activate
 	ActivateMilestone(ctx context.Context, params ActivateMilestoneParams) (ActivateMilestoneRes, error)
+	// AddProjectMember implements addProjectMember operation.
+	//
+	// Add a Project member.
+	//
+	// POST /api/v1/projects/{number}/members
+	AddProjectMember(ctx context.Context, req *ProjectMembershipCreate, params AddProjectMemberParams) (AddProjectMemberRes, error)
 	// AddTaskClaimProgress implements addTaskClaimProgress operation.
 	//
 	// Add an Agent progress message.
@@ -62,6 +68,12 @@ type Handler interface {
 	//
 	// POST /api/v1/projects/{number}/milestones/{id}/complete
 	CompleteMilestone(ctx context.Context, req OptLifecycleRequest, params CompleteMilestoneParams) (CompleteMilestoneRes, error)
+	// CompleteTaskAttachmentUpload implements completeTaskAttachmentUpload operation.
+	//
+	// Verify an uploaded object and create the Task attachment.
+	//
+	// POST /api/v1/tasks/{number}/attachments/uploads/{id}/complete
+	CompleteTaskAttachmentUpload(ctx context.Context, params CompleteTaskAttachmentUploadParams) (CompleteTaskAttachmentUploadRes, error)
 	// CreateAcceptanceCheck implements createAcceptanceCheck operation.
 	//
 	// Record an immutable acceptance check.
@@ -98,12 +110,18 @@ type Handler interface {
 	//
 	// POST /api/v1/tasks
 	CreateTask(ctx context.Context, req *TaskCreate, params CreateTaskParams) (CreateTaskRes, error)
+	// CreateTaskAttachmentUpload implements createTaskAttachmentUpload operation.
+	//
+	// Create a private attachment upload session.
+	//
+	// POST /api/v1/tasks/{number}/attachments/uploads
+	CreateTaskAttachmentUpload(ctx context.Context, req *TaskAttachmentUploadWrite, params CreateTaskAttachmentUploadParams) (CreateTaskAttachmentUploadRes, error)
 	// CreateTaskComment implements createTaskComment operation.
 	//
 	// Add a task comment.
 	//
 	// POST /api/v1/tasks/{number}/comments
-	CreateTaskComment(ctx context.Context, req *CommentWrite, params CreateTaskCommentParams) (CreateTaskCommentRes, error)
+	CreateTaskComment(ctx context.Context, req *CommentCreateWrite, params CreateTaskCommentParams) (CreateTaskCommentRes, error)
 	// CreateTaskCriterion implements createTaskCriterion operation.
 	//
 	// Create a task acceptance criterion.
@@ -122,6 +140,12 @@ type Handler interface {
 	//
 	// DELETE /api/v1/labels/{id}
 	DeleteLabel(ctx context.Context, params DeleteLabelParams) (DeleteLabelRes, error)
+	// DeleteTaskAttachment implements deleteTaskAttachment operation.
+	//
+	// Soft-delete a Task attachment.
+	//
+	// DELETE /api/v1/tasks/{number}/attachments/{id}
+	DeleteTaskAttachment(ctx context.Context, params DeleteTaskAttachmentParams) (DeleteTaskAttachmentRes, error)
 	// DeleteTaskComment implements deleteTaskComment operation.
 	//
 	// Delete a task comment.
@@ -158,6 +182,12 @@ type Handler interface {
 	//
 	// GET /api/v1/tasks/{number}
 	GetTask(ctx context.Context, params GetTaskParams) (GetTaskRes, error)
+	// GetTaskAttachmentContent implements getTaskAttachmentContent operation.
+	//
+	// Read authorized private attachment content.
+	//
+	// GET /api/v1/tasks/{number}/attachments/{id}/content
+	GetTaskAttachmentContent(ctx context.Context, params GetTaskAttachmentContentParams) (GetTaskAttachmentContentRes, error)
 	// GetTaskClaim implements getTaskClaim operation.
 	//
 	// Get a Claim.
@@ -176,6 +206,12 @@ type Handler interface {
 	//
 	// GET /api/v1/projects/{number}/milestones/{id}/criteria
 	ListMilestoneCriteria(ctx context.Context, params ListMilestoneCriteriaParams) (ListMilestoneCriteriaRes, error)
+	// ListProjectMembers implements listProjectMembers operation.
+	//
+	// List Project members.
+	//
+	// GET /api/v1/projects/{number}/members
+	ListProjectMembers(ctx context.Context, params ListProjectMembersParams) (ListProjectMembersRes, error)
 	// ListProjects implements listProjects operation.
 	//
 	// List projects.
@@ -194,6 +230,12 @@ type Handler interface {
 	//
 	// GET /api/v1/tasks/{number}/agent-conversations
 	ListTaskAgentConversations(ctx context.Context, params ListTaskAgentConversationsParams) (ListTaskAgentConversationsRes, error)
+	// ListTaskAttachments implements listTaskAttachments operation.
+	//
+	// List active Task attachments.
+	//
+	// GET /api/v1/tasks/{number}/attachments
+	ListTaskAttachments(ctx context.Context, params ListTaskAttachmentsParams) (ListTaskAttachmentsRes, error)
 	// ListTaskClaimMessages implements listTaskClaimMessages operation.
 	//
 	// List the immutable Agent conversation for a Claim.
@@ -236,6 +278,12 @@ type Handler interface {
 	//
 	// POST /api/v1/claims/{id}/release
 	ReleaseTaskClaim(ctx context.Context, req *TaskClaimRelease, params ReleaseTaskClaimParams) (ReleaseTaskClaimRes, error)
+	// RemoveProjectMember implements removeProjectMember operation.
+	//
+	// Remove a Project member.
+	//
+	// DELETE /api/v1/projects/{number}/members/{user_id}
+	RemoveProjectMember(ctx context.Context, params RemoveProjectMemberParams) (RemoveProjectMemberRes, error)
 	// ReopenMilestone implements reopenMilestone operation.
 	//
 	// Reopen a milestone.
@@ -284,6 +332,12 @@ type Handler interface {
 	//
 	// PATCH /api/v1/projects/{number}
 	UpdateProject(ctx context.Context, req *ProjectPatch, params UpdateProjectParams) (UpdateProjectRes, error)
+	// UpdateProjectMember implements updateProjectMember operation.
+	//
+	// Change a Project member role.
+	//
+	// PATCH /api/v1/projects/{number}/members/{user_id}
+	UpdateProjectMember(ctx context.Context, req *ProjectMembershipPatch, params UpdateProjectMemberParams) (UpdateProjectMemberRes, error)
 	// UpdateTask implements updateTask operation.
 	//
 	// Update a task.
@@ -295,7 +349,13 @@ type Handler interface {
 	// Update a task comment.
 	//
 	// PATCH /api/v1/tasks/{number}/comments/{id}
-	UpdateTaskComment(ctx context.Context, req *CommentWrite, params UpdateTaskCommentParams) (UpdateTaskCommentRes, error)
+	UpdateTaskComment(ctx context.Context, req *CommentUpdateWrite, params UpdateTaskCommentParams) (UpdateTaskCommentRes, error)
+	// UploadTaskAttachmentContent implements uploadTaskAttachmentContent operation.
+	//
+	// Stream content into a Local storage upload session.
+	//
+	// PUT /api/v1/tasks/{number}/attachments/uploads/{id}/content
+	UploadTaskAttachmentContent(ctx context.Context, req UploadTaskAttachmentContentReq, params UploadTaskAttachmentContentParams) (UploadTaskAttachmentContentRes, error)
 }
 
 // Server implements http server based on OpenAPI v3 specification and

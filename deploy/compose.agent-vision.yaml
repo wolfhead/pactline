@@ -1,0 +1,12 @@
+services:
+  api:
+    environment:
+      AGENT_VISION_API_KEY_FILE: /run/secrets/agent_vision_api_key
+      AGENT_VISION_BASE_URL: ${AGENT_VISION_BASE_URL:-https://api.jiekou.ai/openai}
+      AGENT_VISION_MODEL: ${AGENT_VISION_MODEL:-gemini-2.5-flash-lite}
+    secrets:
+      - agent_vision_api_key
+
+secrets:
+  agent_vision_api_key:
+    file: ${PACTLINE_SECRETS_DIR:-./deploy/secrets}/agent_vision_api_key

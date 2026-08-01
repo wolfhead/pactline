@@ -20,6 +20,7 @@ import (
 	"github.com/wolfhead/pactline/internal/api"
 	apiv1 "github.com/wolfhead/pactline/internal/api/v1"
 	"github.com/wolfhead/pactline/internal/application"
+	"github.com/wolfhead/pactline/internal/blob"
 	"github.com/wolfhead/pactline/internal/identity"
 	"github.com/wolfhead/pactline/internal/integrations/devauth"
 	legacyapi "github.com/wolfhead/pactline/internal/legacy/api"
@@ -78,11 +79,20 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 	comments := store.NewCommentStore(db)
 	labels := store.NewLabelStore(db)
 	projects := store.NewProjectStore(db)
+	memberships := store.NewProjectMembershipStore(db)
 	milestones := store.NewMilestoneStore(db)
 	acceptance := store.NewAcceptanceStore(db)
 	claims := store.NewTaskClaimStore(db)
+	attachmentObjects, err := blob.NewLocalStore(t.TempDir())
+	require.NoError(t, err)
+	attachmentService := &application.AttachmentService{
+		Attachments: store.NewAttachmentStore(db), Objects: attachmentObjects,
+	}
 	projectService := &application.ProjectService{
 		Projects: projects, Milestones: milestones, Acceptance: acceptance, Tasks: tasks,
+	}
+	projectAccess := &application.ProjectAccessService{
+		Projects: projects, Tasks: tasks, Memberships: memberships,
 	}
 	legacyHandler := legacyapi.NewRouter(
 		users, legacystore.NewBountyStore(db), legacystore.NewCreditStore(db),
@@ -105,9 +115,11 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 		Tasks: &application.TaskService{
 			Tasks: tasks, Comments: comments, Projects: projectService,
 		},
-		Claims:   claims,
-		Labels:   &application.LabelService{Labels: labels},
-		Projects: projectService,
+		Claims:      claims,
+		Labels:      &application.LabelService{Labels: labels},
+		Projects:    projectService,
+		Access:      projectAccess,
+		Attachments: attachmentService,
 	})
 	require.NoError(t, err)
 	h := api.NewRouter(legacyHandler, api.RouterOptions{
@@ -191,19 +203,43 @@ func ensureAPITestProject(t *testing.T, db *store.DB) {
 	require.NoError(t, db.Pool.QueryRow(ctx,
 		`SELECT EXISTS (SELECT 1 FROM projects WHERE archived_at IS NULL)`,
 	).Scan(&exists))
-	if exists {
-		return
+	if !exists {
+		projectID := uuid.New()
+		_, err := db.Pool.Exec(ctx, `
+			INSERT INTO projects (id, name, description, creator_id)
+			VALUES ($1, $2, $3, $4)
+		`, projectID, "API test workspace", "Workspace fixture for API integration tests", userA)
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			_, cleanupErr := db.Pool.Exec(context.Background(),
+				`DELETE FROM projects WHERE id=$1`, projectID)
+			require.NoError(t, cleanupErr)
+		})
 	}
 
-	projectID := uuid.New()
-	_, err := db.Pool.Exec(ctx, `
-		INSERT INTO projects (id, name, description, owner_id, creator_id)
-		VALUES ($1, $2, $3, $4, $4)
-	`, projectID, "API test workspace", "Workspace fixture for API integration tests", userA)
+	rows, err := db.Pool.Query(ctx, `
+		INSERT INTO project_memberships (id, project_id, user_id, role)
+		SELECT gen_random_uuid(), p.id, u.id,
+			CASE WHEN u.id=$1 THEN 'admin' ELSE 'member' END
+		FROM projects p CROSS JOIN users u
+		WHERE p.archived_at IS NULL AND u.active
+		ON CONFLICT (project_id, user_id) DO NOTHING
+		RETURNING id`, userA)
 	require.NoError(t, err)
+	var insertedMembershipIDs []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		require.NoError(t, rows.Scan(&id))
+		insertedMembershipIDs = append(insertedMembershipIDs, id)
+	}
+	require.NoError(t, rows.Err())
+	rows.Close()
 	t.Cleanup(func() {
+		if len(insertedMembershipIDs) == 0 {
+			return
+		}
 		_, cleanupErr := db.Pool.Exec(context.Background(),
-			`DELETE FROM projects WHERE id=$1`, projectID)
+			`DELETE FROM project_memberships WHERE id=ANY($1::uuid[])`, insertedMembershipIDs)
 		require.NoError(t, cleanupErr)
 	})
 }
@@ -270,6 +306,48 @@ func doWithHeaders(
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	return rec
+}
+
+func doRaw(
+	t *testing.T,
+	h http.Handler,
+	method, path, userID, mediaType string,
+	headers http.Header,
+	body []byte,
+) *httptest.ResponseRecorder {
+	t.Helper()
+	loginBody, err := json.Marshal(map[string]string{"user_id": userID})
+	require.NoError(t, err)
+	loginRequest := httptest.NewRequest(http.MethodPost, "/api/auth/dev/session", bytes.NewReader(loginBody))
+	loginRequest.Header.Set("Content-Type", "application/json")
+	loginResponse := httptest.NewRecorder()
+	h.ServeHTTP(loginResponse, loginRequest)
+	require.Equal(t, http.StatusNoContent, loginResponse.Code, loginResponse.Body.String())
+	cookies := loginResponse.Result().Cookies()
+	csrfToken := ""
+	for _, cookie := range cookies {
+		if cookie.Name == "bb_csrf" {
+			csrfToken = cookie.Value
+		}
+	}
+	request := httptest.NewRequest(method, path, bytes.NewReader(body))
+	for _, cookie := range cookies {
+		request.AddCookie(cookie)
+	}
+	for name, values := range headers {
+		for _, value := range values {
+			request.Header.Add(name, value)
+		}
+	}
+	request.Header.Set("Content-Type", mediaType)
+	if method != http.MethodGet && method != http.MethodHead {
+		request.Header.Set("Origin", "http://app.test")
+		request.Header.Set("Sec-Fetch-Site", "same-origin")
+		request.Header.Set("X-CSRF-Token", csrfToken)
+	}
+	recorder := httptest.NewRecorder()
+	h.ServeHTTP(recorder, request)
+	return recorder
 }
 
 func decodeJSON(t *testing.T, rec *httptest.ResponseRecorder, dst any) {

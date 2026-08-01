@@ -14,15 +14,57 @@ import (
 	"github.com/wolfhead/pactline/internal/domain"
 	"github.com/wolfhead/pactline/internal/identity"
 	"github.com/wolfhead/pactline/internal/store"
+
+	"github.com/google/uuid"
 )
 
 type Handler struct {
 	generated.UnimplementedHandler
-	Users    *store.UserStore
-	Tasks    *application.TaskService
-	Claims   *store.TaskClaimStore
-	Labels   *application.LabelService
-	Projects *application.ProjectService
+	Users       *store.UserStore
+	Tasks       *application.TaskService
+	Claims      *store.TaskClaimStore
+	Labels      *application.LabelService
+	Projects    *application.ProjectService
+	Access      *application.ProjectAccessService
+	Attachments *application.AttachmentService
+}
+
+func accessSubject(ctx context.Context) (domain.ProjectAccessSubject, error) {
+	current, ok := identity.FromContext(ctx)
+	if !ok || !current.Subject.Active {
+		return domain.ProjectAccessSubject{}, ErrAuthenticationRequired
+	}
+	return domain.ProjectAccessSubject{
+		UserID: current.Subject.ID, PlatformRole: current.Subject.PlatformRole,
+	}, nil
+}
+
+func (h *Handler) requireCriterionAccess(
+	ctx context.Context,
+	criterionID uuid.UUID,
+	permission application.ProjectPermission,
+) error {
+	subject, err := accessSubject(ctx)
+	if err != nil {
+		return err
+	}
+	criterion, err := h.Projects.Acceptance.Get(ctx, criterionID)
+	if err != nil {
+		return err
+	}
+	if criterion.TaskID != nil {
+		task, err := h.Projects.Tasks.GetByID(ctx, *criterion.TaskID)
+		if err != nil {
+			return err
+		}
+		_, err = h.Access.RequireProjectByNumber(ctx, task.Project.Number, subject, permission)
+		return err
+	}
+	milestone, err := h.Projects.Milestones.GetByID(ctx, *criterion.MilestoneID)
+	if err != nil {
+		return err
+	}
+	return h.Access.RequireProjectByID(ctx, milestone.ProjectID, subject, permission)
 }
 
 func (h *Handler) GetCurrentPrincipal(ctx context.Context) (generated.GetCurrentPrincipalRes, error) {
