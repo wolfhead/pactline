@@ -59,12 +59,15 @@ describe('CommentSection', () => {
     )
     await screen.findByText('Can someone follow up?')
     fireEvent.click(screen.getByRole('button', { name: '回复' }))
-    fireEvent.click(screen.getByRole('button', { name: '@Blair' }))
-    fireEvent.change(screen.getByLabelText('新评论内容'), { target: { value: 'I will handle it' } })
+    fireEvent.mouseDown(screen.getByRole('button', { name: '提及项目成员' }))
+    fireEvent.mouseDown(screen.getByRole('option', { name: /Blair/ }))
+    const editor = screen.getByRole('combobox', { name: '新评论内容' })
+    editor.append(document.createTextNode('I will handle it'))
+    fireEvent.input(editor)
     fireEvent.click(screen.getByRole('button', { name: '评论' }))
 
     await waitFor(() => expect(tasksApi.createComment).toHaveBeenCalledWith(
-      42, 5, 'I will handle it', 'comment-1', ['u2'],
+      42, 5, '@Blair I will handle it', 'comment-1', ['u2'],
     ))
   })
 })

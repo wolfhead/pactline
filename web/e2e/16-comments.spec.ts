@@ -33,14 +33,24 @@ test('comments: mention, reply, edit, and preserve a deleted root placeholder', 
 
   await expect(commentSection.getByText('还没有评论或 Agent 对话。')).toBeVisible()
 
-  await commentSection.getByLabel('新评论内容').fill('First comment')
-  await commentSection.getByRole('button', { name: '@研发 C', exact: true }).click()
+  const commentEditor = commentSection.getByRole('combobox', { name: '新评论内容' })
+  await commentEditor.fill('First comment ')
+  await commentEditor.press('@')
+  // The reusable picker is portalled so it can escape a scrolling inspector;
+  // locate its options from the page rather than the timeline region.
+  await page.getByRole('option', { name: /研发 C/ }).click()
+  await expect(commentEditor.locator(`[data-mention-id="${USERS.engineerC.id}"]`)).toBeVisible()
+  const commentCreate = page.waitForResponse(
+    (res) => res.url().endsWith(`/api/v1/tasks/${task.number}/comments`) && res.request().method() === 'POST',
+  )
   await commentSection.getByRole('button', { name: '评论', exact: true }).click()
+  const createdComment = await (await commentCreate).json() as { mentioned_user_ids: string[] }
+  expect(createdComment.mentioned_user_ids).toEqual([USERS.engineerC.id])
 
-  await expect(commentSection.getByText('First comment', { exact: true })).toBeVisible()
+  await expect(commentSection.getByText('First comment @研发 C', { exact: true })).toBeVisible()
   await expect(commentSection.getByText('还没有评论或 Agent 对话。')).not.toBeVisible()
   const rootComment = commentSection.locator('li').filter({ hasText: 'First comment' })
-  await expect(rootComment.getByText('@研发 C', { exact: true })).toBeVisible()
+  await expect(rootComment).toContainText('@研发 C')
 
   // Edit: the comment body is itself an InlineEditable, for its own author.
   const editPatch = page.waitForResponse(

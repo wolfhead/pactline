@@ -17,6 +17,10 @@ import type {
   TaskStatus,
 } from '../../task-types'
 import type { AcceptanceCriterion, AcceptanceOutcome } from '@/api/acceptance'
+import MentionInput, {
+  type MentionInputHandle,
+  type MentionInputValue,
+} from '@/components/users/MentionInput'
 import InlineEditable from './InlineEditable'
 import SubmissionReview from './SubmissionReview'
 
@@ -54,10 +58,12 @@ export default function CommentSection({
   const [comments, setComments] = useState<Comment[]>([])
   const [members, setMembers] = useState<ProjectMembership[]>([])
   const [conversations, setConversations] = useState<TaskClaimConversation[]>([])
-  const [body, setBody] = useState('')
+  const [commentDraft, setCommentDraft] = useState<MentionInputValue>({
+    body: '',
+    mentionedUserIDs: [],
+  })
   const [replyToCommentID, setReplyToCommentID] = useState('')
-  const [mentionedUserIDs, setMentionedUserIDs] = useState<string[]>([])
-  const composerRef = useRef<HTMLTextAreaElement>(null)
+  const composerRef = useRef<MentionInputHandle>(null)
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [answeringClaimID, setAnsweringClaimID] = useState('')
   const [releasingClaimID, setReleasingClaimID] = useState('')
@@ -92,6 +98,12 @@ export default function CommentSection({
   }, [taskNumber, projectNumber, me?.id])
 
   const memberByID = useMemo(() => new Map(members.map((member) => [member.user.id, member])), [members])
+  const mentionOptions = useMemo(() => members
+    .filter(({ user }) => user.id !== me?.id)
+    .map(({ user, role }) => ({
+      ...user,
+      description: role === 'admin' ? '项目管理员' : '项目成员',
+    })), [me?.id, members])
 
   const timeline = useMemo(() => {
     const entries: Array<
@@ -146,7 +158,7 @@ export default function CommentSection({
 
   async function submit(e: FormEvent) {
     e.preventDefault()
-    const trimmed = body.trim()
+    const trimmed = commentDraft.body.trim()
     if (!trimmed || posting) return
     setPosting(true)
     setError('')
@@ -156,12 +168,11 @@ export default function CommentSection({
         taskVersion,
         trimmed,
         replyToCommentID || undefined,
-        mentionedUserIDs,
+        commentDraft.mentionedUserIDs,
       )
       setComments((cs) => [...cs, created])
-      setBody('')
+      setCommentDraft({ body: '', mentionedUserIDs: [] })
       setReplyToCommentID('')
-      setMentionedUserIDs([])
       await onTaskChanged()
     } catch (err) {
       setError(String((err as Error).message))
@@ -202,14 +213,6 @@ export default function CommentSection({
   function startReply(comment: Comment) {
     setReplyToCommentID(comment.id)
     window.requestAnimationFrame(() => composerRef.current?.focus())
-  }
-
-  function toggleMention(userID: string) {
-    setMentionedUserIDs((current) => (
-      current.includes(userID)
-        ? current.filter((id) => id !== userID)
-        : [...current, userID]
-    ))
   }
 
   async function answerQuestion(conversation: TaskClaimConversation) {
@@ -369,7 +372,7 @@ export default function CommentSection({
           return (
             <li
               key={c.id}
-              className={`rounded-md border border-border p-3 ${isReply ? 'ml-6 border-l-2 border-l-accent/35' : ''}`}
+              className={`rounded-md border border-border p-3 ${isReply ? 'ml-6 bg-accent/5' : ''}`}
             >
               <div className="mb-1 flex items-center gap-2 text-xs text-fg-muted">
                 <span className="font-medium text-fg">{authorName}</span>
@@ -386,16 +389,11 @@ export default function CommentSection({
                   className="mb-2 w-full text-sm text-fg"
                 />
               ) : (
-                <p className="mb-2 whitespace-pre-wrap text-sm text-fg">{c.body}</p>
-              )}
-              {!c.deleted && (c.mentioned_user_ids ?? []).length > 0 && (
-                <div className="mb-2 flex flex-wrap gap-1">
-                  {(c.mentioned_user_ids ?? []).map((userID) => (
-                    <span key={userID} className="rounded-full bg-accent/10 px-2 py-0.5 text-xs text-accent">
-                      @{memberByID.get(userID)?.user.name ?? '项目成员'}
-                    </span>
-                  ))}
-                </div>
+                <CommentBody
+                  body={c.body}
+                  mentionedUserIDs={c.mentioned_user_ids ?? []}
+                  memberByID={memberByID}
+                />
               )}
               <div className="flex items-center gap-2">
                 <span className="text-xs text-fg-muted">{new Date(c.created_at).toLocaleString()}</span>
@@ -432,43 +430,17 @@ export default function CommentSection({
             <button type="button" className="text-fg-muted hover:text-fg" onClick={() => setReplyToCommentID('')}>取消</button>
           </div>
         )}
-        <textarea
+        <MentionInput
           ref={composerRef}
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
+          value={commentDraft}
+          options={mentionOptions}
+          onChange={setCommentDraft}
           placeholder="添加评论…"
-          aria-label="新评论内容"
-          rows={2}
-          className="rounded-md border border-border-strong bg-surface px-2 py-1.5 text-sm text-fg placeholder:text-fg-muted"
+          ariaLabel="新评论内容"
         />
-        {members.length > 0 && (
-          <div>
-            <p className="mb-1.5 text-xs text-fg-muted">通知项目成员</p>
-            <div className="flex flex-wrap gap-1.5">
-              {members.filter(({ user }) => user.id !== me?.id).map(({ user }) => {
-                const selected = mentionedUserIDs.includes(user.id)
-                return (
-                  <button
-                    key={user.id}
-                    type="button"
-                    aria-pressed={selected}
-                    onClick={() => toggleMention(user.id)}
-                    className={`rounded-full border px-2 py-0.5 text-xs ${
-                      selected
-                        ? 'border-accent bg-accent/10 text-accent'
-                        : 'border-border bg-surface text-fg-muted hover:text-fg'
-                    }`}
-                  >
-                    @{user.name}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        )}
         <button
           type="submit"
-          disabled={!body.trim() || posting}
+          disabled={!commentDraft.body.trim() || posting}
           className="self-end rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-fg disabled:cursor-not-allowed disabled:opacity-50"
         >
           {posting ? '提交中…' : '评论'}
@@ -477,6 +449,49 @@ export default function CommentSection({
       {error && <p className="text-sm text-danger">{error}</p>}
     </section>
   )
+}
+
+function CommentBody({
+  body,
+  mentionedUserIDs,
+  memberByID,
+}: {
+  body: string
+  mentionedUserIDs: string[]
+  memberByID: Map<string, ProjectMembership>
+}) {
+  const mentions = mentionedUserIDs.map((id) => ({
+    id,
+    name: memberByID.get(id)?.user.name ?? '项目成员',
+  }))
+  const missingMentions = mentions.filter(({ name }) => !body.includes(`@${name}`))
+  const names = mentions
+    .map(({ name }) => name)
+    .filter((name) => name !== '项目成员')
+    .sort((left, right) => right.length - left.length)
+  const pattern = names.length > 0
+    ? new RegExp(`(@(?:${names.map(escapeRegExp).join('|')}))`, 'g')
+    : null
+  const parts = pattern ? body.split(pattern) : [body]
+
+  return (
+    <p className="mb-2 whitespace-pre-wrap text-sm text-fg">
+      {missingMentions.map(({ id, name }) => (
+        <span key={id} className="mr-1 rounded-sm bg-accent/10 px-1 py-0.5 font-medium text-accent">
+          @{name}
+        </span>
+      ))}
+      {parts.map((part, index) => (
+        part.startsWith('@') && names.includes(part.slice(1))
+          ? <span key={`${part}-${index}`} className="rounded-sm bg-accent/10 px-1 py-0.5 font-medium text-accent">{part}</span>
+          : part
+      ))}
+    </p>
+  )
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function agentMessageLabel(kind: TaskClaimMessage['kind']): string {
