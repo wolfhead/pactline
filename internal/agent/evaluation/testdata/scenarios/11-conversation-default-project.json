@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "id": "conversation-default-project",
+  "name": "A group default supplies stable Project and terminology context",
+  "business_context": "The trigger intentionally omits a Project name so the evaluation can assess the configured group default without prescribing a Task answer.",
+  "judge_context": "Assess whether the Agent uses the configured default Project and applies the group terminology as background while still grounding the Task in the actual discussion.",
+  "conversation_configuration": {
+    "default_project_number": 14,
+    "business_context": "This group owns the Model Delivery Project. A preview means a 30-minute limited release before production promotion; the promotion threshold is not yet agreed."
+  },
+  "trigger": {
+    "message_id": "trigger-11",
+    "reply_to_message_id": "m114",
+    "text": "请根据以上讨论创建一个任务。",
+    "sender": "Release Owner",
+    "at": "2026-08-03T18:00:00+08:00"
+  },
+  "messages": [
+    {
+      "message_id": "m111",
+      "sender": "Release Owner",
+      "role": "release",
+      "text": "最近两次发布都在全量后才发现指标波动，想把 preview 固定到发布流程里。",
+      "at": "2026-08-03T17:30:00+08:00"
+    },
+    {
+      "message_id": "m112",
+      "sender": "Model Engineer",
+      "role": "model",
+      "text": "先跑 preview 没问题，但现在还没有自动晋级，也没有统一的异常阈值。",
+      "at": "2026-08-03T17:34:00+08:00"
+    },
+    {
+      "message_id": "m113",
+      "sender": "Platform Engineer",
+      "role": "platform",
+      "text": "第一步可以只做流程编排和人工确认，等阈值稳定后再自动晋级。",
+      "at": "2026-08-03T17:38:00+08:00"
+    },
+    {
+      "message_id": "m114",
+      "sender": "Release Owner",
+      "role": "release",
+      "text": "同意，先把每次发布必须走 preview 和人工确认落下来，阈值自动化后续再做。",
+      "at": "2026-08-03T17:42:00+08:00"
+    }
+  ],
+  "projects": [
+    {"number": 14, "name": "Model Delivery"},
+    {"number": 15, "name": "Data Quality"}
+  ],
+  "users": [
+    {"name": "Release Owner", "role": "release"},
+    {"name": "Model Engineer", "role": "model"},
+    {"name": "Platform Engineer", "role": "platform"}
+  ]
+}

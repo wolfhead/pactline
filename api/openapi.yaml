@@ -934,6 +934,43 @@ paths:
           $ref: "#/components/responses/AcceptanceCheckCreated"
         default:
           $ref: "#/components/responses/Problem"
+  /api/v1/agent-conversations:
+    get:
+      operationId: listAgentConversations
+      summary: List visible Agent conversation configurations
+      responses:
+        "200":
+          $ref: "#/components/responses/AgentConversationList"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/agent-conversations/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ResourceID"
+    get:
+      operationId: getAgentConversation
+      summary: Get an Agent conversation configuration
+      responses:
+        "200":
+          $ref: "#/components/responses/AgentConversation"
+        default:
+          $ref: "#/components/responses/Problem"
+    patch:
+      operationId: updateAgentConversation
+      summary: Update an Agent conversation configuration
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentConversationPatch"
+      responses:
+        "200":
+          $ref: "#/components/responses/AgentConversation"
+        default:
+          $ref: "#/components/responses/Problem"
 components:
   securitySchemes:
     bearerAuth:
@@ -1501,6 +1538,28 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Label"
+    AgentConversationList:
+      description: Visible Agent conversation configurations
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AgentConversationList"
+    AgentConversation:
+      description: Agent conversation configuration
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AgentConversation"
     ProjectList:
       description: Project collection
       headers:
@@ -2614,6 +2673,90 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/Label"
+    AgentConversationPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        enabled:
+          type: boolean
+        binding_active:
+          type: boolean
+        default_project_number:
+          type: integer
+          format: int64
+          minimum: 1
+        business_context:
+          type: string
+          maxLength: 4000
+    AgentConversation:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - provider
+        - external_id
+        - name
+        - enabled
+        - binding_active
+        - business_context
+        - version
+        - can_manage
+        - created_by
+        - updated_by
+        - last_seen_at
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+          enum: [lark]
+        external_id:
+          type: string
+        name:
+          type: string
+        enabled:
+          type: boolean
+        binding_active:
+          type: boolean
+        default_project:
+          $ref: "#/components/schemas/ProjectRef"
+        business_context:
+          type: string
+          maxLength: 4000
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        can_manage:
+          type: boolean
+        created_by:
+          type: string
+          format: uuid
+        updated_by:
+          type: string
+          format: uuid
+        last_seen_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    AgentConversationList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentConversation"
     ProjectCreate:
       type: object
       additionalProperties: false

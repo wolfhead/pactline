@@ -30,6 +30,7 @@ import {
 import { ProblemError } from '@/api/v1/client'
 import AcceptanceChecklist from '@/components/projects/AcceptanceChecklist'
 import ProjectMembersPanel from '@/components/projects/ProjectMembersPanel'
+import ProjectAgentConversationsPanel from '@/components/projects/ProjectAgentConversationsPanel'
 import TaskCollection from '@/components/tasks/TaskCollection'
 import TaskInspector from '@/components/tasks/TaskInspector'
 import { useTaskCollection } from '@/components/tasks/useTaskCollection'
@@ -262,6 +263,7 @@ export default function ProjectDetailPage({ view = 'overview' }: { view?: Projec
                 removeProjectMember(project.number, project.version, userID)
               ))}
             />
+            <ProjectAgentConversationsPanel projectNumber={project.number} />
           </div>
         )}
         {error && <p role="alert" className="border-t border-border py-2 text-sm text-danger">操作失败：{error}</p>}

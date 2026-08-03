@@ -56,6 +56,8 @@ describe('NavSidebar', () => {
       .toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('button', { name: '开发者工具' }))
       .toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('button', { name: 'Agent' }))
+      .toHaveAttribute('aria-expanded', 'false')
     expect(screen.getByRole('button', { name: '系统管理' }))
       .toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByRole('link', { name: 'API Token' })).not.toBeInTheDocument()

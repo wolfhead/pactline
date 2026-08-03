@@ -464,6 +464,351 @@ func (s *AcceptanceOutcome) UnmarshalText(data []byte) error {
 	}
 }
 
+// Ref: #/components/schemas/AgentConversation
+type AgentConversation struct {
+	ID              uuid.UUID                 `json:"id"`
+	Provider        AgentConversationProvider `json:"provider"`
+	ExternalID      string                    `json:"external_id"`
+	Name            string                    `json:"name"`
+	Enabled         bool                      `json:"enabled"`
+	BindingActive   bool                      `json:"binding_active"`
+	DefaultProject  OptProjectRef             `json:"default_project"`
+	BusinessContext string                    `json:"business_context"`
+	Version         int64                     `json:"version"`
+	CanManage       bool                      `json:"can_manage"`
+	CreatedBy       uuid.UUID                 `json:"created_by"`
+	UpdatedBy       uuid.UUID                 `json:"updated_by"`
+	LastSeenAt      time.Time                 `json:"last_seen_at"`
+	CreatedAt       time.Time                 `json:"created_at"`
+	UpdatedAt       time.Time                 `json:"updated_at"`
+}
+
+// GetID returns the value of ID.
+func (s *AgentConversation) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetProvider returns the value of Provider.
+func (s *AgentConversation) GetProvider() AgentConversationProvider {
+	return s.Provider
+}
+
+// GetExternalID returns the value of ExternalID.
+func (s *AgentConversation) GetExternalID() string {
+	return s.ExternalID
+}
+
+// GetName returns the value of Name.
+func (s *AgentConversation) GetName() string {
+	return s.Name
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *AgentConversation) GetEnabled() bool {
+	return s.Enabled
+}
+
+// GetBindingActive returns the value of BindingActive.
+func (s *AgentConversation) GetBindingActive() bool {
+	return s.BindingActive
+}
+
+// GetDefaultProject returns the value of DefaultProject.
+func (s *AgentConversation) GetDefaultProject() OptProjectRef {
+	return s.DefaultProject
+}
+
+// GetBusinessContext returns the value of BusinessContext.
+func (s *AgentConversation) GetBusinessContext() string {
+	return s.BusinessContext
+}
+
+// GetVersion returns the value of Version.
+func (s *AgentConversation) GetVersion() int64 {
+	return s.Version
+}
+
+// GetCanManage returns the value of CanManage.
+func (s *AgentConversation) GetCanManage() bool {
+	return s.CanManage
+}
+
+// GetCreatedBy returns the value of CreatedBy.
+func (s *AgentConversation) GetCreatedBy() uuid.UUID {
+	return s.CreatedBy
+}
+
+// GetUpdatedBy returns the value of UpdatedBy.
+func (s *AgentConversation) GetUpdatedBy() uuid.UUID {
+	return s.UpdatedBy
+}
+
+// GetLastSeenAt returns the value of LastSeenAt.
+func (s *AgentConversation) GetLastSeenAt() time.Time {
+	return s.LastSeenAt
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *AgentConversation) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *AgentConversation) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// SetID sets the value of ID.
+func (s *AgentConversation) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetProvider sets the value of Provider.
+func (s *AgentConversation) SetProvider(val AgentConversationProvider) {
+	s.Provider = val
+}
+
+// SetExternalID sets the value of ExternalID.
+func (s *AgentConversation) SetExternalID(val string) {
+	s.ExternalID = val
+}
+
+// SetName sets the value of Name.
+func (s *AgentConversation) SetName(val string) {
+	s.Name = val
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *AgentConversation) SetEnabled(val bool) {
+	s.Enabled = val
+}
+
+// SetBindingActive sets the value of BindingActive.
+func (s *AgentConversation) SetBindingActive(val bool) {
+	s.BindingActive = val
+}
+
+// SetDefaultProject sets the value of DefaultProject.
+func (s *AgentConversation) SetDefaultProject(val OptProjectRef) {
+	s.DefaultProject = val
+}
+
+// SetBusinessContext sets the value of BusinessContext.
+func (s *AgentConversation) SetBusinessContext(val string) {
+	s.BusinessContext = val
+}
+
+// SetVersion sets the value of Version.
+func (s *AgentConversation) SetVersion(val int64) {
+	s.Version = val
+}
+
+// SetCanManage sets the value of CanManage.
+func (s *AgentConversation) SetCanManage(val bool) {
+	s.CanManage = val
+}
+
+// SetCreatedBy sets the value of CreatedBy.
+func (s *AgentConversation) SetCreatedBy(val uuid.UUID) {
+	s.CreatedBy = val
+}
+
+// SetUpdatedBy sets the value of UpdatedBy.
+func (s *AgentConversation) SetUpdatedBy(val uuid.UUID) {
+	s.UpdatedBy = val
+}
+
+// SetLastSeenAt sets the value of LastSeenAt.
+func (s *AgentConversation) SetLastSeenAt(val time.Time) {
+	s.LastSeenAt = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *AgentConversation) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *AgentConversation) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// AgentConversationHeaders wraps AgentConversation with response headers.
+type AgentConversationHeaders struct {
+	Etag                OptString
+	IdempotencyReplayed OptBool
+	XRequestID          OptString
+	Response            AgentConversation
+}
+
+// GetEtag returns the value of Etag.
+func (s *AgentConversationHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *AgentConversationHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *AgentConversationHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *AgentConversationHeaders) GetResponse() AgentConversation {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *AgentConversationHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *AgentConversationHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *AgentConversationHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *AgentConversationHeaders) SetResponse(val AgentConversation) {
+	s.Response = val
+}
+
+func (*AgentConversationHeaders) getAgentConversationRes()    {}
+func (*AgentConversationHeaders) updateAgentConversationRes() {}
+
+// Ref: #/components/schemas/AgentConversationList
+type AgentConversationList struct {
+	Items []AgentConversation `json:"items"`
+}
+
+// GetItems returns the value of Items.
+func (s *AgentConversationList) GetItems() []AgentConversation {
+	return s.Items
+}
+
+// SetItems sets the value of Items.
+func (s *AgentConversationList) SetItems(val []AgentConversation) {
+	s.Items = val
+}
+
+// AgentConversationListHeaders wraps AgentConversationList with response headers.
+type AgentConversationListHeaders struct {
+	XRequestID OptString
+	Response   AgentConversationList
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *AgentConversationListHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *AgentConversationListHeaders) GetResponse() AgentConversationList {
+	return s.Response
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *AgentConversationListHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *AgentConversationListHeaders) SetResponse(val AgentConversationList) {
+	s.Response = val
+}
+
+func (*AgentConversationListHeaders) listAgentConversationsRes() {}
+
+// Ref: #/components/schemas/AgentConversationPatch
+type AgentConversationPatch struct {
+	Enabled              OptBool   `json:"enabled"`
+	BindingActive        OptBool   `json:"binding_active"`
+	DefaultProjectNumber OptInt64  `json:"default_project_number"`
+	BusinessContext      OptString `json:"business_context"`
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *AgentConversationPatch) GetEnabled() OptBool {
+	return s.Enabled
+}
+
+// GetBindingActive returns the value of BindingActive.
+func (s *AgentConversationPatch) GetBindingActive() OptBool {
+	return s.BindingActive
+}
+
+// GetDefaultProjectNumber returns the value of DefaultProjectNumber.
+func (s *AgentConversationPatch) GetDefaultProjectNumber() OptInt64 {
+	return s.DefaultProjectNumber
+}
+
+// GetBusinessContext returns the value of BusinessContext.
+func (s *AgentConversationPatch) GetBusinessContext() OptString {
+	return s.BusinessContext
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *AgentConversationPatch) SetEnabled(val OptBool) {
+	s.Enabled = val
+}
+
+// SetBindingActive sets the value of BindingActive.
+func (s *AgentConversationPatch) SetBindingActive(val OptBool) {
+	s.BindingActive = val
+}
+
+// SetDefaultProjectNumber sets the value of DefaultProjectNumber.
+func (s *AgentConversationPatch) SetDefaultProjectNumber(val OptInt64) {
+	s.DefaultProjectNumber = val
+}
+
+// SetBusinessContext sets the value of BusinessContext.
+func (s *AgentConversationPatch) SetBusinessContext(val OptString) {
+	s.BusinessContext = val
+}
+
+type AgentConversationProvider string
+
+const (
+	AgentConversationProviderLark AgentConversationProvider = "lark"
+)
+
+// AllValues returns all AgentConversationProvider values.
+func (AgentConversationProvider) AllValues() []AgentConversationProvider {
+	return []AgentConversationProvider{
+		AgentConversationProviderLark,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s AgentConversationProvider) MarshalText() ([]byte, error) {
+	switch s {
+	case AgentConversationProviderLark:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *AgentConversationProvider) UnmarshalText(data []byte) error {
+	switch AgentConversationProvider(data) {
+	case AgentConversationProviderLark:
+		*s = AgentConversationProviderLark
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
 type BearerAuth struct {
 	Token string
 	Roles []string
@@ -3633,6 +3978,52 @@ func (o OptProjectMembership) Or(d ProjectMembership) ProjectMembership {
 	return d
 }
 
+// NewOptProjectRef returns new OptProjectRef with value set to v.
+func NewOptProjectRef(v ProjectRef) OptProjectRef {
+	return OptProjectRef{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptProjectRef is optional ProjectRef.
+type OptProjectRef struct {
+	Value ProjectRef
+	Set   bool
+}
+
+// IsSet returns true if OptProjectRef was set.
+func (o OptProjectRef) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptProjectRef) Reset() {
+	var v ProjectRef
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptProjectRef) SetTo(v ProjectRef) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptProjectRef) Get() (v ProjectRef, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptProjectRef) Or(d ProjectRef) ProjectRef {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptString returns new OptString with value set to v.
 func NewOptString(v string) OptString {
 	return OptString{
@@ -4467,12 +4858,14 @@ func (*ProblemStatusCodeWithHeaders) deleteLabelRes()                    {}
 func (*ProblemStatusCodeWithHeaders) deleteTaskAttachmentRes()           {}
 func (*ProblemStatusCodeWithHeaders) deleteTaskCommentRes()              {}
 func (*ProblemStatusCodeWithHeaders) extendTaskClaimRes()                {}
+func (*ProblemStatusCodeWithHeaders) getAgentConversationRes()           {}
 func (*ProblemStatusCodeWithHeaders) getCurrentPrincipalRes()            {}
 func (*ProblemStatusCodeWithHeaders) getCurrentTaskClaimRes()            {}
 func (*ProblemStatusCodeWithHeaders) getProjectRes()                     {}
 func (*ProblemStatusCodeWithHeaders) getTaskAttachmentContentRes()       {}
 func (*ProblemStatusCodeWithHeaders) getTaskClaimRes()                   {}
 func (*ProblemStatusCodeWithHeaders) getTaskRes()                        {}
+func (*ProblemStatusCodeWithHeaders) listAgentConversationsRes()         {}
 func (*ProblemStatusCodeWithHeaders) listLabelsRes()                     {}
 func (*ProblemStatusCodeWithHeaders) listMilestoneCriteriaRes()          {}
 func (*ProblemStatusCodeWithHeaders) listProjectMembersRes()             {}
@@ -4492,6 +4885,7 @@ func (*ProblemStatusCodeWithHeaders) reopenMilestoneRes()                {}
 func (*ProblemStatusCodeWithHeaders) restoreProjectRes()                 {}
 func (*ProblemStatusCodeWithHeaders) restoreTaskRes()                    {}
 func (*ProblemStatusCodeWithHeaders) submitTaskClaimRes()                {}
+func (*ProblemStatusCodeWithHeaders) updateAgentConversationRes()        {}
 func (*ProblemStatusCodeWithHeaders) updateCriterionRes()                {}
 func (*ProblemStatusCodeWithHeaders) updateLabelRes()                    {}
 func (*ProblemStatusCodeWithHeaders) updateMilestoneRes()                {}

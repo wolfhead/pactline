@@ -101,6 +101,10 @@ type ExtendTaskClaimRes interface {
 	extendTaskClaimRes()
 }
 
+type GetAgentConversationRes interface {
+	getAgentConversationRes()
+}
+
 type GetCurrentPrincipalRes interface {
 	getCurrentPrincipalRes()
 }
@@ -123,6 +127,10 @@ type GetTaskClaimRes interface {
 
 type GetTaskRes interface {
 	getTaskRes()
+}
+
+type ListAgentConversationsRes interface {
+	listAgentConversationsRes()
 }
 
 type ListLabelsRes interface {
@@ -199,6 +207,10 @@ type RestoreTaskRes interface {
 
 type SubmitTaskClaimRes interface {
 	submitTaskClaimRes()
+}
+
+type UpdateAgentConversationRes interface {
+	updateAgentConversationRes()
 }
 
 type UpdateCriterionRes interface {
