@@ -158,6 +158,12 @@ type Handler interface {
 	//
 	// POST /api/v1/claims/{id}/extend
 	ExtendTaskClaim(ctx context.Context, req *TaskClaimSession, params ExtendTaskClaimParams) (ExtendTaskClaimRes, error)
+	// GetAgentConversation implements getAgentConversation operation.
+	//
+	// Get an Agent conversation configuration.
+	//
+	// GET /api/v1/agent-conversations/{id}
+	GetAgentConversation(ctx context.Context, params GetAgentConversationParams) (GetAgentConversationRes, error)
 	// GetCurrentPrincipal implements getCurrentPrincipal operation.
 	//
 	// Get the authenticated principal.
@@ -194,6 +200,12 @@ type Handler interface {
 	//
 	// GET /api/v1/claims/{id}
 	GetTaskClaim(ctx context.Context, params GetTaskClaimParams) (GetTaskClaimRes, error)
+	// ListAgentConversations implements listAgentConversations operation.
+	//
+	// List visible Agent conversation configurations.
+	//
+	// GET /api/v1/agent-conversations
+	ListAgentConversations(ctx context.Context) (ListAgentConversationsRes, error)
 	// ListLabels implements listLabels operation.
 	//
 	// List labels.
@@ -308,6 +320,12 @@ type Handler interface {
 	//
 	// POST /api/v1/claims/{id}/submit
 	SubmitTaskClaim(ctx context.Context, req *TaskClaimAgentMessage, params SubmitTaskClaimParams) (SubmitTaskClaimRes, error)
+	// UpdateAgentConversation implements updateAgentConversation operation.
+	//
+	// Update an Agent conversation configuration.
+	//
+	// PATCH /api/v1/agent-conversations/{id}
+	UpdateAgentConversation(ctx context.Context, req *AgentConversationPatch, params UpdateAgentConversationParams) (UpdateAgentConversationRes, error)
 	// UpdateCriterion implements updateCriterion operation.
 	//
 	// Update an acceptance criterion.

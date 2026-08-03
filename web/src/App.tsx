@@ -11,6 +11,7 @@ import InvitePage from './pages/auth/InvitePage'
 import AdminUsersPage from './pages/admin/AdminUsersPage'
 import AdminInvitationsPage from './pages/admin/AdminInvitationsPage'
 import APITokensPage from './pages/account/APITokensPage'
+import AgentConversationsPage from './pages/agent/AgentConversationsPage'
 import AdminAPIAuditPage from './pages/admin/AdminAPIAuditPage'
 import { useIdentity } from './identity'
 
@@ -52,6 +53,7 @@ function ProtectedApplication() {
           <Route path="/projects/:number/milestones/:milestoneID" element={<ProjectDetailPage view="milestones" />} />
           <Route path="/projects/:number/backlog" element={<ProjectDetailPage view="backlog" />} />
           <Route path="/account/api-tokens" element={!impersonation ? <APITokensPage /> : <Navigate to="/" replace />} />
+          <Route path="/agent/conversations" element={<AgentConversationsPage />} />
           <Route
             path="/api-docs"
             element={(

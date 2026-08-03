@@ -15,7 +15,7 @@ import (
 func TestEmbeddedScenariosAreValidAndCoverExplicitDiscussionTriggers(t *testing.T) {
 	scenarios, err := LoadScenarios()
 	require.NoError(t, err)
-	require.Len(t, scenarios, 10)
+	require.Len(t, scenarios, 11)
 	for _, scenario := range scenarios {
 		require.NoError(t, scenario.Validate())
 		require.Contains(t, scenario.Trigger.Text, "讨论")
@@ -23,6 +23,12 @@ func TestEmbeddedScenariosAreValidAndCoverExplicitDiscussionTriggers(t *testing.
 	buried, err := FindScenario("buried-retirement-problem")
 	require.NoError(t, err)
 	require.Equal(t, "m1", buried.Trigger.ReplyToMessageID)
+	configured, err := FindScenario("conversation-default-project")
+	require.NoError(t, err)
+	configuration := configured.AgentConversationConfiguration()
+	require.Equal(t, int64(14), *configuration.DefaultProjectNumber)
+	require.Equal(t, "Model Delivery", configuration.DefaultProjectName)
+	require.Contains(t, configuration.BusinessContext, "preview")
 }
 
 func TestJudgeSourceEvidenceExposesFixtureFactsWithoutTaskExpectations(t *testing.T) {

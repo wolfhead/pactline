@@ -162,6 +162,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
               <SheetTitle className="text-sm">我的</SheetTitle>
               <div className="flex flex-col gap-3">{accountControls}</div>
               <div className="flex flex-col gap-1 border-t border-border pt-3">
+                <Link to="/agent/conversations" onClick={() => setMeOpen(false)} className="rounded-md px-3 py-2 text-sm hover:bg-surface-subtle">
+                  群聊配置
+                </Link>
                 {!impersonation && (
                   <Link to="/account/api-tokens" onClick={() => setMeOpen(false)} className="rounded-md px-3 py-2 text-sm hover:bg-surface-subtle">
                     API Token

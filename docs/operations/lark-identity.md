@@ -98,6 +98,14 @@ messages from the same conversation, never newer than the triggering message
 or older than seven days. A clarification reply must be a direct reply to the
 bot's question and must come from the initiating Pactline user.
 
+Group configuration also requires an explicit mention, but exact configuration
+commands are handled deterministically without invoking the LLM. Project
+members may use `查看本群配置`; Project administrators may use `绑定项目 #12`,
+`设置本群背景：...`, `清除本群背景`, `解除本群项目绑定`, `启用本群Agent`,
+and `停用本群Agent`. The equivalent editor is available under **Agent → 群聊配置**.
+The command and web paths share the same Project ACL, immutable revision
+history, and optimistic version checks.
+
 Operational smoke test:
 
 1. Enable the Agent with one worker and restart the API.

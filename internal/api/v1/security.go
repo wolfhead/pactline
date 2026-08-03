@@ -72,9 +72,11 @@ func requiredScope(operation generated.OperationName) access.Scope {
 		generated.SubmitTaskClaimOperation:
 		return access.ScopeWorkExecute
 	case generated.GetCurrentPrincipalOperation,
+		generated.GetAgentConversationOperation,
 		generated.GetProjectOperation,
 		generated.GetTaskOperation,
 		generated.ListLabelsOperation,
+		generated.ListAgentConversationsOperation,
 		generated.ListMilestoneCriteriaOperation,
 		generated.ListProjectMembersOperation,
 		generated.ListProjectsOperation,

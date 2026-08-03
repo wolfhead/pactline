@@ -22,6 +22,8 @@ boundary is replaced:
 
 - Lark history comes from an embedded synthetic scenario;
 - Project and user search use in-memory fixtures;
+- optional conversation defaults and bounded business context use the same
+  serialized production input contract as a real Agent Run;
 - `create_task` captures a proposed Task instead of calling `/api/v1`;
 - `respond` and `ask_clarification` capture messages without sending them; and
 - Run, checkpoint, and tool-call records remain in memory.
@@ -135,6 +137,12 @@ Every scenario must:
 - use unique synthetic message IDs;
 - declare the visible Projects and users needed by Agent tools; and
 - describe the evaluation focus without prescribing one correct output.
+
+Scenarios that evaluate group configuration may add `conversation_configuration`
+with a visible `default_project_number` and up to 4,000 characters of
+`business_context`. The Judge receives this configuration with the rest of the
+scenario and should assess whether it improved grounding without treating it as
+a hidden expected answer.
 
 Never commit screenshots, copied conversation text, names, account IDs,
 project names, infrastructure details, or other company information. Rewrite

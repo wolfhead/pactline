@@ -238,6 +238,15 @@ func (UnimplementedHandler) ExtendTaskClaim(ctx context.Context, req *TaskClaimS
 	return r, ht.ErrNotImplemented
 }
 
+// GetAgentConversation implements getAgentConversation operation.
+//
+// Get an Agent conversation configuration.
+//
+// GET /api/v1/agent-conversations/{id}
+func (UnimplementedHandler) GetAgentConversation(ctx context.Context, params GetAgentConversationParams) (r GetAgentConversationRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetCurrentPrincipal implements getCurrentPrincipal operation.
 //
 // Get the authenticated principal.
@@ -289,6 +298,15 @@ func (UnimplementedHandler) GetTaskAttachmentContent(ctx context.Context, params
 //
 // GET /api/v1/claims/{id}
 func (UnimplementedHandler) GetTaskClaim(ctx context.Context, params GetTaskClaimParams) (r GetTaskClaimRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListAgentConversations implements listAgentConversations operation.
+//
+// List visible Agent conversation configurations.
+//
+// GET /api/v1/agent-conversations
+func (UnimplementedHandler) ListAgentConversations(ctx context.Context) (r ListAgentConversationsRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -460,6 +478,15 @@ func (UnimplementedHandler) RestoreTask(ctx context.Context, params RestoreTaskP
 //
 // POST /api/v1/claims/{id}/submit
 func (UnimplementedHandler) SubmitTaskClaim(ctx context.Context, req *TaskClaimAgentMessage, params SubmitTaskClaimParams) (r SubmitTaskClaimRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateAgentConversation implements updateAgentConversation operation.
+//
+// Update an Agent conversation configuration.
+//
+// PATCH /api/v1/agent-conversations/{id}
+func (UnimplementedHandler) UpdateAgentConversation(ctx context.Context, req *AgentConversationPatch, params UpdateAgentConversationParams) (r UpdateAgentConversationRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

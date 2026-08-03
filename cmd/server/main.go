@@ -123,6 +123,13 @@ func main() {
 	accessAuditStore := store.NewAccessAuditStore(db)
 	idempotencyStore := store.NewIdempotencyStore(db)
 	agentStore := store.NewAgentStore(db)
+	agentConversations := store.NewAgentConversationStore(db)
+	agentConversationService := &application.AgentConversationService{
+		Conversations: agentConversations,
+		Projects:      projects,
+		Access:        projectAccess,
+		Now:           time.Now,
+	}
 	maintenanceContext, stopMaintenance := context.WithCancel(context.Background())
 	defer stopMaintenance()
 	go (application.Maintenance{Store: accessAuditStore, Claims: claims}).Run(maintenanceContext)
@@ -202,11 +209,12 @@ func main() {
 		Tasks: &application.TaskService{
 			Tasks: tasks, Comments: comments, Projects: projectService,
 		},
-		Claims:      claims,
-		Labels:      &application.LabelService{Labels: labels},
-		Projects:    projectService,
-		Access:      projectAccess,
-		Attachments: attachmentService,
+		Claims:             claims,
+		Labels:             &application.LabelService{Labels: labels},
+		Projects:           projectService,
+		Access:             projectAccess,
+		Attachments:        attachmentService,
+		AgentConversations: agentConversationService,
 	})
 	if err != nil {
 		slog.Error("configure OpenAPI v1 server", "error", err)
@@ -257,6 +265,7 @@ func main() {
 		agentIngress, ingressErr := ingress.New(ingress.Config{
 			Identities:    identityStore,
 			Runs:          agentStore,
+			Conversations: agentConversations,
 			Inputs:        inputCipher,
 			Acknowledgers: map[string]channel.Acknowledger{"lark": larkClient},
 			Model:         cfg.DeepSeekModel,
@@ -326,7 +335,12 @@ func main() {
 			os.Exit(1)
 		}
 		agentWorker, err = agentruntime.New(agentruntime.Config{
-			Repository: agentStore,
+			Repository:    agentStore,
+			Conversations: agentConversations,
+			ConversationCommands: &application.AgentConversationCommandService{
+				Conversations: agentConversationService,
+				Users:         users,
+			},
 			Channels: map[string]channel.ChannelAdapter{
 				"lark": larkClient,
 			},

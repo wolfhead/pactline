@@ -21,6 +21,25 @@ type identityStub struct {
 	user domain.User
 }
 
+type conversationObserverStub struct {
+	configuration pactagent.ConversationConfiguration
+}
+
+func (s conversationObserverStub) ObserveConfiguration(
+	context.Context,
+	string,
+	string,
+	string,
+	uuid.UUID,
+	time.Time,
+) (pactagent.ConversationConfiguration, error) {
+	if s.configuration.RevisionID == uuid.Nil {
+		s.configuration.RevisionID = uuid.New()
+		s.configuration.Enabled = true
+	}
+	return s.configuration, nil
+}
+
 func (s identityStub) FindExternalIdentity(
 	context.Context,
 	identity.PrincipalKey,
@@ -120,6 +139,7 @@ func TestServiceQueuesMentionOnceAndEncryptsCommand(t *testing.T) {
 			user: domain.User{ID: userID, Name: "User", Active: true},
 		},
 		Runs:          repository,
+		Conversations: conversationObserverStub{},
 		Inputs:        cipher,
 		Acknowledgers: map[string]channel.Acknowledger{"lark": acknowledger},
 		Model:         "deepseek-v4-pro",
@@ -195,7 +215,7 @@ func TestServiceReturnsPersistenceFailureForLarkRetry(t *testing.T) {
 		Identities: identityStub{
 			user: domain.User{ID: userID, Name: "User", Active: true},
 		},
-		Runs: repository, Inputs: cipher, Model: "deepseek-v4-pro",
+		Runs: repository, Conversations: conversationObserverStub{}, Inputs: cipher, Model: "deepseek-v4-pro",
 		PromptVersion: "first-party-task-v1",
 		Now:           func() time.Time { return now },
 	})
@@ -224,7 +244,7 @@ func TestServiceRetriesAtomicRunAndInputPersistence(t *testing.T) {
 		Identities: identityStub{
 			user: domain.User{ID: userID, Name: "User", Active: true},
 		},
-		Runs: repository, Inputs: cipher, Model: "deepseek-v4-pro",
+		Runs: repository, Conversations: conversationObserverStub{}, Inputs: cipher, Model: "deepseek-v4-pro",
 		PromptVersion: "first-party-task-v1",
 		Now:           func() time.Time { return now },
 	})
@@ -247,4 +267,19 @@ func TestServiceRetriesAtomicRunAndInputPersistence(t *testing.T) {
 	require.Equal(t, 1, repository.saveN)
 	require.NotEqual(t, uuid.Nil, repository.run.ID)
 	require.Equal(t, repository.run.ID, repository.input.RunID)
+}
+
+func TestClassifyCommandRecognizesDeterministicConversationConfiguration(t *testing.T) {
+	for _, command := range []string{
+		"本群配置",
+		"查看本群配置",
+		"绑定项目 #12",
+		"将本群绑定到 数据平台",
+		"设置本群背景：这里讨论投放系统",
+		"停用本群Agent",
+	} {
+		require.Equal(t, pactagent.CommandConfiguration, ClassifyCommand(command), command)
+	}
+	require.Equal(t, pactagent.CommandDiscussion, ClassifyCommand("请根据以上讨论创建任务"))
+	require.Equal(t, pactagent.CommandDirect, ClassifyCommand("帮我创建任务"))
 }

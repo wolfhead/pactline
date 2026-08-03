@@ -149,7 +149,7 @@ func RunScenario(
 			return ConversionArtifact{}, err
 		}
 	}
-	query, err := agentruntime.EncodeInitialQuery(
+	query, err := agentruntime.EncodeInitialQueryWithConfiguration(
 		scenario.Trigger.Text,
 		nil,
 		contextMessages,
@@ -157,6 +157,7 @@ func RunScenario(
 			ReplyToMessageID:    scenario.Trigger.ReplyToMessageID,
 			ThreadRootMessageID: scenario.Trigger.ThreadRootMessageID,
 		},
+		scenario.AgentConversationConfiguration(),
 	)
 	if err != nil {
 		return ConversionArtifact{}, err

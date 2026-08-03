@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState, type ComponentType } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import {
   BookOpen,
+  Bot,
   ChevronRight,
   ClipboardList,
   Code2,
   FileClock,
   FolderKanban,
   KeyRound,
+  MessageSquareText,
   Plus,
   ShieldCheck,
   UserPlus,
@@ -32,6 +34,10 @@ const PRIMARY_ITEMS: NavigationItem[] = [
 const DEVELOPER_ITEMS: NavigationItem[] = [
   { to: '/account/api-tokens', label: 'API Token', icon: KeyRound },
   { to: '/api-docs', label: 'API 文档', icon: BookOpen },
+]
+
+const AGENT_ITEMS: NavigationItem[] = [
+  { to: '/agent/conversations', label: '群聊配置', icon: MessageSquareText },
 ]
 
 const ADMIN_ITEMS: NavigationItem[] = [
@@ -142,6 +148,9 @@ export default function NavSidebar({ onNavigate }: { onNavigate?: () => void }) 
   const [developerOpen, setDeveloperOpen] = useState(
     developerItems.some((item) => location.pathname.startsWith(item.to)),
   )
+  const [agentOpen, setAgentOpen] = useState(
+    AGENT_ITEMS.some((item) => location.pathname.startsWith(item.to)),
+  )
   const [adminOpen, setAdminOpen] = useState(
     ADMIN_ITEMS.some((item) => location.pathname.startsWith(item.to)),
   )
@@ -157,6 +166,9 @@ export default function NavSidebar({ onNavigate }: { onNavigate?: () => void }) 
   useEffect(() => {
     if (developerItems.some((item) => location.pathname.startsWith(item.to))) {
       setDeveloperOpen(true)
+    }
+    if (AGENT_ITEMS.some((item) => location.pathname.startsWith(item.to))) {
+      setAgentOpen(true)
     }
     if (ADMIN_ITEMS.some((item) => location.pathname.startsWith(item.to))) {
       setAdminOpen(true)
@@ -253,6 +265,15 @@ export default function NavSidebar({ onNavigate }: { onNavigate?: () => void }) 
       </section>
 
       <div className="mt-auto border-t border-border pt-2">
+        <CollapsibleNavigationGroup
+          id="agent-navigation"
+          label="Agent"
+          icon={Bot}
+          items={AGENT_ITEMS}
+          open={agentOpen}
+          onOpenChange={setAgentOpen}
+          onNavigate={onNavigate}
+        />
         <CollapsibleNavigationGroup
           id="developer-navigation"
           label="开发者工具"

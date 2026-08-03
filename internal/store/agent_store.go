@@ -30,17 +30,19 @@ func (s *AgentStore) CreateRun(
 		INSERT INTO agent_runs (
 			id, provider, tenant_id, conversation_id, trigger_message_id,
 			provider_event_id, thread_root_message_id, reply_parent_message_id,
+			conversation_revision_id,
 			trigger_occurred_at, initiating_user_id, initiating_subject_id,
 			status, command_kind,
 			model, prompt_version, attempt_count, clarification_rounds,
 			context_messages_used, available_at, created_at, updated_at
 		) VALUES (
-			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21
+			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22
 		)
 		ON CONFLICT DO NOTHING`,
 		run.ID, run.Provider, run.TenantID, run.ConversationID,
 		run.TriggerMessageID, run.ProviderEventID,
 		nullIfEmpty(run.ThreadRootMessageID), nullIfEmpty(run.ReplyParentMessageID),
+		run.ConversationRevisionID,
 		run.TriggerOccurredAt, run.InitiatingUserID, run.InitiatingSubjectID,
 		run.Status, run.CommandKind,
 		run.Model, run.PromptVersion, run.AttemptCount, run.ClarificationRounds,
@@ -85,17 +87,19 @@ func (s *AgentStore) CreateRunWithInput(
 		INSERT INTO agent_runs (
 			id, provider, tenant_id, conversation_id, trigger_message_id,
 			provider_event_id, thread_root_message_id, reply_parent_message_id,
+			conversation_revision_id,
 			trigger_occurred_at, initiating_user_id, initiating_subject_id,
 			status, command_kind,
 			model, prompt_version, attempt_count, clarification_rounds,
 			context_messages_used, available_at, created_at, updated_at
 		) VALUES (
-			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21
+			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22
 		)
 		ON CONFLICT DO NOTHING`,
 		run.ID, run.Provider, run.TenantID, run.ConversationID,
 		run.TriggerMessageID, run.ProviderEventID,
 		nullIfEmpty(run.ThreadRootMessageID), nullIfEmpty(run.ReplyParentMessageID),
+		run.ConversationRevisionID,
 		run.TriggerOccurredAt, run.InitiatingUserID, run.InitiatingSubjectID,
 		run.Status, run.CommandKind,
 		run.Model, run.PromptVersion, run.AttemptCount, run.ClarificationRounds,
@@ -1000,6 +1004,7 @@ const agentRunColumns = `
 	runs.id, runs.provider, runs.tenant_id, runs.conversation_id,
 	runs.trigger_message_id, runs.provider_event_id,
 	runs.thread_root_message_id, runs.reply_parent_message_id,
+	runs.conversation_revision_id,
 	runs.trigger_occurred_at, runs.initiating_user_id, runs.initiating_subject_id, runs.status,
 	runs.command_kind, runs.model, runs.prompt_version, runs.attempt_count,
 	runs.clarification_rounds, runs.clarification_message_id,
@@ -1025,6 +1030,7 @@ func scanAgentRun(row rowScanner) (pactagent.Run, error) {
 	err := row.Scan(
 		&run.ID, &run.Provider, &run.TenantID, &run.ConversationID,
 		&run.TriggerMessageID, &run.ProviderEventID, &threadRoot, &replyParent,
+		&run.ConversationRevisionID,
 		&run.TriggerOccurredAt, &run.InitiatingUserID, &run.InitiatingSubjectID, &run.Status,
 		&run.CommandKind, &run.Model, &run.PromptVersion, &run.AttemptCount,
 		&run.ClarificationRounds, &clarificationMessage,

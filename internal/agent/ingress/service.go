@@ -50,9 +50,21 @@ type RunRepository interface {
 	) error
 }
 
+type ConversationObserver interface {
+	ObserveConfiguration(
+		context.Context,
+		string,
+		string,
+		string,
+		uuid.UUID,
+		time.Time,
+	) (pactagent.ConversationConfiguration, error)
+}
+
 type Config struct {
 	Identities    IdentityResolver
 	Runs          RunRepository
+	Conversations ConversationObserver
 	Inputs        *pactagent.InputCipher
 	Acknowledgers map[string]channel.Acknowledger
 	Model         string
@@ -63,6 +75,7 @@ type Config struct {
 type Service struct {
 	identities    IdentityResolver
 	runs          RunRepository
+	conversations ConversationObserver
 	inputs        *pactagent.InputCipher
 	acknowledgers map[string]channel.Acknowledger
 	model         string
@@ -71,7 +84,7 @@ type Service struct {
 }
 
 func New(config Config) (*Service, error) {
-	if config.Identities == nil || config.Runs == nil || config.Inputs == nil ||
+	if config.Identities == nil || config.Runs == nil || config.Conversations == nil || config.Inputs == nil ||
 		strings.TrimSpace(config.Model) == "" ||
 		strings.TrimSpace(config.PromptVersion) == "" {
 		return nil, errors.New("configure Agent ingress: missing dependency")
@@ -82,6 +95,7 @@ func New(config Config) (*Service, error) {
 	return &Service{
 		identities:    config.Identities,
 		runs:          config.Runs,
+		conversations: config.Conversations,
 		inputs:        config.Inputs,
 		acknowledgers: config.Acknowledgers,
 		model:         strings.TrimSpace(config.Model),
@@ -112,6 +126,17 @@ func (s *Service) Accept(ctx context.Context, incoming channel.IncomingMessage) 
 	if err != nil {
 		return fmt.Errorf("resolve Agent message sender: %w", err)
 	}
+	configuration, err := s.conversations.ObserveConfiguration(
+		ctx,
+		incoming.Provider,
+		incoming.TenantID,
+		incoming.ConversationID,
+		user.ID,
+		s.now().UTC(),
+	)
+	if err != nil {
+		return fmt.Errorf("observe Agent conversation: %w", err)
+	}
 	resumed, err := s.tryResume(ctx, incoming, user.ID)
 	if err != nil || resumed {
 		return err
@@ -119,21 +144,29 @@ func (s *Service) Accept(ctx context.Context, incoming channel.IncomingMessage) 
 	if !incoming.BotMentioned || strings.TrimSpace(incoming.Text) == "" {
 		return nil
 	}
+	commandKind := ClassifyCommand(incoming.Text)
+	if !configuration.Enabled && commandKind != pactagent.CommandConfiguration {
+		slog.Info("Agent command ignored for disabled conversation",
+			"provider", incoming.Provider,
+			"conversation_id", incoming.ConversationID)
+		return nil
+	}
 	now := s.now().UTC()
 	run, err := pactagent.NewRun(pactagent.NewRunInput{
-		Provider:             incoming.Provider,
-		TenantID:             incoming.TenantID,
-		ConversationID:       incoming.ConversationID,
-		TriggerMessageID:     incoming.MessageID,
-		ProviderEventID:      incoming.EventID,
-		ThreadRootMessageID:  incoming.ThreadRootMessageID,
-		ReplyParentMessageID: incoming.ReplyParentMessageID,
-		TriggerOccurredAt:    incoming.CreatedAt,
-		InitiatingUserID:     user.ID,
-		InitiatingSubjectID:  incoming.SenderSubjectID,
-		CommandKind:          ClassifyCommand(incoming.Text),
-		Model:                s.model,
-		PromptVersion:        s.promptVersion,
+		Provider:               incoming.Provider,
+		TenantID:               incoming.TenantID,
+		ConversationID:         incoming.ConversationID,
+		TriggerMessageID:       incoming.MessageID,
+		ProviderEventID:        incoming.EventID,
+		ThreadRootMessageID:    incoming.ThreadRootMessageID,
+		ReplyParentMessageID:   incoming.ReplyParentMessageID,
+		ConversationRevisionID: &configuration.RevisionID,
+		TriggerOccurredAt:      incoming.CreatedAt,
+		InitiatingUserID:       user.ID,
+		InitiatingSubjectID:    incoming.SenderSubjectID,
+		CommandKind:            commandKind,
+		Model:                  s.model,
+		PromptVersion:          s.promptVersion,
 	}, now)
 	if err != nil {
 		return fmt.Errorf("normalize Agent command: %w", err)
@@ -260,6 +293,22 @@ func (s *Service) tryResume(
 // evaluation harness calls the same function for explicit-mention scenarios.
 func ClassifyCommand(command string) pactagent.CommandKind {
 	normalized := strings.ToLower(command)
+	trimmed := strings.TrimSpace(normalized)
+	for _, marker := range []string{
+		"本群配置", "查看本群配置", "清除本群背景", "解除本群项目绑定",
+		"启用本群agent", "停用本群agent",
+	} {
+		if trimmed == marker {
+			return pactagent.CommandConfiguration
+		}
+	}
+	for _, prefix := range []string{
+		"将本群绑定到", "绑定本群到", "绑定项目", "设置本群背景:", "设置本群背景：",
+	} {
+		if strings.HasPrefix(trimmed, prefix) {
+			return pactagent.CommandConfiguration
+		}
+	}
 	for _, marker := range []string{
 		"以上讨论", "上述讨论", "前面的讨论", "above discussion", "previous discussion",
 	} {

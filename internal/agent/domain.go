@@ -32,8 +32,9 @@ const (
 type CommandKind string
 
 const (
-	CommandDirect     CommandKind = "direct"
-	CommandDiscussion CommandKind = "discussion"
+	CommandDirect        CommandKind = "direct"
+	CommandDiscussion    CommandKind = "discussion"
+	CommandConfiguration CommandKind = "configuration"
 )
 
 type OutboxKind string
@@ -105,6 +106,7 @@ type Run struct {
 	ProviderEventID          string
 	ThreadRootMessageID      string
 	ReplyParentMessageID     string
+	ConversationRevisionID   *uuid.UUID
 	TriggerOccurredAt        time.Time
 	InitiatingUserID         uuid.UUID
 	InitiatingSubjectID      string
@@ -132,24 +134,25 @@ type Run struct {
 
 func NewRun(input NewRunInput, now time.Time) (Run, error) {
 	run := Run{
-		ID:                   uuid.New(),
-		Provider:             strings.TrimSpace(input.Provider),
-		TenantID:             strings.TrimSpace(input.TenantID),
-		ConversationID:       strings.TrimSpace(input.ConversationID),
-		TriggerMessageID:     strings.TrimSpace(input.TriggerMessageID),
-		ProviderEventID:      strings.TrimSpace(input.ProviderEventID),
-		ThreadRootMessageID:  strings.TrimSpace(input.ThreadRootMessageID),
-		ReplyParentMessageID: strings.TrimSpace(input.ReplyParentMessageID),
-		TriggerOccurredAt:    input.TriggerOccurredAt.UTC(),
-		InitiatingUserID:     input.InitiatingUserID,
-		InitiatingSubjectID:  strings.TrimSpace(input.InitiatingSubjectID),
-		Status:               RunQueued,
-		CommandKind:          input.CommandKind,
-		Model:                strings.TrimSpace(input.Model),
-		PromptVersion:        strings.TrimSpace(input.PromptVersion),
-		AvailableAt:          now.UTC(),
-		CreatedAt:            now.UTC(),
-		UpdatedAt:            now.UTC(),
+		ID:                     uuid.New(),
+		Provider:               strings.TrimSpace(input.Provider),
+		TenantID:               strings.TrimSpace(input.TenantID),
+		ConversationID:         strings.TrimSpace(input.ConversationID),
+		TriggerMessageID:       strings.TrimSpace(input.TriggerMessageID),
+		ProviderEventID:        strings.TrimSpace(input.ProviderEventID),
+		ThreadRootMessageID:    strings.TrimSpace(input.ThreadRootMessageID),
+		ReplyParentMessageID:   strings.TrimSpace(input.ReplyParentMessageID),
+		ConversationRevisionID: input.ConversationRevisionID,
+		TriggerOccurredAt:      input.TriggerOccurredAt.UTC(),
+		InitiatingUserID:       input.InitiatingUserID,
+		InitiatingSubjectID:    strings.TrimSpace(input.InitiatingSubjectID),
+		Status:                 RunQueued,
+		CommandKind:            input.CommandKind,
+		Model:                  strings.TrimSpace(input.Model),
+		PromptVersion:          strings.TrimSpace(input.PromptVersion),
+		AvailableAt:            now.UTC(),
+		CreatedAt:              now.UTC(),
+		UpdatedAt:              now.UTC(),
 	}
 	if err := run.Validate(); err != nil {
 		return Run{}, err
@@ -158,19 +161,20 @@ func NewRun(input NewRunInput, now time.Time) (Run, error) {
 }
 
 type NewRunInput struct {
-	Provider             string
-	TenantID             string
-	ConversationID       string
-	TriggerMessageID     string
-	ProviderEventID      string
-	ThreadRootMessageID  string
-	ReplyParentMessageID string
-	TriggerOccurredAt    time.Time
-	InitiatingUserID     uuid.UUID
-	InitiatingSubjectID  string
-	CommandKind          CommandKind
-	Model                string
-	PromptVersion        string
+	Provider               string
+	TenantID               string
+	ConversationID         string
+	TriggerMessageID       string
+	ProviderEventID        string
+	ThreadRootMessageID    string
+	ReplyParentMessageID   string
+	ConversationRevisionID *uuid.UUID
+	TriggerOccurredAt      time.Time
+	InitiatingUserID       uuid.UUID
+	InitiatingSubjectID    string
+	CommandKind            CommandKind
+	Model                  string
+	PromptVersion          string
 }
 
 func (r Run) Validate() error {
@@ -191,7 +195,11 @@ func (r Run) Validate() error {
 	if r.Provider != "lark" {
 		return ErrInvalidRun
 	}
-	if r.CommandKind != CommandDirect && r.CommandKind != CommandDiscussion {
+	if r.ConversationRevisionID != nil && *r.ConversationRevisionID == uuid.Nil {
+		return ErrInvalidRun
+	}
+	if r.CommandKind != CommandDirect && r.CommandKind != CommandDiscussion &&
+		r.CommandKind != CommandConfiguration {
 		return ErrInvalidRun
 	}
 	if !validStatus(r.Status) ||

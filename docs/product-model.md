@@ -135,6 +135,17 @@ External Agents authenticate with user-created personal scoped Bearer Tokens.
 The first-party Pactline Agent uses short-lived internal delegation credentials
 that represent the initiating user and are bound to one durable Agent Run.
 
+Each external group in which the first-party Agent is addressed has one
+provider-neutral `AgentConversation` configuration. It may enable or disable
+new Runs, bind one active default Project, and carry up to 4,000 characters of
+user-authored Markdown business context. An explicit Project in the triggering
+request overrides the group default; an archived default Project is ineffective.
+Every accepted Run snapshots an immutable configuration revision. Business
+context is untrusted input and cannot change system policy, tool boundaries, or
+authorization. Project members may view linked group configuration, while
+Project administrators may change it through the web UI or deterministic Lark
+commands that do not invoke the LLM.
+
 Both use the same `/api/v1` work contract. Agent mutations additionally use
 idempotency keys and ETag preconditions where documented. Audit records preserve
 the real actor, effective subject, personal-token or Agent-Run provenance, and

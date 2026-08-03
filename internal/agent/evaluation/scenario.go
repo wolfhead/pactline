@@ -12,7 +12,9 @@ import (
 	"strings"
 	"time"
 
+	pactagent "github.com/wolfhead/pactline/internal/agent"
 	"github.com/wolfhead/pactline/internal/agent/artifact"
+	"github.com/wolfhead/pactline/internal/domain"
 )
 
 const ScenarioVersion = 1
@@ -21,15 +23,21 @@ const ScenarioVersion = 1
 var scenarioFiles embed.FS
 
 type Scenario struct {
-	Version         int               `json:"version"`
-	ID              string            `json:"id"`
-	Name            string            `json:"name"`
-	BusinessContext string            `json:"business_context"`
-	JudgeContext    string            `json:"judge_context,omitempty"`
-	Trigger         ScenarioTrigger   `json:"trigger"`
-	Messages        []ScenarioMessage `json:"messages"`
-	Projects        []ScenarioProject `json:"projects"`
-	Users           []ScenarioUser    `json:"users,omitempty"`
+	Version                   int                                `json:"version"`
+	ID                        string                             `json:"id"`
+	Name                      string                             `json:"name"`
+	BusinessContext           string                             `json:"business_context"`
+	JudgeContext              string                             `json:"judge_context,omitempty"`
+	Trigger                   ScenarioTrigger                    `json:"trigger"`
+	Messages                  []ScenarioMessage                  `json:"messages"`
+	Projects                  []ScenarioProject                  `json:"projects"`
+	Users                     []ScenarioUser                     `json:"users,omitempty"`
+	ConversationConfiguration *ScenarioConversationConfiguration `json:"conversation_configuration,omitempty"`
+}
+
+type ScenarioConversationConfiguration struct {
+	DefaultProjectNumber int64  `json:"default_project_number"`
+	BusinessContext      string `json:"business_context,omitempty"`
 }
 
 type ScenarioTrigger struct {
@@ -112,7 +120,40 @@ func (s Scenario) Validate() error {
 		}
 		projectNumbers[project.Number] = struct{}{}
 	}
+	if configuration := s.ConversationConfiguration; configuration != nil {
+		if configuration.DefaultProjectNumber <= 0 {
+			return fmt.Errorf("scenario %s has an invalid conversation default Project", s.ID)
+		}
+		if _, ok := projectNumbers[configuration.DefaultProjectNumber]; !ok {
+			return fmt.Errorf("scenario %s conversation default Project is not visible", s.ID)
+		}
+		if _, err := domain.NormalizeAgentConversationContext(configuration.BusinessContext); err != nil {
+			return fmt.Errorf("scenario %s has invalid conversation business context: %w", s.ID, err)
+		}
+	}
 	return nil
+}
+
+func (s Scenario) AgentConversationConfiguration() pactagent.ConversationConfiguration {
+	configuration := s.ConversationConfiguration
+	if configuration == nil {
+		return pactagent.ConversationConfiguration{}
+	}
+	projectNumber := configuration.DefaultProjectNumber
+	projectName := ""
+	for _, project := range s.Projects {
+		if project.Number == projectNumber {
+			projectName = project.Name
+			break
+		}
+	}
+	return pactagent.ConversationConfiguration{
+		RevisionID: stableUUID(s.ID + ":conversation-configuration"),
+		Enabled:    true, BindingActive: true,
+		DefaultProjectNumber: &projectNumber,
+		DefaultProjectName:   projectName,
+		BusinessContext:      configuration.BusinessContext,
+	}
 }
 
 func LoadScenarios() ([]Scenario, error) {

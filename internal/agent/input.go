@@ -62,6 +62,20 @@ type RunInput struct {
 	PendingResumeCiphertext []byte
 }
 
+// ConversationConfiguration is the immutable, server-resolved configuration
+// snapshot used by one Run. BusinessContext remains user-authored data and
+// never gains system-prompt authority.
+type ConversationConfiguration struct {
+	RevisionID             uuid.UUID
+	Enabled                bool
+	BindingActive          bool
+	DefaultProjectID       *uuid.UUID
+	DefaultProjectNumber   *int64
+	DefaultProjectName     string
+	DefaultProjectArchived bool
+	BusinessContext        string
+}
+
 type InputCipher struct {
 	keyID  string
 	aead   cipher.AEAD
