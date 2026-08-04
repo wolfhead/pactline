@@ -94,6 +94,14 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 	projectAccess := &application.ProjectAccessService{
 		Projects: projects, Tasks: tasks, Memberships: memberships,
 	}
+	agentRuns := store.NewAgentStore(db)
+	agentConversations := store.NewAgentConversationStore(db)
+	agentConversationService := &application.AgentConversationService{
+		Conversations: agentConversations,
+		Projects:      projects,
+		Access:        projectAccess,
+		Now:           time.Now,
+	}
 	legacyHandler := legacyapi.NewRouter(
 		users, legacystore.NewBountyStore(db), legacystore.NewCreditStore(db),
 		legacystore.NewCalibrationStore(db), legacystore.NewAnchorStore(db),
@@ -115,11 +123,13 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 		Tasks: &application.TaskService{
 			Tasks: tasks, Comments: comments, Projects: projectService,
 		},
-		Claims:      claims,
-		Labels:      &application.LabelService{Labels: labels},
-		Projects:    projectService,
-		Access:      projectAccess,
-		Attachments: attachmentService,
+		Claims:             claims,
+		Labels:             &application.LabelService{Labels: labels},
+		Projects:           projectService,
+		Access:             projectAccess,
+		Attachments:        attachmentService,
+		AgentConversations: agentConversationService,
+		AgentRuns:          agentRuns,
 	})
 	require.NoError(t, err)
 	h := api.NewRouter(legacyHandler, api.RouterOptions{

@@ -28,16 +28,18 @@ import (
 )
 
 const (
-	ToolGetConversationContext = "get_conversation_context"
-	ToolInspectArtifact        = "inspect_artifact"
-	ToolSearchProjects         = "search_projects"
-	ToolSearchUsers            = "search_users"
-	ToolAskUser                = "ask_user"
-	ToolCreateTask             = "create_task"
-	ToolSearchTasks            = "search_tasks"
-	ToolGetTask                = "get_task"
-	ToolGetProjectOverview     = "get_project_overview"
-	ToolGetMilestoneOverview   = "get_milestone_overview"
+	ToolGetConversationContext   = "get_conversation_context"
+	ToolInspectArtifact          = "inspect_artifact"
+	ToolSearchProjects           = "search_projects"
+	ToolSearchUsers              = "search_users"
+	ToolAskUser                  = "ask_user"
+	ToolCreateTask               = "create_task"
+	ToolSearchTasks              = "search_tasks"
+	ToolGetTask                  = "get_task"
+	ToolGetProjectOverview       = "get_project_overview"
+	ToolGetMilestoneOverview     = "get_milestone_overview"
+	ToolGetConversationConfig    = "get_current_conversation_configuration"
+	ToolUpdateConversationConfig = "update_current_conversation_configuration"
 )
 
 var (
@@ -57,6 +59,11 @@ type OpenAPIClient interface {
 	GetTask(context.Context, generated.GetTaskParams) (generated.GetTaskRes, error)
 	GetProject(context.Context, generated.GetProjectParams) (generated.GetProjectRes, error)
 	CreateTask(context.Context, *generated.TaskCreate, generated.CreateTaskParams) (generated.CreateTaskRes, error)
+}
+
+type ConversationConfigurationClient interface {
+	GetCurrentAgentConversationConfiguration(context.Context) (generated.GetCurrentAgentConversationConfigurationRes, error)
+	UpdateCurrentAgentConversationConfiguration(context.Context, *generated.AgentConversationPatch, generated.UpdateCurrentAgentConversationConfigurationParams) (generated.UpdateCurrentAgentConversationConfigurationRes, error)
 }
 
 type RunRepository interface {
@@ -127,6 +134,35 @@ func NewSet(config Config) (Set, error) {
 		tools = append(tools, &InspectArtifactTool{
 			config: config, responseState: responseState,
 		})
+	}
+	if conversationClient, ok := config.Client.(ConversationConfigurationClient); ok {
+		getConfigurationTool, err := toolutils.InferTool(
+			ToolGetConversationConfig,
+			"Get the authenticated Agent Run's current group configuration and version. Use for natural-language requests to view or change this group configuration. The server derives the group; no group identifier is accepted.",
+			func(ctx context.Context, _ GetConversationConfigurationInput) (ConversationConfigurationResult, error) {
+				if err := responseState.ensureOpen(); err != nil {
+					return ConversationConfigurationResult{}, err
+				}
+				return getCurrentConversationConfiguration(ctx, conversationClient)
+			},
+		)
+		if err != nil {
+			return Set{}, fmt.Errorf("configure conversation configuration read tool: %w", err)
+		}
+		updateConfigurationTool, err := toolutils.InferTool(
+			ToolUpdateConversationConfig,
+			"Update the authenticated Agent Run's current group configuration after reading its version. Resolve a named Project with search_projects and pass its number. The OpenAPI server enforces Project-administrator permission, version checks, and all validation. A disabled group must be re-enabled in the web UI.",
+			func(ctx context.Context, input UpdateConversationConfigurationInput) (ConversationConfigurationResult, error) {
+				if err := responseState.ensureOpen(); err != nil {
+					return ConversationConfigurationResult{}, err
+				}
+				return updateCurrentConversationConfiguration(ctx, config, conversationClient, input)
+			},
+		)
+		if err != nil {
+			return Set{}, fmt.Errorf("configure conversation configuration update tool: %w", err)
+		}
+		tools = append(tools, getConfigurationTool, updateConfigurationTool)
 	}
 	projectTool, err := toolutils.InferTool(
 		ToolSearchProjects,
@@ -623,7 +659,7 @@ type CreateTaskTool struct {
 func (t *CreateTaskTool) Info(context.Context) (*schema.ToolInfo, error) {
 	return toolutils.GoStruct2ToolInfo[CreateTaskInput](
 		ToolCreateTask,
-		"Create exactly one Pactline Task after Project and optional assignee are resolved. This is the only mutation tool.",
+		"Create exactly one Pactline Task after Project and optional assignee are resolved. This is the only Task mutation tool.",
 	)
 }
 

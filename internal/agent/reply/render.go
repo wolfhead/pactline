@@ -46,6 +46,11 @@ func (r Renderer) Response(
 			return "", ErrInvalidResponseSelection
 		}
 		return r.milestoneStatus(runID, selection.Summary, *selection.MilestoneOverview), nil
+	case agenttools.ResponseConversationConfig:
+		if selection.ConversationConfiguration == nil || strings.TrimSpace(selection.Summary) == "" {
+			return "", ErrInvalidResponseSelection
+		}
+		return r.conversationConfiguration(runID, selection.Summary, *selection.ConversationConfiguration), nil
 	case agenttools.ResponseError:
 		if strings.TrimSpace(selection.Message) == "" {
 			return "", ErrInvalidResponseSelection
@@ -67,6 +72,41 @@ func (r Renderer) Response(
 	default:
 		return "", ErrInvalidResponseSelection
 	}
+}
+
+func (r Renderer) conversationConfiguration(
+	runID uuid.UUID,
+	summary string,
+	configuration agenttools.ConversationConfigurationResult,
+) string {
+	status := "已启用"
+	if !configuration.Enabled {
+		status = "已停用（只能从 Pactline Web 重新启用）"
+	}
+	project := "未绑定"
+	if configuration.DefaultProject != nil {
+		project = fmt.Sprintf("#%d %s", configuration.DefaultProject.Number, configuration.DefaultProject.Name)
+		if !configuration.BindingActive {
+			project += "（绑定已暂停）"
+		}
+	}
+	background := strings.TrimSpace(configuration.BusinessContext)
+	if background == "" {
+		background = "未设置"
+	}
+	var body strings.Builder
+	body.WriteString("# ⚙️ 本群 Agent 配置\n\n")
+	writeSummary(&body, summary)
+	fmt.Fprintf(
+		&body,
+		"**Agent 状态**：%s\n**默认项目**：%s\n**业务背景**：\n\n%s\n\n---\n`配置版本 %d · Run %s`",
+		inlineMarkdown(status),
+		inlineMarkdown(project),
+		sanitizeModelMarkdown(background, 4_000),
+		configuration.Version,
+		pactagent.ShortRunReference(runID),
+	)
+	return body.String()
 }
 
 func (r Renderer) Success(runID uuid.UUID, task agenttools.CreatedTask) string {

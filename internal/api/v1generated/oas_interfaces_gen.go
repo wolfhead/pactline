@@ -105,6 +105,10 @@ type GetAgentConversationRes interface {
 	getAgentConversationRes()
 }
 
+type GetCurrentAgentConversationConfigurationRes interface {
+	getCurrentAgentConversationConfigurationRes()
+}
+
 type GetCurrentPrincipalRes interface {
 	getCurrentPrincipalRes()
 }
@@ -215,6 +219,10 @@ type UpdateAgentConversationRes interface {
 
 type UpdateCriterionRes interface {
 	updateCriterionRes()
+}
+
+type UpdateCurrentAgentConversationConfigurationRes interface {
+	updateCurrentAgentConversationConfigurationRes()
 }
 
 type UpdateLabelRes interface {

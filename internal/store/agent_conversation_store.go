@@ -151,18 +151,22 @@ func (s *AgentConversationStore) GetConfigurationRevision(
 		LEFT JOIN projects p ON p.id=r.default_project_id
 		WHERE r.id=$1`, revisionID)
 	var configuration pactagent.ConversationConfiguration
+	var projectName *string
 	var archivedAt *time.Time
 	err := row.Scan(
 		&configuration.RevisionID, &configuration.Enabled,
 		&configuration.BindingActive, &configuration.DefaultProjectID,
 		&configuration.BusinessContext, &configuration.DefaultProjectNumber,
-		&configuration.DefaultProjectName, &archivedAt,
+		&projectName, &archivedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return pactagent.ConversationConfiguration{}, domain.ErrNotFound
 	}
 	if err != nil {
 		return pactagent.ConversationConfiguration{}, fmt.Errorf("get Agent conversation configuration revision: %w", err)
+	}
+	if projectName != nil {
+		configuration.DefaultProjectName = *projectName
 	}
 	configuration.DefaultProjectArchived = archivedAt != nil
 	return configuration, nil

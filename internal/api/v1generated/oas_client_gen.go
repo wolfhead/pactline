@@ -184,6 +184,12 @@ type Invoker interface {
 	//
 	// GET /api/v1/agent-conversations/{id}
 	GetAgentConversation(ctx context.Context, params GetAgentConversationParams) (GetAgentConversationRes, error)
+	// GetCurrentAgentConversationConfiguration invokes getCurrentAgentConversationConfiguration operation.
+	//
+	// Get the conversation configuration bound to the authenticated Agent Run.
+	//
+	// GET /api/v1/agent-runs/current/conversation-configuration
+	GetCurrentAgentConversationConfiguration(ctx context.Context) (GetCurrentAgentConversationConfigurationRes, error)
 	// GetCurrentPrincipal invokes getCurrentPrincipal operation.
 	//
 	// Get the authenticated principal.
@@ -352,6 +358,12 @@ type Invoker interface {
 	//
 	// PATCH /api/v1/criteria/{id}
 	UpdateCriterion(ctx context.Context, request *CriterionPatch, params UpdateCriterionParams) (UpdateCriterionRes, error)
+	// UpdateCurrentAgentConversationConfiguration invokes updateCurrentAgentConversationConfiguration operation.
+	//
+	// Update the conversation configuration bound to the authenticated Agent Run.
+	//
+	// PATCH /api/v1/agent-runs/current/conversation-configuration
+	UpdateCurrentAgentConversationConfiguration(ctx context.Context, request *AgentConversationPatch, params UpdateCurrentAgentConversationConfigurationParams) (UpdateCurrentAgentConversationConfigurationRes, error)
 	// UpdateLabel invokes updateLabel operation.
 	//
 	// Rename a label.
@@ -5004,6 +5016,113 @@ func (c *Client) sendGetAgentConversation(ctx context.Context, params GetAgentCo
 
 	stage = "DecodeResponse"
 	result, err := decodeGetAgentConversationResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
+// GetCurrentAgentConversationConfiguration invokes getCurrentAgentConversationConfiguration operation.
+//
+// Get the conversation configuration bound to the authenticated Agent Run.
+//
+// GET /api/v1/agent-runs/current/conversation-configuration
+func (c *Client) GetCurrentAgentConversationConfiguration(ctx context.Context) (GetCurrentAgentConversationConfigurationRes, error) {
+	res, err := c.sendGetCurrentAgentConversationConfiguration(ctx)
+	return res, err
+}
+
+func (c *Client) sendGetCurrentAgentConversationConfiguration(ctx context.Context) (res GetCurrentAgentConversationConfigurationRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("getCurrentAgentConversationConfiguration"),
+		semconv.HTTPRequestMethodKey.String("GET"),
+		semconv.URLTemplateKey.String("/api/v1/agent-runs/current/conversation-configuration"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, GetCurrentAgentConversationConfigurationOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [1]string
+	pathParts[0] = "/api/v1/agent-runs/current/conversation-configuration"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "GET", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+
+	{
+		type bitset = [1]uint8
+		var satisfied bitset
+		{
+			stage = "Security:BearerAuth"
+			switch err := c.securityBearerAuth(ctx, GetCurrentAgentConversationConfigurationOperation, r); {
+			case err == nil: // if NO error
+				satisfied[0] |= 1 << 0
+			case errors.Is(err, ogenerrors.ErrSkipClientSecurity):
+				// Skip this security.
+			default:
+				return res, errors.Wrap(err, "security \"BearerAuth\"")
+			}
+		}
+
+		if ok := func() bool {
+		nextRequirement:
+			for _, requirement := range []bitset{
+				{0b00000001},
+			} {
+				for i, mask := range requirement {
+					if satisfied[i]&mask != mask {
+						continue nextRequirement
+					}
+				}
+				return true
+			}
+			return false
+		}(); !ok {
+			return res, ogenerrors.ErrSecurityRequirementIsNotSatisfied
+		}
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer body.Close()
+
+	stage = "DecodeResponse"
+	result, err := decodeGetCurrentAgentConversationConfigurationResponse(resp)
 	if err != nil {
 		return res, errors.Wrap(err, "decode response")
 	}
@@ -9790,6 +9909,153 @@ func (c *Client) sendUpdateCriterion(ctx context.Context, request *CriterionPatc
 
 	stage = "DecodeResponse"
 	result, err := decodeUpdateCriterionResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
+// UpdateCurrentAgentConversationConfiguration invokes updateCurrentAgentConversationConfiguration operation.
+//
+// Update the conversation configuration bound to the authenticated Agent Run.
+//
+// PATCH /api/v1/agent-runs/current/conversation-configuration
+func (c *Client) UpdateCurrentAgentConversationConfiguration(ctx context.Context, request *AgentConversationPatch, params UpdateCurrentAgentConversationConfigurationParams) (UpdateCurrentAgentConversationConfigurationRes, error) {
+	res, err := c.sendUpdateCurrentAgentConversationConfiguration(ctx, request, params)
+	return res, err
+}
+
+func (c *Client) sendUpdateCurrentAgentConversationConfiguration(ctx context.Context, request *AgentConversationPatch, params UpdateCurrentAgentConversationConfigurationParams) (res UpdateCurrentAgentConversationConfigurationRes, err error) {
+	// Validate request before sending.
+	if err := func() error {
+		if err := request.Validate(); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return res, errors.Wrap(err, "validate")
+	}
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("updateCurrentAgentConversationConfiguration"),
+		semconv.HTTPRequestMethodKey.String("PATCH"),
+		semconv.URLTemplateKey.String("/api/v1/agent-runs/current/conversation-configuration"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, UpdateCurrentAgentConversationConfigurationOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [1]string
+	pathParts[0] = "/api/v1/agent-runs/current/conversation-configuration"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "PATCH", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+	if err := encodeUpdateCurrentAgentConversationConfigurationRequest(request, r); err != nil {
+		return res, errors.Wrap(err, "encode request")
+	}
+
+	stage = "EncodeHeaderParams"
+	h := uri.NewHeaderEncoder(r.Header)
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "If-Match",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			return e.EncodeValue(conv.StringToString(params.IfMatch))
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "Idempotency-Key",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.IdempotencyKey.Get(); ok {
+				return e.EncodeValue(conv.StringToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+
+	{
+		type bitset = [1]uint8
+		var satisfied bitset
+		{
+			stage = "Security:BearerAuth"
+			switch err := c.securityBearerAuth(ctx, UpdateCurrentAgentConversationConfigurationOperation, r); {
+			case err == nil: // if NO error
+				satisfied[0] |= 1 << 0
+			case errors.Is(err, ogenerrors.ErrSkipClientSecurity):
+				// Skip this security.
+			default:
+				return res, errors.Wrap(err, "security \"BearerAuth\"")
+			}
+		}
+
+		if ok := func() bool {
+		nextRequirement:
+			for _, requirement := range []bitset{
+				{0b00000001},
+			} {
+				for i, mask := range requirement {
+					if satisfied[i]&mask != mask {
+						continue nextRequirement
+					}
+				}
+				return true
+			}
+			return false
+		}(); !ok {
+			return res, ogenerrors.ErrSecurityRequirementIsNotSatisfied
+		}
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer body.Close()
+
+	stage = "DecodeResponse"
+	result, err := decodeUpdateCurrentAgentConversationConfigurationResponse(resp)
 	if err != nil {
 		return res, errors.Wrap(err, "decode response")
 	}

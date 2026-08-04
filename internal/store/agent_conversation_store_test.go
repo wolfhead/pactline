@@ -51,6 +51,12 @@ func TestAgentConversationStoresImmutableConfigurationRevisions(t *testing.T) {
 	require.Equal(t, int64(1), initial.Revision.Version)
 	require.Nil(t, initial.Revision.DefaultProjectID)
 
+	initialConfiguration, err := conversations.GetConfigurationRevision(ctx, initial.Revision.ID)
+	require.NoError(t, err)
+	require.Nil(t, initialConfiguration.DefaultProjectID)
+	require.Nil(t, initialConfiguration.DefaultProjectNumber)
+	require.Empty(t, initialConfiguration.DefaultProjectName)
+
 	enabled := true
 	background := "This room discusses the release validation workflow."
 	updated, err := conversations.UpdateVersioned(

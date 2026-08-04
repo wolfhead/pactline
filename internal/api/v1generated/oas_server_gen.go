@@ -164,6 +164,12 @@ type Handler interface {
 	//
 	// GET /api/v1/agent-conversations/{id}
 	GetAgentConversation(ctx context.Context, params GetAgentConversationParams) (GetAgentConversationRes, error)
+	// GetCurrentAgentConversationConfiguration implements getCurrentAgentConversationConfiguration operation.
+	//
+	// Get the conversation configuration bound to the authenticated Agent Run.
+	//
+	// GET /api/v1/agent-runs/current/conversation-configuration
+	GetCurrentAgentConversationConfiguration(ctx context.Context) (GetCurrentAgentConversationConfigurationRes, error)
 	// GetCurrentPrincipal implements getCurrentPrincipal operation.
 	//
 	// Get the authenticated principal.
@@ -332,6 +338,12 @@ type Handler interface {
 	//
 	// PATCH /api/v1/criteria/{id}
 	UpdateCriterion(ctx context.Context, req *CriterionPatch, params UpdateCriterionParams) (UpdateCriterionRes, error)
+	// UpdateCurrentAgentConversationConfiguration implements updateCurrentAgentConversationConfiguration operation.
+	//
+	// Update the conversation configuration bound to the authenticated Agent Run.
+	//
+	// PATCH /api/v1/agent-runs/current/conversation-configuration
+	UpdateCurrentAgentConversationConfiguration(ctx context.Context, req *AgentConversationPatch, params UpdateCurrentAgentConversationConfigurationParams) (UpdateCurrentAgentConversationConfigurationRes, error)
 	// UpdateLabel implements updateLabel operation.
 	//
 	// Rename a label.

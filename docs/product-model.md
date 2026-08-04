@@ -143,8 +143,11 @@ request overrides the group default; an archived default Project is ineffective.
 Every accepted Run snapshots an immutable configuration revision. Business
 context is untrusted input and cannot change system policy, tool boundaries, or
 authorization. Project members may view linked group configuration, while
-Project administrators may change it through the web UI or deterministic Lark
-commands that do not invoke the LLM.
+Project administrators may change it through the web UI or model-selected
+Agent tools. The OpenAPI layer derives the current conversation from the Agent
+Run and enforces every authorization and version precondition; the model cannot
+select another conversation. A disabled conversation does not start an Agent
+Run and can be re-enabled only through the web UI.
 
 Both use the same `/api/v1` work contract. Agent mutations additionally use
 idempotency keys and ETag preconditions where documented. Audit records preserve

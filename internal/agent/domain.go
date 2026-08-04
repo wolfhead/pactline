@@ -32,9 +32,8 @@ const (
 type CommandKind string
 
 const (
-	CommandDirect        CommandKind = "direct"
-	CommandDiscussion    CommandKind = "discussion"
-	CommandConfiguration CommandKind = "configuration"
+	CommandDirect     CommandKind = "direct"
+	CommandDiscussion CommandKind = "discussion"
 )
 
 type OutboxKind string
@@ -198,8 +197,7 @@ func (r Run) Validate() error {
 	if r.ConversationRevisionID != nil && *r.ConversationRevisionID == uuid.Nil {
 		return ErrInvalidRun
 	}
-	if r.CommandKind != CommandDirect && r.CommandKind != CommandDiscussion &&
-		r.CommandKind != CommandConfiguration {
+	if r.CommandKind != CommandDirect && r.CommandKind != CommandDiscussion {
 		return ErrInvalidRun
 	}
 	if !validStatus(r.Status) ||
@@ -455,4 +453,8 @@ func ShortRunReference(runID uuid.UUID) string {
 
 func CreateTaskIdempotencyKey(runID uuid.UUID) string {
 	return fmt.Sprintf("agent-run:%s:create-task:v1", runID)
+}
+
+func ConversationConfigurationIdempotencyKey(runID uuid.UUID) string {
+	return fmt.Sprintf("agent-run:%s:conversation-configuration:v1", runID)
 }

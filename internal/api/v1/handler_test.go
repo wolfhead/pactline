@@ -90,6 +90,24 @@ func TestGeneratedServerRejectsReadTokenMutation(t *testing.T) {
 	require.Equal(t, generated.ProblemCode("INSUFFICIENT_SCOPE"), problem.Response.Code)
 }
 
+func TestCurrentConversationConfigurationRejectsNonAgentBearer(t *testing.T) {
+	handler := newGeneratedTestHandler(t)
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	client, err := generated.NewClient(
+		server.URL,
+		testSecuritySource{method: access.AuthenticationMethodAPIToken},
+	)
+	require.NoError(t, err)
+
+	response, err := client.GetCurrentAgentConversationConfiguration(context.Background())
+	require.NoError(t, err)
+	problem, ok := response.(*generated.ProblemStatusCodeWithHeaders)
+	require.True(t, ok, "unexpected response type %T", response)
+	require.Equal(t, http.StatusForbidden, problem.StatusCode)
+	require.Equal(t, generated.ProblemCode("FORBIDDEN"), problem.Response.Code)
+}
+
 func TestGeneratedServerRejectsUnknownRequestFields(t *testing.T) {
 	handler := newGeneratedTestHandler(t)
 	request := httptest.NewRequest(

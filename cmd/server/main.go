@@ -215,6 +215,7 @@ func main() {
 		Access:             projectAccess,
 		Attachments:        attachmentService,
 		AgentConversations: agentConversationService,
+		AgentRuns:          agentStore,
 	})
 	if err != nil {
 		slog.Error("configure OpenAPI v1 server", "error", err)
@@ -337,10 +338,6 @@ func main() {
 		agentWorker, err = agentruntime.New(agentruntime.Config{
 			Repository:    agentStore,
 			Conversations: agentConversations,
-			ConversationCommands: &application.AgentConversationCommandService{
-				Conversations: agentConversationService,
-				Users:         users,
-			},
 			Channels: map[string]channel.ChannelAdapter{
 				"lark": larkClient,
 			},

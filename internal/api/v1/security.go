@@ -73,6 +73,7 @@ func requiredScope(operation generated.OperationName) access.Scope {
 		return access.ScopeWorkExecute
 	case generated.GetCurrentPrincipalOperation,
 		generated.GetAgentConversationOperation,
+		generated.GetCurrentAgentConversationConfigurationOperation,
 		generated.GetProjectOperation,
 		generated.GetTaskOperation,
 		generated.ListLabelsOperation,

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"unicode/utf8"
@@ -19,20 +20,21 @@ import (
 const (
 	ToolRespond = "respond"
 
-	ResponseTaskCreated     = "task_created"
-	ResponseTaskDetail      = "task_detail"
-	ResponseProjectStatus   = "project_status"
-	ResponseMilestoneStatus = "milestone_status"
-	ResponseError           = "error"
-	ResponseAskUser         = "ask_user_question"
-	ResponseGeneral         = "general_response"
+	ResponseTaskCreated        = "task_created"
+	ResponseTaskDetail         = "task_detail"
+	ResponseProjectStatus      = "project_status"
+	ResponseMilestoneStatus    = "milestone_status"
+	ResponseConversationConfig = "conversation_configuration"
+	ResponseError              = "error"
+	ResponseAskUser            = "ask_user_question"
+	ResponseGeneral            = "general_response"
 
 	maxResponseSummaryLength = 1_000
 	maxGeneralResponseLength = 4_000
 )
 
 type RespondInput struct {
-	ResponseType      string   `json:"response_type" jsonschema:"required,enum=task_created,enum=task_detail,enum=project_status,enum=milestone_status,enum=error,enum=ask_user_question,enum=general_response" jsonschema_description:"Platform response template to use"`
+	ResponseType      string   `json:"response_type" jsonschema:"required,enum=task_created,enum=task_detail,enum=project_status,enum=milestone_status,enum=conversation_configuration,enum=error,enum=ask_user_question,enum=general_response" jsonschema_description:"Platform response template to use"`
 	SourceToolCallIDs []string `json:"source_tool_call_ids,omitempty" jsonschema_description:"Same-Run evidence IDs; must contain exactly one result from the business tool compatible with the selected template and may include supporting search evidence"`
 	Summary           string   `json:"summary,omitempty" jsonschema_description:"Required concise Markdown interpretation for every structured business response; shown separately from verified fields"`
 	Message           string   `json:"message,omitempty" jsonschema_description:"Bounded Markdown for error or general_response"`
@@ -41,13 +43,14 @@ type RespondInput struct {
 }
 
 type ResponseSelection struct {
-	Type              string
-	Summary           string
-	Message           string
-	CreatedTask       *CreatedTask
-	TaskDetail        *TaskDetail
-	ProjectOverview   *ProjectOverview
-	MilestoneOverview *MilestoneOverview
+	Type                      string
+	Summary                   string
+	Message                   string
+	CreatedTask               *CreatedTask
+	TaskDetail                *TaskDetail
+	ProjectOverview           *ProjectOverview
+	MilestoneOverview         *MilestoneOverview
+	ConversationConfiguration *ConversationConfigurationResult
 }
 
 type responseState struct {
@@ -226,6 +229,21 @@ func (t *RespondTool) selectResponse(
 			return ResponseSelection{}, fmt.Errorf("%w: unresolved Milestone evidence", pactagent.ErrToolCallProtocol)
 		}
 		selection.MilestoneOverview = result.Overview
+	case ResponseConversationConfig:
+		call, err := t.compatibleEvidenceAny(
+			ctx,
+			input.SourceToolCallIDs,
+			ToolGetConversationConfig,
+			ToolUpdateConversationConfig,
+		)
+		if err != nil {
+			return ResponseSelection{}, err
+		}
+		var result ConversationConfigurationResult
+		if err := json.Unmarshal(call.Result, &result); err != nil || result.Version <= 0 {
+			return ResponseSelection{}, fmt.Errorf("%w: invalid conversation configuration evidence", pactagent.ErrToolCallProtocol)
+		}
+		selection.ConversationConfiguration = &result
 	case ResponseError:
 		if input.Message == "" || utf8.RuneCountInString(input.Message) > maxGeneralResponseLength {
 			return ResponseSelection{}, fmt.Errorf("%w: error response message is invalid", ErrToolInput)
@@ -306,6 +324,47 @@ func (t *RespondTool) compatibleEvidence(
 	return compatible[0], nil
 }
 
+func (t *RespondTool) compatibleEvidenceAny(
+	ctx context.Context,
+	toolCallIDs []string,
+	expectedTools ...string,
+) (pactagent.ToolCall, error) {
+	if len(toolCallIDs) == 0 {
+		return pactagent.ToolCall{}, fmt.Errorf(
+			"%w: %w: at least one evidence ID is required",
+			pactagent.ErrToolCallProtocol,
+			ErrResponseEvidence,
+		)
+	}
+	seen := make(map[string]struct{}, len(toolCallIDs))
+	var compatible []pactagent.ToolCall
+	for _, toolCallID := range toolCallIDs {
+		toolCallID = strings.TrimSpace(toolCallID)
+		if toolCallID == "" {
+			return pactagent.ToolCall{}, fmt.Errorf("%w: evidence ID cannot be empty", pactagent.ErrToolCallProtocol)
+		}
+		if _, duplicate := seen[toolCallID]; duplicate {
+			continue
+		}
+		seen[toolCallID] = struct{}{}
+		call, err := t.config.Repository.GetCompletedToolCall(ctx, t.config.Run.ID, toolCallID)
+		if err != nil {
+			return pactagent.ToolCall{}, err
+		}
+		if slices.Contains(expectedTools, call.ToolName) {
+			compatible = append(compatible, call)
+		}
+	}
+	if len(compatible) != 1 {
+		return pactagent.ToolCall{}, fmt.Errorf(
+			"%w: %w: conversation configuration response requires exactly one configuration evidence result",
+			pactagent.ErrToolCallProtocol,
+			ErrResponseEvidence,
+		)
+	}
+	return compatible[0], nil
+}
+
 func inputResponseLabel(toolName string) string {
 	return strings.TrimPrefix(toolName, "get_")
 }
@@ -315,7 +374,8 @@ func requiresResponseSummary(responseType string) bool {
 	case ResponseTaskCreated,
 		ResponseTaskDetail,
 		ResponseProjectStatus,
-		ResponseMilestoneStatus:
+		ResponseMilestoneStatus,
+		ResponseConversationConfig:
 		return true
 	default:
 		return false

@@ -3,6 +3,7 @@ package evaluation
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -15,11 +16,15 @@ import (
 func TestEmbeddedScenariosAreValidAndCoverExplicitDiscussionTriggers(t *testing.T) {
 	scenarios, err := LoadScenarios()
 	require.NoError(t, err)
-	require.Len(t, scenarios, 11)
+	require.Len(t, scenarios, 12)
+	discussionTriggers := 0
 	for _, scenario := range scenarios {
 		require.NoError(t, scenario.Validate())
-		require.Contains(t, scenario.Trigger.Text, "讨论")
+		if strings.Contains(scenario.Trigger.Text, "讨论") {
+			discussionTriggers++
+		}
 	}
+	require.Equal(t, 11, discussionTriggers)
 	buried, err := FindScenario("buried-retirement-problem")
 	require.NoError(t, err)
 	require.Equal(t, "m1", buried.Trigger.ReplyToMessageID)
@@ -29,6 +34,40 @@ func TestEmbeddedScenariosAreValidAndCoverExplicitDiscussionTriggers(t *testing.
 	require.Equal(t, int64(14), *configuration.DefaultProjectNumber)
 	require.Equal(t, "Model Delivery", configuration.DefaultProjectName)
 	require.Contains(t, configuration.BusinessContext, "preview")
+}
+
+func TestRunScenarioLetsModelUpdateCurrentConversationConfiguration(t *testing.T) {
+	scenario, err := FindScenario("natural-language-group-configuration")
+	require.NoError(t, err)
+	model := &scriptedModel{messages: []*schema.Message{
+		toolCallMessage("search-projects", "search_projects", `{"query":"策略与模型"}`),
+		toolCallMessage("get-configuration", "get_current_conversation_configuration", `{}`),
+		toolCallMessage("update-configuration", "update_current_conversation_configuration", `{
+			"expected_version":1,
+			"default_project_number":14
+		}`),
+		toolCallMessage("respond", "respond", `{
+			"response_type":"conversation_configuration",
+			"source_tool_call_ids":["update-configuration"],
+			"summary":"本群默认项目已更新为策略与模型。"
+		}`),
+		schema.AssistantMessage("done", nil),
+	}}
+
+	artifact, err := RunScenario(context.Background(), scenario, RunConfig{
+		ModelName: "scripted", Model: model, Timezone: time.FixedZone("CST", 8*60*60),
+	})
+
+	require.NoError(t, err)
+	require.NoError(t, artifact.Validate())
+	require.Equal(t, "conversation_configuration", artifact.Outcome)
+	require.Nil(t, artifact.Task)
+	require.Equal(t, []string{
+		"search_projects",
+		"get_current_conversation_configuration",
+		"update_current_conversation_configuration",
+		"respond",
+	}, toolNames(artifact.ToolTrace))
 }
 
 func TestJudgeSourceEvidenceExposesFixtureFactsWithoutTaskExpectations(t *testing.T) {

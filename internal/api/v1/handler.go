@@ -28,6 +28,7 @@ type Handler struct {
 	Access             *application.ProjectAccessService
 	Attachments        *application.AttachmentService
 	AgentConversations *application.AgentConversationService
+	AgentRuns          *store.AgentStore
 }
 
 func accessSubject(ctx context.Context) (domain.ProjectAccessSubject, error) {
