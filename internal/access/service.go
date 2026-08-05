@@ -92,7 +92,7 @@ func (s *Service) Authenticate(ctx context.Context, raw string) (Principal, erro
 	if !now.Before(bundle.Token.ExpiresAt) {
 		return Principal{}, ErrTokenExpired
 	}
-	if !bundle.User.Active {
+	if !bundle.User.CanUseApplication() {
 		return Principal{}, ErrUserInactive
 	}
 	if err := s.repository.TouchToken(ctx, bundle.Token.ID, now, now.Add(-LastUsedTouchInterval)); err != nil {

@@ -8,8 +8,8 @@ import ProjectListPage from './pages/projects/ProjectListPage'
 import ProjectDetailPage from './pages/projects/ProjectDetailPage'
 import LoginPage from './pages/auth/LoginPage'
 import InvitePage from './pages/auth/InvitePage'
+import AccessDecisionPage from './pages/auth/AccessDecisionPage'
 import AdminUsersPage from './pages/admin/AdminUsersPage'
-import AdminInvitationsPage from './pages/admin/AdminInvitationsPage'
 import APITokensPage from './pages/account/APITokensPage'
 import AgentConversationsPage from './pages/agent/AgentConversationsPage'
 import AdminAPIAuditPage from './pages/admin/AdminAPIAuditPage'
@@ -29,6 +29,10 @@ function ProtectedApplication() {
   }
   if (status === 'unauthenticated') {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  }
+
+  if (actor?.access_status !== 'APPROVED') {
+    return <AccessDecisionPage />
   }
 
   if (/^\/tasks\/\d+\/attachments\/[^/]+\/preview$/.test(location.pathname)) {
@@ -63,7 +67,6 @@ function ProtectedApplication() {
             )}
           />
           <Route path="/admin/users" element={adminVisible ? <AdminUsersPage /> : <Navigate to="/" replace />} />
-          <Route path="/admin/invitations" element={adminVisible ? <AdminInvitationsPage /> : <Navigate to="/" replace />} />
           <Route path="/admin/api-audit" element={adminVisible ? <AdminAPIAuditPage /> : <Navigate to="/" replace />} />
           <Route path="/" element={<Navigate to="/tasks" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />

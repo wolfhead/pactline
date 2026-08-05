@@ -14,6 +14,7 @@ const USER: User = {
   email: 'alex@example.com',
   avatar_url: null,
   platform_role: 'MEMBER',
+  access_status: 'APPROVED',
   roles: [],
   active: true,
   created_at: '',

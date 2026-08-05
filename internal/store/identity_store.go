@@ -267,11 +267,12 @@ func (s *IdentityStore) AcceptInvitation(ctx context.Context, command identity.A
 	user := domain.User{
 		ID: command.UserID, Name: command.UserName, Email: command.UserEmail,
 		AvatarURL: command.UserAvatarURL, PlatformRole: domain.PlatformRoleMember,
-		Active: true, CreatedAt: command.Now, UpdatedAt: command.Now,
+		AccessStatus: domain.AccessStatusPending, Active: true,
+		CreatedAt: command.Now, UpdatedAt: command.Now,
 	}
 	_, err = tx.Exec(ctx, `
-		INSERT INTO users (id, name, email, avatar_url, platform_role, roles, active, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,'MEMBER','{}',true,$5,$5)`,
+		INSERT INTO users (id, name, email, avatar_url, platform_role, access_status, roles, active, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,'MEMBER','PENDING','{}',true,$5,$5)`,
 		user.ID, user.Name, user.Email, user.AvatarURL, command.Now)
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -311,6 +312,58 @@ func (s *IdentityStore) AcceptInvitation(ctx context.Context, command identity.A
 			return domain.User{}, identity.ErrInvitationInvalid
 		}
 		return domain.User{}, fmt.Errorf("commit invitation acceptance: %w", err)
+	}
+	return user, nil
+}
+
+func (s *IdentityStore) RegisterAccessRequest(
+	ctx context.Context,
+	command identity.RegisterAccessRequestCommand,
+) (domain.User, error) {
+	tx, err := s.db.Pool.Begin(ctx)
+	if err != nil {
+		return domain.User{}, fmt.Errorf("begin access request registration: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	user := domain.User{
+		ID: command.UserID, Name: command.UserName, Email: command.UserEmail,
+		AvatarURL: command.UserAvatarURL, PlatformRole: domain.PlatformRoleMember,
+		AccessStatus: domain.AccessStatusPending, Active: true,
+		CreatedAt: command.Now, UpdatedAt: command.Now,
+	}
+	_, err = tx.Exec(ctx, `
+		INSERT INTO users (id, name, email, avatar_url, platform_role, access_status, roles, active, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,'MEMBER','PENDING','{}',true,$5,$5)`,
+		user.ID, user.Name, user.Email, user.AvatarURL, command.Now)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return domain.User{}, identity.ErrLoginDenied
+		}
+		return domain.User{}, fmt.Errorf("create pending access user: %w", err)
+	}
+	externalID := uuid.New()
+	if err := insertExternalIdentityAndCredential(
+		ctx, tx, externalID, user.ID, command.Principal, command.Credential, command.Now,
+	); err != nil {
+		if isUniqueViolation(err) {
+			return domain.User{}, identity.ErrLoginDenied
+		}
+		return domain.User{}, err
+	}
+	if err := insertSession(ctx, tx, command.Session); err != nil {
+		return domain.User{}, err
+	}
+	command.Audit.SubjectUserID = &user.ID
+	command.Audit.SessionID = &command.Session.ID
+	if err := insertAudit(ctx, tx, command.Audit); err != nil {
+		return domain.User{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		if isUniqueViolation(err) {
+			return domain.User{}, identity.ErrLoginDenied
+		}
+		return domain.User{}, fmt.Errorf("commit access request registration: %w", err)
 	}
 	return user, nil
 }
@@ -372,7 +425,7 @@ func (s *IdentityStore) FindExternalIdentity(ctx context.Context, key identity.P
 		       e.last_verified_at, e.created_at, e.updated_at,
 		       c.access_token_ciphertext, c.refresh_token_ciphertext,
 		       c.access_token_expires_at, c.refresh_token_expires_at, c.encryption_key_id,
-		       u.id, u.name, u.email, u.avatar_url, u.platform_role, u.roles, u.active, u.created_at, u.updated_at
+		       u.id, u.name, u.email, u.avatar_url, u.platform_role, u.access_status, u.roles, u.active, u.created_at, u.updated_at
 		FROM external_identities e
 		JOIN oauth_credentials c ON c.external_identity_id=e.id
 		JOIN users u ON u.id=e.user_id
@@ -386,7 +439,7 @@ func (s *IdentityStore) FindExternalIdentity(ctx context.Context, key identity.P
 		&external.EncryptedCredential.AccessTokenExpiresAt,
 		&external.EncryptedCredential.RefreshTokenExpiresAt,
 		&external.EncryptedCredential.EncryptionKeyID,
-		&user.ID, &user.Name, &user.Email, &user.AvatarURL, &user.PlatformRole,
+		&user.ID, &user.Name, &user.Email, &user.AvatarURL, &user.PlatformRole, &user.AccessStatus,
 		&roles, &user.Active, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -411,16 +464,16 @@ func (s *IdentityStore) BootstrapAdmin(ctx context.Context, command identity.Boo
 		}
 		var roles []string
 		err := tx.QueryRow(ctx, `
-			SELECT id,name,email,avatar_url,platform_role,roles,active,created_at,updated_at
+			SELECT id,name,email,avatar_url,platform_role,access_status,roles,active,created_at,updated_at
 			FROM users WHERE id=$1 FOR UPDATE`, primarySeedUserID).Scan(
-			&user.ID, &user.Name, &user.Email, &user.AvatarURL, &user.PlatformRole,
+			&user.ID, &user.Name, &user.Email, &user.AvatarURL, &user.PlatformRole, &user.AccessStatus,
 			&roles, &user.Active, &user.CreatedAt, &user.UpdatedAt)
 		if err != nil {
 			return fmt.Errorf("lock bootstrap user: %w", err)
 		}
 		user.Roles = userRoles(roles)
 		_, err = tx.Exec(ctx, `
-			UPDATE users SET name=$2,email=$3,avatar_url=$4,platform_role='ADMIN',active=true,updated_at=$5
+			UPDATE users SET name=$2,email=$3,avatar_url=$4,platform_role='ADMIN',access_status='APPROVED',active=true,updated_at=$5
 			WHERE id=$1`, primarySeedUserID, command.Principal.Name, command.Principal.Email,
 			command.Principal.AvatarURL, command.Now)
 		if err != nil {
@@ -446,7 +499,8 @@ func (s *IdentityStore) BootstrapAdmin(ctx context.Context, command identity.Boo
 			return err
 		}
 		user.Name, user.Email, user.AvatarURL = command.Principal.Name, command.Principal.Email, command.Principal.AvatarURL
-		user.PlatformRole, user.Active, user.UpdatedAt = domain.PlatformRoleAdmin, true, command.Now
+		user.PlatformRole, user.AccessStatus, user.Active, user.UpdatedAt =
+			domain.PlatformRoleAdmin, domain.AccessStatusApproved, true, command.Now
 		return nil
 	})
 	return user, err
@@ -458,13 +512,13 @@ func (s *IdentityStore) LoginExternal(ctx context.Context, command identity.Logi
 		var externalID uuid.UUID
 		var roles []string
 		err := tx.QueryRow(ctx, `
-			SELECT e.id,u.id,u.name,u.email,u.avatar_url,u.platform_role,u.roles,u.active,u.created_at,u.updated_at
+			SELECT e.id,u.id,u.name,u.email,u.avatar_url,u.platform_role,u.access_status,u.roles,u.active,u.created_at,u.updated_at
 			FROM external_identities e JOIN users u ON u.id=e.user_id
 			WHERE e.provider=$1 AND e.tenant_id=$2 AND e.subject_id=$3
 			FOR UPDATE OF e,u`,
 			command.Principal.Key.Provider, command.Principal.Key.TenantID, command.Principal.Key.SubjectID).Scan(
 			&externalID, &user.ID, &user.Name, &user.Email, &user.AvatarURL,
-			&user.PlatformRole, &roles, &user.Active, &user.CreatedAt, &user.UpdatedAt)
+			&user.PlatformRole, &user.AccessStatus, &roles, &user.Active, &user.CreatedAt, &user.UpdatedAt)
 		if errors.Is(err, pgx.ErrNoRows) || err == nil && !user.Active {
 			return identity.ErrLoginDenied
 		}
@@ -652,7 +706,7 @@ func (s *IdentityStore) ResolveSession(ctx context.Context, id uuid.UUID, secret
 		SELECT s.id, s.user_id, s.secret_hash, s.csrf_secret_hash, s.created_at, s.last_seen_at,
 		       s.idle_expires_at, s.absolute_expires_at, s.last_provider_verified_at,
 		       s.provider_failure_since, s.revoked_at, s.revoke_reason,
-		       u.id, u.name, u.email, u.avatar_url, u.platform_role, u.roles, u.active, u.created_at, u.updated_at
+		       u.id, u.name, u.email, u.avatar_url, u.platform_role, u.access_status, u.roles, u.active, u.created_at, u.updated_at
 		FROM sessions s JOIN users u ON u.id=s.user_id
 		WHERE s.id=$1`, id)
 	var bundle identity.SessionBundle
@@ -663,7 +717,7 @@ func (s *IdentityStore) ResolveSession(ctx context.Context, id uuid.UUID, secret
 		&bundle.Session.AbsoluteExpiresAt, &bundle.Session.LastProviderVerifiedAt,
 		&bundle.Session.ProviderFailureSince, &bundle.Session.RevokedAt, &bundle.Session.RevokeReason,
 		&bundle.User.ID, &bundle.User.Name, &bundle.User.Email, &bundle.User.AvatarURL,
-		&bundle.User.PlatformRole, &roles, &bundle.User.Active, &bundle.User.CreatedAt, &bundle.User.UpdatedAt,
+		&bundle.User.PlatformRole, &bundle.User.AccessStatus, &roles, &bundle.User.Active, &bundle.User.CreatedAt, &bundle.User.UpdatedAt,
 	); errors.Is(err, pgx.ErrNoRows) {
 		return identity.SessionBundle{}, identity.ErrSessionInvalid
 	} else if err != nil {
@@ -854,6 +908,51 @@ func (s *IdentityStore) ReactivateUser(ctx context.Context, userID, actorID uuid
 	})
 }
 
+func (s *IdentityStore) SetUserAccessStatus(
+	ctx context.Context,
+	userID, actorID uuid.UUID,
+	status domain.AccessStatus,
+	now time.Time,
+	requestID string,
+) error {
+	return s.inTransaction(ctx, "set user access status", func(tx pgx.Tx) error {
+		var current domain.AccessStatus
+		var role domain.PlatformRole
+		if err := tx.QueryRow(ctx, `
+			SELECT access_status, platform_role FROM users WHERE id=$1 FOR UPDATE`, userID).
+			Scan(&current, &role); errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrNotFound
+		} else if err != nil {
+			return fmt.Errorf("lock user access status: %w", err)
+		}
+		if role != domain.PlatformRoleMember {
+			return domain.ErrForbidden
+		}
+		if !domain.CanChangeAccessStatus(current, status) {
+			return domain.ErrConflict
+		}
+		if current == status {
+			return nil
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE users SET access_status=$2, updated_at=$3 WHERE id=$1`, userID, status, now); err != nil {
+			return fmt.Errorf("update user access status: %w", err)
+		}
+		eventType := "access_rejected"
+		if status == domain.AccessStatusApproved {
+			eventType = "access_approved"
+		}
+		audit := identity.AuditEvent{
+			ID: uuid.New(), EventType: eventType, ActorUserID: &actorID,
+			SubjectUserID: &userID, Metadata: json.RawMessage(`{}`), OccurredAt: now,
+		}
+		if requestID != "" {
+			audit.RequestID = &requestID
+		}
+		return insertAudit(ctx, tx, audit)
+	})
+}
+
 func (s *IdentityStore) StartImpersonation(ctx context.Context, impersonation identity.Impersonation, audit identity.AuditEvent) error {
 	return s.inTransaction(ctx, "start impersonation", func(tx pgx.Tx) error {
 		var sessionUserID uuid.UUID
@@ -1002,7 +1101,7 @@ func (s *IdentityStore) inTransaction(ctx context.Context, operation string, fn 
 func (s *IdentityStore) currentImpersonation(ctx context.Context, sessionID uuid.UUID) (*identity.Impersonation, *domain.User, error) {
 	row := s.db.Pool.QueryRow(ctx, `
 		SELECT i.id, i.session_id, i.actor_user_id, i.subject_user_id, i.started_at, i.ended_at,
-		       u.id, u.name, u.email, u.avatar_url, u.platform_role, u.roles, u.active, u.created_at, u.updated_at
+		       u.id, u.name, u.email, u.avatar_url, u.platform_role, u.access_status, u.roles, u.active, u.created_at, u.updated_at
 		FROM impersonations i JOIN users u ON u.id=i.subject_user_id
 		WHERE i.session_id=$1 AND i.ended_at IS NULL`, sessionID)
 	var impersonation identity.Impersonation
@@ -1011,7 +1110,7 @@ func (s *IdentityStore) currentImpersonation(ctx context.Context, sessionID uuid
 	err := row.Scan(
 		&impersonation.ID, &impersonation.SessionID, &impersonation.ActorUserID,
 		&impersonation.SubjectUserID, &impersonation.StartedAt, &impersonation.EndedAt,
-		&subject.ID, &subject.Name, &subject.Email, &subject.AvatarURL, &subject.PlatformRole,
+		&subject.ID, &subject.Name, &subject.Email, &subject.AvatarURL, &subject.PlatformRole, &subject.AccessStatus,
 		&roles, &subject.Active, &subject.CreatedAt, &subject.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {

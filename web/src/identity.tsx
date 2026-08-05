@@ -10,6 +10,7 @@ import {
 
 export type UserRole = 'SPONSOR' | 'ENGINEER' | 'TECH_LEAD' | 'STEWARD'
 export type PlatformRole = 'ADMIN' | 'MEMBER'
+export type AccessStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
 
 export interface User {
   id: string
@@ -17,6 +18,7 @@ export interface User {
   email: string | null
   avatar_url: string | null
   platform_role: PlatformRole
+  access_status: AccessStatus
   roles: UserRole[]
   active: boolean
   created_at: string
@@ -84,6 +86,10 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
       const current = await getMe()
       setIdentity(current)
       setStatus('authenticated')
+      if (current.subject.access_status !== 'APPROVED') {
+        setUsers([current.subject])
+        return
+      }
       try {
         const response = await v1Get<{
           items: Array<Pick<
@@ -93,6 +99,7 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
         }>('/api/v1/users')
         setUsers(response.value.items.map((user) => ({
           ...user,
+          access_status: 'APPROVED',
           roles: [],
           created_at: '',
           updated_at: '',

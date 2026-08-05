@@ -16,11 +16,17 @@ func TestRendererUsesFixedUserVisibleFormats(t *testing.T) {
 	require.NoError(t, err)
 	renderer := Renderer{AppBaseURL: baseURL}
 	require.Equal(t,
-		"# ✅ Task #42 已创建 · 整理群聊需求\n\n**项目**：Pactline\n**位置**：Backlog\n**负责人**：未指派\n**截止日期**：未设置\n**状态**：backlog\n\n[在 Pactline 中打开 Task](https://tasks.example.test/tasks/42)\n\n---\n`Run aaaaaaaa`",
+		"# ✅ Task #42 已创建 · 整理群聊需求\n\n**项目**：Pactline\n**位置**：Backlog\n**负责人**：未指派\n**截止日期**：未设置\n**状态**：backlog\n**附件**：无\n\n[在 Pactline 中打开 Task](https://tasks.example.test/tasks/42)\n\n---\n`Run aaaaaaaa`",
 		renderer.Success(runID, agenttools.CreatedTask{
 			Number: 42, Title: "整理群聊需求", ProjectName: "Pactline", Status: "backlog",
 		}),
 	)
+	withAttachments := renderer.Success(runID, agenttools.CreatedTask{
+		Number: 43, Title: "保留证据", ProjectName: "Pactline", Status: "todo",
+		AttachedArtifacts:  []agenttools.AttachedArtifact{{ArtifactID: "image"}},
+		AttachmentFailures: []agenttools.AttachmentFailure{{ArtifactID: "file"}},
+	})
+	require.Contains(t, withAttachments, "**附件**：已附带 1 个，1 个未能附带")
 	require.Equal(t,
 		"# ❓ 需要更多信息\n\n尚未执行请求。\n\n**可能的方向**\n\n- 修复登录\n\n- 增加审计\n\n请明确选择一个方向。\n\n请直接回复此消息并补充信息。\n\n---\n`Run aaaaaaaa`",
 		renderer.Clarification(runID, "请明确选择一个方向。", []string{"修复登录", "增加审计"}),

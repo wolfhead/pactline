@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"bytes"
 	"context"
 	"testing"
 	"time"
@@ -83,6 +84,49 @@ func TestFirstPartyAgentCreatesTaskThroughDelegatedOpenAPIWithAudit(t *testing.T
 	require.True(t, ok)
 	require.Equal(t, taskID, replay.Response.ID)
 	require.True(t, replay.IdempotencyReplayed.Or(false))
+
+	attachmentBody := []byte("<h1>Agent evidence</h1>")
+	uploadResult, err := client.CreateTaskAttachmentUpload(
+		ctx,
+		&generated.TaskAttachmentUploadWrite{
+			Filename: "evidence.html", MediaType: "text/html",
+			SizeBytes: int64(len(attachmentBody)),
+		},
+		generated.CreateTaskAttachmentUploadParams{
+			Number:         created.Response.Number,
+			IdempotencyKey: generated.NewOptString("agent-test-attachment-start"),
+		},
+	)
+	require.NoError(t, err)
+	upload, ok := uploadResult.(*generated.TaskAttachmentUploadCreatedHeaders)
+	require.True(t, ok, "unexpected response %T", uploadResult)
+	uploaded, err := client.UploadTaskAttachmentContent(
+		ctx,
+		generated.UploadTaskAttachmentContentReq{Data: bytes.NewReader(attachmentBody)},
+		generated.UploadTaskAttachmentContentParams{
+			Number: created.Response.Number, ID: upload.Response.ID,
+			ContentLength: int64(len(attachmentBody)),
+		},
+	)
+	require.NoError(t, err)
+	if problem, failed := uploaded.(*generated.ProblemStatusCodeWithHeaders); failed {
+		t.Fatalf("attachment upload failed: status=%d code=%s detail=%s",
+			problem.StatusCode, problem.Response.Code, problem.Response.Detail)
+	}
+	_, ok = uploaded.(*generated.NoContent)
+	require.True(t, ok, "unexpected response %T", uploaded)
+	completedResult, err := client.CompleteTaskAttachmentUpload(
+		ctx,
+		generated.CompleteTaskAttachmentUploadParams{
+			Number: created.Response.Number, ID: upload.Response.ID,
+			IfMatch:        `"1"`,
+			IdempotencyKey: generated.NewOptString("agent-test-attachment-complete"),
+		},
+	)
+	require.NoError(t, err)
+	completed, ok := completedResult.(*generated.TaskAttachmentCreatedHeaders)
+	require.True(t, ok, "unexpected response %T", completedResult)
+	require.Equal(t, "evidence.html", completed.Response.Filename)
 
 	queries := []struct {
 		sql      string

@@ -8,6 +8,7 @@ const USER: User = {
   email: 'alice@example.com',
   avatar_url: null,
   platform_role: 'ADMIN',
+  access_status: 'APPROVED',
   roles: ['SPONSOR'],
   active: true,
   created_at: '2026-01-01T00:00:00Z',
@@ -50,6 +51,20 @@ describe('IdentityProvider', () => {
     render(<IdentityProvider><Probe /></IdentityProvider>)
 
     await waitFor(() => expect(screen.getByText('unauthenticated::false')).toBeInTheDocument())
+  })
+
+  it('keeps a pending member authenticated without loading protected user references', async () => {
+    const pending = { ...USER, platform_role: 'MEMBER' as const, access_status: 'PENDING' as const }
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ actor: pending, subject: pending, impersonation: null }), { status: 200 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<IdentityProvider><Probe /></IdentityProvider>)
+
+    await waitFor(() => expect(screen.getByText('authenticated:Alice:false')).toBeInTheDocument())
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledWith('/api/me', expect.anything())
   })
 
   it('derives read-only state from active impersonation', async () => {

@@ -287,6 +287,8 @@ paths:
     put:
       operationId: uploadTaskAttachmentContent
       summary: Stream content into a Local storage upload session
+      parameters:
+        - $ref: "#/components/parameters/ContentLength"
       requestBody:
         required: true
         content:
@@ -1100,6 +1102,16 @@ components:
         minLength: 1
         maxLength: 128
         pattern: '^[\x21-\x7E]+$'
+    ContentLength:
+      name: Content-Length
+      in: header
+      required: true
+      description: Exact attachment body size in bytes.
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+        maximum: 104857600
   headers:
     Etag:
       description: Quoted positive integer resource version.

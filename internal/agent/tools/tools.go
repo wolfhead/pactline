@@ -66,6 +66,16 @@ type ConversationConfigurationClient interface {
 	UpdateCurrentAgentConversationConfiguration(context.Context, *generated.AgentConversationPatch, generated.UpdateCurrentAgentConversationConfigurationParams) (generated.UpdateCurrentAgentConversationConfigurationRes, error)
 }
 
+type AttachmentOpenAPIClient interface {
+	CreateTaskAttachmentUpload(context.Context, *generated.TaskAttachmentUploadWrite, generated.CreateTaskAttachmentUploadParams) (generated.CreateTaskAttachmentUploadRes, error)
+	UploadTaskAttachmentContent(context.Context, generated.UploadTaskAttachmentContentReq, generated.UploadTaskAttachmentContentParams) (generated.UploadTaskAttachmentContentRes, error)
+	CompleteTaskAttachmentUpload(context.Context, generated.CompleteTaskAttachmentUploadParams) (generated.CompleteTaskAttachmentUploadRes, error)
+}
+
+type HTTPDoer interface {
+	Do(*http.Request) (*http.Response, error)
+}
+
 type RunRepository interface {
 	GetRun(context.Context, uuid.UUID) (pactagent.Run, error)
 	GetCompletedToolCall(context.Context, uuid.UUID, string) (pactagent.ToolCall, error)
@@ -90,6 +100,7 @@ type Config struct {
 	Timezone          *time.Location
 	Artifacts         artifact.Resolver
 	ArtifactDescriber artifact.Describer
+	DirectUploadHTTP  HTTPDoer
 }
 
 type Set struct {
@@ -506,7 +517,7 @@ func getConversationContext(
 		return ConversationContextResult{}, err
 	}
 	nextCursor := ""
-	if len(messages) == input.PageSize {
+	if len(messages) > 0 {
 		nextCursor = messages[len(messages)-1].Cursor
 	}
 	return ConversationContextResult{
@@ -579,14 +590,15 @@ func askUser(ctx context.Context, input AskUserInput) (AskUserResult, error) {
 }
 
 type CreateTaskInput struct {
-	Title          string  `json:"title" jsonschema:"required,description=Concise Task title"`
-	Context        string  `json:"context" jsonschema:"required,description=Why the Task is needed"`
-	ExpectedResult string  `json:"expected_result" jsonschema:"required,description=Observable result expected at completion"`
-	ProjectNumber  int64   `json:"project_number" jsonschema:"required,description=Resolved Pactline Project number"`
-	MilestoneID    *string `json:"milestone_id" jsonschema:"description=Resolved milestone UUID string or null for Project Backlog"`
-	AssigneeID     *string `json:"assignee_id" jsonschema:"description=Resolved user UUID string or null when unassigned"`
-	DueDate        *string `json:"due_date" jsonschema:"description=Unambiguous YYYY-MM-DD date or null"`
-	Priority       string  `json:"priority" jsonschema:"required,description=One of none low medium high urgent; use none unless the conversation explicitly assigns priority"`
+	Title             string   `json:"title" jsonschema:"required,description=Concise Task title"`
+	Context           string   `json:"context" jsonschema:"required,description=Why the Task is needed"`
+	ExpectedResult    string   `json:"expected_result" jsonschema:"required,description=Observable result expected at completion"`
+	ProjectNumber     int64    `json:"project_number" jsonschema:"required,description=Resolved Pactline Project number"`
+	MilestoneID       *string  `json:"milestone_id" jsonschema:"description=Resolved milestone UUID string or null for Project Backlog"`
+	AssigneeID        *string  `json:"assignee_id" jsonschema:"description=Resolved user UUID string or null when unassigned"`
+	DueDate           *string  `json:"due_date" jsonschema:"description=Unambiguous YYYY-MM-DD date or null"`
+	Priority          string   `json:"priority" jsonschema:"required,description=One of none low medium high urgent; use none unless the conversation explicitly assigns priority"`
+	SourceArtifactIDs []string `json:"source_artifact_ids,omitempty" jsonschema:"description=Up to five opaque artifact IDs that are directly relevant evidence for this Task; omit decorative images reactions memes avatars and unrelated files"`
 }
 
 // UnmarshalJSON accepts an empty array as null for nullable scalar IDs. Some
@@ -636,17 +648,31 @@ func (i *CreateTaskInput) UnmarshalJSON(encoded []byte) error {
 }
 
 type CreatedTask struct {
-	ID               uuid.UUID `json:"id"`
-	Number           int64     `json:"number"`
-	Title            string    `json:"title"`
-	ProjectNumber    int64     `json:"project_number"`
-	ProjectName      string    `json:"project_name"`
-	MilestoneName    string    `json:"milestone_name,omitempty"`
-	AssigneeName     string    `json:"assignee_name,omitempty"`
-	DueDate          *string   `json:"due_date,omitempty"`
-	Status           string    `json:"status"`
-	Priority         string    `json:"priority"`
-	IdempotentReplay bool      `json:"idempotent_replay"`
+	ID                 uuid.UUID           `json:"id"`
+	Number             int64               `json:"number"`
+	Title              string              `json:"title"`
+	ProjectNumber      int64               `json:"project_number"`
+	ProjectName        string              `json:"project_name"`
+	MilestoneName      string              `json:"milestone_name,omitempty"`
+	AssigneeName       string              `json:"assignee_name,omitempty"`
+	DueDate            *string             `json:"due_date,omitempty"`
+	Status             string              `json:"status"`
+	Priority           string              `json:"priority"`
+	IdempotentReplay   bool                `json:"idempotent_replay"`
+	AttachedArtifacts  []AttachedArtifact  `json:"attached_artifacts,omitempty"`
+	AttachmentFailures []AttachmentFailure `json:"attachment_failures,omitempty"`
+}
+
+type AttachedArtifact struct {
+	ArtifactID   string    `json:"artifact_id"`
+	AttachmentID uuid.UUID `json:"attachment_id"`
+	Filename     string    `json:"filename"`
+}
+
+type AttachmentFailure struct {
+	ArtifactID string `json:"artifact_id"`
+	Filename   string `json:"filename,omitempty"`
+	Reason     string `json:"reason"`
 }
 
 type CreateTaskTool struct {
@@ -659,7 +685,7 @@ type CreateTaskTool struct {
 func (t *CreateTaskTool) Info(context.Context) (*schema.ToolInfo, error) {
 	return toolutils.GoStruct2ToolInfo[CreateTaskInput](
 		ToolCreateTask,
-		"Create exactly one Pactline Task after Project and optional assignee are resolved. This is the only Task mutation tool.",
+		"Create exactly one Pactline Task after Project and optional assignee are resolved. It may preserve up to five directly relevant conversation artifacts as private Task attachments. This is the only Task mutation tool.",
 	)
 }
 
@@ -705,6 +731,11 @@ func (t *CreateTaskTool) create(ctx context.Context, input CreateTaskInput) (Cre
 		input.ProjectNumber <= 0 {
 		return CreatedTask{}, fmt.Errorf("%w: title, context, expected result, and Project are required", ErrToolInput)
 	}
+	sourceArtifactIDs, err := normalizeSourceArtifactIDs(input.SourceArtifactIDs)
+	if err != nil {
+		return CreatedTask{}, err
+	}
+	input.SourceArtifactIDs = sourceArtifactIDs
 	priority, err := taskPriority(input.Priority)
 	if err != nil {
 		return CreatedTask{}, err
@@ -772,6 +803,10 @@ func (t *CreateTaskTool) create(ctx context.Context, input CreateTaskInput) (Cre
 	}
 	taskResult.IdempotentReplay = !attached ||
 		created.IdempotencyReplayed.Or(false)
+	if len(input.SourceArtifactIDs) > 0 {
+		taskResult.AttachedArtifacts, taskResult.AttachmentFailures =
+			t.attachSourceArtifacts(ctx, taskResult, created.Response.Version, input.SourceArtifactIDs)
+	}
 	t.mu.Lock()
 	t.last = &taskResult
 	t.mu.Unlock()

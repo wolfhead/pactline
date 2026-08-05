@@ -136,7 +136,7 @@ func TestServiceQueuesMentionOnceAndEncryptsCommand(t *testing.T) {
 	require.NoError(t, err)
 	service, err := New(Config{
 		Identities: identityStub{
-			user: domain.User{ID: userID, Name: "User", Active: true},
+			user: domain.User{ID: userID, Name: "User", Active: true, AccessStatus: domain.AccessStatusApproved},
 		},
 		Runs:          repository,
 		Conversations: conversationObserverStub{},
@@ -187,6 +187,39 @@ func TestServiceQueuesMentionOnceAndEncryptsCommand(t *testing.T) {
 	}}, acknowledger.requests)
 }
 
+func TestServiceRejectsPendingUserBeforeStartingRun(t *testing.T) {
+	now := time.Date(2026, 8, 4, 10, 0, 0, 0, time.UTC)
+	repository := &repositoryStub{}
+	cipher, err := pactagent.NewInputCipher(
+		"input-key",
+		[]byte("0123456789abcdef0123456789abcdef"),
+	)
+	require.NoError(t, err)
+	service, err := New(Config{
+		Identities: identityStub{user: domain.User{
+			ID:           uuid.New(),
+			Name:         "Pending User",
+			Active:       true,
+			AccessStatus: domain.AccessStatusPending,
+		}},
+		Runs:          repository,
+		Conversations: conversationObserverStub{},
+		Inputs:        cipher,
+		Model:         "deepseek-v4-pro",
+		PromptVersion: "first-party-work-v12",
+		Now:           func() time.Time { return now },
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, service.Accept(context.Background(), channel.IncomingMessage{
+		Provider: "lark", TenantID: "tenant", EventID: "event-pending",
+		ConversationID: "chat-pending", MessageID: "message-pending",
+		SenderSubjectID: "ou_pending", MessageType: "text",
+		Text: "帮我创建任务", CreatedAt: now, BotMentioned: true,
+	}))
+	require.Zero(t, repository.createN)
+}
+
 func TestServiceDoesNotStartRunForDisabledConversation(t *testing.T) {
 	now := time.Date(2026, 8, 4, 10, 0, 0, 0, time.UTC)
 	userID := uuid.New()
@@ -197,7 +230,7 @@ func TestServiceDoesNotStartRunForDisabledConversation(t *testing.T) {
 	)
 	require.NoError(t, err)
 	service, err := New(Config{
-		Identities: identityStub{user: domain.User{ID: userID, Name: "User", Active: true}},
+		Identities: identityStub{user: domain.User{ID: userID, Name: "User", Active: true, AccessStatus: domain.AccessStatusApproved}},
 		Runs:       repository,
 		Conversations: conversationObserverStub{configuration: pactagent.ConversationConfiguration{
 			RevisionID: uuid.New(), Enabled: false,
@@ -242,7 +275,7 @@ func TestServiceReturnsPersistenceFailureForLarkRetry(t *testing.T) {
 	require.NoError(t, err)
 	service, err := New(Config{
 		Identities: identityStub{
-			user: domain.User{ID: userID, Name: "User", Active: true},
+			user: domain.User{ID: userID, Name: "User", Active: true, AccessStatus: domain.AccessStatusApproved},
 		},
 		Runs: repository, Conversations: conversationObserverStub{}, Inputs: cipher, Model: "deepseek-v4-pro",
 		PromptVersion: "first-party-task-v1",
@@ -271,7 +304,7 @@ func TestServiceRetriesAtomicRunAndInputPersistence(t *testing.T) {
 	require.NoError(t, err)
 	service, err := New(Config{
 		Identities: identityStub{
-			user: domain.User{ID: userID, Name: "User", Active: true},
+			user: domain.User{ID: userID, Name: "User", Active: true, AccessStatus: domain.AccessStatusApproved},
 		},
 		Runs: repository, Conversations: conversationObserverStub{}, Inputs: cipher, Model: "deepseek-v4-pro",
 		PromptVersion: "first-party-task-v1",

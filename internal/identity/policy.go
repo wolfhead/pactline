@@ -65,9 +65,9 @@ func IsExplicitInvalid(category ProviderErrorCategory) bool {
 }
 
 func CanImpersonate(actor, subject domain.User) bool {
-	return actor.Active &&
+	return actor.CanUseApplication() &&
 		actor.PlatformRole == domain.PlatformRoleAdmin &&
-		subject.Active &&
+		subject.CanUseApplication() &&
 		subject.PlatformRole == domain.PlatformRoleMember &&
 		actor.ID != subject.ID
 }

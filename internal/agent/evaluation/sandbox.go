@@ -10,6 +10,7 @@ import (
 	"image/color"
 	"image/draw"
 	"image/png"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -56,6 +57,8 @@ type Sandbox struct {
 	projects                  []generated.Project
 	users                     []generated.User
 	artifacts                 map[string]sandboxArtifact
+	attachmentUploads         map[uuid.UUID]sandboxAttachmentUpload
+	AttachedArtifacts         []string
 	conversationConfiguration generated.AgentConversation
 }
 
@@ -64,6 +67,11 @@ type sandboxArtifact struct {
 	Fixture   string
 	MessageID string
 	CreatedAt time.Time
+}
+
+type sandboxAttachmentUpload struct {
+	Request generated.TaskAttachmentUploadWrite
+	Content []byte
 }
 
 func NewSandbox(scenario Scenario, run pactagent.Run) (*Sandbox, error) {
@@ -151,11 +159,13 @@ func NewSandbox(scenario Scenario, run pactagent.Run) (*Sandbox, error) {
 	})
 	return &Sandbox{
 		Scenario: scenario, Run: run,
-		contextMessages: messages,
-		toolCalls:       make(map[string]pactagent.ToolCall),
-		toolArguments:   make(map[string]json.RawMessage),
-		projects:        projects, users: users,
+		contextMessages:           messages,
+		toolCalls:                 make(map[string]pactagent.ToolCall),
+		toolArguments:             make(map[string]json.RawMessage),
+		projects:                  projects,
+		users:                     users,
 		artifacts:                 artifacts,
+		attachmentUploads:         make(map[uuid.UUID]sandboxAttachmentUpload),
 		conversationConfiguration: conversationConfiguration,
 	}, nil
 }
@@ -535,6 +545,87 @@ func (s *Sandbox) CreateTask(
 	s.CreatedTask = &copyRequest
 	s.CreatedReceipt = &created
 	return &generated.TaskCreatedHeaders{Response: created}, nil
+}
+
+func (s *Sandbox) CreateTaskAttachmentUpload(
+	_ context.Context,
+	request *generated.TaskAttachmentUploadWrite,
+	params generated.CreateTaskAttachmentUploadParams,
+) (generated.CreateTaskAttachmentUploadRes, error) {
+	if request == nil {
+		return nil, errors.New("sandbox received a nil attachment upload request")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.CreatedReceipt == nil {
+		return &generated.ProblemStatusCodeWithHeaders{StatusCode: 404}, nil
+	}
+	idempotencyKey := params.IdempotencyKey.Or(request.Filename)
+	id := stableUUID(s.Scenario.ID + ":attachment-upload:" + idempotencyKey)
+	s.attachmentUploads[id] = sandboxAttachmentUpload{Request: *request}
+	return &generated.TaskAttachmentUploadCreatedHeaders{
+		Response: generated.TaskAttachmentUpload{
+			ID: id, Provider: generated.TaskAttachmentUploadProviderLocal,
+			Filename: request.Filename, MediaType: request.MediaType,
+			SizeBytes: request.SizeBytes, Direct: false,
+			Method:    generated.TaskAttachmentUploadMethodPUT,
+			UploadURL: "/evaluation-upload", Headers: generated.TaskAttachmentUploadHeaders{},
+			ExpiresAt: s.Scenario.Trigger.At.Add(time.Hour),
+		},
+	}, nil
+}
+
+func (s *Sandbox) UploadTaskAttachmentContent(
+	_ context.Context,
+	request generated.UploadTaskAttachmentContentReq,
+	params generated.UploadTaskAttachmentContentParams,
+) (generated.UploadTaskAttachmentContentRes, error) {
+	content, err := io.ReadAll(request.Data)
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	upload, ok := s.attachmentUploads[params.ID]
+	if !ok {
+		return &generated.ProblemStatusCodeWithHeaders{StatusCode: 404}, nil
+	}
+	if params.ContentLength != int64(len(content)) {
+		return &generated.ProblemStatusCodeWithHeaders{StatusCode: 400}, nil
+	}
+	upload.Content = content
+	s.attachmentUploads[params.ID] = upload
+	return &generated.NoContent{}, nil
+}
+
+func (s *Sandbox) CompleteTaskAttachmentUpload(
+	_ context.Context,
+	params generated.CompleteTaskAttachmentUploadParams,
+) (generated.CompleteTaskAttachmentUploadRes, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	upload, ok := s.attachmentUploads[params.ID]
+	if !ok || s.CreatedReceipt == nil {
+		return &generated.ProblemStatusCodeWithHeaders{StatusCode: 404}, nil
+	}
+	if params.IfMatch != fmt.Sprintf("\"%d\"", s.CreatedReceipt.Version) ||
+		int64(len(upload.Content)) != upload.Request.SizeBytes {
+		return &generated.ProblemStatusCodeWithHeaders{StatusCode: 412}, nil
+	}
+	attachmentID := stableUUID(s.Scenario.ID + ":attachment:" + params.ID.String())
+	s.CreatedReceipt.Version++
+	s.AttachedArtifacts = append(s.AttachedArtifacts, upload.Request.Filename)
+	return &generated.TaskAttachmentCreatedHeaders{
+		Response: generated.TaskAttachment{
+			ID: attachmentID, TaskID: s.CreatedReceipt.ID,
+			UploaderID: s.Run.InitiatingUserID,
+			Filename:   upload.Request.Filename, MediaType: upload.Request.MediaType,
+			SizeBytes:   upload.Request.SizeBytes,
+			PreviewKind: generated.TaskAttachmentPreviewKindDownload,
+			Version:     1, ContentURL: "/evaluation-content", DownloadURL: "/evaluation-download",
+			CreatedAt: s.Scenario.Trigger.At, UpdatedAt: s.Scenario.Trigger.At,
+		},
+	}, nil
 }
 
 func (s *Sandbox) GetRun(context.Context, uuid.UUID) (pactagent.Run, error) {

@@ -34,6 +34,7 @@ type IdentityRepository interface {
 	CreateAuthorizationTransaction(ctx context.Context, transaction AuthorizationTransaction) error
 	ConsumeAuthorizationState(ctx context.Context, stateHash []byte, now time.Time) (AuthorizationTransaction, error)
 	BootstrapAdmin(ctx context.Context, command BootstrapAdminCommand) (domain.User, error)
+	RegisterAccessRequest(ctx context.Context, command RegisterAccessRequestCommand) (domain.User, error)
 	LoginExternal(ctx context.Context, command LoginCommand) (domain.User, error)
 	GetExternalIdentityForUser(ctx context.Context, userID uuid.UUID) (ExternalIdentity, error)
 	RefreshCredentialLocked(ctx context.Context, externalIdentityID uuid.UUID, refresh func(OAuthCredential) (OAuthCredential, error)) (OAuthCredential, error)
@@ -52,6 +53,7 @@ type IdentityRepository interface {
 	RevokeInvitation(ctx context.Context, id uuid.UUID, now time.Time, audit AuditEvent) error
 	RecordDelivery(ctx context.Context, delivery InvitationDelivery) error
 	ReactivateUser(ctx context.Context, userID, actorID uuid.UUID) error
+	SetUserAccessStatus(ctx context.Context, userID, actorID uuid.UUID, status domain.AccessStatus, now time.Time, requestID string) error
 	StartImpersonation(ctx context.Context, impersonation Impersonation, audit AuditEvent) error
 	EndImpersonation(ctx context.Context, sessionID uuid.UUID, endedAt time.Time, audit AuditEvent) error
 	AppendAudit(ctx context.Context, audit AuditEvent) error
@@ -405,6 +407,34 @@ func (s *Service) SetUserActive(ctx context.Context, actor domain.User, userID u
 	return s.identity.DeactivateUser(ctx, target.ID, actor.ID, "administrator_deactivated", "")
 }
 
+func (s *Service) SetUserAccessStatus(
+	ctx context.Context,
+	actor domain.User,
+	userID uuid.UUID,
+	status domain.AccessStatus,
+	requestID string,
+) error {
+	if actor.PlatformRole != domain.PlatformRoleAdmin || !actor.CanUseApplication() {
+		return ErrAdminRequired
+	}
+	if status != domain.AccessStatusApproved && status != domain.AccessStatusRejected {
+		return domain.ErrInvalidInput
+	}
+	target, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if target.PlatformRole == domain.PlatformRoleAdmin || target.ID == actor.ID {
+		return domain.ErrForbidden
+	}
+	if !domain.CanChangeAccessStatus(target.AccessStatus, status) {
+		return domain.ErrConflict
+	}
+	return s.identity.SetUserAccessStatus(
+		ctx, target.ID, actor.ID, status, s.clock.Now(), requestID,
+	)
+}
+
 func (s *Service) StartImpersonation(ctx context.Context, current RequestIdentity, subjectID uuid.UUID, requestID string) error {
 	if current.IsImpersonating() || current.Actor.PlatformRole != domain.PlatformRoleAdmin || !current.Actor.Active {
 		return ErrImpersonationDenied
@@ -583,21 +613,30 @@ func (s *Service) CompleteAuthorization(ctx context.Context, state, code, reques
 	}
 	emailMatches := authenticated.Principal.Email != nil && authenticated.Principal.EmailVerified &&
 		strings.EqualFold(strings.TrimSpace(*authenticated.Principal.Email), s.bootstrapEmail)
-	if !emailMatches {
-		slog.Warn("Lark administrator bootstrap email rejected",
-			"email_present", authenticated.Principal.Email != nil,
-			"email_verified", authenticated.Principal.EmailVerified)
-		s.recordAuthenticationRejection(ctx, "unbound_principal", requestID)
-		return SessionTokens{}, ErrLoginDenied
+	if emailMatches {
+		primarySeed := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+		session.UserID = primarySeed
+		audit.EventType = "administrator_bootstrapped"
+		if _, err := s.identity.BootstrapAdmin(ctx, BootstrapAdminCommand{
+			Principal: authenticated.Principal, Credential: authenticated.Credential,
+			Session: session, Audit: audit, Now: now,
+		}); err != nil {
+			s.recordAuthenticationRejection(ctx, "bootstrap_denied", requestID)
+			return SessionTokens{}, ErrLoginDenied
+		}
+		return tokens, nil
 	}
-	primarySeed := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-	session.UserID = primarySeed
-	audit.EventType = "administrator_bootstrapped"
-	if _, err := s.identity.BootstrapAdmin(ctx, BootstrapAdminCommand{
+
+	userID := uuid.New()
+	session.UserID = userID
+	audit.EventType = "access_requested"
+	if _, err := s.identity.RegisterAccessRequest(ctx, RegisterAccessRequestCommand{
 		Principal: authenticated.Principal, Credential: authenticated.Credential,
+		UserID: userID, UserName: authenticated.Principal.Name,
+		UserEmail: authenticated.Principal.Email, UserAvatarURL: authenticated.Principal.AvatarURL,
 		Session: session, Audit: audit, Now: now,
 	}); err != nil {
-		s.recordAuthenticationRejection(ctx, "bootstrap_denied", requestID)
+		s.recordAuthenticationRejection(ctx, "access_request_registration", requestID)
 		return SessionTokens{}, ErrLoginDenied
 	}
 	return tokens, nil

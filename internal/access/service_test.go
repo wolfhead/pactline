@@ -145,7 +145,7 @@ func TestIssueTokenRejectsUnsupportedLifetimeAndScope(t *testing.T) {
 
 func TestAuthenticateTokenReturnsPrincipalAndThrottlesTouch(t *testing.T) {
 	now := time.Date(2026, 7, 28, 2, 3, 4, 0, time.UTC)
-	owner := domain.User{ID: uuid.New(), Name: "Owner", Active: true}
+	owner := domain.User{ID: uuid.New(), Name: "Owner", Active: true, AccessStatus: domain.AccessStatusApproved}
 	repository := &testRepository{}
 	issuer := NewService(repository, testClock{now: now}, testSecrets{value: make([]byte, SecretSize)})
 	issued, err := issuer.Issue(context.Background(), IssueRequest{

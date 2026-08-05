@@ -12,7 +12,6 @@ import {
   MessageSquareText,
   Plus,
   ShieldCheck,
-  UserPlus,
   Users,
 } from 'lucide-react'
 import { listProjects, type Project } from '@/api/projects'
@@ -42,7 +41,6 @@ const AGENT_ITEMS: NavigationItem[] = [
 
 const ADMIN_ITEMS: NavigationItem[] = [
   { to: '/admin/users', label: '用户', icon: Users },
-  { to: '/admin/invitations', label: '邀请', icon: UserPlus },
   { to: '/admin/api-audit', label: 'API 审计', icon: FileClock },
 ]
 

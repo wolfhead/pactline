@@ -47,7 +47,7 @@ func (s *AccessStore) GetToken(ctx context.Context, id uuid.UUID) (access.TokenW
 			t.id, t.user_id, t.name, t.secret_hash, t.display_prefix, t.scopes,
 			t.expires_at, t.last_used_at, t.revoked_at, t.revoked_by_user_id,
 			t.created_at,
-			u.id, u.name, u.email, u.avatar_url, u.platform_role, u.roles,
+			u.id, u.name, u.email, u.avatar_url, u.platform_role, u.access_status, u.roles,
 			u.active, u.created_at, u.updated_at
 		FROM api_tokens t
 		JOIN users u ON u.id=t.user_id
@@ -93,7 +93,7 @@ func (s *AccessStore) ListAllTokens(ctx context.Context) ([]access.TokenWithUser
 			t.id, t.user_id, t.name, t.secret_hash, t.display_prefix, t.scopes,
 			t.expires_at, t.last_used_at, t.revoked_at, t.revoked_by_user_id,
 			t.created_at,
-			u.id, u.name, u.email, u.avatar_url, u.platform_role, u.roles,
+			u.id, u.name, u.email, u.avatar_url, u.platform_role, u.access_status, u.roles,
 			u.active, u.created_at, u.updated_at
 		FROM api_tokens t
 		JOIN users u ON u.id=t.user_id
@@ -200,7 +200,7 @@ func scanTokenWithUser(s scanner) (access.TokenWithUser, error) {
 		&token.ID, &token.UserID, &token.Name, &token.SecretHash,
 		&token.DisplayPrefix, &scopes, &token.ExpiresAt, &token.LastUsedAt,
 		&token.RevokedAt, &token.RevokedByUserID, &token.CreatedAt,
-		&user.ID, &user.Name, &user.Email, &user.AvatarURL, &user.PlatformRole,
+		&user.ID, &user.Name, &user.Email, &user.AvatarURL, &user.PlatformRole, &user.AccessStatus,
 		&roles, &user.Active, &user.CreatedAt, &user.UpdatedAt,
 	); err != nil {
 		return access.TokenWithUser{}, err

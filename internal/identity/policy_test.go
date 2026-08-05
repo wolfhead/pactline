@@ -61,11 +61,14 @@ func TestExplicitProviderInvalidClassifications(t *testing.T) {
 
 func TestImpersonationPolicy(t *testing.T) {
 	adminID, memberID := uuid.New(), uuid.New()
-	admin := domain.User{ID: adminID, Active: true, PlatformRole: domain.PlatformRoleAdmin}
-	member := domain.User{ID: memberID, Active: true, PlatformRole: domain.PlatformRoleMember}
+	admin := domain.User{ID: adminID, Active: true, PlatformRole: domain.PlatformRoleAdmin, AccessStatus: domain.AccessStatusApproved}
+	member := domain.User{ID: memberID, Active: true, PlatformRole: domain.PlatformRoleMember, AccessStatus: domain.AccessStatusApproved}
 	assert.True(t, CanImpersonate(admin, member))
 	assert.False(t, CanImpersonate(admin, admin))
-	assert.False(t, CanImpersonate(admin, domain.User{ID: uuid.New(), Active: true, PlatformRole: domain.PlatformRoleAdmin}))
+	assert.False(t, CanImpersonate(admin, domain.User{ID: uuid.New(), Active: true, PlatformRole: domain.PlatformRoleAdmin, AccessStatus: domain.AccessStatusApproved}))
+	member.AccessStatus = domain.AccessStatusPending
+	assert.False(t, CanImpersonate(admin, member))
+	member.AccessStatus = domain.AccessStatusApproved
 	member.Active = false
 	assert.False(t, CanImpersonate(admin, member))
 }

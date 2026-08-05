@@ -121,6 +121,9 @@ After every deployment, verify:
 - the login page loads from the test origin;
 - Lark OAuth returns to the same origin and `/api/me` identifies the expected
   account;
+- a first-time tenant Member remains on the approval page until the
+  Administrator approves them from **Users**, after which the same session can
+  enter the product;
 - an existing Project and Task can be read;
 - a reversible test Task mutation succeeds;
 - `GET /api/admin/agent/status` reports the Lark channel and worker as ready;

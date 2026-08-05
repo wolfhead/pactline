@@ -46,8 +46,8 @@ inspectable and safe to retry.
 - Teams work through project, milestone, backlog, and personal-work views.
 - Desktop is the primary high-density operating environment. Mobile web
   supports the core viewing, creation, and editing workflows.
-- Production membership is invitation-only and currently uses international
-  Lark OAuth. The external office identity and notification provider must
+- Production membership uses international Lark OAuth followed by explicit
+  Administrator approval. The external office identity provider must
   remain behind an explicit integration boundary so another provider can be
   adopted without rewriting the work domain.
 

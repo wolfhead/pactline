@@ -3,9 +3,9 @@
 ## Scope
 
 This application serves one company and one Lark tenant. It supports one
-Administrator, invitation-only Members, Lark bot delivery for invitations,
-server-owned application sessions, and read-only Administrator
-impersonation. It does not support multiple tenants, Administrator promotion,
+Administrator, Administrator-approved Members, restricted pending sessions,
+server-owned application sessions, and read-only Administrator impersonation.
+It does not support multiple tenants, Administrator promotion,
 department-based authorization, or a general notification system.
 
 ## Lark application setup
@@ -24,8 +24,13 @@ delivery as the bot. Grant and publish these user OAuth scopes:
 The bot must also have the tenant permission required by Lark's Create
 Message API to send a direct message as the application. Configure contact
 visibility so the application can find every employee the Administrator may
-invite. Grant the application-level `tenant:tenant:readonly` scope so Pactline
+admit. Grant the application-level `tenant:tenant:readonly` scope so Pactline
 can discover and bind the application's company tenant during startup.
+
+The published application's availability range must include every employee
+who may request Pactline access. Lark OAuth still enforces the single-tenant
+boundary; Pactline then keeps each new Member restricted until the
+Administrator approves the access request.
 
 Register this exact redirect URI:
 
@@ -147,25 +152,26 @@ OAuth callbacks can redirect into client-side routes.
 3. Confirm startup logs show `auth_provider=lark` and no configuration error.
 4. Visit `/login` and choose Lark login with the bootstrap account.
 5. Confirm `/api/me` reports that account as `ADMIN`.
-6. Confirm the Users and Invitations navigation entries are visible.
+6. Confirm the Users navigation entry is visible.
 
 Only the bootstrap flow may create the Administrator. Do not manually
 promote a Member in the database.
 
-## Inviting a Member
+## Approving a Member
 
-1. Open **Invitations**.
-2. Enter at least two characters of the employee's name.
-3. Verify the exact Lark identity using name, avatar, and email.
-4. Send the invitation.
-5. If delivery is `FAILED`, generate and copy a new link, then deliver it
-   through an approved channel. Generating a new link invalidates the old
-   link.
+1. Configure the published Lark application availability range to include
+   every employee who may request Pactline access.
+2. The employee opens Pactline and completes Lark OAuth. A first login creates
+   a restricted `PENDING` account and shows the approval waiting page.
+3. Open **Users**. Pending requests appear first.
+4. Verify the employee's Lark name, avatar, and email, then choose **Approve**
+   or **Reject**.
+5. Approval takes effect in the employee's existing session when they recheck
+   or refresh. Rejection keeps only the status page and logout available.
 
-Invitation links expire after seven days and can be used once. The raw token
-exists only in the URL fragment and request body; the database stores only a
-hash. Resend, copy-new-link, and revoke invalidate every outstanding OAuth
-state tied to the previous link.
+Legacy invitation links remain accepted during the compatibility period, but
+they create the same pending account and never bypass Administrator approval.
+The active frontend no longer creates new invitations.
 
 ## Sessions and employee status
 
@@ -301,7 +307,7 @@ Common categories:
 2. Roll back application binaries before rolling back schema.
 3. Do not restore `X-User-Id` or Development authentication in production.
 4. If Lark is unavailable, keep the application unavailable or read-only;
-   do not bypass tenant or invitation checks.
+   do not bypass tenant or Administrator-approval checks.
 5. Schema migrations are additive. Use a forward corrective migration
    instead of editing or dropping identity tables in place.
 
@@ -311,9 +317,11 @@ Record date, application version, Lark application version, tester, and
 pass/fail evidence without secrets:
 
 - [ ] Bootstrap Administrator
-- [ ] Directory search and exact-person selection
-- [ ] Bot direct-message delivery
-- [ ] Fragment invitation, OAuth, and Member account creation
+- [ ] First-time same-tenant OAuth creates a restricted pending Member
+- [ ] Pending and rejected Members cannot access product or Agent surfaces
+- [ ] Administrator approve, reject, and later re-approve decisions
+- [ ] Approval takes effect in the Member's existing session
+- [ ] Legacy invitation OAuth creates a pending Member without bypassing approval
 - [ ] Existing Member login
 - [ ] Refresh-token rotation
 - [ ] 15-minute active-principal revalidation

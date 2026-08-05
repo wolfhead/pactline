@@ -28,6 +28,7 @@ type userResponse struct {
 	Email        *string             `json:"email"`
 	AvatarURL    *string             `json:"avatar_url"`
 	PlatformRole domain.PlatformRole `json:"platform_role"`
+	AccessStatus domain.AccessStatus `json:"access_status"`
 	Roles        []domain.UserRole   `json:"roles"`
 	Active       bool                `json:"active"`
 	CreatedAt    time.Time           `json:"created_at"`
@@ -43,6 +44,7 @@ func userResponses(users []domain.User) []userResponse {
 			Email:        user.Email,
 			AvatarURL:    user.AvatarURL,
 			PlatformRole: user.PlatformRole,
+			AccessStatus: user.AccessStatus,
 			Roles:        user.Roles,
 			Active:       user.Active,
 			CreatedAt:    user.CreatedAt,
@@ -56,7 +58,8 @@ func userResponseFromDomain(user domain.User) userResponse {
 	return userResponse{
 		ID: user.ID, Name: user.Name, Email: user.Email, AvatarURL: user.AvatarURL,
 		PlatformRole: user.PlatformRole, Roles: user.Roles, Active: user.Active,
-		CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt,
+		AccessStatus: user.AccessStatus,
+		CreatedAt:    user.CreatedAt, UpdatedAt: user.UpdatedAt,
 	}
 }
 
