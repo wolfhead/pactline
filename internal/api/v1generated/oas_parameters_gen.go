@@ -12989,11 +12989,20 @@ func decodeUpdateTaskCommentParams(args [2]string, argsEscaped bool, r *http.Req
 
 // UploadTaskAttachmentContentParams is parameters of uploadTaskAttachmentContent operation.
 type UploadTaskAttachmentContentParams struct {
-	Number int64
-	ID     uuid.UUID
+	// Exact attachment body size in bytes.
+	ContentLength int64
+	Number        int64
+	ID            uuid.UUID
 }
 
 func unpackUploadTaskAttachmentContentParams(packed middleware.Parameters) (params UploadTaskAttachmentContentParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "Content-Length",
+			In:   "header",
+		}
+		params.ContentLength = packed[key].(int64)
+	}
 	{
 		key := middleware.ParameterKey{
 			Name: "number",
@@ -13012,6 +13021,59 @@ func unpackUploadTaskAttachmentContentParams(packed middleware.Parameters) (para
 }
 
 func decodeUploadTaskAttachmentContentParams(args [2]string, argsEscaped bool, r *http.Request) (params UploadTaskAttachmentContentParams, _ error) {
+	h := uri.NewHeaderDecoder(r.Header)
+	// Decode header: Content-Length.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Content-Length",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToInt64(val)
+				if err != nil {
+					return err
+				}
+
+				params.ContentLength = c
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if err := (validate.Int{
+					MinSet:        true,
+					Min:           1,
+					MaxSet:        true,
+					Max:           104857600,
+					MinExclusive:  false,
+					MaxExclusive:  false,
+					MultipleOfSet: false,
+					MultipleOf:    0,
+					Pattern:       nil,
+				}).Validate(int64(params.ContentLength)); err != nil {
+					return errors.Wrap(err, "int")
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Content-Length",
+			In:   "header",
+			Err:  err,
+		}
+	}
 	// Decode path: number.
 	if err := func() error {
 		param := args[0]

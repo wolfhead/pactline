@@ -144,16 +144,29 @@ func (r Renderer) taskCreated(
 	writeSummary(&body, summary)
 	fmt.Fprintf(
 		&body,
-		"**项目**：%s\n**位置**：%s\n**负责人**：%s\n**截止日期**：%s\n**状态**：%s\n\n[在 Pactline 中打开 Task](%s)\n\n---\n`Run %s`",
+		"**项目**：%s\n**位置**：%s\n**负责人**：%s\n**截止日期**：%s\n**状态**：%s\n**附件**：%s\n\n[在 Pactline 中打开 Task](%s)\n\n---\n`Run %s`",
 		inlineMarkdown(task.ProjectName),
 		inlineMarkdown(location),
 		inlineMarkdown(assignee),
 		inlineMarkdown(dueDate),
 		inlineMarkdown(task.Status),
+		inlineMarkdown(taskAttachmentSummary(task)),
 		taskURL,
 		pactagent.ShortRunReference(runID),
 	)
 	return body.String()
+}
+
+func taskAttachmentSummary(task agenttools.CreatedTask) string {
+	attached := len(task.AttachedArtifacts)
+	failed := len(task.AttachmentFailures)
+	if attached == 0 && failed == 0 {
+		return "无"
+	}
+	if failed == 0 {
+		return fmt.Sprintf("已附带 %d 个", attached)
+	}
+	return fmt.Sprintf("已附带 %d 个，%d 个未能附带", attached, failed)
 }
 
 func (r Renderer) taskDetail(

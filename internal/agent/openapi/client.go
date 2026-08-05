@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 
 	"github.com/wolfhead/pactline/internal/access"
 	generated "github.com/wolfhead/pactline/internal/api/v1generated"
@@ -86,6 +87,13 @@ func (t inProcessTransport) RoundTrip(request *http.Request) (*http.Response, er
 	recorder := httptest.NewRecorder()
 	request.RemoteAddr = "127.0.0.1:0"
 	request.Header.Set("User-Agent", "pactline-first-party-agent")
+	if encodedLength := request.Header.Get("Content-Length"); encodedLength != "" {
+		contentLength, err := strconv.ParseInt(encodedLength, 10, 64)
+		if err != nil || contentLength < 0 {
+			return nil, fmt.Errorf("Agent OpenAPI transport rejected Content-Length %q", encodedLength)
+		}
+		request.ContentLength = contentLength
+	}
 	t.handler.ServeHTTP(recorder, request)
 	response := recorder.Result()
 	response.Request = request

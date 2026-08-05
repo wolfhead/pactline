@@ -13788,6 +13788,10 @@ func (s *Server) handleUploadTaskAttachmentContentRequest(args [2]string, argsEs
 			RawBody:          rawBody,
 			Params: middleware.Parameters{
 				{
+					Name: "Content-Length",
+					In:   "header",
+				}: params.ContentLength,
+				{
 					Name: "number",
 					In:   "path",
 				}: params.Number,

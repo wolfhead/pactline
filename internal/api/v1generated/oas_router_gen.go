@@ -141,7 +141,7 @@ var (
 		"POST": "Authorization,Idempotency-Key,If-Match",
 	}
 	rn76AllowedHeaders = map[string]string{
-		"PUT": "Authorization,Content-Type",
+		"PUT": "Authorization,Content-Length,Content-Type",
 	}
 	rn47AllowedHeaders = map[string]string{
 		"DELETE": "Authorization,Idempotency-Key,If-Match",
