@@ -30,7 +30,12 @@ services:
     image: rabbitmq:4.1-alpine
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-pactline}
-      RABBITMQ_DEFAULT_PASS_FILE: /run/secrets/rabbitmq_password
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        export RABBITMQ_DEFAULT_PASS="$$(cat /run/secrets/rabbitmq_password)"
+        exec docker-entrypoint.sh rabbitmq-server
     secrets:
       - rabbitmq_password
     healthcheck:
