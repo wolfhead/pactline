@@ -187,6 +187,35 @@ func TestServiceQueuesMentionOnceAndEncryptsCommand(t *testing.T) {
 	}}, acknowledger.requests)
 }
 
+func TestServiceDoesNotStartRunForDisabledConversation(t *testing.T) {
+	now := time.Date(2026, 8, 4, 10, 0, 0, 0, time.UTC)
+	userID := uuid.New()
+	repository := &repositoryStub{}
+	cipher, err := pactagent.NewInputCipher(
+		"input-key",
+		[]byte("0123456789abcdef0123456789abcdef"),
+	)
+	require.NoError(t, err)
+	service, err := New(Config{
+		Identities: identityStub{user: domain.User{ID: userID, Name: "User", Active: true}},
+		Runs:       repository,
+		Conversations: conversationObserverStub{configuration: pactagent.ConversationConfiguration{
+			RevisionID: uuid.New(), Enabled: false,
+		}},
+		Inputs: cipher, Model: "deepseek-v4-pro", PromptVersion: "first-party-work-v12",
+		Now: func() time.Time { return now },
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, service.Accept(context.Background(), channel.IncomingMessage{
+		Provider: "lark", TenantID: "tenant", EventID: "event-disabled",
+		ConversationID: "chat-disabled", MessageID: "message-disabled",
+		SenderSubjectID: "ou_user", MessageType: "text",
+		Text: "重新启用本群 Agent", CreatedAt: now, BotMentioned: true,
+	}))
+	require.Zero(t, repository.createN)
+}
+
 func TestServiceReturnsPersistenceFailureForLarkRetry(t *testing.T) {
 	now := time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
 	userID := uuid.New()
@@ -269,17 +298,9 @@ func TestServiceRetriesAtomicRunAndInputPersistence(t *testing.T) {
 	require.Equal(t, repository.run.ID, repository.input.RunID)
 }
 
-func TestClassifyCommandRecognizesDeterministicConversationConfiguration(t *testing.T) {
-	for _, command := range []string{
-		"本群配置",
-		"查看本群配置",
-		"绑定项目 #12",
-		"将本群绑定到 数据平台",
-		"设置本群背景：这里讨论投放系统",
-		"停用本群Agent",
-	} {
-		require.Equal(t, pactagent.CommandConfiguration, ClassifyCommand(command), command)
-	}
+func TestClassifyCommandLeavesConversationConfigurationIntentToModel(t *testing.T) {
+	require.Equal(t, pactagent.CommandDirect, ClassifyCommand("查看本群配置"))
+	require.Equal(t, pactagent.CommandDirect, ClassifyCommand("设置本群默认项目到 策略与模型"))
 	require.Equal(t, pactagent.CommandDiscussion, ClassifyCommand("请根据以上讨论创建任务"))
 	require.Equal(t, pactagent.CommandDirect, ClassifyCommand("帮我创建任务"))
 }

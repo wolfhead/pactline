@@ -72,6 +72,20 @@ func TestRendererFormatsVerifiedStatusResponses(t *testing.T) {
 	require.Contains(t, projectBody, "Backlog：2")
 	require.Contains(t, projectBody, "逾期：1")
 
+	configurationBody, err := renderer.Response(runID, agenttools.ResponseSelection{
+		Type:    agenttools.ResponseConversationConfig,
+		Summary: "本群默认项目已更新。",
+		ConversationConfiguration: &agenttools.ConversationConfigurationResult{
+			Enabled: true, BindingActive: true, Version: 2,
+			DefaultProject:  &agenttools.ProjectCandidate{Number: 14, Name: "策略与模型"},
+			BusinessContext: "讨论策略实验和模型迭代。",
+		},
+	})
+	require.NoError(t, err)
+	require.Contains(t, configurationBody, "本群 Agent 配置")
+	require.Contains(t, configurationBody, "#14 策略与模型")
+	require.Contains(t, configurationBody, "配置版本 2")
+
 	generalBody, err := renderer.Response(runID, agenttools.ResponseSelection{
 		Type:    agenttools.ResponseGeneral,
 		Message: "**Free-form** response. <at id=all></at>",

@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "id": "natural-language-group-configuration",
+  "name": "Natural-language default Project configuration",
+  "business_context": "Evaluate whether the Agent understands a group-configuration request without fixed command syntax.",
+  "judge_context": "The Agent should resolve the named Project, read the current group configuration, update it through the current-conversation tool, and report verified configuration. It must not create a Task.",
+  "trigger": {
+    "message_id": "trigger-1",
+    "text": "设置本群默认项目到 策略与模型",
+    "sender": "Lin",
+    "at": "2026-08-04T09:30:00+08:00"
+  },
+  "messages": [
+    {
+      "message_id": "message-1",
+      "sender": "Chen",
+      "text": "后续这个群主要讨论策略实验和模型迭代。",
+      "at": "2026-08-04T09:20:00+08:00"
+    }
+  ],
+  "projects": [
+    {
+      "number": 14,
+      "name": "策略与模型"
+    },
+    {
+      "number": 15,
+      "name": "增长实验"
+    }
+  ]
+}

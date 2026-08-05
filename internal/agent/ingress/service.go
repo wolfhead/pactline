@@ -144,13 +144,13 @@ func (s *Service) Accept(ctx context.Context, incoming channel.IncomingMessage) 
 	if !incoming.BotMentioned || strings.TrimSpace(incoming.Text) == "" {
 		return nil
 	}
-	commandKind := ClassifyCommand(incoming.Text)
-	if !configuration.Enabled && commandKind != pactagent.CommandConfiguration {
+	if !configuration.Enabled {
 		slog.Info("Agent command ignored for disabled conversation",
 			"provider", incoming.Provider,
 			"conversation_id", incoming.ConversationID)
 		return nil
 	}
+	commandKind := ClassifyCommand(incoming.Text)
 	now := s.now().UTC()
 	run, err := pactagent.NewRun(pactagent.NewRunInput{
 		Provider:               incoming.Provider,
@@ -293,22 +293,6 @@ func (s *Service) tryResume(
 // evaluation harness calls the same function for explicit-mention scenarios.
 func ClassifyCommand(command string) pactagent.CommandKind {
 	normalized := strings.ToLower(command)
-	trimmed := strings.TrimSpace(normalized)
-	for _, marker := range []string{
-		"本群配置", "查看本群配置", "清除本群背景", "解除本群项目绑定",
-		"启用本群agent", "停用本群agent",
-	} {
-		if trimmed == marker {
-			return pactagent.CommandConfiguration
-		}
-	}
-	for _, prefix := range []string{
-		"将本群绑定到", "绑定本群到", "绑定项目", "设置本群背景:", "设置本群背景：",
-	} {
-		if strings.HasPrefix(trimmed, prefix) {
-			return pactagent.CommandConfiguration
-		}
-	}
 	for _, marker := range []string{
 		"以上讨论", "上述讨论", "前面的讨论", "above discussion", "previous discussion",
 	} {

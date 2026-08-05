@@ -24,6 +24,8 @@ boundary is replaced:
 - Project and user search use in-memory fixtures;
 - optional conversation defaults and bounded business context use the same
   serialized production input contract as a real Agent Run;
+- current-conversation configuration reads and updates use an in-memory
+  OpenAPI sandbox with the same model-visible tool contract;
 - `create_task` captures a proposed Task instead of calling `/api/v1`;
 - `respond` and `ask_clarification` capture messages without sending them; and
 - Run, checkpoint, and tool-call records remain in memory.
@@ -130,7 +132,7 @@ Add public-safe synthetic JSON under
 real conversation shape and preserve ambiguity; do not add a hidden golden
 Task merely to make a test deterministic.
 
-Every scenario must:
+Every discussion-conversion scenario must:
 
 - contain an explicit discussion-conversion trigger;
 - place all source messages before the trigger;
@@ -143,6 +145,11 @@ with a visible `default_project_number` and up to 4,000 characters of
 `business_context`. The Judge receives this configuration with the rest of the
 scenario and should assess whether it improved grounding without treating it as
 a hidden expected answer.
+
+Natural-language configuration scenarios should exercise
+`get_current_conversation_configuration` and
+`update_current_conversation_configuration`; do not encode fixed command
+phrases or bypass the model.
 
 Never commit screenshots, copied conversation text, names, account IDs,
 project names, infrastructure details, or other company information. Rewrite

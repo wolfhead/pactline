@@ -247,6 +247,15 @@ func (UnimplementedHandler) GetAgentConversation(ctx context.Context, params Get
 	return r, ht.ErrNotImplemented
 }
 
+// GetCurrentAgentConversationConfiguration implements getCurrentAgentConversationConfiguration operation.
+//
+// Get the conversation configuration bound to the authenticated Agent Run.
+//
+// GET /api/v1/agent-runs/current/conversation-configuration
+func (UnimplementedHandler) GetCurrentAgentConversationConfiguration(ctx context.Context) (r GetCurrentAgentConversationConfigurationRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetCurrentPrincipal implements getCurrentPrincipal operation.
 //
 // Get the authenticated principal.
@@ -496,6 +505,15 @@ func (UnimplementedHandler) UpdateAgentConversation(ctx context.Context, req *Ag
 //
 // PATCH /api/v1/criteria/{id}
 func (UnimplementedHandler) UpdateCriterion(ctx context.Context, req *CriterionPatch, params UpdateCriterionParams) (r UpdateCriterionRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateCurrentAgentConversationConfiguration implements updateCurrentAgentConversationConfiguration operation.
+//
+// Update the conversation configuration bound to the authenticated Agent Run.
+//
+// PATCH /api/v1/agent-runs/current/conversation-configuration
+func (UnimplementedHandler) UpdateCurrentAgentConversationConfiguration(ctx context.Context, req *AgentConversationPatch, params UpdateCurrentAgentConversationConfigurationParams) (r UpdateCurrentAgentConversationConfigurationRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

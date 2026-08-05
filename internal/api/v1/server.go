@@ -250,6 +250,7 @@ func operationRequiresIfMatch(operationID string) bool {
 		"updateLabel",
 		"updateMilestone",
 		"updateAgentConversation",
+		"updateCurrentAgentConversationConfiguration",
 		"updateProject",
 		"updateTask",
 		"updateTaskComment":

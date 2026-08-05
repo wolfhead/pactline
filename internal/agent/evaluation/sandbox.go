@@ -43,19 +43,20 @@ type ToolTrace struct {
 }
 
 type Sandbox struct {
-	mu              sync.Mutex
-	Scenario        Scenario
-	Run             pactagent.Run
-	CreatedTask     *generated.TaskCreate
-	CreatedReceipt  *generated.Task
-	contextMessages []channel.ChannelMessage
-	contextUsed     int
-	toolCalls       map[string]pactagent.ToolCall
-	toolOrder       []string
-	toolArguments   map[string]json.RawMessage
-	projects        []generated.Project
-	users           []generated.User
-	artifacts       map[string]sandboxArtifact
+	mu                        sync.Mutex
+	Scenario                  Scenario
+	Run                       pactagent.Run
+	CreatedTask               *generated.TaskCreate
+	CreatedReceipt            *generated.Task
+	contextMessages           []channel.ChannelMessage
+	contextUsed               int
+	toolCalls                 map[string]pactagent.ToolCall
+	toolOrder                 []string
+	toolArguments             map[string]json.RawMessage
+	projects                  []generated.Project
+	users                     []generated.User
+	artifacts                 map[string]sandboxArtifact
+	conversationConfiguration generated.AgentConversation
 }
 
 type sandboxArtifact struct {
@@ -88,6 +89,31 @@ func NewSandbox(scenario Scenario, run pactagent.Run) (*Sandbox, error) {
 			Name: user.Name, Active: true,
 			PlatformRole: generated.UserPlatformRoleMEMBER,
 		})
+	}
+	conversationConfiguration := generated.AgentConversation{
+		ID:         stableUUID(scenario.ID + ":conversation"),
+		Provider:   generated.AgentConversationProviderLark,
+		ExternalID: "evaluation:" + scenario.ID,
+		Enabled:    true,
+		Version:    1,
+		CanManage:  true,
+		CreatedBy:  run.InitiatingUserID,
+		UpdatedBy:  run.InitiatingUserID,
+		LastSeenAt: scenario.Trigger.At,
+		CreatedAt:  scenario.Trigger.At.Add(-time.Hour),
+		UpdatedAt:  scenario.Trigger.At,
+	}
+	if configured := scenario.ConversationConfiguration; configured != nil {
+		conversationConfiguration.BusinessContext = configured.BusinessContext
+		for _, project := range projects {
+			if project.Number == configured.DefaultProjectNumber {
+				conversationConfiguration.BindingActive = true
+				conversationConfiguration.DefaultProject = generated.NewOptProjectRef(
+					generated.ProjectRef{ID: project.ID, Number: project.Number, Name: project.Name},
+				)
+				break
+			}
+		}
 	}
 	messages := make([]channel.ChannelMessage, 0, len(scenario.Messages))
 	artifacts := make(map[string]sandboxArtifact)
@@ -129,7 +155,8 @@ func NewSandbox(scenario Scenario, run pactagent.Run) (*Sandbox, error) {
 		toolCalls:       make(map[string]pactagent.ToolCall),
 		toolArguments:   make(map[string]json.RawMessage),
 		projects:        projects, users: users,
-		artifacts: artifacts,
+		artifacts:                 artifacts,
+		conversationConfiguration: conversationConfiguration,
 	}, nil
 }
 
@@ -356,6 +383,63 @@ func (s *Sandbox) ListProjects(
 ) (generated.ListProjectsRes, error) {
 	return &generated.ProjectListHeaders{
 		Response: generated.ProjectList{Items: append([]generated.Project(nil), s.projects...)},
+	}, nil
+}
+
+func (s *Sandbox) GetCurrentAgentConversationConfiguration(
+	context.Context,
+) (generated.GetCurrentAgentConversationConfigurationRes, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return &generated.AgentConversationHeaders{
+		Etag:     generated.NewOptString(fmt.Sprintf("\"%d\"", s.conversationConfiguration.Version)),
+		Response: s.conversationConfiguration,
+	}, nil
+}
+
+func (s *Sandbox) UpdateCurrentAgentConversationConfiguration(
+	_ context.Context,
+	request *generated.AgentConversationPatch,
+	params generated.UpdateCurrentAgentConversationConfigurationParams,
+) (generated.UpdateCurrentAgentConversationConfigurationRes, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if request == nil || params.IfMatch != fmt.Sprintf("\"%d\"", s.conversationConfiguration.Version) {
+		return &generated.ProblemStatusCodeWithHeaders{StatusCode: 412}, nil
+	}
+	if value, ok := request.Enabled.Get(); ok {
+		s.conversationConfiguration.Enabled = value
+	}
+	explicitBinding, bindingSet := request.BindingActive.Get()
+	if bindingSet {
+		s.conversationConfiguration.BindingActive = explicitBinding
+	}
+	if number, ok := request.DefaultProjectNumber.Get(); ok {
+		matched := false
+		for _, project := range s.projects {
+			if project.Number == number {
+				s.conversationConfiguration.DefaultProject = generated.NewOptProjectRef(
+					generated.ProjectRef{ID: project.ID, Number: project.Number, Name: project.Name},
+				)
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return &generated.ProblemStatusCodeWithHeaders{StatusCode: 404}, nil
+		}
+		if !bindingSet {
+			s.conversationConfiguration.BindingActive = true
+		}
+	}
+	if value, ok := request.BusinessContext.Get(); ok {
+		s.conversationConfiguration.BusinessContext = value
+	}
+	s.conversationConfiguration.Version++
+	s.conversationConfiguration.UpdatedAt = s.Scenario.Trigger.At
+	return &generated.AgentConversationHeaders{
+		Etag:     generated.NewOptString(fmt.Sprintf("\"%d\"", s.conversationConfiguration.Version)),
+		Response: s.conversationConfiguration,
 	}, nil
 }
 

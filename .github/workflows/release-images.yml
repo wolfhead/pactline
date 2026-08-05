@@ -28,9 +28,19 @@ jobs:
           --health-interval 2s
           --health-timeout 3s
           --health-retries 20
+      rabbitmq:
+        image: rabbitmq:4.1-alpine
+        ports:
+          - 5673:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     env:
       CI: "true"
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/pactline_test?sslmode=disable
+      RABBITMQ_URL: amqp://guest:guest@localhost:5673/
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
