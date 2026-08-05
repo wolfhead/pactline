@@ -6,6 +6,7 @@ const ADMIN = {
   email: 'admin@example.test',
   avatar_url: null,
   platform_role: 'ADMIN',
+  access_status: 'APPROVED',
   roles: ['SPONSOR'],
   active: true,
   created_at: '2026-01-01T00:00:00Z',
@@ -42,6 +43,39 @@ test('an invitation fragment is scrubbed before the token is exchanged', async (
   await expect(page).toHaveURL(/\/login$/)
   expect(submittedToken).toBe('one-time-secret')
   expect(page.url()).not.toContain('one-time-secret')
+})
+
+test('a pending member stays on the approval page until access is granted', async ({ page }) => {
+  let approved = false
+  const pendingMember = { ...MEMBER, access_status: 'PENDING' }
+  await page.route((url) => url.pathname.startsWith('/api/'), async (route) => {
+    const url = new URL(route.request().url())
+    if (url.pathname === '/api/me') {
+      const member = approved ? MEMBER : pendingMember
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ actor: member, subject: member, impersonation: null }),
+      })
+      return
+    }
+    if (url.pathname === '/api/v1/users') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [MEMBER] }) })
+      return
+    }
+    if (url.pathname === '/api/v1/tasks' || url.pathname === '/api/v1/labels' || url.pathname === '/api/v1/projects') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [] }) })
+      return
+    }
+    await route.fulfill({ status: 404, contentType: 'application/json', body: '{"error":"not mocked"}' })
+  })
+
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: '访问申请等待审批' })).toBeVisible()
+  approved = true
+  await page.getByRole('button', { name: '重新检查状态' }).click()
+  await expect(page).toHaveURL(/\/tasks$/)
+  await expect(page.getByRole('heading', { name: '访问申请等待审批' })).toHaveCount(0)
 })
 
 test('Admin can enter and exit read-only impersonation', async ({ page }) => {
@@ -101,7 +135,7 @@ test('Admin can enter and exit read-only impersonation', async ({ page }) => {
   })
 
   await page.goto('/admin/users')
-  await expect(page.getByRole('heading', { name: '用户管理' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '用户与访问申请' })).toBeVisible()
   page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: '只读查看' }).click()
 

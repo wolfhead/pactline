@@ -34,6 +34,7 @@ func TestListActiveReturnsSeededUsers(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, active, 1, "only the primary identity remains active after consolidation")
 	require.Equal(t, userA, active[0].ID)
+	require.Equal(t, domain.AccessStatusApproved, active[0].AccessStatus)
 
 	all, err := us.ListAll(ctx)
 	require.NoError(t, err)
@@ -94,6 +95,7 @@ func TestUserStoreRoundTripsIdentityProfile(t *testing.T) {
 	require.NotNil(t, u.AvatarURL)
 	require.Equal(t, avatarURL, *u.AvatarURL)
 	require.Equal(t, domain.PlatformRoleMember, u.PlatformRole)
+	require.Equal(t, domain.AccessStatusApproved, u.AccessStatus)
 	require.Equal(t, []domain.UserRole{domain.UserRoleEngineer}, u.Roles)
 	require.True(t, u.Active)
 	require.False(t, u.CreatedAt.IsZero())

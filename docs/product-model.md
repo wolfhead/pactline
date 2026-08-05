@@ -118,7 +118,12 @@ Agent or person can identify exactly what was checked.
 
 Pactline serves one Lark tenant and has one Administrator.
 
-- Membership is invitation-only.
+- Any active principal from the configured Lark tenant may authenticate.
+- A new Member starts with `PENDING` access and receives only a restricted
+  session for viewing the approval result and logging out.
+- The Administrator may approve or reject a pending Member. A rejected Member
+  may later be approved; an approved Member is suspended through the separate
+  active flag rather than by rewriting approval history.
 - Production identity comes only from international Lark OAuth.
 - Lark principals are periodically revalidated.
 - An explicitly invalid principal is deactivated and its sessions are revoked.
@@ -131,6 +136,8 @@ are rejected.
 ## Human and Agent access
 
 Browser users authenticate with server-owned sessions and CSRF protection.
+Pending and rejected sessions cannot access work, administration, personal
+tokens, OpenAPI documents, or first-party Agent execution.
 External Agents authenticate with user-created personal scoped Bearer Tokens.
 The first-party Pactline Agent uses short-lived internal delegation credentials
 that represent the initiating user and are bound to one durable Agent Run.
@@ -148,6 +155,18 @@ Agent tools. The OpenAPI layer derives the current conversation from the Agent
 Run and enforces every authorization and version precondition; the model cannot
 select another conversation. A disabled conversation does not start an Agent
 Run and can be re-enabled only through the web UI.
+
+Conversation artifacts remain provider-owned, opaque references until the
+first-party Agent selects them. When creating a Task, the Agent may preserve up
+to five directly relevant images or files as private Task attachments. The
+server resolves and copies each selected artifact within the current Run's
+conversation and time boundary; provider resource keys are never exposed to
+the model. Artifact inspection and attachment preservation are independent: an
+artifact may be retained as source evidence even when surrounding text made
+inspection unnecessary. Decorative images, reactions, memes, avatars,
+duplicates, and unrelated history are excluded by default. One failed copy
+does not roll back the Task or other successful attachments and is reported in
+the verified creation receipt.
 
 Both use the same `/api/v1` work contract. Agent mutations additionally use
 idempotency keys and ETag preconditions where documented. Audit records preserve

@@ -320,6 +320,71 @@ func TestInvitationAcceptanceIsAtomicAndCredentialStaysSealed(t *testing.T) {
 	require.NoError(t, db.Pool.QueryRow(ctx, `SELECT token_hash FROM invitations WHERE id=$1`, invitation.ID).Scan(&storedHash))
 	require.Equal(t, tokenHash[:], storedHash)
 	require.NotEqual(t, rawToken, storedHash)
+	_, accepted, err := repository.FindExternalIdentity(ctx, key)
+	require.NoError(t, err)
+	require.Equal(t, domain.AccessStatusPending, accepted.AccessStatus)
+}
+
+func TestPendingAccessRegistrationAndApprovalAreTransactional(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	repository := store.NewIdentityStore(db)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	userID, sessionID := uuid.New(), uuid.New()
+	key := identity.PrincipalKey{
+		Provider: "lark", TenantID: "tenant-" + uuid.NewString(), SubjectID: "subject",
+	}
+	sessionHash := identity.HashSecret([]byte("pending-session-secret"))
+	csrfHash := identity.HashSecret([]byte("pending-csrf-secret"))
+	command := identity.RegisterAccessRequestCommand{
+		Principal: identity.Principal{Key: key, Name: "Pending Member", Active: true},
+		Credential: identity.OAuthCredential{
+			AccessTokenCiphertext: []byte("sealed-access"), RefreshTokenCiphertext: []byte("sealed-refresh"),
+			AccessTokenExpiresAt: now.Add(time.Hour), RefreshTokenExpiresAt: now.Add(24 * time.Hour),
+			EncryptionKeyID: "test-key",
+		},
+		UserID: userID, UserName: "Pending Member",
+		Session: identity.Session{
+			ID: sessionID, UserID: userID, SecretHash: sessionHash[:], CSRFSecretHash: csrfHash[:],
+			CreatedAt: now, LastSeenAt: now, IdleExpiresAt: now.Add(time.Hour),
+			AbsoluteExpiresAt: now.Add(2 * time.Hour),
+		},
+		Audit: auditEvent("access_requested", now), Now: now,
+	}
+	t.Cleanup(func() {
+		cleanupCtx := context.Background()
+		_, err := db.Pool.Exec(cleanupCtx, `DELETE FROM identity_audit_events WHERE subject_user_id=$1`, userID)
+		require.NoError(t, err)
+		_, err = db.Pool.Exec(cleanupCtx, `DELETE FROM sessions WHERE user_id=$1`, userID)
+		require.NoError(t, err)
+		_, err = db.Pool.Exec(cleanupCtx, `DELETE FROM external_identities WHERE user_id=$1`, userID)
+		require.NoError(t, err)
+		_, err = db.Pool.Exec(cleanupCtx, `DELETE FROM users WHERE id=$1`, userID)
+		require.NoError(t, err)
+	})
+
+	created, err := repository.RegisterAccessRequest(ctx, command)
+	require.NoError(t, err)
+	require.Equal(t, domain.AccessStatusPending, created.AccessStatus)
+	bundle, err := repository.ResolveSession(ctx, sessionID, sessionHash[:], now)
+	require.NoError(t, err)
+	require.Equal(t, domain.AccessStatusPending, bundle.User.AccessStatus)
+
+	require.NoError(t, repository.SetUserAccessStatus(
+		ctx, userID, primarySeedID, domain.AccessStatusRejected, now.Add(time.Minute), "request-reject",
+	))
+	rejected, err := store.NewUserStore(db).GetByID(ctx, userID)
+	require.NoError(t, err)
+	require.Equal(t, domain.AccessStatusRejected, rejected.AccessStatus)
+	require.NoError(t, repository.SetUserAccessStatus(
+		ctx, userID, primarySeedID, domain.AccessStatusApproved, now.Add(2*time.Minute), "request-approve",
+	))
+	approved, err := store.NewUserStore(db).GetByID(ctx, userID)
+	require.NoError(t, err)
+	require.True(t, approved.CanUseApplication())
+	require.ErrorIs(t, repository.SetUserAccessStatus(
+		ctx, userID, primarySeedID, domain.AccessStatusRejected, now.Add(3*time.Minute), "request-regress",
+	), domain.ErrConflict)
 }
 
 func TestCredentialRefreshLockedReusesConcurrentRotation(t *testing.T) {

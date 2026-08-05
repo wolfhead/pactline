@@ -68,6 +68,17 @@ func (m identityMiddleware) wrap(next http.Handler) http.Handler {
 				}
 			}
 		}
+		accessApprovalRequired := !requestIdentity.Actor.CanUseApplication()
+		approvalStatusRoute := r.Method == http.MethodGet && r.URL.Path == "/api/me"
+		logoutRoute := r.Method == http.MethodPost && r.URL.Path == "/api/auth/logout"
+		if accessApprovalRequired && !approvalStatusRoute && !logoutRoute {
+			slog.Warn("unapproved application access rejected",
+				"method", r.Method, "route", routePattern,
+				"user_id", requestIdentity.Actor.ID,
+				"access_status", requestIdentity.Actor.AccessStatus)
+			WriteJSON(w, http.StatusForbidden, ErrorBody{Error: "access approval required"})
+			return
+		}
 		adminRouteDenied := requestIdentity.IsImpersonating() &&
 			strings.HasPrefix(r.URL.Path, "/api/admin/") &&
 			!(r.Method == http.MethodDelete && routePattern == "/api/admin/impersonation")

@@ -69,8 +69,9 @@ task and project numbers in URLs, not UUIDs. Browser requests use server-owned
 application sessions; mutations require the `bb_csrf` cookie value in
 `X-CSRF-Token` and a same-origin request. Agent requests use personal Bearer
 Tokens and the OpenAPI-documented scope, idempotency, ETag, and rate-limit
-contracts. Production identity comes only from invite-bound international
-Lark OAuth; Development auth is startup-rejected in production. There is no
+contracts. Production identity comes only from international Lark OAuth;
+new tenant Members receive restricted pending sessions until the Administrator
+approves them. Development auth is startup-rejected in production. There is no
 production `X-User-Id` fallback.
 
 ### Frontend
@@ -134,8 +135,9 @@ production `X-User-Id` fallback.
   and logged; unexpected errors become logged 500s.
 - External and boundary failures must remain diagnosable without logging
   secrets or sensitive personal data.
-- The product serves one Lark tenant with one Administrator. Members are
-  invitation-only; there is no Administrator promotion or multi-tenant path.
+- The product serves one Lark tenant with one Administrator. New Members may
+  authenticate but require Administrator approval; there is no Administrator
+  promotion or multi-tenant path.
 - During impersonation, the real Administrator remains the actor and an active
   Member becomes the effective subject. The backend rejects all writes except
   ending impersonation and logout, and denies other Administrator routes.

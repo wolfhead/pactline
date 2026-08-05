@@ -46,7 +46,7 @@ func TestLarkAuthorizationStateIsOneTimeAndBootstrapRequiresVerifiedEmail(t *tes
 	require.Equal(t, 1, authenticator.exchanges)
 }
 
-func TestLarkBootstrapRejectsUnverifiedEmailGenerically(t *testing.T) {
+func TestLarkUnverifiedBootstrapEmailRegistersPendingAccessRequest(t *testing.T) {
 	now := time.Now().UTC()
 	repository := &larkServiceRepository{}
 	authenticator := &larkAuthenticator{principal: AuthenticatedPrincipal{Principal: Principal{
@@ -62,12 +62,13 @@ func TestLarkBootstrapRejectsUnverifiedEmailGenerically(t *testing.T) {
 	}))
 	_, err = service.StartAuthorization(context.Background(), AuthorizationLogin, nil)
 	require.NoError(t, err)
-	_, err = service.CompleteAuthorization(context.Background(), "state", "secret-code", "")
-	require.ErrorIs(t, err, ErrLoginDenied)
+	tokens, err := service.CompleteAuthorization(context.Background(), "state", "secret-code", "")
+	require.NoError(t, err)
+	require.NotEqual(t, uuid.Nil, tokens.SessionID)
 	require.Nil(t, repository.bootstrap)
-	require.Equal(t, "login_rejected", repository.lastAudit.EventType)
-	require.NotContains(t, err.Error(), "admin@example.test")
-	require.NotContains(t, err.Error(), "secret-code")
+	require.NotNil(t, repository.accessRequest)
+	require.Equal(t, "access_requested", repository.accessRequest.Audit.EventType)
+	require.Equal(t, "ou_admin", repository.accessRequest.Principal.Key.SubjectID)
 }
 
 func TestLarkExchangeFailureAuditsProviderRequestID(t *testing.T) {
@@ -217,8 +218,8 @@ func TestInvitationOAuthAcceptanceRequiresValidatedTokenVersion(t *testing.T) {
 
 func TestUserLifecycleAndImpersonationUseRealAdminActor(t *testing.T) {
 	now := time.Date(2026, 7, 28, 13, 0, 0, 0, time.UTC)
-	admin := domain.User{ID: uuid.New(), Active: true, PlatformRole: domain.PlatformRoleAdmin}
-	member := domain.User{ID: uuid.New(), Active: true, PlatformRole: domain.PlatformRoleMember}
+	admin := domain.User{ID: uuid.New(), Active: true, PlatformRole: domain.PlatformRoleAdmin, AccessStatus: domain.AccessStatusApproved}
+	member := domain.User{ID: uuid.New(), Active: true, PlatformRole: domain.PlatformRoleMember, AccessStatus: domain.AccessStatusApproved}
 	users := lifecycleUsers{users: map[uuid.UUID]domain.User{admin.ID: admin, member.ID: member}}
 	repository := &larkServiceRepository{}
 	service, err := NewService(repository, users, []byte("01234567890123456789012345678901"),
@@ -410,6 +411,7 @@ type larkServiceRepository struct {
 	tokenVerifications   int
 	providerFailureAudit AuditEvent
 	acceptedInvitation   *AcceptInvitationCommand
+	accessRequest        *RegisterAccessRequestCommand
 	refreshMu            sync.Mutex
 }
 
@@ -431,7 +433,18 @@ func (r *larkServiceRepository) ConsumeAuthorizationState(_ context.Context, has
 
 func (r *larkServiceRepository) BootstrapAdmin(_ context.Context, command BootstrapAdminCommand) (domain.User, error) {
 	r.bootstrap = &command
-	return domain.User{ID: command.Session.UserID, Active: true, PlatformRole: domain.PlatformRoleAdmin}, nil
+	return domain.User{ID: command.Session.UserID, Active: true, PlatformRole: domain.PlatformRoleAdmin, AccessStatus: domain.AccessStatusApproved}, nil
+}
+
+func (r *larkServiceRepository) RegisterAccessRequest(
+	_ context.Context,
+	command RegisterAccessRequestCommand,
+) (domain.User, error) {
+	r.accessRequest = &command
+	return domain.User{
+		ID: command.UserID, Name: command.UserName, Active: true,
+		PlatformRole: domain.PlatformRoleMember, AccessStatus: domain.AccessStatusPending,
+	}, nil
 }
 
 func (r *larkServiceRepository) LoginExternal(context.Context, LoginCommand) (domain.User, error) {
@@ -496,7 +509,7 @@ func (r *larkServiceRepository) AcceptInvitation(
 	r.acceptedInvitation = &command
 	return domain.User{
 		ID: command.UserID, Name: command.UserName, Email: command.UserEmail,
-		PlatformRole: domain.PlatformRoleMember, Active: true,
+		PlatformRole: domain.PlatformRoleMember, AccessStatus: domain.AccessStatusPending, Active: true,
 	}, nil
 }
 func (r *larkServiceRepository) CreateInvitation(_ context.Context, invitation Invitation, _ AuditEvent) error {
@@ -565,6 +578,16 @@ func (r *larkServiceRepository) RecordDelivery(_ context.Context, delivery Invit
 	return nil
 }
 func (r *larkServiceRepository) ReactivateUser(context.Context, uuid.UUID, uuid.UUID) error {
+	return nil
+}
+func (r *larkServiceRepository) SetUserAccessStatus(
+	context.Context,
+	uuid.UUID,
+	uuid.UUID,
+	domain.AccessStatus,
+	time.Time,
+	string,
+) error {
 	return nil
 }
 func (r *larkServiceRepository) StartImpersonation(_ context.Context, value Impersonation, _ AuditEvent) error {

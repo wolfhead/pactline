@@ -179,9 +179,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
                   <Link to="/admin/users" onClick={() => setMeOpen(false)} className="rounded-md px-3 py-2 text-sm hover:bg-surface-subtle">
                     用户管理
                   </Link>
-                  <Link to="/admin/invitations" onClick={() => setMeOpen(false)} className="rounded-md px-3 py-2 text-sm hover:bg-surface-subtle">
-                    邀请成员
-                  </Link>
                   <Link to="/admin/api-audit" onClick={() => setMeOpen(false)} className="rounded-md px-3 py-2 text-sm hover:bg-surface-subtle">
                     API 审计
                   </Link>

@@ -18,12 +18,14 @@ type UserStore struct{ db *DB }
 // NewUserStore wires a UserStore to the pool.
 func NewUserStore(db *DB) *UserStore { return &UserStore{db: db} }
 
-const userColumns = `id, name, email, avatar_url, platform_role, roles, active, created_at, updated_at`
+const userColumns = `id, name, email, avatar_url, platform_role, access_status, roles, active, created_at, updated_at`
 
-// ListActive returns every active user ordered by name.
+// ListActive returns approved active users ordered by name. Pending and
+// rejected identities are real accounts but must not appear in product
+// assignee, member, or Agent choices.
 func (s *UserStore) ListActive(ctx context.Context) ([]domain.User, error) {
 	rows, err := s.db.Pool.Query(ctx,
-		`SELECT `+userColumns+` FROM users WHERE active ORDER BY name`)
+		`SELECT `+userColumns+` FROM users WHERE active AND access_status='APPROVED' ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("query users: %w", err)
 	}
@@ -64,7 +66,9 @@ func (s *UserStore) GetByID(ctx context.Context, id uuid.UUID) (domain.User, err
 // ListActive.
 func (s *UserStore) ListAll(ctx context.Context) ([]domain.User, error) {
 	rows, err := s.db.Pool.Query(ctx,
-		`SELECT `+userColumns+` FROM users ORDER BY name`)
+		`SELECT `+userColumns+` FROM users
+		 ORDER BY CASE access_status WHEN 'PENDING' THEN 0 WHEN 'REJECTED' THEN 1 ELSE 2 END,
+		          created_at, name`)
 	if err != nil {
 		return nil, fmt.Errorf("query users: %w", err)
 	}
@@ -112,6 +116,7 @@ func scanUser(s scanner) (domain.User, error) {
 		&u.Email,
 		&u.AvatarURL,
 		&u.PlatformRole,
+		&u.AccessStatus,
 		&roles,
 		&u.Active,
 		&u.CreatedAt,

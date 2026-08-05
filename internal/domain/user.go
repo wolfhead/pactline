@@ -26,6 +26,17 @@ const (
 	PlatformRoleMember PlatformRole = "MEMBER"
 )
 
+// AccessStatus records whether an authenticated tenant member may use the
+// application. It is independent from Active, which continues to represent
+// provider validity and administrator suspension.
+type AccessStatus string
+
+const (
+	AccessStatusPending  AccessStatus = "PENDING"
+	AccessStatusApproved AccessStatus = "APPROVED"
+	AccessStatusRejected AccessStatus = "REJECTED"
+)
+
 // User is a member of the team.
 type User struct {
 	ID           uuid.UUID
@@ -33,10 +44,28 @@ type User struct {
 	Email        *string
 	AvatarURL    *string
 	PlatformRole PlatformRole
+	AccessStatus AccessStatus
 	Roles        []UserRole
 	Active       bool
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
+}
+
+// CanUseApplication reports whether the account may cross the product access
+// boundary. Provider validity remains a separate prerequisite.
+func (u User) CanUseApplication() bool {
+	return u.Active && u.AccessStatus == AccessStatusApproved
+}
+
+// CanChangeAccessStatus protects approval as the terminal admission decision.
+// Suspension after approval uses Active rather than rewriting approval history.
+func CanChangeAccessStatus(from, to AccessStatus) bool {
+	if from == to {
+		return true
+	}
+	return (from == AccessStatusPending &&
+		(to == AccessStatusApproved || to == AccessStatusRejected)) ||
+		(from == AccessStatusRejected && to == AccessStatusApproved)
 }
 
 // HasRole reports whether the user carries the given role.

@@ -202,21 +202,33 @@ func (h *adminIdentityHandler) updateUser(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var request struct {
-		Active *bool `json:"active"`
+		Active       *bool                `json:"active"`
+		AccessStatus *domain.AccessStatus `json:"access_status"`
 	}
 	if !decodeStrictBody(w, r, &request) {
 		return
 	}
-	if request.Active == nil {
-		WriteJSON(w, http.StatusBadRequest, ErrorBody{Error: "active is required"})
+	if (request.Active == nil) == (request.AccessStatus == nil) {
+		WriteJSON(w, http.StatusBadRequest, ErrorBody{Error: "exactly one user state change is required"})
 		return
 	}
-	if err := h.service.SetUserActive(r.Context(), current.Actor, id, *request.Active); err != nil {
+	if request.AccessStatus != nil {
+		err = h.service.SetUserAccessStatus(
+			r.Context(), current.Actor, id, *request.AccessStatus, requestID(r),
+		)
+	} else {
+		err = h.service.SetUserActive(r.Context(), current.Actor, id, *request.Active)
+	}
+	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrNotFound):
 			WriteJSON(w, http.StatusNotFound, ErrorBody{Error: "user not found"})
-		case errors.Is(err, domain.ErrForbidden):
-			WriteJSON(w, http.StatusForbidden, ErrorBody{Error: "administrator cannot be deactivated"})
+		case errors.Is(err, domain.ErrForbidden), errors.Is(err, identity.ErrAdminRequired):
+			WriteJSON(w, http.StatusForbidden, ErrorBody{Error: "administrator cannot be changed"})
+		case errors.Is(err, domain.ErrInvalidInput):
+			WriteJSON(w, http.StatusBadRequest, ErrorBody{Error: "invalid access status"})
+		case errors.Is(err, domain.ErrConflict):
+			WriteJSON(w, http.StatusConflict, ErrorBody{Error: "access decision cannot be changed"})
 		default:
 			WriteJSON(w, http.StatusInternalServerError, ErrorBody{Error: "failed to update user"})
 		}

@@ -182,6 +182,71 @@ func TestMeReturnsActorSubjectAndNullableProfileFields(t *testing.T) {
 	require.Nil(t, body.Impersonation)
 }
 
+func TestPendingMemberSessionIsRestrictedUntilAdministratorApproval(t *testing.T) {
+	handler, db := newTaskTestServer(t)
+	ctx := context.Background()
+	adminID, memberID := uuid.MustParse(userA), uuid.MustParse(userB)
+	type originalUserState struct {
+		Role         domain.PlatformRole
+		AccessStatus domain.AccessStatus
+		Active       bool
+	}
+	loadState := func(id uuid.UUID) originalUserState {
+		var state originalUserState
+		require.NoError(t, db.Pool.QueryRow(ctx, `
+			SELECT platform_role, access_status, active FROM users WHERE id=$1`, id).
+			Scan(&state.Role, &state.AccessStatus, &state.Active))
+		return state
+	}
+	adminOriginal, memberOriginal := loadState(adminID), loadState(memberID)
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE users SET platform_role='ADMIN', access_status='APPROVED', active=true WHERE id=$1`, adminID)
+	require.NoError(t, err)
+	_, err = db.Pool.Exec(ctx, `
+		UPDATE users SET platform_role='MEMBER', access_status='PENDING', active=true WHERE id=$1`, memberID)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, cleanupErr := db.Pool.Exec(context.Background(), `
+			UPDATE users SET platform_role=$2, access_status=$3, active=$4 WHERE id=$1`,
+			adminID, adminOriginal.Role, adminOriginal.AccessStatus, adminOriginal.Active)
+		require.NoError(t, cleanupErr)
+		_, cleanupErr = db.Pool.Exec(context.Background(), `
+			UPDATE users SET platform_role=$2, access_status=$3, active=$4 WHERE id=$1`,
+			memberID, memberOriginal.Role, memberOriginal.AccessStatus, memberOriginal.Active)
+		require.NoError(t, cleanupErr)
+	})
+
+	memberCookies, memberCSRF := developmentLogin(t, handler, memberID.String())
+	meRequest := authenticatedHTTPTestRequest(http.MethodGet, "/api/me", nil, memberCookies, memberCSRF)
+	meResponse := httptest.NewRecorder()
+	handler.ServeHTTP(meResponse, meRequest)
+	require.Equal(t, http.StatusOK, meResponse.Code, meResponse.Body.String())
+	require.Contains(t, meResponse.Body.String(), `"access_status":"PENDING"`)
+
+	blockedRequest := authenticatedHTTPTestRequest(http.MethodGet, "/api/v1/users", nil, memberCookies, memberCSRF)
+	blockedResponse := httptest.NewRecorder()
+	handler.ServeHTTP(blockedResponse, blockedRequest)
+	require.Equal(t, http.StatusForbidden, blockedResponse.Code, blockedResponse.Body.String())
+	require.Contains(t, blockedResponse.Body.String(), "access approval required")
+
+	adminCookies, adminCSRF := developmentLogin(t, handler, adminID.String())
+	approveRequest := authenticatedHTTPTestRequest(
+		http.MethodPatch,
+		"/api/admin/users/"+memberID.String(),
+		[]byte(`{"access_status":"APPROVED"}`),
+		adminCookies,
+		adminCSRF,
+	)
+	approveResponse := httptest.NewRecorder()
+	handler.ServeHTTP(approveResponse, approveRequest)
+	require.Equal(t, http.StatusNoContent, approveResponse.Code, approveResponse.Body.String())
+
+	allowedRequest := authenticatedHTTPTestRequest(http.MethodGet, "/api/v1/users", nil, memberCookies, memberCSRF)
+	allowedResponse := httptest.NewRecorder()
+	handler.ServeHTTP(allowedResponse, allowedRequest)
+	require.Equal(t, http.StatusOK, allowedResponse.Code, allowedResponse.Body.String())
+}
+
 func TestMePropagatesImpersonationActorAndSubject(t *testing.T) {
 	handler, db := newTaskTestServer(t)
 	ctx := context.Background()

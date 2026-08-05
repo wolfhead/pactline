@@ -220,3 +220,15 @@ type LoginCommand struct {
 	Audit      AuditEvent
 	Now        time.Time
 }
+
+type RegisterAccessRequestCommand struct {
+	Principal     Principal
+	Credential    OAuthCredential
+	UserID        uuid.UUID
+	UserName      string
+	UserEmail     *string
+	UserAvatarURL *string
+	Session       Session
+	Audit         AuditEvent
+	Now           time.Time
+}

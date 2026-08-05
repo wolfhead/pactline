@@ -115,7 +115,7 @@ func (s *Service) Accept(ctx context.Context, incoming channel.IncomingMessage) 
 		Provider: incoming.Provider, TenantID: incoming.TenantID,
 		SubjectID: incoming.SenderSubjectID,
 	})
-	if errors.Is(err, domain.ErrNotFound) || (err == nil && !user.Active) {
+	if errors.Is(err, domain.ErrNotFound) || (err == nil && !user.CanUseApplication()) {
 		slog.Warn("Agent message sender rejected",
 			"provider", incoming.Provider,
 			"tenant_id", incoming.TenantID,

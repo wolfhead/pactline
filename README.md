@@ -31,8 +31,8 @@ acceptance criteria.
 - Tasks support private attachments and threaded comments with structured
   Project-member mentions. Reliable notification intents flow through a
   PostgreSQL outbox and RabbitMQ without coupling comments to one IM provider.
-- Production identity is invitation-only, single-tenant Lark OAuth with one
-  Administrator.
+- Production identity uses single-tenant Lark OAuth with one Administrator;
+  new Members require Administrator approval before accessing the product.
 - Administrative impersonation is read-only and keeps the Administrator as the
   audited actor.
 
