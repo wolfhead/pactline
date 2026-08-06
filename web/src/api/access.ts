@@ -45,6 +45,58 @@ export interface APIAccessPage {
   next_cursor?: string
 }
 
+export type LarkAPIOutcome =
+  | 'succeeded'
+  | 'rejected'
+  | 'rate_limited'
+  | 'unavailable'
+  | 'cancelled'
+  | 'contract_error'
+
+export interface LarkAPIAuditEvent {
+  id: string
+  occurred_at: string
+  operation: string
+  category: string
+  method: string
+  route_pattern: string
+  credential_kind: 'none' | 'app' | 'tenant' | 'user'
+  outcome: LarkAPIOutcome
+  http_status?: number
+  provider_code?: number
+  provider_request_id?: string
+  error_category?: string
+  duration_ms: number
+  request_bytes: number
+  response_bytes: number
+  request_id?: string
+  actor_user_id?: string
+  subject_user_id?: string
+  agent_run_id?: string
+  application_event_id?: string
+}
+
+export interface LarkAPIAuditPage {
+  items: LarkAPIAuditEvent[]
+  next_cursor?: string
+}
+
+export interface LarkAPIAuditFilters {
+  operation?: string
+  category?: string
+  outcome?: LarkAPIOutcome
+  status?: number
+  providerRequestID?: string
+  requestID?: string
+  actorUserID?: string
+  agentRunID?: string
+  eventID?: string
+  from?: string
+  to?: string
+  cursor?: string
+  pageSize?: number
+}
+
 export interface AdminAPIToken {
   token: APIToken
   user: User
@@ -94,6 +146,26 @@ export function revokeAdminAPIToken(id: string): Promise<void> {
 
 export function listAdminAPIActivity(filters: APIAccessFilters = {}): Promise<APIAccessPage> {
   return apiGet(`/api/admin/api-activity?${accessQuery(filters)}`)
+}
+
+export function listAdminLarkAPIActivity(
+  filters: LarkAPIAuditFilters = {},
+): Promise<LarkAPIAuditPage> {
+  const query = new URLSearchParams()
+  if (filters.operation) query.set('operation', filters.operation)
+  if (filters.category) query.set('category', filters.category)
+  if (filters.outcome) query.set('outcome', filters.outcome)
+  if (filters.status !== undefined) query.set('status', String(filters.status))
+  if (filters.providerRequestID) query.set('provider_request_id', filters.providerRequestID)
+  if (filters.requestID) query.set('request_id', filters.requestID)
+  if (filters.actorUserID) query.set('actor_user_id', filters.actorUserID)
+  if (filters.agentRunID) query.set('agent_run_id', filters.agentRunID)
+  if (filters.eventID) query.set('event_id', filters.eventID)
+  if (filters.from) query.set('from', filters.from)
+  if (filters.to) query.set('to', filters.to)
+  if (filters.cursor) query.set('cursor', filters.cursor)
+  query.set('page_size', String(filters.pageSize ?? 50))
+  return apiGet(`/api/admin/lark-api-activity?${query.toString()}`)
 }
 
 function accessQuery(filters: APIAccessFilters): string {

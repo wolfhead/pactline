@@ -15,6 +15,7 @@ type AuthSurface struct {
 	Tokens        *access.Service
 	Delegates     *access.DelegateService
 	AccessAudit   accessAuditStore
+	LarkAudit     larkAuditReader
 	Idempotency   idempotencyRepository
 	Development   developmentAuthenticator
 	LarkEnabled   bool
@@ -73,10 +74,12 @@ func NewRouter(
 	protected.HandleFunc("GET /api/account/api-activity", accountAccess.activity)
 	adminAccess := &adminAccessHandler{
 		tokens: options.Auth.Tokens, audit: options.Auth.AccessAudit,
+		lark: options.Auth.LarkAudit,
 	}
 	protected.HandleFunc("GET /api/admin/api-tokens", adminAccess.listTokens)
 	protected.HandleFunc("DELETE /api/admin/api-tokens/{id}", adminAccess.revokeToken)
 	protected.HandleFunc("GET /api/admin/api-activity", adminAccess.activity)
+	protected.HandleFunc("GET /api/admin/lark-api-activity", adminAccess.larkActivity)
 	if options.AgentStatus != nil {
 		agentStatus := &agentStatusHandler{status: options.AgentStatus}
 		protected.HandleFunc("GET /api/admin/agent/status", agentStatus.get)

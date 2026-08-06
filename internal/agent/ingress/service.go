@@ -13,6 +13,7 @@ import (
 	"github.com/wolfhead/pactline/internal/agent/channel"
 	"github.com/wolfhead/pactline/internal/domain"
 	"github.com/wolfhead/pactline/internal/identity"
+	"github.com/wolfhead/pactline/internal/larkaudit"
 
 	"github.com/google/uuid"
 )
@@ -210,6 +211,9 @@ func (s *Service) acknowledge(
 ) {
 	ctx, cancel := context.WithTimeout(parent, acknowledgementTimeout)
 	defer cancel()
+	ctx = larkaudit.WithCorrelation(ctx, larkaudit.Correlation{
+		AgentRunID: &run.ID, SubjectUserID: &run.InitiatingUserID,
+	})
 	err := acknowledger.Acknowledge(ctx, channel.AcknowledgeRequest{
 		TenantID:        run.TenantID,
 		TargetMessageID: run.TriggerMessageID,

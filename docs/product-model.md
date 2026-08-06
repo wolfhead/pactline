@@ -224,6 +224,16 @@ outbox, RabbitMQ, retry, and Lark DM path as real notifications and always uses
 a fixed diagnostic card. Enqueueing confirms only that the event entered the
 delivery pipeline; receipt in Lark remains the end-to-end proof.
 
+Every outbound Lark HTTP call produces a separate transient audit record. It
+captures a stable operation and route template, result classification, HTTP
+and provider codes, provider request ID, duration, byte counts, credential
+kind, and available Pactline request, user, Agent Run, or application-event
+correlation. It never stores credentials, request or response bodies, message
+content, search queries, provider identity keys, concrete resource URLs, or
+attachment names. Audit persistence failure is diagnosed but does not turn a
+completed provider operation into a retryable failure. Lark API audit records
+are visible only to the Administrator and expire after 90 days.
+
 ## Legacy context
 
 The bounty and credits mechanism under `internal/legacy` is a separate bounded

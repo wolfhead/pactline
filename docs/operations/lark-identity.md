@@ -293,6 +293,17 @@ activity by user, token, method, route, status, request ID, and a time range of
 at most 90 days. Use the request ID to correlate the UI, structured logs,
 access audit, product activity, and business audit without exposing secrets.
 
+The same Administrator screen has a separate Lark API view for outbound
+provider calls. Each real HTTP attempt records only its operation, safe route
+template, credential kind, outcome, status and provider codes, byte counts,
+duration, provider request ID, and available Pactline correlation IDs. JSON
+bodies, downloaded file contents, tokens, OAuth codes, search terms, provider
+user/chat/message identifiers, concrete URLs, and filenames are excluded.
+Lark audit writes use a bounded context independent from the caller's
+cancellation; a failed audit write is logged but never changes the provider
+call result. These records use the same 90-day transient retention policy as
+API access audit.
+
 ## Diagnostics
 
 Search structured logs by request ID, session ID, actor user ID, invitation

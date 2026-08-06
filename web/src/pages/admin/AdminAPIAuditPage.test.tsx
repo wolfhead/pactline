@@ -53,6 +53,24 @@ const EVENT = {
   response_body: 'response-body-must-never-render',
 } as unknown as accessAPI.APIAccessEvent
 
+const LARK_EVENT: accessAPI.LarkAPIAuditEvent = {
+  id: 'lark-event-1',
+  occurred_at: '2026-08-06T08:00:00Z',
+  operation: 'send_notification',
+  category: 'notification',
+  method: 'POST',
+  route_pattern: '/open-apis/im/v1/messages',
+  credential_kind: 'tenant',
+  outcome: 'succeeded',
+  http_status: 200,
+  provider_code: 0,
+  provider_request_id: 'provider-log-1',
+  duration_ms: 18,
+  request_bytes: 120,
+  response_bytes: 48,
+  agent_run_id: 'run-1',
+}
+
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
@@ -65,6 +83,7 @@ beforeEach(() => {
     items: [EVENT],
     next_cursor: filters?.cursor ? undefined : 'next-page',
   }))
+  vi.mocked(accessAPI.listAdminLarkAPIActivity).mockResolvedValue({ items: [LARK_EVENT] })
   vi.mocked(accessAPI.revokeAdminAPIToken).mockResolvedValue()
 })
 
@@ -113,5 +132,24 @@ describe('AdminAPIAuditPage', () => {
 
     await waitFor(() => expect(accessAPI.revokeAdminAPIToken).toHaveBeenCalledWith(TOKEN.id))
     expect(document.body.textContent).not.toContain('secret')
+  })
+
+  it('shows separately filtered Lark API calls without payloads or credentials', async () => {
+    render(<AdminAPIAuditPage />)
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Lark API' }))
+    await screen.findByText('provider-log-1')
+    fireEvent.change(screen.getByLabelText('操作'), { target: { value: 'send_notification' } })
+    fireEvent.change(screen.getByLabelText('结果'), { target: { value: 'succeeded' } })
+    fireEvent.click(screen.getByRole('button', { name: '筛选' }))
+
+    await waitFor(() => expect(accessAPI.listAdminLarkAPIActivity).toHaveBeenCalledWith({
+      operation: 'send_notification',
+      outcome: 'succeeded',
+      cursor: undefined,
+      pageSize: 50,
+    }))
+    expect(document.body.textContent).not.toContain('private message')
+    expect(document.body.textContent).not.toContain('access token')
   })
 })

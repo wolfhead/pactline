@@ -9,6 +9,7 @@ import (
 
 	"github.com/wolfhead/pactline/internal/events"
 	"github.com/wolfhead/pactline/internal/identity"
+	"github.com/wolfhead/pactline/internal/larkaudit"
 
 	"github.com/google/uuid"
 )
@@ -38,6 +39,9 @@ func (handler Handler) Handle(ctx context.Context, event events.Event) error {
 	if recipient.Key.Provider != "lark" {
 		return fmt.Errorf("unsupported notification recipient provider")
 	}
+	ctx = larkaudit.WithCorrelation(ctx, larkaudit.Correlation{
+		SubjectUserID: &event.RecipientID, ApplicationEventID: &event.ID,
+	})
 	if _, err := handler.Sender.SendCard(ctx, recipient.Key, card, event.ID.String()); err != nil {
 		return fmt.Errorf("send notification: %w", err)
 	}

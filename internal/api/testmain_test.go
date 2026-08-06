@@ -136,7 +136,8 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 		Auth: api.AuthSurface{
 			Sessions: identityService, Tokens: tokenService,
 			Delegates:   delegateService,
-			AccessAudit: accessAuditStore, Idempotency: store.NewIdempotencyStore(db),
+			AccessAudit: accessAuditStore, LarkAudit: accessAuditStore,
+			Idempotency: store.NewIdempotencyStore(db),
 			Development: devauth.New(users, identityService), AppBaseURL: baseURL,
 		},
 		V1:      v1Handler,

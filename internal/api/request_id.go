@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"regexp"
 
+	"github.com/wolfhead/pactline/internal/larkaudit"
+
 	"github.com/google/uuid"
 )
 
@@ -16,6 +18,8 @@ func RequestIDMiddleware(next http.Handler) http.Handler {
 			accepted = uuid.NewString()
 		}
 		w.Header().Set("X-Request-ID", accepted)
-		next.ServeHTTP(w, r.WithContext(withRequestID(r.Context(), accepted)))
+		ctx := withRequestID(r.Context(), accepted)
+		ctx = larkaudit.WithCorrelation(ctx, larkaudit.Correlation{RequestID: accepted})
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

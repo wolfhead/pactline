@@ -22,6 +22,7 @@ import (
 	"github.com/wolfhead/pactline/internal/agent/reply"
 	agenttools "github.com/wolfhead/pactline/internal/agent/tools"
 	generated "github.com/wolfhead/pactline/internal/api/v1generated"
+	"github.com/wolfhead/pactline/internal/larkaudit"
 
 	"github.com/cloudwego/eino/adk"
 	"github.com/google/uuid"
@@ -191,6 +192,9 @@ func (w *Worker) executeRun(parent context.Context, workerID string, run pactage
 	startedAt := time.Now()
 	ctx, cancel := context.WithTimeout(parent, w.config.ExecutionTimeout)
 	defer cancel()
+	ctx = larkaudit.WithCorrelation(ctx, larkaudit.Correlation{
+		AgentRunID: &run.ID, SubjectUserID: &run.InitiatingUserID,
+	})
 	leaseLost := make(chan error, 1)
 	go w.renewLease(ctx, cancel, workerID, run.ID, leaseLost)
 
@@ -921,6 +925,9 @@ func (w *Worker) deliverOutbox(
 		w.failOutbox(ctx, workerID, message, "adapter_missing")
 		return
 	}
+	ctx = larkaudit.WithCorrelation(ctx, larkaudit.Correlation{
+		AgentRunID: &run.ID, SubjectUserID: &run.InitiatingUserID,
+	})
 	providerID, err := adapter.Reply(ctx, channel.ReplyRequest{
 		TenantID:        run.TenantID,
 		ConversationID:  run.ConversationID,

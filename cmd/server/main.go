@@ -162,6 +162,7 @@ func main() {
 			AppID: cfg.LarkAppID, AppSecret: cfg.LarkAppSecret,
 			Cipher: cipher, EncryptionKeyID: cfg.TokenEncryptionKeyID,
 			RedirectURI: cfg.LarkRedirectURI.String(),
+			AuditWriter: accessAuditStore,
 		})
 		if clientErr != nil {
 			slog.Error("configure Lark client", "error", clientErr)
@@ -320,6 +321,7 @@ func main() {
 			Sessions: identityService, Tokens: tokenService,
 			Delegates:   delegateService,
 			AccessAudit: accessAuditStore,
+			LarkAudit:   accessAuditStore,
 			Idempotency: idempotencyStore,
 			Development: developmentAuth, AppBaseURL: cfg.AppBaseURL,
 			LarkEnabled:   cfg.AuthProvider == AuthProviderLark,

@@ -1,13 +1,10 @@
 package lark
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -16,6 +13,7 @@ import (
 	"time"
 
 	"github.com/wolfhead/pactline/internal/identity"
+	"github.com/wolfhead/pactline/internal/larkaudit"
 )
 
 const (
@@ -34,6 +32,7 @@ type Config struct {
 	Cipher           *identity.CredentialCipher
 	EncryptionKeyID  string
 	HTTPClient       *http.Client
+	AuditWriter      larkaudit.Writer
 }
 
 type Client struct {
@@ -43,6 +42,7 @@ type Client struct {
 	cipher                      *identity.CredentialCipher
 	encryptionKeyID             string
 	httpClient                  *http.Client
+	transport                   Transport
 	now                         func() time.Time
 	tenantMu                    sync.RWMutex
 	botMu                       sync.RWMutex
@@ -79,7 +79,7 @@ func NewClient(config Config) (*Client, error) {
 		}
 		config.HTTPClient = &http.Client{Transport: transport, Timeout: defaultRequestTimeout}
 	}
-	return &Client{
+	client := &Client{
 		appID: config.AppID, appSecret: config.AppSecret, tenantKey: config.TenantKey,
 		baseURL: strings.TrimRight(config.BaseURL, "/"), authorizationURL: config.AuthorizationURL,
 		redirectURI: config.RedirectURI,
@@ -88,7 +88,10 @@ func NewClient(config Config) (*Client, error) {
 		now:               func() time.Time { return time.Now().UTC() },
 		conversationNames: make(map[string]conversationNameCacheEntry),
 		artifacts:         make(map[string]registeredArtifact),
-	}, nil
+	}
+	baseTransport := httpTransport{baseURL: client.baseURL, client: client.httpClient}
+	client.transport = newAuditedTransport(baseTransport, config.AuditWriter)
+	return client, nil
 }
 
 func (c *Client) InitializeTenant(ctx context.Context) (string, error) {
@@ -457,46 +460,11 @@ func (c *Client) sealTokens(tokens tokenResponse) (identity.OAuthCredential, err
 }
 
 func (c *Client) doJSON(ctx context.Context, operation, method, path, token string, input, output any) (string, error) {
-	var body io.Reader
-	if input != nil {
-		encoded, err := json.Marshal(input)
-		if err != nil {
-			return "", providerError(operation, identity.ProviderContract, "", err)
-		}
-		body = bytes.NewReader(encoded)
-	}
-	request, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
-	if err != nil {
-		return "", providerError(operation, identity.ProviderContract, "", err)
-	}
-	request.Header.Set("Accept", "application/json")
-	if input != nil {
-		request.Header.Set("Content-Type", "application/json")
-	}
-	if token != "" {
-		request.Header.Set("Authorization", "Bearer "+token)
-	}
-	response, err := c.httpClient.Do(request)
-	if err != nil {
-		slog.Warn("Lark request failed", "operation", operation, "error_category", identity.ProviderUnavailable)
-		return "", providerError(operation, identity.ProviderUnavailable, "", err)
-	}
-	defer response.Body.Close()
-	requestID := response.Header.Get("X-Tt-Logid")
-	if response.StatusCode == http.StatusTooManyRequests {
-		return requestID, providerError(operation, identity.ProviderRateLimited, requestID, errors.New("provider rate limited"))
-	}
-	if response.StatusCode >= 500 {
-		return requestID, providerError(operation, identity.ProviderUnavailable, requestID, errors.New("provider unavailable"))
-	}
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return requestID, providerError(operation, identity.ProviderUnauthorized, requestID, fmt.Errorf("provider HTTP status %d", response.StatusCode))
-	}
-	decoder := json.NewDecoder(io.LimitReader(response.Body, 2<<20))
-	if err := decoder.Decode(output); err != nil {
-		return requestID, providerError(operation, identity.ProviderContract, requestID, err)
-	}
-	return requestID, nil
+	result, err := c.transport.DoJSON(ctx, JSONCall{
+		Descriptor: descriptorFor(operation, method), Path: path, Token: token,
+		Input: input, Output: output,
+	})
+	return result.ProviderRequestID, err
 }
 
 func validateTokens(tokens tokenResponse) error {

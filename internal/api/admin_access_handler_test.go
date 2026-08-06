@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/wolfhead/pactline/internal/access"
+	"github.com/wolfhead/pactline/internal/larkaudit"
 	"github.com/wolfhead/pactline/internal/store"
 
 	"github.com/google/uuid"
@@ -23,6 +24,11 @@ type adminTokenListJSON struct {
 type auditPageJSON struct {
 	Items      []access.RequestAuditEvent `json:"items"`
 	NextCursor string                     `json:"next_cursor"`
+}
+
+type larkAuditPageJSON struct {
+	Items      []larkaudit.Event `json:"items"`
+	NextCursor string            `json:"next_cursor"`
 }
 
 func TestAdminAccessCanListAndRevokeButCannotCreateSecrets(t *testing.T) {
@@ -113,6 +119,45 @@ func TestAccessAuditQueriesForceAccountOwnerAndSupportAdminFiltersAndCursor(t *t
 	decodeJSON(t, adminFiltered, &adminPage)
 	require.Len(t, adminPage.Items, 1)
 	require.Equal(t, userCID, *adminPage.Items[0].UserID)
+}
+
+func TestLarkAPIAuditIsAdministratorOnlyAndSupportsSafeFilters(t *testing.T) {
+	handler, db := newTaskTestServer(t)
+	setTestAdmin(t, db, uuid.MustParse(userA))
+	repository := store.NewAccessAuditStore(db)
+	now := time.Date(2040, 8, 6, 8, 0, 0, 0, time.UTC)
+	status, code := http.StatusOK, 0
+	event := larkaudit.Event{
+		ID: uuid.New(), OccurredAt: now, Operation: "send_notification",
+		Category: "notification", Method: http.MethodPost,
+		RoutePattern:   "/open-apis/im/v1/messages",
+		CredentialKind: string(larkaudit.CredentialTenant),
+		Outcome:        larkaudit.OutcomeSucceeded, HTTPStatus: &status,
+		ProviderCode: &code, ProviderRequestID: "lark-log-1",
+		DurationMS: 12, RequestBytes: 20, ResponseBytes: 30,
+	}
+	require.NoError(t, repository.RecordLarkAPIAudit(context.Background(), event))
+	t.Cleanup(func() {
+		_, err := db.Pool.Exec(context.Background(),
+			`DELETE FROM lark_api_audit_events WHERE id=$1`, event.ID)
+		require.NoError(t, err)
+	})
+
+	denied := do(t, handler, http.MethodGet,
+		"/api/admin/lark-api-activity", userB, nil)
+	require.Equal(t, http.StatusForbidden, denied.Code)
+
+	window := "&from=" + url.QueryEscape(now.Add(-time.Minute).Format(time.RFC3339)) +
+		"&to=" + url.QueryEscape(now.Add(time.Minute).Format(time.RFC3339))
+	response := do(t, handler, http.MethodGet,
+		"/api/admin/lark-api-activity?operation=send_notification&outcome=succeeded"+window,
+		userA, nil)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	var page larkAuditPageJSON
+	decodeJSON(t, response, &page)
+	require.Len(t, page.Items, 1)
+	require.Equal(t, "lark-log-1", page.Items[0].ProviderRequestID)
+	require.NotContains(t, response.Body.String(), "Authorization")
 }
 
 func setTestAdmin(t *testing.T, db *store.DB, userID uuid.UUID) {
