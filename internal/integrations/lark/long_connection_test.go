@@ -92,6 +92,7 @@ func TestLongConnectionAcceptsMockLarkMessageWithoutRunningModelInline(t *testin
 	require.NoError(t, connection.handleMessage(context.Background(), &event))
 	require.Equal(t, "event-1", consumer.message.EventID)
 	require.Equal(t, "create a Task", consumer.message.Text)
+	require.Equal(t, "Project Alpha", consumer.message.ConversationName)
 	require.True(t, consumer.message.BotMentioned)
 
 	consumer.err = errors.New("database unavailable")

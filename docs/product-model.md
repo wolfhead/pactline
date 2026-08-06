@@ -209,11 +209,14 @@ target author; an explicit mention of the same person wins over the implicit
 reply notification. Self-notifications are omitted, and edits notify only
 newly added mentions.
 
-Comment notification intents are committed atomically with the comment through
-a PostgreSQL outbox. A confirmed publisher relays them to durable RabbitMQ
-topic/retry/dead-letter topology. Consumers are idempotent by event ID. The
-initial consumer intentionally acknowledges without external delivery; IM and
-inbox delivery are later consumers of the same event contract.
+Application events use one typed contract and are committed atomically with
+the state change through a PostgreSQL outbox. A confirmed publisher relays
+them to durable RabbitMQ topic/retry/dead-letter topology, where consumers bind
+by event type and remain idempotent by event ID. Comment mention and reply
+events currently use a no-op consumer. Access requests send the Administrator
+a fixed Lark DM card linking to the approval page; approval sends the applicant
+a fixed Lark DM card linking to Pactline. A future inbox is another consumer of
+the same events rather than a second event-production path.
 
 ## Legacy context
 

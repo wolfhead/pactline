@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/wolfhead/pactline/internal/domain"
+	"github.com/wolfhead/pactline/internal/events"
 	"github.com/wolfhead/pactline/internal/identity"
 	"github.com/wolfhead/pactline/internal/store"
 
@@ -353,7 +354,9 @@ func TestPendingAccessRegistrationAndApprovalAreTransactional(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()
-		_, err := db.Pool.Exec(cleanupCtx, `DELETE FROM identity_audit_events WHERE subject_user_id=$1`, userID)
+		_, err := db.Pool.Exec(cleanupCtx, `DELETE FROM outbox_events WHERE aggregate_id=$1`, userID)
+		require.NoError(t, err)
+		_, err = db.Pool.Exec(cleanupCtx, `DELETE FROM identity_audit_events WHERE subject_user_id=$1`, userID)
 		require.NoError(t, err)
 		_, err = db.Pool.Exec(cleanupCtx, `DELETE FROM sessions WHERE user_id=$1`, userID)
 		require.NoError(t, err)
@@ -366,6 +369,16 @@ func TestPendingAccessRegistrationAndApprovalAreTransactional(t *testing.T) {
 	created, err := repository.RegisterAccessRequest(ctx, command)
 	require.NoError(t, err)
 	require.Equal(t, domain.AccessStatusPending, created.AccessStatus)
+	var requestedRecipient uuid.UUID
+	var requestedPayload []byte
+	require.NoError(t, db.Pool.QueryRow(ctx, `SELECT recipient_id, payload FROM outbox_events
+		WHERE aggregate_id=$1 AND event_type=$2`, userID, events.AccessRequested).
+		Scan(&requestedRecipient, &requestedPayload))
+	require.Equal(t, primarySeedID, requestedRecipient)
+	var requestEvent events.AccessRequestedPayload
+	require.NoError(t, json.Unmarshal(requestedPayload, &requestEvent))
+	require.Equal(t, userID, requestEvent.RequesterID)
+	require.Equal(t, "Pending Member", requestEvent.RequesterName)
 	bundle, err := repository.ResolveSession(ctx, sessionID, sessionHash[:], now)
 	require.NoError(t, err)
 	require.Equal(t, domain.AccessStatusPending, bundle.User.AccessStatus)
@@ -382,6 +395,16 @@ func TestPendingAccessRegistrationAndApprovalAreTransactional(t *testing.T) {
 	approved, err := store.NewUserStore(db).GetByID(ctx, userID)
 	require.NoError(t, err)
 	require.True(t, approved.CanUseApplication())
+	var approvedRecipient uuid.UUID
+	var approvedPayload []byte
+	require.NoError(t, db.Pool.QueryRow(ctx, `SELECT recipient_id, payload FROM outbox_events
+		WHERE aggregate_id=$1 AND event_type=$2`, userID, events.AccessApproved).
+		Scan(&approvedRecipient, &approvedPayload))
+	require.Equal(t, userID, approvedRecipient)
+	var approvalEvent events.AccessApprovedPayload
+	require.NoError(t, json.Unmarshal(approvedPayload, &approvalEvent))
+	require.Equal(t, userID, approvalEvent.UserID)
+	require.Equal(t, primarySeedID, approvalEvent.ApprovedByID)
 	require.ErrorIs(t, repository.SetUserAccessStatus(
 		ctx, userID, primarySeedID, domain.AccessStatusRejected, now.Add(3*time.Minute), "request-regress",
 	), domain.ErrConflict)

@@ -2,28 +2,45 @@ package messaging
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
 	"time"
 
-	"github.com/wolfhead/pactline/internal/domain"
-	"github.com/wolfhead/pactline/internal/store"
+	"github.com/wolfhead/pactline/internal/events"
+	"github.com/wolfhead/pactline/internal/identity"
 
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 const (
-	EventsExchange = "pactline.events"
-	RetryExchange  = "pactline.events.retry"
-	DeadExchange   = "pactline.events.dead"
-	NoopQueue      = "pactline.notifications.noop"
-	RetryQueue     = "pactline.notifications.retry"
-	DeadQueue      = "pactline.notifications.dead"
-	NoopConsumer   = "pactline.notifications.noop.v1"
+	EventsExchange   = "pactline.events"
+	RetryExchange    = "pactline.events.retry"
+	DeadExchange     = "pactline.events.dead"
+	NoopQueue        = "pactline.notifications.noop"
+	LarkDMQueue      = "pactline.notifications.lark_dm"
+	RetryQueue       = "pactline.notifications.retry"
+	DeadQueue        = "pactline.notifications.dead"
+	NoopConsumer     = "pactline.notifications.noop.v1"
+	LarkDMConsumer   = "pactline.notifications.lark_dm.v1"
+	maxDeliveryTries = 5
 )
+
+type EventHandler interface {
+	Handle(context.Context, events.Event) error
+}
+
+type NoopConsumptionStore interface {
+	ConsumeOnce(context.Context, string, uuid.UUID, json.RawMessage) (bool, error)
+}
+
+type EventConsumptionStore interface {
+	WasConsumed(context.Context, string, uuid.UUID) (bool, error)
+	MarkConsumed(context.Context, string, uuid.UUID) (bool, error)
+}
 
 type RabbitMQ struct {
 	connection *amqp.Connection
@@ -47,7 +64,7 @@ func NewRecoveringPublisher(url string) (*RecoveringPublisher, error) {
 	return &RecoveringPublisher{url: url, client: client}, nil
 }
 
-func (publisher *RecoveringPublisher) Publish(ctx context.Context, event domain.OutboxEvent) error {
+func (publisher *RecoveringPublisher) Publish(ctx context.Context, event events.Event) error {
 	publisher.mu.Lock()
 	defer publisher.mu.Unlock()
 	if publisher.client == nil {
@@ -124,12 +141,20 @@ func (r *RabbitMQ) declareTopology() error {
 	if err := r.publisher.QueueBind(NoopQueue, "comment.*", EventsExchange, false, nil); err != nil {
 		return fmt.Errorf("bind RabbitMQ noop queue: %w", err)
 	}
+	if _, err := r.publisher.QueueDeclare(LarkDMQueue, true, false, false, false, amqp.Table{
+		"x-dead-letter-exchange": RetryExchange,
+	}); err != nil {
+		return fmt.Errorf("declare RabbitMQ Lark DM queue: %w", err)
+	}
+	if err := r.publisher.QueueBind(LarkDMQueue, "access.*", EventsExchange, false, nil); err != nil {
+		return fmt.Errorf("bind RabbitMQ Lark DM queue: %w", err)
+	}
 	if _, err := r.publisher.QueueDeclare(RetryQueue, true, false, false, false, amqp.Table{
 		"x-message-ttl": int32(30000), "x-dead-letter-exchange": EventsExchange,
 	}); err != nil {
 		return fmt.Errorf("declare RabbitMQ retry queue: %w", err)
 	}
-	if err := r.publisher.QueueBind(RetryQueue, "comment.*", RetryExchange, false, nil); err != nil {
+	if err := r.publisher.QueueBind(RetryQueue, "access.*", RetryExchange, false, nil); err != nil {
 		return fmt.Errorf("bind RabbitMQ retry queue: %w", err)
 	}
 	if _, err := r.publisher.QueueDeclare(DeadQueue, true, false, false, false, nil); err != nil {
@@ -141,16 +166,23 @@ func (r *RabbitMQ) declareTopology() error {
 	return nil
 }
 
-func (r *RabbitMQ) Publish(ctx context.Context, event domain.OutboxEvent) error {
+func (r *RabbitMQ) Publish(ctx context.Context, event events.Event) error {
+	if err := event.Validate(); err != nil {
+		return fmt.Errorf("validate RabbitMQ event: %w", err)
+	}
+	body, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("encode RabbitMQ event: %w", err)
+	}
 	publishing := amqp.Publishing{
 		Headers: amqp.Table{
 			"recipient_id": event.RecipientID.String(), "dedupe_key": event.DedupeKey,
 		},
 		ContentType: "application/json", DeliveryMode: amqp.Persistent,
-		MessageId: event.ID.String(), Type: event.EventType,
-		Timestamp: event.CreatedAt, Body: event.Payload,
+		MessageId: event.ID.String(), Type: event.Type,
+		Timestamp: event.CreatedAt, Body: body,
 	}
-	if err := r.publisher.PublishWithContext(ctx, EventsExchange, event.EventType, true, false, publishing); err != nil {
+	if err := r.publisher.PublishWithContext(ctx, EventsExchange, event.Type, true, false, publishing); err != nil {
 		return fmt.Errorf("publish RabbitMQ event: %w", err)
 	}
 	select {
@@ -169,7 +201,7 @@ func (r *RabbitMQ) Publish(ctx context.Context, event domain.OutboxEvent) error 
 	}
 }
 
-func (r *RabbitMQ) ConsumeNoop(ctx context.Context, outbox *store.OutboxStore) error {
+func (r *RabbitMQ) ConsumeNoop(ctx context.Context, outbox NoopConsumptionStore) error {
 	deliveries, err := r.consumer.ConsumeWithContext(
 		ctx, NoopQueue, NoopConsumer, false, false, false, false, nil,
 	)
@@ -177,24 +209,24 @@ func (r *RabbitMQ) ConsumeNoop(ctx context.Context, outbox *store.OutboxStore) e
 		return fmt.Errorf("start RabbitMQ noop consumer: %w", err)
 	}
 	for delivery := range deliveries {
-		eventID, parseErr := uuid.Parse(delivery.MessageId)
+		event, parseErr := decodeDelivery(delivery)
 		if parseErr != nil {
-			slog.Error("reject RabbitMQ event with invalid message ID", "message_id", delivery.MessageId)
+			slog.Error("reject invalid RabbitMQ event", "message_id", delivery.MessageId, "error", parseErr)
 			if err := delivery.Nack(false, false); err != nil {
 				return err
 			}
 			continue
 		}
-		first, consumeErr := outbox.ConsumeOnce(ctx, NoopConsumer, eventID, delivery.Body)
+		first, consumeErr := outbox.ConsumeOnce(ctx, NoopConsumer, event.ID, delivery.Body)
 		if consumeErr != nil {
-			slog.Error("noop RabbitMQ consumer failed", "event_id", eventID, "error", consumeErr)
+			slog.Error("noop RabbitMQ consumer failed", "event_id", event.ID, "error", consumeErr)
 			if err := delivery.Nack(false, true); err != nil {
 				return err
 			}
 			continue
 		}
 		if first {
-			slog.Info("noop notification event consumed", "event_id", eventID, "event_type", delivery.Type)
+			slog.Info("noop notification event consumed", "event_id", event.ID, "event_type", delivery.Type)
 		}
 		if err := delivery.Ack(false); err != nil {
 			return err
@@ -203,7 +235,141 @@ func (r *RabbitMQ) ConsumeNoop(ctx context.Context, outbox *store.OutboxStore) e
 	return ctx.Err()
 }
 
-func ConsumeNoopForever(ctx context.Context, url string, outbox *store.OutboxStore) {
+func (r *RabbitMQ) ConsumeLarkDM(
+	ctx context.Context,
+	outbox EventConsumptionStore,
+	handler EventHandler,
+) error {
+	deliveries, err := r.consumer.ConsumeWithContext(
+		ctx, LarkDMQueue, LarkDMConsumer, false, false, false, false, nil,
+	)
+	if err != nil {
+		return fmt.Errorf("start RabbitMQ Lark DM consumer: %w", err)
+	}
+	for delivery := range deliveries {
+		event, decodeErr := decodeDelivery(delivery)
+		if decodeErr != nil {
+			slog.Error("dead-letter invalid Lark DM event", "message_id", delivery.MessageId, "error", decodeErr)
+			if err := r.deadLetter(ctx, delivery); err != nil {
+				return err
+			}
+			continue
+		}
+		consumed, consumeErr := outbox.WasConsumed(ctx, LarkDMConsumer, event.ID)
+		if consumeErr != nil {
+			slog.Error("check Lark DM event consumption", "event_id", event.ID, "error", consumeErr)
+			if err := delivery.Nack(false, false); err != nil {
+				return err
+			}
+			continue
+		}
+		if consumed {
+			if err := delivery.Ack(false); err != nil {
+				return err
+			}
+			continue
+		}
+		deliveryContext, cancel := context.WithTimeout(ctx, 10*time.Second)
+		handleErr := handler.Handle(deliveryContext, event)
+		cancel()
+		if handleErr != nil {
+			attempt := deliveryAttempt(delivery) + 1
+			if retryableDelivery(handleErr) && attempt < maxDeliveryTries {
+				slog.Warn("Lark DM event delivery deferred", "event_id", event.ID,
+					"event_type", event.Type, "attempt", attempt, "error", handleErr)
+				if err := delivery.Nack(false, false); err != nil {
+					return err
+				}
+				continue
+			}
+			slog.Error("Lark DM event delivery exhausted", "event_id", event.ID,
+				"event_type", event.Type, "attempt", attempt, "error", handleErr)
+			if err := r.deadLetter(ctx, delivery); err != nil {
+				return err
+			}
+			continue
+		}
+		if _, err := outbox.MarkConsumed(ctx, LarkDMConsumer, event.ID); err != nil {
+			slog.Error("record Lark DM event consumption", "event_id", event.ID, "error", err)
+			if nackErr := delivery.Nack(false, false); nackErr != nil {
+				return nackErr
+			}
+			continue
+		}
+		if err := delivery.Ack(false); err != nil {
+			return err
+		}
+		slog.Info("Lark DM notification delivered", "event_id", event.ID, "event_type", event.Type)
+	}
+	return ctx.Err()
+}
+
+func decodeDelivery(delivery amqp.Delivery) (events.Event, error) {
+	var event events.Event
+	if err := json.Unmarshal(delivery.Body, &event); err != nil {
+		return events.Event{}, fmt.Errorf("decode RabbitMQ event: %w", err)
+	}
+	if err := event.Validate(); err != nil {
+		return events.Event{}, err
+	}
+	if delivery.MessageId != event.ID.String() || delivery.Type != event.Type {
+		return events.Event{}, fmt.Errorf("RabbitMQ event envelope mismatch")
+	}
+	return event, nil
+}
+
+func retryableDelivery(err error) bool {
+	category, categorized := identity.ProviderCategoryFromError(err)
+	if !categorized {
+		return true
+	}
+	return category == identity.ProviderRateLimited || category == identity.ProviderUnavailable
+}
+
+func deliveryAttempt(delivery amqp.Delivery) int64 {
+	deaths, ok := delivery.Headers["x-death"].([]any)
+	if !ok {
+		return 0
+	}
+	var attempts int64
+	for _, raw := range deaths {
+		death, ok := raw.(amqp.Table)
+		if !ok || death["queue"] != LarkDMQueue {
+			continue
+		}
+		if count, ok := death["count"].(int64); ok && count > attempts {
+			attempts = count
+		}
+	}
+	return attempts
+}
+
+func (r *RabbitMQ) deadLetter(ctx context.Context, delivery amqp.Delivery) error {
+	publishing := amqp.Publishing{
+		Headers: delivery.Headers, ContentType: delivery.ContentType,
+		DeliveryMode: amqp.Persistent, MessageId: delivery.MessageId,
+		Type: delivery.Type, Timestamp: delivery.Timestamp, Body: delivery.Body,
+	}
+	if err := r.publisher.PublishWithContext(
+		ctx, DeadExchange, delivery.RoutingKey, false, false, publishing,
+	); err != nil {
+		return fmt.Errorf("publish dead-letter event: %w", err)
+	}
+	select {
+	case confirmation, ok := <-r.confirms:
+		if !ok || !confirmation.Ack {
+			return fmt.Errorf("dead-letter event was not confirmed")
+		}
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	if err := delivery.Ack(false); err != nil {
+		return fmt.Errorf("acknowledge dead-lettered event: %w", err)
+	}
+	return nil
+}
+
+func ConsumeNoopForever(ctx context.Context, url string, outbox NoopConsumptionStore) {
 	for ctx.Err() == nil {
 		client, err := Dial(url)
 		if err == nil {
@@ -214,6 +380,30 @@ func ConsumeNoopForever(ctx context.Context, url string, outbox *store.OutboxSto
 			return
 		}
 		slog.Warn("RabbitMQ noop consumer reconnecting", "error", err)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(5 * time.Second):
+		}
+	}
+}
+
+func ConsumeLarkDMForever(
+	ctx context.Context,
+	url string,
+	outbox EventConsumptionStore,
+	handler EventHandler,
+) {
+	for ctx.Err() == nil {
+		client, err := Dial(url)
+		if err == nil {
+			err = client.ConsumeLarkDM(ctx, outbox, handler)
+			client.Close()
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		slog.Warn("RabbitMQ Lark DM consumer reconnecting", "error", err)
 		select {
 		case <-ctx.Done():
 			return

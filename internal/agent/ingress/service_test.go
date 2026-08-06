@@ -23,16 +23,21 @@ type identityStub struct {
 
 type conversationObserverStub struct {
 	configuration pactagent.ConversationConfiguration
+	observedName  *string
 }
 
 func (s conversationObserverStub) ObserveConfiguration(
-	context.Context,
-	string,
-	string,
-	string,
-	uuid.UUID,
-	time.Time,
+	_ context.Context,
+	_ string,
+	_ string,
+	_ string,
+	name string,
+	_ uuid.UUID,
+	_ time.Time,
 ) (pactagent.ConversationConfiguration, error) {
+	if s.observedName != nil {
+		*s.observedName = name
+	}
 	if s.configuration.RevisionID == uuid.Nil {
 		s.configuration.RevisionID = uuid.New()
 		s.configuration.Enabled = true
@@ -128,6 +133,7 @@ func TestServiceQueuesMentionOnceAndEncryptsCommand(t *testing.T) {
 	now := time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
 	userID := uuid.New()
 	repository := &repositoryStub{}
+	observedConversationName := ""
 	acknowledger := &acknowledgerStub{called: make(chan struct{}, 1)}
 	cipher, err := pactagent.NewInputCipher(
 		"input-key",
@@ -139,7 +145,7 @@ func TestServiceQueuesMentionOnceAndEncryptsCommand(t *testing.T) {
 			user: domain.User{ID: userID, Name: "User", Active: true, AccessStatus: domain.AccessStatusApproved},
 		},
 		Runs:          repository,
-		Conversations: conversationObserverStub{},
+		Conversations: conversationObserverStub{observedName: &observedConversationName},
 		Inputs:        cipher,
 		Acknowledgers: map[string]channel.Acknowledger{"lark": acknowledger},
 		Model:         "deepseek-v4-pro",
@@ -150,7 +156,8 @@ func TestServiceQueuesMentionOnceAndEncryptsCommand(t *testing.T) {
 	incoming := channel.IncomingMessage{
 		Provider: "lark", TenantID: "tenant", EventID: "event-1",
 		ConversationID: "chat-1", MessageID: "message-1",
-		SenderSubjectID: "ou_user", MessageType: "text",
+		ConversationName: "Project Alpha",
+		SenderSubjectID:  "ou_user", MessageType: "text",
 		Text: "帮我创建一个 Task", CreatedAt: now, BotMentioned: true,
 		Artifacts: []artifact.Reference{{
 			ID: "trigger-image", Kind: artifact.KindImage, Name: "report.png",
@@ -168,6 +175,7 @@ func TestServiceQueuesMentionOnceAndEncryptsCommand(t *testing.T) {
 
 	require.Equal(t, 2, repository.createN)
 	require.Equal(t, 1, repository.saveN)
+	require.Equal(t, "Project Alpha", observedConversationName)
 	require.Equal(t, repository.run.ID, repository.input.RunID)
 	plaintext, err := cipher.Decrypt(
 		repository.run.ID,

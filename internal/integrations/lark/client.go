@@ -47,6 +47,8 @@ type Client struct {
 	tenantMu                    sync.RWMutex
 	botMu                       sync.RWMutex
 	botOpenID                   string
+	conversationNameMu          sync.RWMutex
+	conversationNames           map[string]conversationNameCacheEntry
 	artifactMu                  sync.RWMutex
 	artifacts                   map[string]registeredArtifact
 }
@@ -82,9 +84,10 @@ func NewClient(config Config) (*Client, error) {
 		baseURL: strings.TrimRight(config.BaseURL, "/"), authorizationURL: config.AuthorizationURL,
 		redirectURI: config.RedirectURI,
 		cipher:      config.Cipher, encryptionKeyID: config.EncryptionKeyID,
-		httpClient: config.HTTPClient,
-		now:        func() time.Time { return time.Now().UTC() },
-		artifacts:  make(map[string]registeredArtifact),
+		httpClient:        config.HTTPClient,
+		now:               func() time.Time { return time.Now().UTC() },
+		conversationNames: make(map[string]conversationNameCacheEntry),
+		artifacts:         make(map[string]registeredArtifact),
 	}, nil
 }
 

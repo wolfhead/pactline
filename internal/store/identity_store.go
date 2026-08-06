@@ -359,6 +359,9 @@ func (s *IdentityStore) RegisterAccessRequest(
 	if err := insertAudit(ctx, tx, command.Audit); err != nil {
 		return domain.User{}, err
 	}
+	if err := insertAccessRequestedEvent(ctx, tx, user, command.Now); err != nil {
+		return domain.User{}, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		if isUniqueViolation(err) {
 			return domain.User{}, identity.ErrLoginDenied
@@ -949,7 +952,13 @@ func (s *IdentityStore) SetUserAccessStatus(
 		if requestID != "" {
 			audit.RequestID = &requestID
 		}
-		return insertAudit(ctx, tx, audit)
+		if err := insertAudit(ctx, tx, audit); err != nil {
+			return err
+		}
+		if status == domain.AccessStatusApproved {
+			return insertAccessApprovedEvent(ctx, tx, userID, actorID, now)
+		}
+		return nil
 	})
 }
 

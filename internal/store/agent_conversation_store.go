@@ -129,11 +129,11 @@ func (s *AgentConversationStore) ObserveRevision(
 
 func (s *AgentConversationStore) ObserveConfiguration(
 	ctx context.Context,
-	provider, tenantID, externalID string,
+	provider, tenantID, externalID, name string,
 	actorID uuid.UUID,
 	now time.Time,
 ) (pactagent.ConversationConfiguration, error) {
-	snapshot, err := s.Observe(ctx, provider, tenantID, externalID, "", actorID, now)
+	snapshot, err := s.Observe(ctx, provider, tenantID, externalID, name, actorID, now)
 	if err != nil {
 		return pactagent.ConversationConfiguration{}, err
 	}

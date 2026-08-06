@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/wolfhead/pactline/internal/domain"
+	"github.com/wolfhead/pactline/internal/events"
 
 	"github.com/google/uuid"
 )
@@ -15,7 +16,7 @@ type OutboxStore struct{ db *DB }
 
 func NewOutboxStore(db *DB) *OutboxStore { return &OutboxStore{db: db} }
 
-func (s *OutboxStore) ClaimBatch(ctx context.Context, limit int) ([]domain.OutboxEvent, error) {
+func (s *OutboxStore) ClaimBatch(ctx context.Context, limit int) ([]events.Event, error) {
 	if limit < 1 || limit > 200 {
 		limit = 50
 	}
@@ -41,17 +42,17 @@ func (s *OutboxStore) ClaimBatch(ctx context.Context, limit int) ([]domain.Outbo
 		return nil, fmt.Errorf("claim outbox events: %w", err)
 	}
 	defer rows.Close()
-	events := []domain.OutboxEvent{}
+	claimed := []events.Event{}
 	for rows.Next() {
-		var event domain.OutboxEvent
+		var event events.Event
 		if err := rows.Scan(
 			&event.ID, &event.AggregateType, &event.AggregateID,
-			&event.EventType, &event.RecipientID, &event.Payload,
+			&event.Type, &event.RecipientID, &event.Payload,
 			&event.DedupeKey, &event.AttemptCount, &event.CreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan outbox event: %w", err)
 		}
-		events = append(events, event)
+		claimed = append(claimed, event)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -59,7 +60,7 @@ func (s *OutboxStore) ClaimBatch(ctx context.Context, limit int) ([]domain.Outbo
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit claim outbox events: %w", err)
 	}
-	return events, nil
+	return claimed, nil
 }
 
 func (s *OutboxStore) MarkPublished(ctx context.Context, id uuid.UUID) error {
@@ -98,6 +99,28 @@ func (s *OutboxStore) ConsumeOnce(
 	if !json.Valid(payload) {
 		return false, fmt.Errorf("invalid event JSON")
 	}
+	return s.MarkConsumed(ctx, consumerName, eventID)
+}
+
+func (s *OutboxStore) WasConsumed(
+	ctx context.Context,
+	consumerName string,
+	eventID uuid.UUID,
+) (bool, error) {
+	var consumed bool
+	if err := s.db.Pool.QueryRow(ctx, `SELECT EXISTS (
+		SELECT 1 FROM message_consumptions WHERE consumer_name=$1 AND event_id=$2
+	)`, consumerName, eventID).Scan(&consumed); err != nil {
+		return false, fmt.Errorf("check message consumption: %w", err)
+	}
+	return consumed, nil
+}
+
+func (s *OutboxStore) MarkConsumed(
+	ctx context.Context,
+	consumerName string,
+	eventID uuid.UUID,
+) (bool, error) {
 	command, err := s.db.Pool.Exec(ctx, `INSERT INTO message_consumptions
 		(consumer_name, event_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, consumerName, eventID)
 	if err != nil {

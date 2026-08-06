@@ -33,6 +33,7 @@ import (
 	legacystore "github.com/wolfhead/pactline/internal/legacy/store"
 	"github.com/wolfhead/pactline/internal/logging"
 	"github.com/wolfhead/pactline/internal/messaging"
+	"github.com/wolfhead/pactline/internal/notification"
 	"github.com/wolfhead/pactline/internal/store"
 
 	"github.com/cloudwego/eino/components/model"
@@ -186,6 +187,16 @@ func main() {
 			slog.Error("configure Lark identity service", "error", configureErr)
 			os.Exit(1)
 		}
+		go messaging.ConsumeLarkDMForever(
+			maintenanceContext,
+			cfg.RabbitMQURL,
+			outboxStore,
+			notification.AccessHandler{
+				Recipients: identityStore,
+				Sender:     larkClient,
+				AppBaseURL: cfg.AppBaseURL,
+			},
+		)
 	}
 	var developmentAuth *devauth.Provider
 	if cfg.AuthProvider == AuthProviderDevelopment {

@@ -5,12 +5,12 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/wolfhead/pactline/internal/domain"
+	"github.com/wolfhead/pactline/internal/events"
 	"github.com/wolfhead/pactline/internal/store"
 )
 
 type EventPublisher interface {
-	Publish(context.Context, domain.OutboxEvent) error
+	Publish(context.Context, events.Event) error
 }
 
 type OutboxRelay struct {
@@ -52,14 +52,14 @@ func (r OutboxRelay) PublishPending(ctx context.Context) error {
 				return markErr
 			}
 			slog.Warn("outbox event publish deferred", "event_id", event.ID,
-				"event_type", event.EventType, "attempt", event.AttemptCount, "error", err)
+				"event_type", event.Type, "attempt", event.AttemptCount, "error", err)
 			continue
 		}
 		if err := r.Store.MarkPublished(ctx, event.ID); err != nil {
 			return err
 		}
 		slog.Info("outbox event published", "event_id", event.ID,
-			"event_type", event.EventType, "attempt", event.AttemptCount)
+			"event_type", event.Type, "attempt", event.AttemptCount)
 	}
 	return nil
 }

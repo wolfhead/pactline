@@ -31,6 +31,8 @@ acceptance criteria.
 - Tasks support private attachments and threaded comments with structured
   Project-member mentions. Reliable notification intents flow through a
   PostgreSQL outbox and RabbitMQ without coupling comments to one IM provider.
+- Access requests and approvals use the same event contract and currently
+  deliver fixed Lark DM cards; a future inbox can consume the same events.
 - Production identity uses single-tenant Lark OAuth with one Administrator;
   new Members require Administrator approval before accessing the product.
 - Administrative impersonation is read-only and keeps the Administrator as the

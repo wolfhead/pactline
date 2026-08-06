@@ -134,6 +134,19 @@ func (c *LongConnection) handleMessage(
 			"error_category", "invalid_event")
 		return nil
 	}
+	conversationName, err := c.lark.conversationName(
+		ctx,
+		incoming.TenantID,
+		incoming.ConversationID,
+	)
+	if err != nil {
+		slog.Warn("Lark Agent conversation metadata unavailable",
+			"conversation_id", incoming.ConversationID,
+			"error_category", "provider_metadata",
+			"error", err)
+	} else {
+		incoming.ConversationName = conversationName
+	}
 	if err := c.consumer.Accept(ctx, incoming); err != nil {
 		slog.Error("Lark Agent message persistence failed",
 			"event_id", incoming.EventID,

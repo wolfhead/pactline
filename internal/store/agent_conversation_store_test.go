@@ -51,6 +51,20 @@ func TestAgentConversationStoresImmutableConfigurationRevisions(t *testing.T) {
 	require.Equal(t, int64(1), initial.Revision.Version)
 	require.Nil(t, initial.Revision.DefaultProjectID)
 
+	_, err = conversations.ObserveConfiguration(
+		ctx,
+		"lark",
+		"tenant-conversation-test",
+		"chat-conversation-test",
+		"Release planning room",
+		userA,
+		now.Add(30*time.Second),
+	)
+	require.NoError(t, err)
+	observed, err := conversations.Get(ctx, initial.Conversation.ID)
+	require.NoError(t, err)
+	require.Equal(t, "Release planning room", observed.Conversation.Name)
+
 	initialConfiguration, err := conversations.GetConfigurationRevision(ctx, initial.Revision.ID)
 	require.NoError(t, err)
 	require.Nil(t, initialConfiguration.DefaultProjectID)

@@ -32,6 +32,14 @@ who may request Pactline access. Lark OAuth still enforces the single-tenant
 boundary; Pactline then keeps each new Member restricted until the
 Administrator approves the access request.
 
+Access requests and approvals are delivered as fixed bot DM cards through the
+RabbitMQ `access.*` route. A request card links the Administrator to
+`/admin/users`; an approval card links the admitted Member back to Pactline.
+The consumer uses the application event ID as Lark's message UUID, retries
+transient delivery failures, and dead-letters permanent or exhausted failures.
+The bot availability range and `im:message:send_as_bot` permission must cover
+both the Administrator and every employee who may request access.
+
 Register this exact redirect URI:
 
 ```text
@@ -75,6 +83,8 @@ it, publish a Lark application version that:
 - grants `im:message.group_at_msg:readonly` to receive group mentions;
 - grants `im:message.group_msg:readonly` and `im:message:readonly` to read the
   bounded history of groups in which the bot participates;
+- grants `im:chat:readonly` so Pactline can resolve and periodically refresh
+  the names of groups in which the bot participates;
 - grants `im:resource` so the bot can download image and file resources from
   those messages;
 - grants `im:message:send_as_bot` to reply as the bot; and

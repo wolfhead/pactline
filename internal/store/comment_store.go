@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/wolfhead/pactline/internal/domain"
+	"github.com/wolfhead/pactline/internal/events"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -395,13 +396,13 @@ func insertCommentEvents(
 		if recipientID == authorID {
 			continue
 		}
-		if err := insertCommentEvent(ctx, tx, comment, projectID, recipientID, domain.EventCommentMentioned); err != nil {
+		if err := insertCommentEvent(ctx, tx, comment, projectID, recipientID, events.CommentMentioned); err != nil {
 			return err
 		}
 	}
 	if replyAuthorID != nil && *replyAuthorID != authorID {
 		if _, explicitlyMentioned := mentioned[*replyAuthorID]; !explicitlyMentioned {
-			if err := insertCommentEvent(ctx, tx, comment, projectID, *replyAuthorID, domain.EventCommentReplied); err != nil {
+			if err := insertCommentEvent(ctx, tx, comment, projectID, *replyAuthorID, events.CommentReplied); err != nil {
 				return err
 			}
 		}
@@ -412,25 +413,22 @@ func insertCommentEvents(
 func insertCommentEvent(
 	ctx context.Context, tx pgx.Tx, comment domain.Comment, projectID, recipientID uuid.UUID, eventType string,
 ) error {
-	eventID := uuid.New()
-	payload, err := json.Marshal(map[string]any{
-		"event_id": eventID, "event_type": eventType, "recipient_id": recipientID,
-		"project_id": projectID, "task_id": comment.TaskID, "comment_id": comment.ID,
-		"comment_author_id": comment.AuthorID, "reply_to_comment_id": comment.ReplyToCommentID,
-		"occurred_at": time.Now().UTC(),
+	occurredAt := time.Now().UTC()
+	event, err := events.New(events.NewEvent{
+		AggregateType: "comment", AggregateID: comment.ID,
+		Type: eventType, RecipientID: recipientID,
+		Payload: events.CommentPayload{
+			ProjectID: projectID, TaskID: comment.TaskID, CommentID: comment.ID,
+			CommentAuthorID: comment.AuthorID, ReplyToCommentID: comment.ReplyToCommentID,
+			OccurredAt: occurredAt,
+		},
+		DedupeKey: fmt.Sprintf("%s:%s:%d:%s", eventType, comment.ID, comment.Version, recipientID),
+		CreatedAt: occurredAt,
 	})
 	if err != nil {
-		return fmt.Errorf("encode comment event: %w", err)
+		return fmt.Errorf("build comment event: %w", err)
 	}
-	dedupeKey := fmt.Sprintf("%s:%s:%d:%s", eventType, comment.ID, comment.Version, recipientID)
-	if _, err := tx.Exec(ctx, `INSERT INTO outbox_events (
-		id, aggregate_type, aggregate_id, event_type, recipient_id, payload, dedupe_key
-	) VALUES ($1,'comment',$2,$3,$4,$5,$6) ON CONFLICT (dedupe_key) DO NOTHING`,
-		eventID, comment.ID, eventType, recipientID, payload, dedupeKey,
-	); err != nil {
-		return fmt.Errorf("insert comment outbox event: %w", err)
-	}
-	return nil
+	return insertEvent(ctx, tx, event)
 }
 
 func uniqueUserIDs(userIDs []uuid.UUID) ([]uuid.UUID, error) {
