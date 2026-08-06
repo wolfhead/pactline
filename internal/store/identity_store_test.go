@@ -331,6 +331,16 @@ func TestPendingAccessRegistrationAndApprovalAreTransactional(t *testing.T) {
 	ctx := context.Background()
 	repository := store.NewIdentityStore(db)
 	now := time.Now().UTC().Truncate(time.Microsecond)
+	var previousRole domain.PlatformRole
+	require.NoError(t, db.Pool.QueryRow(ctx,
+		`SELECT platform_role FROM users WHERE id=$1`, primarySeedID).Scan(&previousRole))
+	_, err := db.Pool.Exec(ctx, `UPDATE users SET platform_role='ADMIN' WHERE id=$1`, primarySeedID)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, cleanupErr := db.Pool.Exec(context.Background(),
+			`UPDATE users SET platform_role=$1 WHERE id=$2`, previousRole, primarySeedID)
+		require.NoError(t, cleanupErr)
+	})
 	userID, sessionID := uuid.New(), uuid.New()
 	key := identity.PrincipalKey{
 		Provider: "lark", TenantID: "tenant-" + uuid.NewString(), SubjectID: "subject",
