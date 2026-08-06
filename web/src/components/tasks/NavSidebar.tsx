@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Code2,
   FileClock,
+  FlaskConical,
   FolderKanban,
   KeyRound,
   MessageSquareText,
@@ -42,6 +43,7 @@ const AGENT_ITEMS: NavigationItem[] = [
 const ADMIN_ITEMS: NavigationItem[] = [
   { to: '/admin/users', label: '用户', icon: Users },
   { to: '/admin/api-audit', label: 'API 审计', icon: FileClock },
+  { to: '/admin/tools', label: '测试工具', icon: FlaskConical },
 ]
 
 const PROJECT_LIMIT = 6

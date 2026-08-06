@@ -138,6 +138,9 @@ func main() {
 		Attachments: attachments, Objects: attachmentObjects,
 	}).Run(maintenanceContext)
 	outboxStore := store.NewOutboxStore(db)
+	notificationTestService := &notification.TestService{
+		Users: users, Recipients: identityStore, Events: outboxStore, Now: time.Now,
+	}
 	rabbitMQ, err := messaging.NewRecoveringPublisher(cfg.RabbitMQURL)
 	if err != nil {
 		slog.Error("configure RabbitMQ event delivery", "error", err)
@@ -191,7 +194,7 @@ func main() {
 			maintenanceContext,
 			cfg.RabbitMQURL,
 			outboxStore,
-			notification.AccessHandler{
+			notification.Handler{
 				Recipients: identityStore,
 				Sender:     larkClient,
 				AppBaseURL: cfg.AppBaseURL,
@@ -325,6 +328,7 @@ func main() {
 		V1:          v1Handler,
 		OpenAPI:     apiv1.OpenAPIHandler(contract.OpenAPIDocument),
 		AgentStatus: agentConnection,
+		AdminTools:  notificationTestService,
 	})
 	var agentWorker *agentruntime.Worker
 	if cfg.AgentEnabled {

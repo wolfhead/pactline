@@ -18,6 +18,7 @@ const (
 	CommentReplied   = "comment.replied"
 	AccessRequested  = "access.requested"
 	AccessApproved   = "access.approved"
+	NotificationTest = "notification.test"
 )
 
 type Event struct {

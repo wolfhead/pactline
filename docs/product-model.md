@@ -218,6 +218,12 @@ a fixed Lark DM card linking to the approval page; approval sends the applicant
 a fixed Lark DM card linking to Pactline. A future inbox is another consumer of
 the same events rather than a second event-production path.
 
+The Administrator test-tool surface may emit a `notification.test` event for
+an approved, active user with a bound Lark identity. It follows the same
+outbox, RabbitMQ, retry, and Lark DM path as real notifications and always uses
+a fixed diagnostic card. Enqueueing confirms only that the event entered the
+delivery pipeline; receipt in Lark remains the end-to-end proof.
+
 ## Legacy context
 
 The bounty and credits mechanism under `internal/legacy` is a separate bounded

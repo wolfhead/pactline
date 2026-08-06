@@ -149,6 +149,9 @@ func (r *RabbitMQ) declareTopology() error {
 	if err := r.publisher.QueueBind(LarkDMQueue, "access.*", EventsExchange, false, nil); err != nil {
 		return fmt.Errorf("bind RabbitMQ Lark DM queue: %w", err)
 	}
+	if err := r.publisher.QueueBind(LarkDMQueue, events.NotificationTest, EventsExchange, false, nil); err != nil {
+		return fmt.Errorf("bind RabbitMQ notification test route: %w", err)
+	}
 	if _, err := r.publisher.QueueDeclare(RetryQueue, true, false, false, false, amqp.Table{
 		"x-message-ttl": int32(30000), "x-dead-letter-exchange": EventsExchange,
 	}); err != nil {
@@ -156,6 +159,9 @@ func (r *RabbitMQ) declareTopology() error {
 	}
 	if err := r.publisher.QueueBind(RetryQueue, "access.*", RetryExchange, false, nil); err != nil {
 		return fmt.Errorf("bind RabbitMQ retry queue: %w", err)
+	}
+	if err := r.publisher.QueueBind(RetryQueue, events.NotificationTest, RetryExchange, false, nil); err != nil {
+		return fmt.Errorf("bind RabbitMQ notification test retry route: %w", err)
 	}
 	if _, err := r.publisher.QueueDeclare(DeadQueue, true, false, false, false, nil); err != nil {
 		return fmt.Errorf("declare RabbitMQ dead queue: %w", err)

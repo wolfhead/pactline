@@ -16,6 +16,21 @@ type OutboxStore struct{ db *DB }
 
 func NewOutboxStore(db *DB) *OutboxStore { return &OutboxStore{db: db} }
 
+func (s *OutboxStore) Enqueue(ctx context.Context, event events.Event) error {
+	tx, err := s.db.Pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin enqueue application event: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if err := insertEvent(ctx, tx, event); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit application event: %w", err)
+	}
+	return nil
+}
+
 func (s *OutboxStore) ClaimBatch(ctx context.Context, limit int) ([]events.Event, error) {
 	if limit < 1 || limit > 200 {
 		limit = 50

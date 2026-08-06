@@ -32,6 +32,12 @@ type AccessApprovedPayload struct {
 	ApprovedAt     time.Time `json:"approved_at"`
 }
 
+type NotificationTestPayload struct {
+	TriggeredByID   uuid.UUID `json:"triggered_by_id"`
+	TriggeredByName string    `json:"triggered_by_name"`
+	TriggeredAt     time.Time `json:"triggered_at"`
+}
+
 func (payload CommentPayload) Validate() error {
 	if payload.ProjectID == uuid.Nil || payload.TaskID == uuid.Nil || payload.CommentID == uuid.Nil ||
 		payload.CommentAuthorID == uuid.Nil || payload.OccurredAt.IsZero() {
@@ -53,6 +59,14 @@ func (payload AccessApprovedPayload) Validate() error {
 		payload.ApprovedByID == uuid.Nil || strings.TrimSpace(payload.ApprovedByName) == "" ||
 		payload.ApprovedAt.IsZero() {
 		return fmt.Errorf("invalid access approved event payload")
+	}
+	return nil
+}
+
+func (payload NotificationTestPayload) Validate() error {
+	if payload.TriggeredByID == uuid.Nil || strings.TrimSpace(payload.TriggeredByName) == "" ||
+		payload.TriggeredAt.IsZero() {
+		return fmt.Errorf("invalid notification test event payload")
 	}
 	return nil
 }

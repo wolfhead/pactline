@@ -104,6 +104,21 @@ func TestRabbitMQTopologyAndPublisherConfirm(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, events.AccessRequested, delivery.Type)
 	require.NoError(t, delivery.Ack(false))
+
+	notificationEventID := uuid.New()
+	notificationEvent, err := events.New(events.NewEvent{
+		ID: notificationEventID, AggregateType: "notification_test", AggregateID: notificationEventID,
+		Type: events.NotificationTest, RecipientID: uuid.New(),
+		Payload:   map[string]string{"body": "test"},
+		DedupeKey: "test:notification:" + eventID.String(), CreatedAt: time.Now().UTC(),
+	})
+	require.NoError(t, err)
+	require.NoError(t, rabbit.Publish(ctx, notificationEvent))
+	delivery, ok, err = rabbit.consumer.Get(LarkDMQueue, false)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, events.NotificationTest, delivery.Type)
+	require.NoError(t, delivery.Ack(false))
 }
 
 func TestRabbitMQLarkDMConsumerMarksSuccessfulDelivery(t *testing.T) {

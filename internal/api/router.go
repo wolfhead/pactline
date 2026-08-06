@@ -7,6 +7,7 @@ import (
 	"github.com/wolfhead/pactline/internal/access"
 	"github.com/wolfhead/pactline/internal/agent/channel"
 	"github.com/wolfhead/pactline/internal/identity"
+	"github.com/wolfhead/pactline/internal/notification"
 )
 
 type AuthSurface struct {
@@ -26,6 +27,7 @@ type RouterOptions struct {
 	V1          http.Handler
 	OpenAPI     http.Handler
 	AgentStatus channel.StatusProvider
+	AdminTools  *notification.TestService
 }
 
 type accessAuditStore interface {
@@ -78,6 +80,11 @@ func NewRouter(
 	if options.AgentStatus != nil {
 		agentStatus := &agentStatusHandler{status: options.AgentStatus}
 		protected.HandleFunc("GET /api/admin/agent/status", agentStatus.get)
+	}
+	if options.AdminTools != nil {
+		adminTools := &adminToolsHandler{notifications: options.AdminTools}
+		protected.HandleFunc("GET /api/admin/tools/notifications/recipients", adminTools.listNotificationRecipients)
+		protected.HandleFunc("POST /api/admin/tools/notifications/test", adminTools.requestDMTest)
 	}
 
 	root := http.NewServeMux()

@@ -447,6 +447,17 @@ func TestCredentialRefreshLockedReusesConcurrentRotation(t *testing.T) {
 	audit := auditEvent("identity_bound", now)
 	audit.SubjectUserID = &userID
 	require.NoError(t, repository.BindExternalIdentity(ctx, external, expired, audit))
+	externalUsers, err := repository.ListExternalIdentityUsers(ctx, "lark")
+	require.NoError(t, err)
+	foundExternalUser := false
+	for _, candidate := range externalUsers {
+		if candidate.ID == userID {
+			foundExternalUser = true
+			require.Equal(t, "Refresh User", candidate.Name)
+			require.True(t, candidate.CanUseApplication())
+		}
+	}
+	require.True(t, foundExternalUser)
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()
 		_, cleanupErr := db.Pool.Exec(cleanupCtx,

@@ -36,3 +36,26 @@ func TestNewBuildsValidatedEventWithTypedPayload(t *testing.T) {
 	})
 	require.Error(t, err)
 }
+
+func TestNotificationTestPayloadRequiresTriggerIdentity(t *testing.T) {
+	now := time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)
+	eventID := uuid.New()
+	event, err := New(NewEvent{
+		ID: eventID, AggregateType: "notification_test", AggregateID: eventID,
+		Type: NotificationTest, RecipientID: uuid.New(),
+		Payload: NotificationTestPayload{
+			TriggeredByID: uuid.New(), TriggeredByName: "Administrator", TriggeredAt: now,
+		},
+		DedupeKey: NotificationTest + ":" + eventID.String(), CreatedAt: now,
+	})
+	require.NoError(t, err)
+	require.NoError(t, event.Validate())
+
+	_, err = New(NewEvent{
+		ID: eventID, AggregateType: "notification_test", AggregateID: eventID,
+		Type: NotificationTest, RecipientID: uuid.New(),
+		Payload:   NotificationTestPayload{TriggeredAt: now},
+		DedupeKey: NotificationTest + ":invalid", CreatedAt: now,
+	})
+	require.Error(t, err)
+}

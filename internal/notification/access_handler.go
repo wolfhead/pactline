@@ -17,15 +17,15 @@ type RecipientResolver interface {
 	GetExternalIdentityForUser(context.Context, uuid.UUID) (identity.ExternalIdentity, error)
 }
 
-type AccessHandler struct {
+type Handler struct {
 	Recipients RecipientResolver
 	Sender     Sender
 	AppBaseURL *url.URL
 }
 
-func (handler AccessHandler) Handle(ctx context.Context, event events.Event) error {
+func (handler Handler) Handle(ctx context.Context, event events.Event) error {
 	if handler.Recipients == nil || handler.Sender == nil || handler.AppBaseURL == nil {
-		return fmt.Errorf("access notification handler is not configured")
+		return fmt.Errorf("notification handler is not configured")
 	}
 	card, err := handler.card(event)
 	if err != nil {
@@ -39,17 +39,17 @@ func (handler AccessHandler) Handle(ctx context.Context, event events.Event) err
 		return fmt.Errorf("unsupported notification recipient provider")
 	}
 	if _, err := handler.Sender.SendCard(ctx, recipient.Key, card, event.ID.String()); err != nil {
-		return fmt.Errorf("send access notification: %w", err)
+		return fmt.Errorf("send notification: %w", err)
 	}
 	return nil
 }
 
-func (handler AccessHandler) card(event events.Event) (Card, error) {
-	if event.AggregateType != "access_request" {
-		return Card{}, fmt.Errorf("invalid access notification aggregate")
-	}
+func (handler Handler) card(event events.Event) (Card, error) {
 	switch event.Type {
 	case events.AccessRequested:
+		if event.AggregateType != "access_request" {
+			return Card{}, fmt.Errorf("invalid access notification aggregate")
+		}
 		payload, err := events.DecodePayload[events.AccessRequestedPayload](event)
 		if err != nil {
 			return Card{}, err
@@ -73,6 +73,9 @@ func (handler AccessHandler) card(event events.Event) (Card, error) {
 			Template:    "blue",
 		}, nil
 	case events.AccessApproved:
+		if event.AggregateType != "access_request" {
+			return Card{}, fmt.Errorf("invalid access notification aggregate")
+		}
 		payload, err := events.DecodePayload[events.AccessApprovedPayload](event)
 		if err != nil {
 			return Card{}, err
@@ -90,12 +93,32 @@ func (handler AccessHandler) card(event events.Event) (Card, error) {
 			ActionURL:   handler.resolvePath("/"),
 			Template:    "green",
 		}, nil
+	case events.NotificationTest:
+		if event.AggregateType != "notification_test" || event.AggregateID != event.ID {
+			return Card{}, fmt.Errorf("invalid notification test aggregate")
+		}
+		payload, err := events.DecodePayload[events.NotificationTestPayload](event)
+		if err != nil {
+			return Card{}, err
+		}
+		return Card{
+			Title: "Pactline 通知链路测试",
+			Lines: []string{
+				"如果你收到这条消息，Pactline 到 Lark DM 的通知链路工作正常。",
+				"触发人：" + strings.TrimSpace(payload.TriggeredByName),
+				"触发时间：" + displayTime(payload.TriggeredAt),
+				"Event ID：" + event.ID.String(),
+			},
+			ActionLabel: "打开 Pactline",
+			ActionURL:   handler.resolvePath("/"),
+			Template:    "blue",
+		}, nil
 	default:
-		return Card{}, fmt.Errorf("unsupported access notification event %q", event.Type)
+		return Card{}, fmt.Errorf("unsupported notification event %q", event.Type)
 	}
 }
 
-func (handler AccessHandler) resolvePath(path string) string {
+func (handler Handler) resolvePath(path string) string {
 	return handler.AppBaseURL.ResolveReference(&url.URL{Path: path}).String()
 }
 

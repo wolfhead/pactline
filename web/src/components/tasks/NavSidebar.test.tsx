@@ -85,6 +85,15 @@ describe('NavSidebar', () => {
       .toHaveAttribute('aria-expanded', 'false')
   })
 
+  it('exposes the administrator test tool collection', () => {
+    renderSidebar('/admin/tools')
+
+    expect(screen.getByRole('button', { name: '系统管理' }))
+      .toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('link', { name: '测试工具' }))
+      .toHaveAttribute('aria-current', 'page')
+  })
+
   it('limits long project lists while always retaining the current project', async () => {
     renderSidebar('/projects/8/milestones')
 

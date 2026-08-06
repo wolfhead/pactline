@@ -42,7 +42,7 @@ func (stub *cardSenderStub) SendCard(
 	return identity.DeliveryReceipt{ProviderReference: "message-1"}, nil
 }
 
-func TestAccessHandlerRendersRequestedAndApprovedCards(t *testing.T) {
+func TestHandlerRendersAccessAndTestCards(t *testing.T) {
 	baseURL, err := url.Parse("https://pactline.example.test")
 	require.NoError(t, err)
 	recipient := identity.PrincipalKey{
@@ -53,16 +53,17 @@ func TestAccessHandlerRendersRequestedAndApprovedCards(t *testing.T) {
 	email := "applicant@example.test"
 
 	tests := []struct {
-		name       string
-		eventType  string
-		payload    any
-		wantTitle  string
-		wantAction string
-		wantURL    string
-		wantLine   string
+		name          string
+		eventType     string
+		aggregateType string
+		payload       any
+		wantTitle     string
+		wantAction    string
+		wantURL       string
+		wantLine      string
 	}{
 		{
-			name: "requested", eventType: events.AccessRequested,
+			name: "requested", eventType: events.AccessRequested, aggregateType: "access_request",
 			payload: events.AccessRequestedPayload{
 				RequesterID: requesterID, RequesterName: "Applicant",
 				RequesterEmail: &email, RequestedAt: now,
@@ -71,7 +72,7 @@ func TestAccessHandlerRendersRequestedAndApprovedCards(t *testing.T) {
 			wantURL: "https://pactline.example.test/admin/users", wantLine: "申请人：Applicant",
 		},
 		{
-			name: "approved", eventType: events.AccessApproved,
+			name: "approved", eventType: events.AccessApproved, aggregateType: "access_request",
 			payload: events.AccessApprovedPayload{
 				UserID: requesterID, UserName: "Applicant", ApprovedByID: uuid.New(),
 				ApprovedByName: "Administrator", ApprovedAt: now,
@@ -79,21 +80,34 @@ func TestAccessHandlerRendersRequestedAndApprovedCards(t *testing.T) {
 			wantTitle: "Pactline 访问申请已通过", wantAction: "进入 Pactline",
 			wantURL: "https://pactline.example.test/", wantLine: "Administrator 已通过你的访问申请。",
 		},
+		{
+			name: "test", eventType: events.NotificationTest, aggregateType: "notification_test",
+			payload: events.NotificationTestPayload{
+				TriggeredByID: uuid.New(), TriggeredByName: "Administrator", TriggeredAt: now,
+			},
+			wantTitle: "Pactline 通知链路测试", wantAction: "打开 Pactline",
+			wantURL: "https://pactline.example.test/", wantLine: "触发人：Administrator",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			recipientID := uuid.New()
+			eventID := uuid.New()
+			aggregateID := requesterID
 			if test.eventType == events.AccessApproved {
 				recipientID = requesterID
 			}
+			if test.eventType == events.NotificationTest {
+				aggregateID = eventID
+			}
 			event, eventErr := events.New(events.NewEvent{
-				AggregateType: "access_request", AggregateID: requesterID,
+				ID: eventID, AggregateType: test.aggregateType, AggregateID: aggregateID,
 				Type: test.eventType, RecipientID: recipientID, Payload: test.payload,
 				DedupeKey: test.eventType + ":" + requesterID.String(), CreatedAt: now,
 			})
 			require.NoError(t, eventErr)
 			sender := &cardSenderStub{}
-			handler := AccessHandler{
+			handler := Handler{
 				Recipients: recipientResolverStub{recipient: identity.ExternalIdentity{Key: recipient}},
 				Sender:     sender, AppBaseURL: baseURL,
 			}
