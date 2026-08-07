@@ -164,10 +164,32 @@ export function completeTaskAttachmentUpload(
   uploadID: string,
   taskVersion: number,
 ): Promise<TaskAttachment> {
+  return completeTaskAttachmentUploadVersioned(number, uploadID, taskVersion)
+    .then(({ attachment }) => attachment)
+}
+
+export interface TaskAttachmentUploadCompletion {
+  attachment: TaskAttachment
+  taskVersion: number
+}
+
+export function completeTaskAttachmentUploadVersioned(
+  number: number,
+  uploadID: string,
+  taskVersion: number,
+): Promise<TaskAttachmentUploadCompletion> {
   return v1Post<TaskAttachment>(
     `/api/v1/tasks/${number}/attachments/uploads/${uploadID}/complete`,
     { ifMatch: etagForVersion(taskVersion) },
-  ).then(({ value }) => value)
+  ).then((response) => {
+    const versioned = requireVersioned(response)
+    const matched = /^"([1-9][0-9]*)"$/.exec(versioned.etag)
+    const nextTaskVersion = matched ? Number(matched[1]) : NaN
+    if (!Number.isSafeInteger(nextTaskVersion)) {
+      throw new Error('Attachment completion returned an invalid Task version')
+    }
+    return { attachment: versioned.value, taskVersion: nextTaskVersion }
+  })
 }
 
 export function deleteTaskAttachment(
