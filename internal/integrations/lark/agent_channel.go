@@ -26,10 +26,17 @@ var ErrAgentChannelNotConfigured = errors.New("Lark Agent channel is not configu
 const acknowledgementEmojiType = "OnIt"
 
 const (
-	defaultAgentCardTitle  = "Pactline Agent"
-	maxAgentCardTitleRunes = 80
-	maxAgentCardBytes      = 30 * 1024
+	defaultAgentCardTitle           = "Pactline Agent"
+	maxAgentCardTitleRunes          = 80
+	maxAgentCardBytes               = 30 * 1024
+	conversationNameCacheTTL        = 6 * time.Hour
+	conversationNameFailureCacheTTL = 5 * time.Minute
 )
+
+type conversationNameCacheEntry struct {
+	name      string
+	expiresAt time.Time
+}
 
 func (c *Client) AgentChannelReady() bool {
 	if c == nil {
@@ -88,6 +95,71 @@ func (c *Client) InitializeAgentChannel(ctx context.Context) error {
 	c.botOpenID = strings.TrimSpace(response.Bot.OpenID)
 	c.botMu.Unlock()
 	return nil
+}
+
+func (c *Client) conversationName(
+	ctx context.Context,
+	tenantID string,
+	conversationID string,
+) (string, error) {
+	if !c.AgentChannelReady() || tenantID != c.TenantKey() || strings.TrimSpace(conversationID) == "" {
+		return "", channel.ErrContextBoundary
+	}
+	conversationID = strings.TrimSpace(conversationID)
+	now := c.now().UTC()
+	c.conversationNameMu.RLock()
+	cached, ok := c.conversationNames[conversationID]
+	c.conversationNameMu.RUnlock()
+	if ok && now.Before(cached.expiresAt) {
+		return cached.name, nil
+	}
+
+	tenantToken, err := c.tenantAccessToken(ctx)
+	if err != nil {
+		c.cacheConversationName(conversationID, "", now.Add(conversationNameFailureCacheTTL))
+		return "", err
+	}
+	var response providerEnvelope[struct {
+		Name string `json:"name"`
+	}]
+	requestID, err := c.doJSON(
+		ctx,
+		"get_agent_conversation",
+		http.MethodGet,
+		"/open-apis/im/v1/chats/"+url.PathEscape(conversationID),
+		tenantToken,
+		nil,
+		&response,
+	)
+	if err != nil {
+		c.cacheConversationName(conversationID, "", now.Add(conversationNameFailureCacheTTL))
+		return "", err
+	}
+	name := strings.TrimSpace(response.Data.Name)
+	if response.Code != 0 || name == "" {
+		c.cacheConversationName(conversationID, "", now.Add(conversationNameFailureCacheTTL))
+		return "", providerError(
+			"get_agent_conversation",
+			classifyProviderCode(response.Code),
+			firstNonEmpty(requestID, response.Error.LogID),
+			fmt.Errorf("provider code %d or incomplete conversation", response.Code),
+		)
+	}
+	c.cacheConversationName(conversationID, name, now.Add(conversationNameCacheTTL))
+	return name, nil
+}
+
+func (c *Client) cacheConversationName(
+	conversationID string,
+	name string,
+	expiresAt time.Time,
+) {
+	c.conversationNameMu.Lock()
+	c.conversationNames[conversationID] = conversationNameCacheEntry{
+		name:      name,
+		expiresAt: expiresAt,
+	}
+	c.conversationNameMu.Unlock()
 }
 
 func (c *Client) NormalizeMessageEvent(

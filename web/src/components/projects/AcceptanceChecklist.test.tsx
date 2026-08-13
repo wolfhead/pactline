@@ -5,6 +5,39 @@ import AcceptanceChecklist from './AcceptanceChecklist'
 afterEach(cleanup)
 
 describe('AcceptanceChecklist', () => {
+  it('distinguishes execution verification from acceptance evidence', () => {
+    render(
+      <AcceptanceChecklist
+        title="Task acceptance"
+        criteria={[{
+          id: 'criterion-1',
+          version: 1,
+          criterion: 'The release test passes',
+          verification_instructions: 'Run make e2e',
+          revision: 1,
+          position: 0,
+          current_check: {
+            id: 'check-1',
+            criterion_id: 'criterion-1',
+            criterion_revision: 1,
+            outcome: 'passed',
+            evidence: 'Playwright passed',
+            checker_type: 'agent',
+            checked_by_user_id: null,
+            purpose: 'execution_verification',
+            checked_at: '2026-08-13T00:00:00Z',
+          },
+        }]}
+        onAdd={vi.fn()}
+        onCheck={vi.fn()}
+        onUpdate={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('执行自检 · 通过：Playwright passed')).toBeInTheDocument()
+  })
+
   it('submits one addressable criterion check with evidence', async () => {
     const onCheck = vi.fn().mockResolvedValue(undefined)
     render(

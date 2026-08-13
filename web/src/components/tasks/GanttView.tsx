@@ -6,7 +6,7 @@ import type { Tier } from '@/hooks/useBreakpoint'
 import { cn } from '@/lib/utils'
 import {
   PRIORITY_LABELS,
-  STATUS_LABELS,
+  PHASE_LABELS,
   type Task,
   type TaskPriority,
 } from '@/task-types'
@@ -120,7 +120,7 @@ function TaskPreview({
       <HoverCardContent>
         <div className="flex items-center gap-2 text-xs text-fg-muted">
           <span className="font-mono">#{task.number}</span>
-          <span>{STATUS_LABELS[task.status]}</span>
+          <span>{PHASE_LABELS[task.phase]}</span>
           <span>·</span>
           <span>{PRIORITY_LABELS[task.priority]}</span>
         </div>
@@ -140,7 +140,7 @@ function TaskPreview({
         {task.blocked && (
           <p className="mt-3 flex items-center gap-1.5 rounded-md bg-status-in-progress/10 px-2 py-1.5 text-xs text-status-in-progress">
             <Link2 className="size-3.5 shrink-0" aria-hidden="true" />
-            等待 {task.dependencies.filter((item) => !['done', 'cancelled'].includes(item.status)).length} 个前置任务
+            等待 {task.dependencies.filter((item) => !['done', 'cancelled'].includes(item.phase)).length} 个前置任务
           </p>
         )}
         <p className="mt-3 border-t border-border pt-2 text-xs text-fg-subtle">点击打开任务详情</p>

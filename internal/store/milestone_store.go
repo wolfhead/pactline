@@ -321,7 +321,7 @@ func (s *MilestoneStore) ApplyLifecycleWithOperation(
 			   AND COALESCE((SELECT chk.outcome FROM acceptance_checks chk
 			                 WHERE chk.criterion_id=ac.id AND chk.criterion_revision=ac.revision
 			                 ORDER BY chk.checked_at DESC, chk.id DESC LIMIT 1), '') NOT IN ('passed','waived')),
-			(SELECT count(*) FROM tasks t WHERE t.milestone_id=$1 AND t.status NOT IN ('done','cancelled'))`,
+			(SELECT count(*) FROM tasks t WHERE t.milestone_id=$1 AND (t.phase IS NULL OR t.phase NOT IN ('done','cancelled')))`,
 		milestone.ID,
 	).Scan(&readiness.ActiveCriteria, &readiness.UnsatisfiedCriteria, &readiness.UnfinishedTasks)
 	if err != nil {

@@ -54,11 +54,11 @@ Every Task:
 
 - belongs to exactly one Project;
 - may belong to one Milestone in that Project;
-- is in the Project Backlog when it has no Milestone;
+- is structurally in the Project Backlog when it has no Milestone, independently
+  of its lifecycle phase;
 - may define an optional start date, due date, or coherent inclusive date range;
 - has a stable, human-facing sequential number;
 - records a creator and an optional assignee;
-- declares `human_only` or `agent_allowed` execution mode;
 - requires context and an expected result when created; and
 - is archived or restored rather than hard-deleted.
 
@@ -71,18 +71,28 @@ active attachment limit. Deletion is soft first and physical object cleanup is
 asynchronous. Images and safe Markdown are viewable inline, HTML runs only in
 a sandboxed standalone page, and spreadsheet/CSV files are download-only.
 
-Task status and priority are labels, not scheduling constraints. Any valid
-status may move to any other valid status. Moving to `done` is the only
-acceptance gate: a Task with active acceptance criteria may complete only when
-every current criterion revision is passed or waived by a person. After an
-Agent submission, only human checks recorded at or after that submission
-satisfy this gate; Agent checks are self-verification evidence for the reviewer,
-not human acceptance.
+Task lifecycle is a command-driven state machine shared by people and Agents.
+Its phase records delivery progress:
 
-`agent_allowed` is an explicit delegation signal, not a second task lifecycle.
-An external Codex session may claim only an assigned, unarchived `todo` Task
-with that mode. Claiming moves it to `in_progress`; verified submission moves
-it to `in_review`. The Agent cannot mark the Task done.
+- `backlog`: defined but not ready to start;
+- `ready`: immediately claimable for execution;
+- `in_progress`: execution of the work;
+- `in_review`: delivery review, including code review, technical verification,
+  required confirmation, merge, and final Task acceptance;
+- `done`: accepted and complete; and
+- `cancelled`: intentionally stopped.
+
+`in_progress` and `in_review` additionally have one activity state:
+
+- `available`: the phase can be claimed;
+- `working`: exactly one active Claim owns the phase; and
+- `needs_resolution`: work is blocked by exactly one open typed Issue Thread.
+
+Priority remains a label, not a scheduling constraint. Phase and activity are
+not generic PATCH fields. Commands atomically update the Task, Claim, Thread
+Items, audit history, and acceptance context. A Task's Project is immutable;
+moving work across Projects requires creating another Task rather than
+rewriting its authorization and history boundary.
 
 Task relationships add coordination without creating a general-purpose graph:
 
@@ -94,8 +104,8 @@ Task relationships add coordination without creating a general-purpose graph:
 - A parent cannot complete while a child remains unfinished.
 - Dependencies are directed, cycle-free, and confined to one Project. They may
   cross Milestones in that Project.
-- An unfinished dependency does not prevent work from starting or change
-  status automatically; it only prevents the dependent Task from completing.
+- An unfinished dependency does not prevent work from starting or change phase
+  automatically; it only prevents the dependent Task from completing.
 - A direct parent-child pair cannot also be a dependency pair.
 
 List and Gantt are two renderers of the same filtered Task collection. Gantt
@@ -113,6 +123,16 @@ Milestones and Tasks share two acceptance entities:
 
 A criterion has exactly one owner scope. Revision history is retained so an
 Agent or person can identify exactly what was checked.
+
+Task checks are always recorded through an active Claim. An execution Claim
+creates `execution_verification` evidence. A review Claim creates `acceptance`
+evidence for the Task's current review cycle. Completing execution freezes the
+current delivery, execution checks, and active criterion revisions into an
+immutable completion record. Completing the Task requires each
+active criterion's current revision to have a passing current-cycle acceptance
+check. A changed criterion or a new submission cannot silently reuse stale
+acceptance. Milestone checks remain acceptance checks without a Task Claim or
+Task review cycle.
 
 ## Identity and access
 
@@ -174,46 +194,75 @@ the real actor, effective subject, personal-token or Agent-Run provenance, and
 request identifier without recording credentials or unnecessary personal data.
 
 External Codex execution uses the least-privilege `work:execute` scope. It
-implies read access and permits only Claim-owned lifecycle operations, Agent
-conversation messages, and acceptance checks for the claimed Task. It does not
-permit editing Task definitions, criteria, Projects, or ordinary comments.
+implies read access and permits Claim-owned lifecycle operations, unified
+Thread interaction, Issue resolution, and acceptance checks for the claimed
+Task. It does not permit editing Task definitions, criteria, or Projects.
 
-A `TaskClaim` binds one unfinished Task to one real client session. A session
-may hold at most one unfinished Claim. Claims are never transferred between
-sessions. The opaque client-session binding is stored for authorization but is
-not returned in Claim responses or audit payloads:
+People and Agents have the same Task execution and acceptance capabilities.
+Authentication method and actor type are provenance, not workflow policy. A
+`TaskStageClaim` represents exclusive, temporary ownership of either execution
+or review. Claim stage is inferred from Task phase and cannot be chosen by the
+caller. One Task has at most one active Claim; the Claim is bound to its actor,
+effective user, authentication provenance, and optional client context. It is
+never transferred or implicitly resumed.
 
-- active Claims expire after seven days and may be explicitly extended by the
-  original session;
-- a question atomically changes the Claim to `waiting_human` for at most 24
-  hours;
-- only an explicit human answer resumes the same Claim;
-- submission terminates the Claim and moves an unchanged `in_progress` Task
-  to `in_review`, where the latest submission remains visible as current Agent
-  work until review finishes or the Task leaves `in_review`; and
-- release or expiry returns the Task to `todo` only if it is still
-  `in_progress`, preserving any intervening human status change.
+- Claiming `ready` or `in_progress.available` creates an execution Claim and
+  produces `in_progress.working`.
+- Claiming `in_review.available` creates a review Claim and produces
+  `in_review.working`.
+- Releasing or lazily expiring a Claim keeps the phase and returns it to
+  `available`.
+- Recording a work submission appends an immutable delivery record and keeps
+  the execution Claim and `in_progress.working` state unchanged. It is
+  repeatable and targets the next review cycle.
+- Completing execution ends the Claim, freezes the delivery snapshot,
+  increments the review cycle, and produces `in_review.available`.
+- Requesting changes ends a review Claim and produces
+  `in_progress.available`.
+- Accepting through a review Claim ends it and produces `done`.
 
-Agent progress, questions, answers, handoff, and submission are immutable
-conversation messages separate from ordinary comments. The task UI presents
-both streams together in chronological order. The latest submitted message is
-also the entry point for human, criterion-by-criterion review and explicit Task
-completion.
+Claims expire after seven days. Expiry is evaluated while the workflow is
+accessed; there is no periodic Claim poll, heartbeat, or extension command.
 
-Ordinary Task comments form one visually flattened thread. Each reply retains
-its exact reply target and canonical root so context is not lost. Deleting a
-comment preserves a placeholder whenever replies may still refer to it.
-Mentions are structured user identifiers, not names parsed from comment text,
-and may target only active members of the Task's Project. A reply notifies its
-target author; an explicit mention of the same person wins over the implicit
-reply notification. Self-notifications are omitted, and edits notify only
-newly added mentions.
+Every Task owns one durable Main Thread across its entire lifetime. Messages,
+progress, handoffs, work submissions, execution completions, review outcomes,
+lifecycle events, and merged Issue conclusions are Thread Items shared by
+people and Agents. Editable user
+or Agent messages retain structured replies and mentions; immutable workflow
+Items preserve state-changing context.
 
-Comment notification intents are committed atomically with the comment through
-a PostgreSQL outbox. A confirmed publisher relays them to durable RabbitMQ
-topic/retry/dead-letter topology. Consumers are idempotent by event ID. The
-initial consumer intentionally acknowledges without external delivery; IM and
-inbox delivery are later consumers of the same event contract.
+When work needs a decision or dependency resolution, the active Claim uses the
+atomic `request_resolution` command. It ends the Claim, creates one Issue Thread
+typed `decision_required` or `dependency_required`, and changes the Task to
+`needs_resolution`. Any authorized person or Agent may discuss and resolve the
+Issue. Resolution records the conclusion, merges the original request and final
+resolution into one structured Main Thread Item, and returns the same phase to
+`available`. The old Claim is not restored.
+
+Application events use one typed contract and are committed atomically with
+the state change through a PostgreSQL outbox. A confirmed publisher relays
+them to durable RabbitMQ topic/retry/dead-letter topology, where consumers bind
+by event type and remain idempotent by event ID. Comment mention and reply
+events currently use a no-op consumer. Access requests send the Administrator
+a fixed Lark DM card linking to the approval page; approval sends the applicant
+a fixed Lark DM card linking to Pactline. A future inbox is another consumer of
+the same events rather than a second event-production path.
+
+The Administrator test-tool surface may emit a `notification.test` event for
+an approved, active user with a bound Lark identity. It follows the same
+outbox, RabbitMQ, retry, and Lark DM path as real notifications and always uses
+a fixed diagnostic card. Enqueueing confirms only that the event entered the
+delivery pipeline; receipt in Lark remains the end-to-end proof.
+
+Every outbound Lark HTTP call produces a separate transient audit record. It
+captures a stable operation and route template, result classification, HTTP
+and provider codes, provider request ID, duration, byte counts, credential
+kind, and available Pactline request, user, Agent Run, or application-event
+correlation. It never stores credentials, request or response bodies, message
+content, search queries, provider identity keys, concrete resource URLs, or
+attachment names. Audit persistence failure is diagnosed but does not turn a
+completed provider operation into a retryable failure. Lark API audit records
+are visible only to the Administrator and expire after 90 days.
 
 ## Legacy context
 

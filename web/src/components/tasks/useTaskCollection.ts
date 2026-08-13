@@ -70,7 +70,7 @@ export function useTaskCollection(
   )
 
   const hasActiveFilters =
-    filters.statuses.length > 0 ||
+    filters.phases.length > 0 ||
     filters.priorities.length > 0 ||
     filters.assignee !== '' ||
     filters.labelId !== '' ||
@@ -78,7 +78,7 @@ export function useTaskCollection(
 
   const buildQuery = useCallback((cursor?: string): TaskListParams => ({
     ...baseQuery,
-    status: filters.statuses.length ? filters.statuses : baseQuery.status,
+    phase: filters.phases.length ? filters.phases : baseQuery.phase,
     priority: filters.priorities.length ? filters.priorities : baseQuery.priority,
     assignee: filters.assignee || baseQuery.assignee,
     label: filters.labelId ? [filters.labelId] : baseQuery.label,

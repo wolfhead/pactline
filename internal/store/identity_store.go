@@ -359,6 +359,9 @@ func (s *IdentityStore) RegisterAccessRequest(
 	if err := insertAudit(ctx, tx, command.Audit); err != nil {
 		return domain.User{}, err
 	}
+	if err := insertAccessRequestedEvent(ctx, tx, user, command.Now); err != nil {
+		return domain.User{}, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		if isUniqueViolation(err) {
 			return domain.User{}, identity.ErrLoginDenied
@@ -414,6 +417,36 @@ func (s *IdentityStore) GetExternalIdentityForUser(ctx context.Context, userID u
 		return identity.ExternalIdentity{}, fmt.Errorf("get user external identity: %w", err)
 	}
 	return external, nil
+}
+
+func (s *IdentityStore) ListExternalIdentityUsers(
+	ctx context.Context,
+	provider string,
+) ([]domain.User, error) {
+	rows, err := s.db.Pool.Query(ctx, `
+		SELECT DISTINCT u.id,u.name,u.email,u.avatar_url,u.platform_role,u.access_status,
+		       u.roles,u.active,u.created_at,u.updated_at
+		FROM users u
+		JOIN external_identities e ON e.user_id=u.id
+		JOIN oauth_credentials c ON c.external_identity_id=e.id
+		WHERE e.provider=$1 AND u.active AND u.access_status='APPROVED'
+		ORDER BY u.name,u.id`, provider)
+	if err != nil {
+		return nil, fmt.Errorf("list external identity users: %w", err)
+	}
+	defer rows.Close()
+	users := []domain.User{}
+	for rows.Next() {
+		user, scanErr := scanUser(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		users = append(users, user)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate external identity users: %w", err)
+	}
+	return users, nil
 }
 
 func (s *IdentityStore) FindExternalIdentity(ctx context.Context, key identity.PrincipalKey) (identity.ExternalIdentity, domain.User, error) {
@@ -949,7 +982,13 @@ func (s *IdentityStore) SetUserAccessStatus(
 		if requestID != "" {
 			audit.RequestID = &requestID
 		}
-		return insertAudit(ctx, tx, audit)
+		if err := insertAudit(ctx, tx, audit); err != nil {
+			return err
+		}
+		if status == domain.AccessStatusApproved {
+			return insertAccessApprovedEvent(ctx, tx, userID, actorID, now)
+		}
+		return nil
 	})
 }
 

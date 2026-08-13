@@ -13,6 +13,7 @@ import (
 	"github.com/wolfhead/pactline/internal/agent/channel"
 	"github.com/wolfhead/pactline/internal/domain"
 	"github.com/wolfhead/pactline/internal/identity"
+	"github.com/wolfhead/pactline/internal/larkaudit"
 
 	"github.com/google/uuid"
 )
@@ -52,12 +53,10 @@ type RunRepository interface {
 
 type ConversationObserver interface {
 	ObserveConfiguration(
-		context.Context,
-		string,
-		string,
-		string,
-		uuid.UUID,
-		time.Time,
+		ctx context.Context,
+		provider, tenantID, externalID, name string,
+		actorID uuid.UUID,
+		now time.Time,
 	) (pactagent.ConversationConfiguration, error)
 }
 
@@ -131,6 +130,7 @@ func (s *Service) Accept(ctx context.Context, incoming channel.IncomingMessage) 
 		incoming.Provider,
 		incoming.TenantID,
 		incoming.ConversationID,
+		incoming.ConversationName,
 		user.ID,
 		s.now().UTC(),
 	)
@@ -211,6 +211,9 @@ func (s *Service) acknowledge(
 ) {
 	ctx, cancel := context.WithTimeout(parent, acknowledgementTimeout)
 	defer cancel()
+	ctx = larkaudit.WithCorrelation(ctx, larkaudit.Correlation{
+		AgentRunID: &run.ID, SubjectUserID: &run.InitiatingUserID,
+	})
 	err := acknowledger.Acknowledge(ctx, channel.AcknowledgeRequest{
 		TenantID:        run.TenantID,
 		TargetMessageID: run.TriggerMessageID,

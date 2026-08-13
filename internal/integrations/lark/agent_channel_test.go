@@ -248,6 +248,74 @@ func TestAgentChannelFetchesBoundedContextAndReplies(t *testing.T) {
 	require.Equal(t, "OnIt", reactionBody["reaction_type"]["emoji_type"])
 }
 
+func TestAgentChannelCachesConversationName(t *testing.T) {
+	now := time.Date(2026, 8, 6, 10, 0, 0, 0, time.UTC)
+	chatRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/open-apis/auth/v3/tenant_access_token/internal":
+			_, _ = io.WriteString(w, `{"code":0,"tenant_access_token":"tenant-token","expire":7200}`)
+		case "/open-apis/tenant/v2/tenant/query":
+			_, _ = io.WriteString(w, `{"code":0,"data":{"tenant":{"tenant_key":"tenant"}}}`)
+		case "/open-apis/bot/v3/info":
+			_, _ = io.WriteString(w, `{"code":0,"bot":{"activate_status":2,"open_id":"ou_bot"}}`)
+		case "/open-apis/im/v1/chats/chat-1":
+			chatRequests++
+			_, _ = io.WriteString(w, `{"code":0,"data":{"name":"Project Alpha"}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	client := newAgentChannelTestClient(t, server.URL, server.Client())
+	client.now = func() time.Time { return now }
+
+	name, err := client.conversationName(context.Background(), "tenant", "chat-1")
+	require.NoError(t, err)
+	require.Equal(t, "Project Alpha", name)
+	name, err = client.conversationName(context.Background(), "tenant", "chat-1")
+	require.NoError(t, err)
+	require.Equal(t, "Project Alpha", name)
+	require.Equal(t, 1, chatRequests)
+
+	now = now.Add(conversationNameCacheTTL + time.Second)
+	name, err = client.conversationName(context.Background(), "tenant", "chat-1")
+	require.NoError(t, err)
+	require.Equal(t, "Project Alpha", name)
+	require.Equal(t, 2, chatRequests)
+}
+
+func TestAgentChannelTemporarilyCachesConversationNameFailure(t *testing.T) {
+	chatRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/open-apis/auth/v3/tenant_access_token/internal":
+			_, _ = io.WriteString(w, `{"code":0,"tenant_access_token":"tenant-token","expire":7200}`)
+		case "/open-apis/tenant/v2/tenant/query":
+			_, _ = io.WriteString(w, `{"code":0,"data":{"tenant":{"tenant_key":"tenant"}}}`)
+		case "/open-apis/bot/v3/info":
+			_, _ = io.WriteString(w, `{"code":0,"bot":{"activate_status":2,"open_id":"ou_bot"}}`)
+		case "/open-apis/im/v1/chats/chat-1":
+			chatRequests++
+			_, _ = io.WriteString(w, `{"code":99991663,"msg":"forbidden"}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	client := newAgentChannelTestClient(t, server.URL, server.Client())
+
+	name, err := client.conversationName(context.Background(), "tenant", "chat-1")
+	require.Error(t, err)
+	require.Empty(t, name)
+	name, err = client.conversationName(context.Background(), "tenant", "chat-1")
+	require.NoError(t, err)
+	require.Empty(t, name)
+	require.Equal(t, 1, chatRequests)
+}
+
 func TestAgentArtifactResolverDownloadsOnlyRegisteredRunScope(t *testing.T) {
 	createdAt := time.Date(2026, 7, 30, 8, 0, 0, 0, time.UTC)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -359,6 +427,9 @@ func newAgentChannelInitializationServer(t *testing.T) *httptest.Server {
 		case "/open-apis/bot/v3/info":
 			require.Equal(t, "Bearer tenant-token", r.Header.Get("Authorization"))
 			_, _ = io.WriteString(w, `{"code":0,"msg":"ok","bot":{"activate_status":2,"open_id":"ou_bot"}}`)
+		case "/open-apis/im/v1/chats/chat-1":
+			require.Equal(t, "Bearer tenant-token", r.Header.Get("Authorization"))
+			_, _ = io.WriteString(w, `{"code":0,"data":{"name":"Project Alpha"}}`)
 		default:
 			http.NotFound(w, r)
 		}

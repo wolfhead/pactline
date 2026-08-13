@@ -8,6 +8,12 @@ import (
 
 // Handler handles operations described by OpenAPI v3 specification.
 type Handler interface {
+	// AcceptTask implements acceptTask operation.
+	//
+	// Accept the Task outcome and complete the Task.
+	//
+	// POST /api/v1/tasks/{number}/claims/{id}/accept
+	AcceptTask(ctx context.Context, req *TaskStageClaimFinish, params AcceptTaskParams) (AcceptTaskRes, error)
 	// ActivateMilestone implements activateMilestone operation.
 	//
 	// Activate a planned milestone.
@@ -20,18 +26,6 @@ type Handler interface {
 	//
 	// POST /api/v1/projects/{number}/members
 	AddProjectMember(ctx context.Context, req *ProjectMembershipCreate, params AddProjectMemberParams) (AddProjectMemberRes, error)
-	// AddTaskClaimProgress implements addTaskClaimProgress operation.
-	//
-	// Add an Agent progress message.
-	//
-	// POST /api/v1/claims/{id}/progress
-	AddTaskClaimProgress(ctx context.Context, req *TaskClaimAgentMessage, params AddTaskClaimProgressParams) (AddTaskClaimProgressRes, error)
-	// AnswerTaskClaimQuestion implements answerTaskClaimQuestion operation.
-	//
-	// Answer the pending Agent question and resume the Claim.
-	//
-	// POST /api/v1/claims/{id}/answer
-	AnswerTaskClaimQuestion(ctx context.Context, req *TaskClaimHumanAnswer, params AnswerTaskClaimQuestionParams) (AnswerTaskClaimQuestionRes, error)
 	// ArchiveProject implements archiveProject operation.
 	//
 	// Archive a project.
@@ -44,24 +38,18 @@ type Handler interface {
 	//
 	// POST /api/v1/tasks/{number}/archive
 	ArchiveTask(ctx context.Context, params ArchiveTaskParams) (ArchiveTaskRes, error)
-	// AskTaskClaimQuestion implements askTaskClaimQuestion operation.
-	//
-	// Ask a human question and pause the Claim.
-	//
-	// POST /api/v1/claims/{id}/ask
-	AskTaskClaimQuestion(ctx context.Context, req *TaskClaimAgentMessage, params AskTaskClaimQuestionParams) (AskTaskClaimQuestionRes, error)
 	// CancelMilestone implements cancelMilestone operation.
 	//
 	// Cancel a milestone.
 	//
 	// POST /api/v1/projects/{number}/milestones/{id}/cancel
 	CancelMilestone(ctx context.Context, req OptLifecycleRequest, params CancelMilestoneParams) (CancelMilestoneRes, error)
-	// ClaimTask implements claimTask operation.
+	// CancelTask implements cancelTask operation.
 	//
-	// Claim an eligible assigned task for this client session.
+	// Cancel a non-terminal Task and close active workflow state.
 	//
-	// POST /api/v1/tasks/{number}/claim
-	ClaimTask(ctx context.Context, req *TaskClaimSession, params ClaimTaskParams) (ClaimTaskRes, error)
+	// POST /api/v1/tasks/{number}/commands/cancel
+	CancelTask(ctx context.Context, req *ReasonWrite, params CancelTaskParams) (CancelTaskRes, error)
 	// CompleteMilestone implements completeMilestone operation.
 	//
 	// Complete a milestone.
@@ -74,6 +62,12 @@ type Handler interface {
 	//
 	// POST /api/v1/tasks/{number}/attachments/uploads/{id}/complete
 	CompleteTaskAttachmentUpload(ctx context.Context, params CompleteTaskAttachmentUploadParams) (CompleteTaskAttachmentUploadRes, error)
+	// CompleteTaskExecution implements completeTaskExecution operation.
+	//
+	// End execution and make the frozen delivery available for review.
+	//
+	// POST /api/v1/tasks/{number}/claims/{id}/complete-execution
+	CompleteTaskExecution(ctx context.Context, req *TaskStageClaimFinish, params CompleteTaskExecutionParams) (CompleteTaskExecutionRes, error)
 	// CreateAcceptanceCheck implements createAcceptanceCheck operation.
 	//
 	// Record an immutable acceptance check.
@@ -116,18 +110,24 @@ type Handler interface {
 	//
 	// POST /api/v1/tasks/{number}/attachments/uploads
 	CreateTaskAttachmentUpload(ctx context.Context, req *TaskAttachmentUploadWrite, params CreateTaskAttachmentUploadParams) (CreateTaskAttachmentUploadRes, error)
-	// CreateTaskComment implements createTaskComment operation.
-	//
-	// Add a task comment.
-	//
-	// POST /api/v1/tasks/{number}/comments
-	CreateTaskComment(ctx context.Context, req *CommentCreateWrite, params CreateTaskCommentParams) (CreateTaskCommentRes, error)
 	// CreateTaskCriterion implements createTaskCriterion operation.
 	//
 	// Create a task acceptance criterion.
 	//
 	// POST /api/v1/tasks/{number}/criteria
 	CreateTaskCriterion(ctx context.Context, req *CriterionCreate, params CreateTaskCriterionParams) (CreateTaskCriterionRes, error)
+	// CreateTaskStageClaim implements createTaskStageClaim operation.
+	//
+	// Claim the Task's currently available execution or review stage.
+	//
+	// POST /api/v1/tasks/{number}/claims
+	CreateTaskStageClaim(ctx context.Context, req *TaskStageClaimCreate, params CreateTaskStageClaimParams) (CreateTaskStageClaimRes, error)
+	// CreateTaskThreadMessage implements createTaskThreadMessage operation.
+	//
+	// Add an ordinary message or immutable progress update to one Task Thread.
+	//
+	// POST /api/v1/threads/{id}/items
+	CreateTaskThreadMessage(ctx context.Context, req *TaskThreadMessageWrite, params CreateTaskThreadMessageParams) (CreateTaskThreadMessageRes, error)
 	// DeleteCriterion implements deleteCriterion operation.
 	//
 	// Remove an acceptance criterion.
@@ -146,18 +146,12 @@ type Handler interface {
 	//
 	// DELETE /api/v1/tasks/{number}/attachments/{id}
 	DeleteTaskAttachment(ctx context.Context, params DeleteTaskAttachmentParams) (DeleteTaskAttachmentRes, error)
-	// DeleteTaskComment implements deleteTaskComment operation.
+	// DeleteTaskThreadMessage implements deleteTaskThreadMessage operation.
 	//
-	// Delete a task comment.
+	// Delete a message owned by the caller.
 	//
-	// DELETE /api/v1/tasks/{number}/comments/{id}
-	DeleteTaskComment(ctx context.Context, params DeleteTaskCommentParams) (DeleteTaskCommentRes, error)
-	// ExtendTaskClaim implements extendTaskClaim operation.
-	//
-	// Extend an active Claim.
-	//
-	// POST /api/v1/claims/{id}/extend
-	ExtendTaskClaim(ctx context.Context, req *TaskClaimSession, params ExtendTaskClaimParams) (ExtendTaskClaimRes, error)
+	// DELETE /api/v1/thread-items/{id}
+	DeleteTaskThreadMessage(ctx context.Context, params DeleteTaskThreadMessageParams) (DeleteTaskThreadMessageRes, error)
 	// GetAgentConversation implements getAgentConversation operation.
 	//
 	// Get an Agent conversation configuration.
@@ -176,12 +170,12 @@ type Handler interface {
 	//
 	// GET /api/v1/me
 	GetCurrentPrincipal(ctx context.Context) (GetCurrentPrincipalRes, error)
-	// GetCurrentTaskClaim implements getCurrentTaskClaim operation.
+	// GetCurrentTaskStageClaim implements getCurrentTaskStageClaim operation.
 	//
-	// Get the unfinished Claim owned by this client session.
+	// Get the active Claim owned by this authenticated client session.
 	//
-	// GET /api/v1/agent/claims/current
-	GetCurrentTaskClaim(ctx context.Context, params GetCurrentTaskClaimParams) (GetCurrentTaskClaimRes, error)
+	// GET /api/v1/claims/current
+	GetCurrentTaskStageClaim(ctx context.Context, params GetCurrentTaskStageClaimParams) (GetCurrentTaskStageClaimRes, error)
 	// GetProject implements getProject operation.
 	//
 	// Get a project and its work aggregate.
@@ -200,12 +194,6 @@ type Handler interface {
 	//
 	// GET /api/v1/tasks/{number}/attachments/{id}/content
 	GetTaskAttachmentContent(ctx context.Context, params GetTaskAttachmentContentParams) (GetTaskAttachmentContentRes, error)
-	// GetTaskClaim implements getTaskClaim operation.
-	//
-	// Get a Claim.
-	//
-	// GET /api/v1/claims/{id}
-	GetTaskClaim(ctx context.Context, params GetTaskClaimParams) (GetTaskClaimRes, error)
 	// ListAgentConversations implements listAgentConversations operation.
 	//
 	// List visible Agent conversation configurations.
@@ -242,36 +230,36 @@ type Handler interface {
 	//
 	// GET /api/v1/tasks/{number}/activity
 	ListTaskActivity(ctx context.Context, params ListTaskActivityParams) (ListTaskActivityRes, error)
-	// ListTaskAgentConversations implements listTaskAgentConversations operation.
-	//
-	// List Agent conversations for the task timeline.
-	//
-	// GET /api/v1/tasks/{number}/agent-conversations
-	ListTaskAgentConversations(ctx context.Context, params ListTaskAgentConversationsParams) (ListTaskAgentConversationsRes, error)
 	// ListTaskAttachments implements listTaskAttachments operation.
 	//
 	// List active Task attachments.
 	//
 	// GET /api/v1/tasks/{number}/attachments
 	ListTaskAttachments(ctx context.Context, params ListTaskAttachmentsParams) (ListTaskAttachmentsRes, error)
-	// ListTaskClaimMessages implements listTaskClaimMessages operation.
-	//
-	// List the immutable Agent conversation for a Claim.
-	//
-	// GET /api/v1/claims/{id}/messages
-	ListTaskClaimMessages(ctx context.Context, params ListTaskClaimMessagesParams) (ListTaskClaimMessagesRes, error)
-	// ListTaskComments implements listTaskComments operation.
-	//
-	// List task comments.
-	//
-	// GET /api/v1/tasks/{number}/comments
-	ListTaskComments(ctx context.Context, params ListTaskCommentsParams) (ListTaskCommentsRes, error)
 	// ListTaskCriteria implements listTaskCriteria operation.
 	//
 	// List task acceptance criteria.
 	//
 	// GET /api/v1/tasks/{number}/criteria
 	ListTaskCriteria(ctx context.Context, params ListTaskCriteriaParams) (ListTaskCriteriaRes, error)
+	// ListTaskStageClaims implements listTaskStageClaims operation.
+	//
+	// List execution and acceptance Claims for a Task.
+	//
+	// GET /api/v1/tasks/{number}/claims
+	ListTaskStageClaims(ctx context.Context, params ListTaskStageClaimsParams) (ListTaskStageClaimsRes, error)
+	// ListTaskThreadItems implements listTaskThreadItems operation.
+	//
+	// List Items in one Task Thread.
+	//
+	// GET /api/v1/threads/{id}/items
+	ListTaskThreadItems(ctx context.Context, params ListTaskThreadItemsParams) (ListTaskThreadItemsRes, error)
+	// ListTaskThreads implements listTaskThreads operation.
+	//
+	// List the Main Thread and historical Issue Threads.
+	//
+	// GET /api/v1/tasks/{number}/threads
+	ListTaskThreads(ctx context.Context, params ListTaskThreadsParams) (ListTaskThreadsRes, error)
 	// ListTasks implements listTasks operation.
 	//
 	// List tasks.
@@ -284,18 +272,30 @@ type Handler interface {
 	//
 	// GET /api/v1/users
 	ListUsers(ctx context.Context, params ListUsersParams) (ListUsersRes, error)
-	// RecordTaskClaimAcceptanceCheck implements recordTaskClaimAcceptanceCheck operation.
+	// MarkTaskReady implements markTaskReady operation.
 	//
-	// Record an acceptance check owned by the active Claim.
+	// Mark a backlog Task ready to claim.
 	//
-	// POST /api/v1/claims/{id}/criteria/{criterion_id}/checks
-	RecordTaskClaimAcceptanceCheck(ctx context.Context, req *TaskClaimAcceptanceCheckCreate, params RecordTaskClaimAcceptanceCheckParams) (RecordTaskClaimAcceptanceCheckRes, error)
-	// ReleaseTaskClaim implements releaseTaskClaim operation.
+	// POST /api/v1/tasks/{number}/commands/mark-ready
+	MarkTaskReady(ctx context.Context, params MarkTaskReadyParams) (MarkTaskReadyRes, error)
+	// RecordTaskStageAcceptanceCheck implements recordTaskStageAcceptanceCheck operation.
 	//
-	// Release a Claim.
+	// Record execution verification or acceptance through the active Claim.
 	//
-	// POST /api/v1/claims/{id}/release
-	ReleaseTaskClaim(ctx context.Context, req *TaskClaimRelease, params ReleaseTaskClaimParams) (ReleaseTaskClaimRes, error)
+	// POST /api/v1/tasks/{number}/claims/{id}/criteria/{criterion_id}/checks
+	RecordTaskStageAcceptanceCheck(ctx context.Context, req *TaskStageAcceptanceCheckWrite, params RecordTaskStageAcceptanceCheckParams) (RecordTaskStageAcceptanceCheckRes, error)
+	// RecordTaskWorkSubmission implements recordTaskWorkSubmission operation.
+	//
+	// Record an immutable work submission without ending execution.
+	//
+	// POST /api/v1/tasks/{number}/claims/{id}/submissions
+	RecordTaskWorkSubmission(ctx context.Context, req *TaskStageClaimFinish, params RecordTaskWorkSubmissionParams) (RecordTaskWorkSubmissionRes, error)
+	// ReleaseTaskStageClaim implements releaseTaskStageClaim operation.
+	//
+	// Release the active Claim with a durable handoff.
+	//
+	// POST /api/v1/tasks/{number}/claims/{id}/release
+	ReleaseTaskStageClaim(ctx context.Context, req *TaskStageClaimFinish, params ReleaseTaskStageClaimParams) (ReleaseTaskStageClaimRes, error)
 	// RemoveProjectMember implements removeProjectMember operation.
 	//
 	// Remove a Project member.
@@ -308,6 +308,24 @@ type Handler interface {
 	//
 	// POST /api/v1/projects/{number}/milestones/{id}/reopen
 	ReopenMilestone(ctx context.Context, req *LifecycleRequest, params ReopenMilestoneParams) (ReopenMilestoneRes, error)
+	// RequestTaskChanges implements requestTaskChanges operation.
+	//
+	// Return acceptance review to execution.
+	//
+	// POST /api/v1/tasks/{number}/claims/{id}/request-changes
+	RequestTaskChanges(ctx context.Context, req *TaskStageClaimFinish, params RequestTaskChangesParams) (RequestTaskChangesRes, error)
+	// RequestTaskResolution implements requestTaskResolution operation.
+	//
+	// End the Claim and open one typed blocking Issue Thread.
+	//
+	// POST /api/v1/tasks/{number}/claims/{id}/request-resolution
+	RequestTaskResolution(ctx context.Context, req *TaskResolutionRequest, params RequestTaskResolutionParams) (RequestTaskResolutionRes, error)
+	// ResolveTaskIssue implements resolveTaskIssue operation.
+	//
+	// Resolve the active Issue and return the Task to available.
+	//
+	// POST /api/v1/tasks/{number}/issues/{id}/resolve
+	ResolveTaskIssue(ctx context.Context, req *TaskIssueResolve, params ResolveTaskIssueParams) (ResolveTaskIssueRes, error)
 	// RestoreProject implements restoreProject operation.
 	//
 	// Restore a project.
@@ -320,12 +338,6 @@ type Handler interface {
 	//
 	// POST /api/v1/tasks/{number}/restore
 	RestoreTask(ctx context.Context, params RestoreTaskParams) (RestoreTaskRes, error)
-	// SubmitTaskClaim implements submitTaskClaim operation.
-	//
-	// Submit verified Agent work for human review.
-	//
-	// POST /api/v1/claims/{id}/submit
-	SubmitTaskClaim(ctx context.Context, req *TaskClaimAgentMessage, params SubmitTaskClaimParams) (SubmitTaskClaimRes, error)
 	// UpdateAgentConversation implements updateAgentConversation operation.
 	//
 	// Update an Agent conversation configuration.
@@ -374,18 +386,24 @@ type Handler interface {
 	//
 	// PATCH /api/v1/tasks/{number}
 	UpdateTask(ctx context.Context, req *TaskPatch, params UpdateTaskParams) (UpdateTaskRes, error)
-	// UpdateTaskComment implements updateTaskComment operation.
+	// UpdateTaskThreadMessage implements updateTaskThreadMessage operation.
 	//
-	// Update a task comment.
+	// Edit a message owned by the caller.
 	//
-	// PATCH /api/v1/tasks/{number}/comments/{id}
-	UpdateTaskComment(ctx context.Context, req *CommentUpdateWrite, params UpdateTaskCommentParams) (UpdateTaskCommentRes, error)
+	// PATCH /api/v1/thread-items/{id}
+	UpdateTaskThreadMessage(ctx context.Context, req *TaskThreadMessageUpdate, params UpdateTaskThreadMessageParams) (UpdateTaskThreadMessageRes, error)
 	// UploadTaskAttachmentContent implements uploadTaskAttachmentContent operation.
 	//
 	// Stream content into a Local storage upload session.
 	//
 	// PUT /api/v1/tasks/{number}/attachments/uploads/{id}/content
 	UploadTaskAttachmentContent(ctx context.Context, req UploadTaskAttachmentContentReq, params UploadTaskAttachmentContentParams) (UploadTaskAttachmentContentRes, error)
+	// WithdrawTaskReadiness implements withdrawTaskReadiness operation.
+	//
+	// Return a ready Task to backlog.
+	//
+	// POST /api/v1/tasks/{number}/commands/withdraw-readiness
+	WithdrawTaskReadiness(ctx context.Context, req *ReasonWrite, params WithdrawTaskReadinessParams) (WithdrawTaskReadinessRes, error)
 }
 
 // Server implements http server based on OpenAPI v3 specification and

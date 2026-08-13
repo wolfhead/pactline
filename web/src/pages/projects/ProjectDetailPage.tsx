@@ -295,21 +295,21 @@ export default function ProjectDetailPage({ view = 'overview' }: { view?: Projec
 function Overview({ detail, users }: { detail: ProjectDetail; users: Array<{ id: string; name: string }> }) {
   const today = new Date().toISOString().slice(0, 10)
   const liveTasks = detail.tasks.filter((task) => !task.archived_at)
-  const unfinished = liveTasks.filter((task) => !['done', 'cancelled'].includes(task.status))
+  const unfinished = liveTasks.filter((task) => !['done', 'cancelled'].includes(task.phase))
   const active = detail.milestones.filter((item) => item.status === 'active')
   const activeIDs = new Set(active.map((item) => item.id))
   const attention = [
     ['逾期里程碑', active.filter((item) => item.target_date && item.target_date < today).length],
     ['逾期任务', unfinished.filter((task) => task.due_date && task.due_date < today).length],
     ['活跃里程碑中的未分配任务', unfinished.filter((task) => !task.assignee && task.milestone && activeIDs.has(task.milestone.id)).length],
-    ['待评审任务', liveTasks.filter((task) => task.status === 'in_review').length],
+    ['待验收任务', liveTasks.filter((task) => task.phase === 'in_review').length],
     ['任务已结束但验收未完成的里程碑', active.filter((milestone) => {
       const tasks = liveTasks.filter((task) => task.milestone?.id === milestone.id)
-      const tasksConcluded = tasks.length > 0 && tasks.every((task) => ['done', 'cancelled'].includes(task.status))
+      const tasksConcluded = tasks.length > 0 && tasks.every((task) => ['done', 'cancelled'].includes(task.phase))
       const acceptanceIncomplete = milestone.acceptance_criteria.some((criterion) => !['passed', 'waived'].includes(criterion.current_check?.outcome ?? ''))
       return tasksConcluded && acceptanceIncomplete
     }).length],
-    ['高优先级 Backlog', liveTasks.filter((task) => !task.milestone && ['high', 'urgent'].includes(task.priority) && !['done', 'cancelled'].includes(task.status)).length],
+    ['高优先级 Backlog', liveTasks.filter((task) => !task.milestone && ['high', 'urgent'].includes(task.priority) && !['done', 'cancelled'].includes(task.phase)).length],
   ] as const
   const backlogCount = liveTasks.filter((task) => !task.milestone).length
 
@@ -337,10 +337,10 @@ function Overview({ detail, users }: { detail: ProjectDetail; users: Array<{ id:
           <div className="grid gap-3 lg:grid-cols-2">
             {active.map((milestone) => {
               const tasks = liveTasks.filter((task) => task.milestone?.id === milestone.id)
-              const concluded = tasks.filter((task) => ['done', 'cancelled'].includes(task.status)).length
-              const inReview = tasks.filter((task) => task.status === 'in_review').length
+              const concluded = tasks.filter((task) => ['done', 'cancelled'].includes(task.phase)).length
+              const inReview = tasks.filter((task) => task.phase === 'in_review').length
               const overdue = tasks.filter(
-                (task) => !['done', 'cancelled'].includes(task.status)
+                (task) => !['done', 'cancelled'].includes(task.phase)
                   && Boolean(task.due_date && task.due_date < today),
               ).length
               const satisfied = milestone.acceptance_criteria.filter((criterion) => ['passed', 'waived'].includes(criterion.current_check?.outcome ?? '')).length
@@ -412,7 +412,7 @@ function Milestones({
   const selectedTasks = selected
     ? detail.tasks.filter((task) => !task.archived_at && task.milestone?.id === selected.id)
     : []
-  const concludedTasks = selectedTasks.filter((task) => ['done', 'cancelled'].includes(task.status))
+  const concludedTasks = selectedTasks.filter((task) => ['done', 'cancelled'].includes(task.phase))
   const tasksConcluded = selectedTasks.length > 0 && concludedTasks.length === selectedTasks.length
   const acceptanceSatisfied = selected?.acceptance_criteria.filter((criterion) => (
     ['passed', 'waived'].includes(criterion.current_check?.outcome ?? '')

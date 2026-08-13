@@ -213,12 +213,28 @@ func TestV1ProjectMilestoneAndAcceptanceVersions(t *testing.T) {
 	require.Equal(t, http.StatusCreated, createdTaskCriterion.Code, createdTaskCriterion.Body.String())
 	var taskCriterion v1CriterionJSON
 	decodeJSON(t, createdTaskCriterion, &taskCriterion)
+	ready := doWithHeaders(
+		t, handler, http.MethodPost, taskPath+"/commands/mark-ready", userA,
+		http.Header{"If-Match": {`"2"`}}, nil,
+	)
+	require.Equal(t, http.StatusOK, ready.Code, ready.Body.String())
+	claimed := doWithHeaders(
+		t, handler, http.MethodPost, taskPath+"/claims", userA,
+		http.Header{"If-Match": {`"3"`}}, map[string]any{},
+	)
+	require.Equal(t, http.StatusCreated, claimed.Code, claimed.Body.String())
+	var execution stageClaimCommandJSON
+	decodeJSON(t, claimed, &execution)
 
 	createdCheck := doWithHeaders(
 		t, handler, http.MethodPost,
-		"/api/v1/criteria/"+taskCriterion.ID.String()+"/checks", userA,
-		http.Header{"If-Match": {`"1"`}},
+		fmt.Sprintf(
+			"%s/claims/%s/criteria/%s/checks",
+			taskPath, execution.Claim.ID, taskCriterion.ID,
+		), userA,
+		http.Header{"If-Match": {`"4"`}},
 		map[string]any{
+			"claim_version":      execution.Claim.Version,
 			"criterion_revision": 1, "outcome": "passed",
 			"evidence": "The transport test passed.",
 		},
@@ -236,7 +252,7 @@ func TestV1ProjectMilestoneAndAcceptanceVersions(t *testing.T) {
 	}
 	decodeJSON(t, criteriaList, &criteria)
 	require.Len(t, criteria.Items, 1)
-	require.Equal(t, int64(2), criteria.Items[0].Version)
+	require.Equal(t, int64(1), criteria.Items[0].Version)
 	require.NotNil(t, criteria.Items[0].CurrentCheck)
 	require.Equal(t, check.ID, criteria.Items[0].CurrentCheck.ID)
 }

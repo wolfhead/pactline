@@ -588,6 +588,16 @@ func (h *Handler) CreateAcceptanceCheck(
 	); err != nil {
 		return nil, err
 	}
+	criterion, err := h.Projects.Acceptance.Get(ctx, params.ID)
+	if err != nil {
+		return nil, err
+	}
+	if criterion.TaskID != nil {
+		return nil, fmt.Errorf(
+			"%w: Task acceptance checks require an active stage Claim",
+			domain.ErrConflict,
+		)
+	}
 	checker := domain.Actor{Type: domain.ActorTypeUser, UserID: &subjectID}
 	if actor.AuthMethod == domain.AuthenticationMethodAPIToken ||
 		actor.AuthMethod == domain.AuthenticationMethodAgentDelegate {
@@ -782,11 +792,22 @@ func acceptanceCheckFromDomain(check domain.AcceptanceCheck) generated.Acceptanc
 		CheckerType: generated.AcceptanceCheckCheckerType(check.Checker.Type),
 		CheckedAt:   check.CheckedAt,
 	}
+	if check.Purpose != "" {
+		out.Purpose = generated.NewOptAcceptanceCheckPurpose(
+			generated.AcceptanceCheckPurpose(check.Purpose),
+		)
+	}
 	if check.Checker.UserID != nil {
 		out.CheckedByUserID = generated.NewOptUUID(*check.Checker.UserID)
 	}
 	if check.Checker.Ref != "" {
 		out.CheckerRef = generated.NewOptString(check.Checker.Ref)
+	}
+	if check.TaskClaimID != nil {
+		out.TaskClaimID = generated.NewOptUUID(*check.TaskClaimID)
+	}
+	if check.TaskReviewCycle != nil {
+		out.ReviewCycle = generated.NewOptInt64(*check.TaskReviewCycle)
 	}
 	return out
 }

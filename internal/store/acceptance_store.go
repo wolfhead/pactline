@@ -140,7 +140,8 @@ func (s *AcceptanceStore) list(ctx context.Context, predicate string, ownerID uu
 	rows, err := s.db.Pool.Query(ctx, `
 		SELECT `+criterionColumns+`,
 			ch.id, ch.criterion_revision, ch.outcome, ch.evidence,
-			ch.checker_type, ch.checked_by_user_id, ch.checker_ref, ch.checked_at
+			ch.checker_type, ch.checked_by_user_id, ch.checker_ref,
+			ch.purpose, ch.task_stage_claim_id, ch.task_review_cycle, ch.checked_at
 		FROM acceptance_criteria ac
 		LEFT JOIN LATERAL (
 			SELECT *
@@ -166,6 +167,9 @@ func (s *AcceptanceStore) list(ctx context.Context, predicate string, ownerID uu
 			checkerType   *domain.ActorType
 			checkerUserID *uuid.UUID
 			checkerRef    *string
+			purpose       *domain.AcceptanceCheckPurpose
+			taskClaimID   *uuid.UUID
+			reviewCycle   *int64
 			checkedAt     *time.Time
 		)
 		err := rows.Scan(
@@ -175,7 +179,7 @@ func (s *AcceptanceStore) list(ctx context.Context, predicate string, ownerID uu
 			&item.Criterion.Revision, &item.Criterion.Position, &item.Criterion.ArchivedAt,
 			&item.Criterion.CreatedAt, &item.Criterion.UpdatedAt,
 			&checkID, &revision, &outcome, &evidence, &checkerType,
-			&checkerUserID, &checkerRef, &checkedAt,
+			&checkerUserID, &checkerRef, &purpose, &taskClaimID, &reviewCycle, &checkedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan acceptance criterion with check: %w", err)
@@ -192,7 +196,10 @@ func (s *AcceptanceStore) list(ctx context.Context, predicate string, ownerID uu
 					UserID: checkerUserID,
 					Ref:    derefStr(checkerRef),
 				},
-				CheckedAt: *checkedAt,
+				TaskClaimID: taskClaimID, TaskReviewCycle: reviewCycle, CheckedAt: *checkedAt,
+			}
+			if purpose != nil {
+				item.CurrentCheck.Purpose = *purpose
 			}
 		}
 		out = append(out, item)

@@ -73,7 +73,7 @@ test('a long-lived Project plans and completes an evidence-backed Milestone', as
     .fill('The task completes inside the selected milestone.')
   await taskComposer.getByRole('button', { name: '创建任务', exact: true }).click()
   const task = await (await taskResponse).json() as { id: string; number: number }
-  await tasksApi.updateTask(USERS.sponsorA.id, task.number, { status: 'done' })
+  await tasksApi.completeTask(USERS.sponsorA.id, task.number)
   await page.reload()
   await expect(page.getByRole('link', { name: taskTitle })).toBeVisible()
 

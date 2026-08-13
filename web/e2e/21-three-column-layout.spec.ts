@@ -14,7 +14,11 @@ test('task detail uses one closable inspector while preserving the list', async 
   tasksApi,
 }) => {
   const title = uniqueTitle('Three column')
-  const task = await tasksApi.createTask(USERS.engineerC.id, { title })
+  const task = await tasksApi.createTask(USERS.engineerC.id, {
+    title,
+    // Development E2E sessions intentionally consolidate on sponsorA.
+    assignee_id: USERS.sponsorA.id,
+  })
   trackTask(task.id)
 
   await page.setViewportSize({ width: 1440, height: 900 })

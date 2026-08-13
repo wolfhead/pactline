@@ -115,6 +115,11 @@ export default function AcceptanceChecklist({
         {criteria.length === 0 && <p className="py-3 text-sm text-fg-muted">尚未定义验收项。</p>}
         {criteria.map((criterion) => {
           const outcome = criterion.current_check?.outcome
+          const purposeLabel = criterion.current_check?.purpose === 'execution_verification'
+            ? '执行自检'
+            : criterion.current_check?.purpose === 'acceptance'
+              ? '验收'
+              : ''
           return (
             <div key={criterion.id} className="py-3">
               <div className="flex items-start gap-3">
@@ -133,6 +138,7 @@ export default function AcceptanceChecklist({
                   <p className="mt-1 text-xs text-fg-muted">{criterion.verification_instructions}</p>
                   {criterion.current_check && (
                     <p className="mt-2 text-xs text-fg-muted">
+                      {purposeLabel && <>{purposeLabel} · </>}
                       {OUTCOME_LABELS[criterion.current_check.outcome]}：{criterion.current_check.evidence}
                     </p>
                   )}

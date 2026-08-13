@@ -15,6 +15,7 @@ import (
 	"github.com/wolfhead/pactline/internal/access"
 	"github.com/wolfhead/pactline/internal/domain"
 	"github.com/wolfhead/pactline/internal/identity"
+	"github.com/wolfhead/pactline/internal/larkaudit"
 
 	"github.com/google/uuid"
 )
@@ -29,9 +30,14 @@ type accessAuditReader interface {
 	ListAccessAudit(context.Context, access.RequestAuditFilter) ([]access.RequestAuditEvent, error)
 }
 
+type larkAuditReader interface {
+	ListLarkAPIAudit(context.Context, larkaudit.Filter) ([]larkaudit.Event, error)
+}
+
 type adminAccessHandler struct {
 	tokens *access.Service
 	audit  accessAuditReader
+	lark   larkAuditReader
 }
 
 type adminTokenResponse struct {
@@ -46,6 +52,11 @@ type adminTokenListResponse struct {
 type accessAuditPage struct {
 	Items      []access.RequestAuditEvent `json:"items"`
 	NextCursor string                     `json:"next_cursor,omitempty"`
+}
+
+type larkAuditPage struct {
+	Items      []larkaudit.Event `json:"items"`
+	NextCursor string            `json:"next_cursor,omitempty"`
 }
 
 type auditCursorPayload struct {
@@ -107,6 +118,40 @@ func (h *adminAccessHandler) activity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeAccessAuditPage(w, r, h.audit, filter)
+}
+
+func (h *adminAccessHandler) larkActivity(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireAdministrator(w, r); !ok {
+		return
+	}
+	filter, err := parseLarkAuditFilter(r)
+	if err != nil {
+		WriteJSON(w, http.StatusBadRequest, ErrorBody{Error: err.Error()})
+		return
+	}
+	if h.lark == nil {
+		WriteJSON(w, http.StatusInternalServerError, ErrorBody{Error: "Lark API activity unavailable"})
+		return
+	}
+	events, err := h.lark.ListLarkAPIAudit(r.Context(), filter)
+	if err != nil {
+		slog.Error("list Lark API audit failed", "request_id", requestID(r), "error", err)
+		WriteJSON(w, http.StatusInternalServerError, ErrorBody{Error: "failed to list Lark API activity"})
+		return
+	}
+	pageSize := filter.Limit - 1
+	response := larkAuditPage{Items: events}
+	if len(events) > pageSize {
+		response.Items = events[:pageSize]
+		last := response.Items[len(response.Items)-1]
+		response.NextCursor = encodeAuditCursor(access.RequestAuditCursor{
+			OccurredAt: last.OccurredAt, ID: last.ID,
+		})
+	}
+	if response.Items == nil {
+		response.Items = []larkaudit.Event{}
+	}
+	WriteJSON(w, http.StatusOK, response)
 }
 
 func requireAdministrator(w http.ResponseWriter, r *http.Request) (identity.RequestIdentity, bool) {
@@ -179,6 +224,75 @@ func parseAccessAuditFilter(r *http.Request) (access.RequestAuditFilter, error) 
 			return access.RequestAuditFilter{}, errors.New("cursor is invalid")
 		}
 		filter.Before = &cursor
+	}
+	return filter, nil
+}
+
+func parseLarkAuditFilter(r *http.Request) (larkaudit.Filter, error) {
+	query := r.URL.Query()
+	pageSize := defaultAuditPageSize
+	if raw := query.Get("page_size"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 || value > maxAuditPageSize {
+			return larkaudit.Filter{}, fmt.Errorf("page_size must be between 1 and %d", maxAuditPageSize)
+		}
+		pageSize = value
+	}
+	filter := larkaudit.Filter{
+		Operation: query.Get("operation"), Category: query.Get("category"),
+		Outcome:           larkaudit.Outcome(query.Get("outcome")),
+		ProviderRequestID: query.Get("provider_request_id"),
+		RequestID:         query.Get("request_id"), Limit: pageSize + 1,
+	}
+	if filter.Outcome != "" {
+		switch filter.Outcome {
+		case larkaudit.OutcomeSucceeded, larkaudit.OutcomeRejected,
+			larkaudit.OutcomeRateLimited, larkaudit.OutcomeUnavailable,
+			larkaudit.OutcomeCancelled, larkaudit.OutcomeContractError:
+		default:
+			return larkaudit.Filter{}, errors.New("outcome is invalid")
+		}
+	}
+	if raw := query.Get("status"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 100 || value > 599 {
+			return larkaudit.Filter{}, errors.New("status must be an HTTP status code")
+		}
+		filter.HTTPStatus = &value
+	}
+	for name, target := range map[string]**uuid.UUID{
+		"actor_user_id": &filter.ActorUserID,
+		"agent_run_id":  &filter.AgentRunID,
+		"event_id":      &filter.ApplicationEventID,
+	} {
+		if raw := query.Get(name); raw != "" {
+			value, err := uuid.Parse(raw)
+			if err != nil {
+				return larkaudit.Filter{}, fmt.Errorf("%s must be a UUID", name)
+			}
+			*target = &value
+		}
+	}
+	for name, target := range map[string]**time.Time{"from": &filter.From, "to": &filter.To} {
+		if raw := query.Get(name); raw != "" {
+			value, err := time.Parse(time.RFC3339, raw)
+			if err != nil {
+				return larkaudit.Filter{}, fmt.Errorf("%s must be an RFC3339 timestamp", name)
+			}
+			value = value.UTC()
+			*target = &value
+		}
+	}
+	if filter.From != nil && filter.To != nil &&
+		(filter.To.Before(*filter.From) || filter.To.Sub(*filter.From) > maxAuditTimeRange) {
+		return larkaudit.Filter{}, errors.New("audit time range must be ordered and no longer than 90 days")
+	}
+	if raw := query.Get("cursor"); raw != "" {
+		cursor, err := decodeAuditCursor(raw)
+		if err != nil {
+			return larkaudit.Filter{}, errors.New("cursor is invalid")
+		}
+		filter.Before = &larkaudit.Cursor{OccurredAt: cursor.OccurredAt, ID: cursor.ID}
 	}
 	return filter, nil
 }

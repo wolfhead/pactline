@@ -3,6 +3,7 @@ package store_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/wolfhead/pactline/internal/domain"
 	"github.com/wolfhead/pactline/internal/store"
@@ -53,6 +54,8 @@ func TestTaskParentRelationshipIsOneLevelAndSharesWorkContext(t *testing.T) {
 func TestTaskDependenciesPreventCyclesAndPrematureCompletion(t *testing.T) {
 	db := newTestDB(t)
 	tasks := store.NewTaskStore(db)
+	workflow := store.NewTaskWorkflowStore(db)
+	now := time.Date(2026, 8, 13, 8, 0, 0, 0, time.UTC)
 
 	predecessor := mustCreateTask(t, db, tasks, domain.Task{
 		Title:     "Predecessor",
@@ -79,12 +82,9 @@ func TestTaskDependenciesPreventCyclesAndPrematureCompletion(t *testing.T) {
 	require.True(t, linked.Blocked)
 	require.Len(t, linked.Dependencies, 1)
 
-	done := domain.TaskStatusDone
-	_, err = tasks.Update(
-		context.Background(),
-		dependent.Task.Number,
-		domain.TaskPatch{Status: &done},
-		userA,
+	_, err = workflow.MarkReady(
+		context.Background(), dependent.Task.Number, linked.Task.Version,
+		domain.SessionOperation(userA, "dependent-premature-ready"), now,
 	)
 	require.ErrorIs(t, err, domain.ErrConflict)
 
@@ -99,23 +99,49 @@ func TestTaskDependenciesPreventCyclesAndPrematureCompletion(t *testing.T) {
 	)
 	require.ErrorIs(t, err, domain.ErrConflict)
 
-	predecessor, err = tasks.Update(
-		context.Background(),
-		predecessor.Task.Number,
-		domain.TaskPatch{Status: &done},
-		userA,
-	)
-	require.NoError(t, err)
-	require.Equal(t, domain.TaskStatusDone, predecessor.Task.Status)
+	completeTaskWorkflow(t, workflow, predecessor.Task.Number, predecessor.Task.Version, now)
 
-	completed, err := tasks.Update(
-		context.Background(),
-		dependent.Task.Number,
-		domain.TaskPatch{Status: &done},
-		userA,
+	reloaded, err := tasks.GetByNumber(context.Background(), dependent.Task.Number)
+	require.NoError(t, err)
+	require.False(t, reloaded.Blocked)
+	completeTaskWorkflow(t, workflow, dependent.Task.Number, reloaded.Task.Version, now.Add(time.Hour))
+}
+
+func completeTaskWorkflow(
+	t *testing.T,
+	workflow *store.TaskWorkflowStore,
+	taskNumber, version int64,
+	now time.Time,
+) {
+	t.Helper()
+	ctx := context.Background()
+	actor := domain.Actor{Type: domain.ActorTypeUser, UserID: &userA}
+	ready, err := workflow.MarkReady(
+		ctx, taskNumber, version, domain.SessionOperation(userA, "complete-ready"), now,
 	)
 	require.NoError(t, err)
-	require.False(t, completed.Blocked)
+	working, execution, err := workflow.Claim(
+		ctx, taskNumber, ready.Version, actor,
+		domain.SessionOperation(userA, "complete-execution-claim"), "browser", "", now.Add(time.Minute),
+	)
+	require.NoError(t, err)
+	review, _, _, err := workflow.CompleteExecution(
+		ctx, taskNumber, execution.ID, working.Version, execution.Version,
+		"Execution complete.", actor,
+		domain.SessionOperation(userA, "complete-submit"), now.Add(2*time.Minute),
+	)
+	require.NoError(t, err)
+	reviewWorking, reviewClaim, err := workflow.Claim(
+		ctx, taskNumber, review.Version, actor,
+		domain.SessionOperation(userA, "complete-review-claim"), "browser", "", now.Add(3*time.Minute),
+	)
+	require.NoError(t, err)
+	_, _, err = workflow.AcceptTask(
+		ctx, taskNumber, reviewClaim.ID, reviewWorking.Version, reviewClaim.Version,
+		"Accepted.", actor,
+		domain.SessionOperation(userA, "complete-accept"), now.Add(4*time.Minute),
+	)
+	require.NoError(t, err)
 }
 
 func TestMovingParentMovesChildrenAtomically(t *testing.T) {

@@ -21,6 +21,12 @@ func mapPgError(err error) error {
 	}
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
+		switch pgErr.ConstraintName {
+		case "task_stage_claims_one_active_per_task":
+			return fmt.Errorf("%w: %s", domain.ErrActiveClaim, pgErr.Message)
+		case "task_threads_one_open_issue_per_task":
+			return fmt.Errorf("%w: %s", domain.ErrActiveIssue, pgErr.Message)
+		}
 		switch pgErr.Code {
 		case "23505": // unique_violation
 			return fmt.Errorf("%w: %s", domain.ErrConflict, pgErr.Message)

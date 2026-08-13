@@ -107,6 +107,17 @@ the change.
 - Use the shared JSON error envelope and domain-to-status mapping.
 - Preserve PATCH presence semantics: an absent nullable field means unchanged;
   explicit `null` means clear.
+- Do not expose Task phase, activity, active Claim, active Issue, review cycle,
+  or Project reassignment as generic PATCH fields. Use an explicit command that
+  preserves the lifecycle aggregate in one transaction.
+- Human browser sessions, personal tokens, and delegated Agents use the same
+  Task workflow commands. Authentication provenance may constrain ownership
+  checks but must not create parallel human-only and Agent-only lifecycles.
+- Task checks are Claim-owned. Derive acceptance-check purpose from Claim stage;
+  never trust a caller-supplied purpose or review cycle.
+- Treat work submission and execution completion as separate commands. A work
+  submission does not mutate Task or Claim lifecycle versions; completion
+  derives and freezes the next review-cycle snapshot while both are locked.
 - Return enough related data for a screen or use case without creating
   client-side N+1 requests.
 - Log rejected and failed requests with the operation, route, status, useful
@@ -127,6 +138,11 @@ the change.
   list or detail response always needs them.
 - Tests that share the integration database must run serially and clean up the
   data they create.
+- Preserve the Task workflow lock order: Task, active Claim, active Issue
+  Thread, then acceptance rows and new Thread Items. State transitions that
+  cross these records must commit or roll back together.
+- Claim expiry is lazy workflow behavior. Do not add periodic expiry polling or
+  heartbeat extension without a separately approved product change.
 
 ## Breaking Changes
 

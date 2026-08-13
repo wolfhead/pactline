@@ -33,6 +33,7 @@ import (
 	legacystore "github.com/wolfhead/pactline/internal/legacy/store"
 	"github.com/wolfhead/pactline/internal/logging"
 	"github.com/wolfhead/pactline/internal/messaging"
+	"github.com/wolfhead/pactline/internal/notification"
 	"github.com/wolfhead/pactline/internal/store"
 
 	"github.com/cloudwego/eino/components/model"
@@ -76,7 +77,6 @@ func main() {
 	memberships := store.NewProjectMembershipStore(db)
 	milestones := store.NewMilestoneStore(db)
 	acceptance := store.NewAcceptanceStore(db)
-	claims := store.NewTaskClaimStore(db)
 	attachments := store.NewAttachmentStore(db)
 	var attachmentObjects blob.Store
 	switch cfg.AttachmentStorageProvider {
@@ -132,11 +132,14 @@ func main() {
 	}
 	maintenanceContext, stopMaintenance := context.WithCancel(context.Background())
 	defer stopMaintenance()
-	go (application.Maintenance{Store: accessAuditStore, Claims: claims}).Run(maintenanceContext)
+	go (application.Maintenance{Store: accessAuditStore}).Run(maintenanceContext)
 	go (application.AttachmentCleanup{
 		Attachments: attachments, Objects: attachmentObjects,
 	}).Run(maintenanceContext)
 	outboxStore := store.NewOutboxStore(db)
+	notificationTestService := &notification.TestService{
+		Users: users, Recipients: identityStore, Events: outboxStore, Now: time.Now,
+	}
 	rabbitMQ, err := messaging.NewRecoveringPublisher(cfg.RabbitMQURL)
 	if err != nil {
 		slog.Error("configure RabbitMQ event delivery", "error", err)
@@ -158,6 +161,7 @@ func main() {
 			AppID: cfg.LarkAppID, AppSecret: cfg.LarkAppSecret,
 			Cipher: cipher, EncryptionKeyID: cfg.TokenEncryptionKeyID,
 			RedirectURI: cfg.LarkRedirectURI.String(),
+			AuditWriter: accessAuditStore,
 		})
 		if clientErr != nil {
 			slog.Error("configure Lark client", "error", clientErr)
@@ -186,6 +190,16 @@ func main() {
 			slog.Error("configure Lark identity service", "error", configureErr)
 			os.Exit(1)
 		}
+		go messaging.ConsumeLarkDMForever(
+			maintenanceContext,
+			cfg.RabbitMQURL,
+			outboxStore,
+			notification.Handler{
+				Recipients: identityStore,
+				Sender:     larkClient,
+				AppBaseURL: cfg.AppBaseURL,
+			},
+		)
 	}
 	var developmentAuth *devauth.Provider
 	if cfg.AuthProvider == AuthProviderDevelopment {
@@ -209,7 +223,9 @@ func main() {
 		Tasks: &application.TaskService{
 			Tasks: tasks, Comments: comments, Projects: projectService,
 		},
-		Claims:             claims,
+		Workflow:           store.NewTaskWorkflowStore(db),
+		StageClaims:        store.NewTaskStageClaimStore(db),
+		Threads:            store.NewTaskThreadStore(db),
 		Labels:             &application.LabelService{Labels: labels},
 		Projects:           projectService,
 		Access:             projectAccess,
@@ -306,6 +322,7 @@ func main() {
 			Sessions: identityService, Tokens: tokenService,
 			Delegates:   delegateService,
 			AccessAudit: accessAuditStore,
+			LarkAudit:   accessAuditStore,
 			Idempotency: idempotencyStore,
 			Development: developmentAuth, AppBaseURL: cfg.AppBaseURL,
 			LarkEnabled:   cfg.AuthProvider == AuthProviderLark,
@@ -314,6 +331,7 @@ func main() {
 		V1:          v1Handler,
 		OpenAPI:     apiv1.OpenAPIHandler(contract.OpenAPIDocument),
 		AgentStatus: agentConnection,
+		AdminTools:  notificationTestService,
 	})
 	var agentWorker *agentruntime.Worker
 	if cfg.AgentEnabled {

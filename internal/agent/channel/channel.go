@@ -61,6 +61,7 @@ type IncomingMessage struct {
 	TenantID             string
 	EventID              string
 	ConversationID       string
+	ConversationName     string
 	MessageID            string
 	ThreadRootMessageID  string
 	ReplyParentMessageID string

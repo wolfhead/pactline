@@ -23,22 +23,25 @@ type TaskSearchInput struct {
 	Query         string   `json:"query,omitempty" jsonschema_description:"Exact or partial Task title or text"`
 	ProjectNumber *int64   `json:"project_number,omitempty" jsonschema_description:"Optional resolved Project number"`
 	MilestoneID   *string  `json:"milestone_id,omitempty" jsonschema_description:"Optional resolved Milestone UUID"`
-	Statuses      []string `json:"statuses,omitempty" jsonschema_description:"Optional Task statuses: todo, in_progress, in_review, done, cancelled"`
+	Phases        []string `json:"phases,omitempty" jsonschema_description:"Optional Task phases: backlog, ready, in_progress, in_review, done, cancelled"`
+	Activities    []string `json:"activities,omitempty" jsonschema_description:"Optional active-phase activities: available, working, needs_resolution"`
 	Limit         int      `json:"limit,omitempty" jsonschema_description:"Maximum results from 1 through 20; defaults to 10"`
 }
 
 type TaskSummary struct {
-	Number        int64   `json:"number"`
-	Title         string  `json:"title"`
-	Status        string  `json:"status"`
-	Priority      string  `json:"priority"`
-	ProjectNumber int64   `json:"project_number"`
-	ProjectName   string  `json:"project_name"`
-	MilestoneName string  `json:"milestone_name,omitempty"`
-	AssigneeName  string  `json:"assignee_name,omitempty"`
-	DueDate       *string `json:"due_date,omitempty"`
-	Blocked       bool    `json:"blocked"`
-	Overdue       bool    `json:"overdue"`
+	Number          int64   `json:"number"`
+	Title           string  `json:"title"`
+	Phase           string  `json:"phase"`
+	Activity        string  `json:"activity,omitempty"`
+	Priority        string  `json:"priority"`
+	ProjectNumber   int64   `json:"project_number"`
+	ProjectName     string  `json:"project_name"`
+	MilestoneName   string  `json:"milestone_name,omitempty"`
+	AssigneeName    string  `json:"assignee_name,omitempty"`
+	DueDate         *string `json:"due_date,omitempty"`
+	Blocked         bool    `json:"blocked"`
+	NeedsResolution bool    `json:"needs_resolution"`
+	Overdue         bool    `json:"overdue"`
 }
 
 type TaskSearchResult struct {
@@ -82,12 +85,19 @@ func searchTasks(
 		}
 		params.MilestoneID = generated.NewOptUUID(id)
 	}
-	for _, status := range input.Statuses {
-		parsed, err := taskStatus(status)
+	for _, phase := range input.Phases {
+		parsed, err := taskPhase(phase)
 		if err != nil {
 			return TaskSearchResult{}, err
 		}
-		params.Status = append(params.Status, parsed)
+		params.Phase = append(params.Phase, parsed)
+	}
+	for _, activity := range input.Activities {
+		parsed, err := taskActivity(activity)
+		if err != nil {
+			return TaskSearchResult{}, err
+		}
+		params.Activity = append(params.Activity, parsed)
 	}
 	response, err := client.ListTasks(ctx, params)
 	if err != nil {
@@ -158,7 +168,7 @@ func getTask(
 		result.StartDate = &formatted
 	}
 	for _, child := range task.Children {
-		if child.Status == generated.TaskStatusDone || child.Status == generated.TaskStatusCancelled {
+		if child.Phase == generated.TaskPhaseDone || child.Phase == generated.TaskPhaseCancelled {
 			result.CompletedChildCount++
 		} else {
 			result.ActiveChildCount++
@@ -167,8 +177,9 @@ func getTask(
 	return result, nil
 }
 
-type TaskStatusCounts struct {
-	Todo       int `json:"todo"`
+type TaskPhaseCounts struct {
+	Backlog    int `json:"backlog"`
+	Ready      int `json:"ready"`
 	InProgress int `json:"in_progress"`
 	InReview   int `json:"in_review"`
 	Done       int `json:"done"`
@@ -176,15 +187,15 @@ type TaskStatusCounts struct {
 }
 
 type MilestoneSummary struct {
-	ID              uuid.UUID        `json:"id"`
-	Name            string           `json:"name"`
-	Status          string           `json:"status"`
-	TargetDate      *string          `json:"target_date,omitempty"`
-	TaskCount       int              `json:"task_count"`
-	StatusCounts    TaskStatusCounts `json:"status_counts"`
-	OverdueCount    int              `json:"overdue_count"`
-	BlockedCount    int              `json:"blocked_count"`
-	CompletionRatio float64          `json:"completion_ratio"`
+	ID              uuid.UUID       `json:"id"`
+	Name            string          `json:"name"`
+	Status          string          `json:"status"`
+	TargetDate      *string         `json:"target_date,omitempty"`
+	TaskCount       int             `json:"task_count"`
+	PhaseCounts     TaskPhaseCounts `json:"phase_counts"`
+	OverdueCount    int             `json:"overdue_count"`
+	BlockedCount    int             `json:"blocked_count"`
+	CompletionRatio float64         `json:"completion_ratio"`
 }
 
 type ProjectOverviewInput struct {
@@ -197,7 +208,7 @@ type ProjectOverview struct {
 	CreatorName         string             `json:"creator_name"`
 	Archived            bool               `json:"archived"`
 	TaskCount           int                `json:"task_count"`
-	StatusCounts        TaskStatusCounts   `json:"status_counts"`
+	PhaseCounts         TaskPhaseCounts    `json:"phase_counts"`
 	BacklogCount        int                `json:"backlog_count"`
 	OverdueCount        int                `json:"overdue_count"`
 	BlockedCount        int                `json:"blocked_count"`
@@ -330,7 +341,7 @@ func projectOverview(
 			continue
 		}
 		result.TaskCount++
-		addTaskStatus(&result.StatusCounts, task.Status)
+		addTaskPhase(&result.PhaseCounts, task.Phase)
 		if task.Blocked {
 			result.BlockedCount++
 		}
@@ -375,7 +386,7 @@ func milestoneSummary(
 		result.TargetDate = &formatted
 	}
 	for _, task := range tasks {
-		addTaskStatus(&result.StatusCounts, task.Status)
+		addTaskPhase(&result.PhaseCounts, task.Phase)
 		if task.Blocked {
 			result.BlockedCount++
 		}
@@ -383,9 +394,9 @@ func milestoneSummary(
 			result.OverdueCount++
 		}
 	}
-	eligible := result.TaskCount - result.StatusCounts.Cancelled
+	eligible := result.TaskCount - result.PhaseCounts.Cancelled
 	if eligible > 0 {
-		result.CompletionRatio = float64(result.StatusCounts.Done) / float64(eligible)
+		result.CompletionRatio = float64(result.PhaseCounts.Done) / float64(eligible)
 	}
 	return result
 }
@@ -448,7 +459,7 @@ func attentionTasks(
 		if task.ArchivedAt.IsSet() {
 			continue
 		}
-		if task.Status == generated.TaskStatusDone || task.Status == generated.TaskStatusCancelled {
+		if task.Phase == generated.TaskPhaseDone || task.Phase == generated.TaskPhaseCancelled {
 			continue
 		}
 		if task.Blocked || taskIsOverdue(task, now, timezone) {
@@ -509,10 +520,14 @@ func taskSummary(
 	timezone *time.Location,
 ) TaskSummary {
 	result := TaskSummary{
-		Number: task.Number, Title: task.Title, Status: string(task.Status),
+		Number: task.Number, Title: task.Title, Phase: string(task.Phase),
 		Priority: string(task.Priority), ProjectNumber: task.Project.Number,
 		ProjectName: task.Project.Name, Blocked: task.Blocked,
 		Overdue: taskIsOverdue(task, now, timezone),
+	}
+	if activity, ok := task.Activity.Get(); ok {
+		result.Activity = string(activity)
+		result.NeedsResolution = activity == generated.TaskActivityStateNeedsResolution
 	}
 	if milestone, ok := task.Milestone.Get(); ok {
 		result.MilestoneName = milestone.Name
@@ -528,7 +543,7 @@ func taskSummary(
 }
 
 func taskIsOverdue(task generated.Task, now time.Time, timezone *time.Location) bool {
-	if task.Status == generated.TaskStatusDone || task.Status == generated.TaskStatusCancelled {
+	if task.Phase == generated.TaskPhaseDone || task.Phase == generated.TaskPhaseCancelled {
 		return false
 	}
 	dueDate, ok := task.DueDate.Get()
@@ -543,34 +558,51 @@ func taskIsOverdue(task generated.Task, now time.Time, timezone *time.Location) 
 	return dueDate.Before(todayDate)
 }
 
-func addTaskStatus(counts *TaskStatusCounts, status generated.TaskStatus) {
-	switch status {
-	case generated.TaskStatusTodo:
-		counts.Todo++
-	case generated.TaskStatusInProgress:
+func addTaskPhase(counts *TaskPhaseCounts, phase generated.TaskPhase) {
+	switch phase {
+	case generated.TaskPhaseBacklog:
+		counts.Backlog++
+	case generated.TaskPhaseReady:
+		counts.Ready++
+	case generated.TaskPhaseInProgress:
 		counts.InProgress++
-	case generated.TaskStatusInReview:
+	case generated.TaskPhaseInReview:
 		counts.InReview++
-	case generated.TaskStatusDone:
+	case generated.TaskPhaseDone:
 		counts.Done++
-	case generated.TaskStatusCancelled:
+	case generated.TaskPhaseCancelled:
 		counts.Cancelled++
 	}
 }
 
-func taskStatus(value string) (generated.TaskStatus, error) {
+func taskPhase(value string) (generated.TaskPhase, error) {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "todo":
-		return generated.TaskStatusTodo, nil
+	case "backlog":
+		return generated.TaskPhaseBacklog, nil
+	case "ready":
+		return generated.TaskPhaseReady, nil
 	case "in_progress":
-		return generated.TaskStatusInProgress, nil
+		return generated.TaskPhaseInProgress, nil
 	case "in_review":
-		return generated.TaskStatusInReview, nil
+		return generated.TaskPhaseInReview, nil
 	case "done":
-		return generated.TaskStatusDone, nil
+		return generated.TaskPhaseDone, nil
 	case "cancelled":
-		return generated.TaskStatusCancelled, nil
+		return generated.TaskPhaseCancelled, nil
 	default:
-		return "", fmt.Errorf("%w: invalid Task status", ErrToolInput)
+		return "", fmt.Errorf("%w: invalid Task phase", ErrToolInput)
+	}
+}
+
+func taskActivity(value string) (generated.TaskActivityState, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "available":
+		return generated.TaskActivityStateAvailable, nil
+	case "working":
+		return generated.TaskActivityStateWorking, nil
+	case "needs_resolution":
+		return generated.TaskActivityStateNeedsResolution, nil
+	default:
+		return "", fmt.Errorf("%w: invalid Task activity", ErrToolInput)
 	}
 }

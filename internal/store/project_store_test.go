@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/wolfhead/pactline/internal/domain"
 	"github.com/wolfhead/pactline/internal/store"
@@ -116,6 +117,7 @@ func TestProjectArchiveRequiresConcludedMilestonesAndTasks(t *testing.T) {
 	projects := store.NewProjectStore(db)
 	milestones := store.NewMilestoneStore(db)
 	tasks := store.NewTaskStore(db)
+	workflow := store.NewTaskWorkflowStore(db)
 	ctx := context.Background()
 	actor := domain.Actor{Type: domain.ActorTypeUser, UserID: &userA}
 
@@ -140,8 +142,10 @@ func TestProjectArchiveRequiresConcludedMilestonesAndTasks(t *testing.T) {
 	)
 	require.ErrorIs(t, err, domain.ErrConflict)
 
-	cancelled := domain.TaskStatusCancelled
-	_, err = tasks.Update(ctx, task.Task.Number, domain.TaskPatch{Status: &cancelled}, userA)
+	_, err = workflow.CancelTask(
+		ctx, task.Task.Number, task.Task.Version, "Work is no longer required.", actor,
+		domain.SessionOperation(userA, "cancel-project-task"), time.Now().UTC(),
+	)
 	require.NoError(t, err)
 	_, err = milestones.ApplyLifecycle(
 		ctx, project.Project.ID, milestone.ID, store.MilestoneActionCancel, actor, "",

@@ -6,6 +6,7 @@ import {
   v1Patch,
   v1Post,
 } from './v1/client'
+import type { TaskStageClaim } from '@/task-types'
 
 export type AcceptanceOutcome = 'passed' | 'failed' | 'unable' | 'waived'
 
@@ -18,6 +19,9 @@ export interface AcceptanceCheck {
   checker_type: 'user' | 'agent' | 'system'
   checked_by_user_id: string | null
   checker_ref?: string
+  purpose?: 'execution_verification' | 'acceptance'
+  task_claim_id?: string
+  review_cycle?: number
   checked_at: string
 }
 
@@ -70,6 +74,28 @@ export function checkCriterion(
       evidence,
     },
   }).then(({ value }) => value)
+}
+
+export function checkTaskCriterionThroughClaim(
+  taskNumber: number,
+  taskVersion: number,
+  claim: TaskStageClaim,
+  criterion: AcceptanceCriterion,
+  outcome: AcceptanceOutcome,
+  evidence: string,
+): Promise<AcceptanceCheck> {
+  return v1Post<AcceptanceCheck>(
+    `/api/v1/tasks/${taskNumber}/claims/${claim.id}/criteria/${criterion.id}/checks`,
+    {
+      ifMatch: etagForVersion(taskVersion),
+      body: {
+        claim_version: claim.version,
+        criterion_revision: criterion.revision,
+        outcome,
+        evidence,
+      },
+    },
+  ).then(({ value }) => value)
 }
 
 export function updateCriterion(

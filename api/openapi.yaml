@@ -16,6 +16,18 @@ paths:
           $ref: "#/components/responses/CurrentPrincipal"
         default:
           $ref: "#/components/responses/Problem"
+  /api/v1/claims/current:
+    get:
+      operationId: getCurrentTaskStageClaim
+      summary: Get the active Claim owned by this authenticated client session
+      parameters:
+        - $ref: "#/components/parameters/ClientKind"
+        - $ref: "#/components/parameters/ClientSessionID"
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskStageClaim"
+        default:
+          $ref: "#/components/responses/Problem"
   /api/v1/users:
     get:
       operationId: listUsers
@@ -40,24 +52,24 @@ paths:
           schema:
             type: string
             maxLength: 200
-        - name: status
+        - name: phase
           in: query
           schema:
             type: array
             items:
-              $ref: "#/components/schemas/TaskStatus"
+              $ref: "#/components/schemas/TaskPhase"
+        - name: activity
+          in: query
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/TaskActivityState"
         - name: priority
           in: query
           schema:
             type: array
             items:
               $ref: "#/components/schemas/TaskPriority"
-        - name: execution_mode
-          in: query
-          schema:
-            type: array
-            items:
-              $ref: "#/components/schemas/TaskExecutionMode"
         - name: assignee
           in: query
           description: User UUID or `none`.
@@ -187,44 +199,304 @@ paths:
           $ref: "#/components/responses/Task"
         default:
           $ref: "#/components/responses/Problem"
-  /api/v1/tasks/{number}/comments:
+  /api/v1/tasks/{number}/commands/mark-ready:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+    post:
+      operationId: markTaskReady
+      summary: Mark a backlog Task ready to claim
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskWorkflow"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/commands/withdraw-readiness:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+    post:
+      operationId: withdrawTaskReadiness
+      summary: Return a ready Task to backlog
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReasonWrite"
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskWorkflow"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/claims:
     parameters:
       - $ref: "#/components/parameters/TaskNumber"
     get:
-      operationId: listTaskComments
-      summary: List task comments
+      operationId: listTaskStageClaims
+      summary: List execution and acceptance Claims for a Task
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskStageClaimList"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      operationId: createTaskStageClaim
+      summary: Claim the Task's currently available execution or review stage
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskStageClaimCreate"
+      responses:
+        "201":
+          $ref: "#/components/responses/TaskStageClaimCommand"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/claims/{id}/release:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+      - $ref: "#/components/parameters/ResourceID"
+    post:
+      operationId: releaseTaskStageClaim
+      summary: Release the active Claim with a durable handoff
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskStageClaimFinish"
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskStageClaimCommand"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/claims/{id}/submissions:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+      - $ref: "#/components/parameters/ResourceID"
+    post:
+      operationId: recordTaskWorkSubmission
+      summary: Record an immutable work submission without ending execution
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskStageClaimFinish"
+      responses:
+        "201":
+          $ref: "#/components/responses/TaskWorkSubmissionCommand"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/claims/{id}/complete-execution:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+      - $ref: "#/components/parameters/ResourceID"
+    post:
+      operationId: completeTaskExecution
+      summary: End execution and make the frozen delivery available for review
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskStageClaimFinish"
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskExecutionCompletionCommand"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/claims/{id}/request-resolution:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+      - $ref: "#/components/parameters/ResourceID"
+    post:
+      operationId: requestTaskResolution
+      summary: End the Claim and open one typed blocking Issue Thread
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskResolutionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskResolutionRequested"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/claims/{id}/request-changes:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+      - $ref: "#/components/parameters/ResourceID"
+    post:
+      operationId: requestTaskChanges
+      summary: Return acceptance review to execution
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskStageClaimFinish"
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskStageClaimCommand"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/claims/{id}/accept:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+      - $ref: "#/components/parameters/ResourceID"
+    post:
+      operationId: acceptTask
+      summary: Accept the Task outcome and complete the Task
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskStageClaimFinish"
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskStageClaimCommand"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/claims/{id}/criteria/{criterion_id}/checks:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+      - $ref: "#/components/parameters/ResourceID"
+      - $ref: "#/components/parameters/ClaimCriterionID"
+    post:
+      operationId: recordTaskStageAcceptanceCheck
+      summary: Record execution verification or acceptance through the active Claim
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskStageAcceptanceCheckWrite"
+      responses:
+        "201":
+          $ref: "#/components/responses/AcceptanceCheckCreated"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/issues/{id}/resolve:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+      - $ref: "#/components/parameters/ResourceID"
+    post:
+      operationId: resolveTaskIssue
+      summary: Resolve the active Issue and return the Task to available
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskIssueResolve"
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskIssueResolved"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/commands/cancel:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+    post:
+      operationId: cancelTask
+      summary: Cancel a non-terminal Task and close active workflow state
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReasonWrite"
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskCancelResult"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/threads:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+    get:
+      operationId: listTaskThreads
+      summary: List the Main Thread and historical Issue Threads
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskThreadList"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/threads/{id}/items:
+    parameters:
+      - $ref: "#/components/parameters/ResourceID"
+    get:
+      operationId: listTaskThreadItems
+      summary: List Items in one Task Thread
       parameters:
         - $ref: "#/components/parameters/Cursor"
         - $ref: "#/components/parameters/Limit"
       responses:
         "200":
-          $ref: "#/components/responses/CommentList"
+          $ref: "#/components/responses/TaskThreadItemList"
         default:
           $ref: "#/components/responses/Problem"
     post:
-      operationId: createTaskComment
-      summary: Add a task comment
+      operationId: createTaskThreadMessage
+      summary: Add an ordinary message or immutable progress update to one Task Thread
       parameters:
-        - $ref: "#/components/parameters/IfMatch"
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CommentCreateWrite"
+              $ref: "#/components/schemas/TaskThreadMessageWrite"
       responses:
         "201":
-          $ref: "#/components/responses/CommentCreated"
+          $ref: "#/components/responses/TaskThreadItem"
         default:
           $ref: "#/components/responses/Problem"
-  /api/v1/tasks/{number}/comments/{id}:
+  /api/v1/thread-items/{id}:
     parameters:
-      - $ref: "#/components/parameters/TaskNumber"
       - $ref: "#/components/parameters/ResourceID"
     patch:
-      operationId: updateTaskComment
-      summary: Update a task comment
+      operationId: updateTaskThreadMessage
+      summary: Edit a message owned by the caller
       parameters:
         - $ref: "#/components/parameters/IfMatch"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -233,21 +505,21 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CommentUpdateWrite"
+              $ref: "#/components/schemas/TaskThreadMessageUpdate"
       responses:
         "200":
-          $ref: "#/components/responses/Comment"
+          $ref: "#/components/responses/TaskThreadItem"
         default:
           $ref: "#/components/responses/Problem"
     delete:
-      operationId: deleteTaskComment
-      summary: Delete a task comment
+      operationId: deleteTaskThreadMessage
+      summary: Delete a message owned by the caller
       parameters:
         - $ref: "#/components/parameters/IfMatch"
         - $ref: "#/components/parameters/IdempotencyKey"
       responses:
-        "204":
-          $ref: "#/components/responses/NoContent"
+        "200":
+          $ref: "#/components/responses/TaskThreadItem"
         default:
           $ref: "#/components/responses/Problem"
   /api/v1/tasks/{number}/attachments:
@@ -370,210 +642,6 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/TaskActivityList"
-        default:
-          $ref: "#/components/responses/Problem"
-  /api/v1/tasks/{number}/agent-conversations:
-    parameters:
-      - $ref: "#/components/parameters/TaskNumber"
-    get:
-      operationId: listTaskAgentConversations
-      summary: List Agent conversations for the task timeline
-      responses:
-        "200":
-          $ref: "#/components/responses/TaskClaimConversationList"
-        default:
-          $ref: "#/components/responses/Problem"
-  /api/v1/agent/claims/current:
-    get:
-      operationId: getCurrentTaskClaim
-      summary: Get the unfinished Claim owned by this client session
-      parameters:
-        - $ref: "#/components/parameters/ClientKind"
-        - $ref: "#/components/parameters/ClientSessionID"
-      responses:
-        "200":
-          $ref: "#/components/responses/TaskClaim"
-        default:
-          $ref: "#/components/responses/Problem"
-  /api/v1/tasks/{number}/claim:
-    parameters:
-      - $ref: "#/components/parameters/TaskNumber"
-    post:
-      operationId: claimTask
-      summary: Claim an eligible assigned task for this client session
-      parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TaskClaimSession"
-      responses:
-        "201":
-          $ref: "#/components/responses/TaskClaimCreated"
-        default:
-          $ref: "#/components/responses/Problem"
-  /api/v1/claims/{id}:
-    parameters:
-      - $ref: "#/components/parameters/ResourceID"
-    get:
-      operationId: getTaskClaim
-      summary: Get a Claim
-      responses:
-        "200":
-          $ref: "#/components/responses/TaskClaim"
-        default:
-          $ref: "#/components/responses/Problem"
-  /api/v1/claims/{id}/messages:
-    parameters:
-      - $ref: "#/components/parameters/ResourceID"
-    get:
-      operationId: listTaskClaimMessages
-      summary: List the immutable Agent conversation for a Claim
-      responses:
-        "200":
-          $ref: "#/components/responses/TaskClaimMessageList"
-        default:
-          $ref: "#/components/responses/Problem"
-  /api/v1/claims/{id}/extend:
-    parameters:
-      - $ref: "#/components/parameters/ResourceID"
-    post:
-      operationId: extendTaskClaim
-      summary: Extend an active Claim
-      parameters:
-        - $ref: "#/components/parameters/IfMatch"
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TaskClaimSession"
-      responses:
-        "200":
-          $ref: "#/components/responses/TaskClaim"
-        default:
-          $ref: "#/components/responses/Problem"
-  /api/v1/claims/{id}/progress:
-    parameters:
-      - $ref: "#/components/parameters/ResourceID"
-    post:
-      operationId: addTaskClaimProgress
-      summary: Add an Agent progress message
-      parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TaskClaimAgentMessage"
-      responses:
-        "201":
-          $ref: "#/components/responses/TaskClaimMessageCreated"
-        default:
-          $ref: "#/components/responses/Problem"
-  /api/v1/claims/{id}/ask:
-    parameters:
-      - $ref: "#/components/parameters/ResourceID"
-    post:
-      operationId: askTaskClaimQuestion
-      summary: Ask a human question and pause the Claim
-      parameters:
-        - $ref: "#/components/parameters/IfMatch"
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TaskClaimAgentMessage"
-      responses:
-        "200":
-          $ref: "#/components/responses/TaskClaimAction"
-        default:
-          $ref: "#/components/responses/Problem"
-  /api/v1/claims/{id}/answer:
-    parameters:
-      - $ref: "#/components/parameters/ResourceID"
-    post:
-      operationId: answerTaskClaimQuestion
-      summary: Answer the pending Agent question and resume the Claim
-      parameters:
-        - $ref: "#/components/parameters/IfMatch"
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TaskClaimHumanAnswer"
-      responses:
-        "200":
-          $ref: "#/components/responses/TaskClaimAction"
-        default:
-          $ref: "#/components/responses/Problem"
-  /api/v1/claims/{id}/release:
-    parameters:
-      - $ref: "#/components/parameters/ResourceID"
-    post:
-      operationId: releaseTaskClaim
-      summary: Release a Claim
-      parameters:
-        - $ref: "#/components/parameters/IfMatch"
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TaskClaimRelease"
-      responses:
-        "200":
-          $ref: "#/components/responses/TaskClaim"
-        default:
-          $ref: "#/components/responses/Problem"
-  /api/v1/claims/{id}/submit:
-    parameters:
-      - $ref: "#/components/parameters/ResourceID"
-    post:
-      operationId: submitTaskClaim
-      summary: Submit verified Agent work for human review
-      parameters:
-        - $ref: "#/components/parameters/IfMatch"
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TaskClaimAgentMessage"
-      responses:
-        "200":
-          $ref: "#/components/responses/TaskClaimAction"
-        default:
-          $ref: "#/components/responses/Problem"
-  /api/v1/claims/{id}/criteria/{criterion_id}/checks:
-    parameters:
-      - $ref: "#/components/parameters/ResourceID"
-      - $ref: "#/components/parameters/ClaimCriterionID"
-    post:
-      operationId: recordTaskClaimAcceptanceCheck
-      summary: Record an acceptance check owned by the active Claim
-      parameters:
-        - $ref: "#/components/parameters/IfMatch"
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TaskClaimAcceptanceCheckCreate"
-      responses:
-        "201":
-          $ref: "#/components/responses/AcceptanceCheckCreated"
         default:
           $ref: "#/components/responses/Problem"
   /api/v1/labels:
@@ -1346,61 +1414,140 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Task"
-    CommentList:
-      description: Comment collection
-      headers:
-        X-Request-Id:
-          $ref: "#/components/headers/RequestID"
-        Ratelimit-Limit:
-          $ref: "#/components/headers/RateLimitLimit"
-        Ratelimit-Remaining:
-          $ref: "#/components/headers/RateLimitRemaining"
-        Ratelimit-Reset:
-          $ref: "#/components/headers/RateLimitReset"
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/CommentList"
-    Comment:
-      description: Comment
+    TaskWorkflow:
+      description: Task workflow state
       headers:
         Etag:
           $ref: "#/components/headers/Etag"
         X-Request-Id:
           $ref: "#/components/headers/RequestID"
-        Ratelimit-Limit:
-          $ref: "#/components/headers/RateLimitLimit"
-        Ratelimit-Remaining:
-          $ref: "#/components/headers/RateLimitRemaining"
-        Ratelimit-Reset:
-          $ref: "#/components/headers/RateLimitReset"
         Idempotency-Replayed:
           $ref: "#/components/headers/IdempotencyReplayed"
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/Comment"
-    CommentCreated:
-      description: Comment created
+            $ref: "#/components/schemas/TaskWorkflow"
+    TaskStageClaimCommand:
+      description: Atomic Task and Claim transition
       headers:
         Etag:
           $ref: "#/components/headers/Etag"
-        Location:
-          $ref: "#/components/headers/Location"
         X-Request-Id:
           $ref: "#/components/headers/RequestID"
-        Ratelimit-Limit:
-          $ref: "#/components/headers/RateLimitLimit"
-        Ratelimit-Remaining:
-          $ref: "#/components/headers/RateLimitRemaining"
-        Ratelimit-Reset:
-          $ref: "#/components/headers/RateLimitReset"
         Idempotency-Replayed:
           $ref: "#/components/headers/IdempotencyReplayed"
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/Comment"
+            $ref: "#/components/schemas/TaskStageClaimCommand"
+    TaskWorkSubmissionCommand:
+      description: Work submission recorded while execution remains active
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TaskWorkSubmissionCommand"
+    TaskExecutionCompletionCommand:
+      description: Execution completed and delivery frozen for review
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TaskExecutionCompletionCommand"
+    TaskStageClaim:
+      description: Active Claim owned by the authenticated client session
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TaskStageClaim"
+    TaskResolutionRequested:
+      description: Task blocked by a new typed Issue Thread
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TaskResolutionRequested"
+    TaskIssueResolved:
+      description: Issue resolved and Task available again
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TaskIssueResolved"
+    TaskCancelResult:
+      description: Cancelled Task with closed active workflow state
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TaskCancelResult"
+    TaskStageClaimList:
+      description: Task Claim history
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TaskStageClaimList"
+    TaskThreadList:
+      description: Task Threads
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TaskThreadList"
+    TaskThreadItemList:
+      description: Thread Items
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TaskThreadItemList"
+    TaskThreadItem:
+      description: Thread Item
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TaskThreadItem"
     TaskAttachmentList:
       description: Active Task attachment collection
       headers:
@@ -1453,78 +1600,6 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/TaskActivityList"
-    TaskClaim:
-      description: Task Claim
-      headers:
-        Etag:
-          $ref: "#/components/headers/Etag"
-        X-Request-Id:
-          $ref: "#/components/headers/RequestID"
-        Idempotency-Replayed:
-          $ref: "#/components/headers/IdempotencyReplayed"
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/TaskClaim"
-    TaskClaimCreated:
-      description: Task Claim created
-      headers:
-        Etag:
-          $ref: "#/components/headers/Etag"
-        Location:
-          $ref: "#/components/headers/Location"
-        X-Request-Id:
-          $ref: "#/components/headers/RequestID"
-        Idempotency-Replayed:
-          $ref: "#/components/headers/IdempotencyReplayed"
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/TaskClaim"
-    TaskClaimAction:
-      description: Claim transition and conversation message
-      headers:
-        Etag:
-          $ref: "#/components/headers/Etag"
-        X-Request-Id:
-          $ref: "#/components/headers/RequestID"
-        Idempotency-Replayed:
-          $ref: "#/components/headers/IdempotencyReplayed"
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/TaskClaimAction"
-    TaskClaimMessageCreated:
-      description: Agent conversation message created
-      headers:
-        Location:
-          $ref: "#/components/headers/Location"
-        X-Request-Id:
-          $ref: "#/components/headers/RequestID"
-        Idempotency-Replayed:
-          $ref: "#/components/headers/IdempotencyReplayed"
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/TaskClaimMessage"
-    TaskClaimMessageList:
-      description: Agent conversation
-      headers:
-        X-Request-Id:
-          $ref: "#/components/headers/RequestID"
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/TaskClaimMessageList"
-    TaskClaimConversationList:
-      description: Agent conversations for a task
-      headers:
-        X-Request-Id:
-          $ref: "#/components/headers/RequestID"
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/TaskClaimConversationList"
     LabelList:
       description: Label collection
       headers:
@@ -1924,15 +1999,15 @@ components:
       properties:
         next_cursor:
           type: string
-    TaskStatus:
+    TaskPhase:
       type: string
-      enum: [todo, in_progress, in_review, done, cancelled]
+      enum: [backlog, ready, in_progress, in_review, done, cancelled]
+    TaskActivityState:
+      type: string
+      enum: [available, working, needs_resolution]
     TaskPriority:
       type: string
       enum: [none, low, medium, high, urgent]
-    TaskExecutionMode:
-      type: string
-      enum: [human_only, agent_allowed]
     MilestoneStatus:
       type: string
       enum: [planned, active, completed, cancelled]
@@ -1974,12 +2049,8 @@ components:
           description: The observable result expected when the task is complete.
         description:
           type: string
-        status:
-          $ref: "#/components/schemas/TaskStatus"
         priority:
           $ref: "#/components/schemas/TaskPriority"
-        execution_mode:
-          $ref: "#/components/schemas/TaskExecutionMode"
         assignee_id:
           $ref: "#/components/schemas/NullableUUID"
         start_date:
@@ -2029,12 +2100,8 @@ components:
           minLength: 1
         description:
           type: string
-        status:
-          $ref: "#/components/schemas/TaskStatus"
         priority:
           $ref: "#/components/schemas/TaskPriority"
-        execution_mode:
-          $ref: "#/components/schemas/TaskExecutionMode"
         assignee_id:
           $ref: "#/components/schemas/NullableUUID"
         start_date:
@@ -2048,10 +2115,6 @@ components:
           items:
             type: string
             format: uuid
-        project_number:
-          type: integer
-          format: int64
-          minimum: 1
         milestone_id:
           $ref: "#/components/schemas/NullableUUID"
         parent_number:
@@ -2097,7 +2160,7 @@ components:
     TaskRelationRef:
       type: object
       additionalProperties: false
-      required: [id, number, title, status, archived]
+      required: [id, number, title, phase, archived]
       properties:
         id:
           type: string
@@ -2108,8 +2171,8 @@ components:
           minimum: 1
         title:
           type: string
-        status:
-          $ref: "#/components/schemas/TaskStatus"
+        phase:
+          $ref: "#/components/schemas/TaskPhase"
         archived:
           type: boolean
         milestone:
@@ -2125,9 +2188,10 @@ components:
         - context
         - expected_result
         - description
-        - status
+        - phase
+        - review_cycle
+        - main_thread_id
         - priority
-        - execution_mode
         - creator
         - project
         - labels
@@ -2157,14 +2221,22 @@ components:
           type: string
         description:
           type: string
-        status:
-          $ref: "#/components/schemas/TaskStatus"
+        phase:
+          $ref: "#/components/schemas/TaskPhase"
+        activity:
+          $ref: "#/components/schemas/TaskActivityState"
+        review_cycle:
+          type: integer
+          format: int64
+          minimum: 0
+        active_issue_thread_id:
+          type: string
+          format: uuid
+        main_thread_id:
+          type: string
+          format: uuid
         priority:
           $ref: "#/components/schemas/TaskPriority"
-        execution_mode:
-          $ref: "#/components/schemas/TaskExecutionMode"
-        agent_work:
-          $ref: "#/components/schemas/TaskAgentWorkSummary"
         assignee:
           $ref: "#/components/schemas/UserRef"
         creator:
@@ -2223,118 +2295,78 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/Task"
-    TaskClaimStatus:
+    ActorType:
       type: string
-      enum: [active, waiting_human, submitted, released, expired]
-    TaskAgentWorkSummary:
+      enum: [user, agent, system]
+    Actor:
       type: object
       additionalProperties: false
-      required:
-        - claim_id
-        - status
-        - token_name
-        - client_kind
-        - updated_at
+      required: [type]
       properties:
-        claim_id:
+        type:
+          $ref: "#/components/schemas/ActorType"
+        user_id:
           type: string
           format: uuid
-        status:
-          $ref: "#/components/schemas/TaskClaimStatus"
-        token_name:
+        ref:
           type: string
-        client_kind:
-          type: string
-        updated_at:
-          type: string
-          format: date-time
-        completed_at:
-          type: string
-          format: date-time
-    TaskClaimSession:
+    TaskWorkflow:
       type: object
       additionalProperties: false
-      required: [client_kind, client_session_id]
+      required: [task_id, task_number, version, phase, review_cycle, main_thread_id]
       properties:
-        client_kind:
+        task_id:
           type: string
-          minLength: 1
-          maxLength: 100
-        client_session_id:
-          type: string
-          minLength: 1
-          maxLength: 255
-    TaskClaimAgentMessage:
-      type: object
-      additionalProperties: false
-      required: [client_kind, client_session_id, body]
-      properties:
-        client_kind:
-          type: string
-          minLength: 1
-          maxLength: 100
-        client_session_id:
-          type: string
-          minLength: 1
-          maxLength: 255
-        body:
-          type: string
-          minLength: 1
-    TaskClaimHumanAnswer:
-      type: object
-      additionalProperties: false
-      required: [body]
-      properties:
-        body:
-          type: string
-          minLength: 1
-    TaskClaimAcceptanceCheckCreate:
-      type: object
-      additionalProperties: false
-      required:
-        - client_kind
-        - client_session_id
-        - criterion_revision
-        - outcome
-        - evidence
-      properties:
-        client_kind:
-          type: string
-          minLength: 1
-          maxLength: 100
-        client_session_id:
-          type: string
-          minLength: 1
-          maxLength: 255
-        criterion_revision:
+          format: uuid
+        task_number:
           type: integer
+          format: int64
           minimum: 1
-        outcome:
-          $ref: "#/components/schemas/AcceptanceOutcome"
-        evidence:
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        phase:
+          $ref: "#/components/schemas/TaskPhase"
+        activity:
+          $ref: "#/components/schemas/TaskActivityState"
+        review_cycle:
+          type: integer
+          format: int64
+          minimum: 0
+        active_issue_thread_id:
           type: string
-          minLength: 1
-    TaskClaimRelease:
-      type: object
-      additionalProperties: false
-      properties:
-        client_kind:
+          format: uuid
+        main_thread_id:
           type: string
-          maxLength: 100
-        client_session_id:
-          type: string
-          maxLength: 255
-        handoff:
-          type: string
-    TaskClaim:
+          format: uuid
+    TaskClaimStage:
+      type: string
+      enum: [execution, review]
+    TaskStageClaimStatus:
+      type: string
+      enum: [active, completed, released, expired, cancelled]
+    TaskStageClaimOutcome:
+      type: string
+      enum:
+        - execution_completed
+        - task_accepted
+        - changes_requested
+        - needs_resolution
+        - voluntarily_released
+        - deadline_elapsed
+        - task_cancelled
+    TaskStageClaim:
       type: object
       additionalProperties: false
       required:
         - id
         - task_id
         - task_number
-        - claimed_by_user_id
-        - token_name
+        - stage
+        - claimed_by
+        - subject_user_id
+        - authentication_method
         - client_kind
         - status
         - version
@@ -2352,15 +2384,24 @@ components:
           type: integer
           format: int64
           minimum: 1
-        claimed_by_user_id:
+        stage:
+          $ref: "#/components/schemas/TaskClaimStage"
+        claimed_by:
+          $ref: "#/components/schemas/Actor"
+        subject_user_id:
           type: string
           format: uuid
+        authentication_method:
+          type: string
+          enum: [session, api_token, agent_delegate]
         token_name:
           type: string
         client_kind:
           type: string
         status:
-          $ref: "#/components/schemas/TaskClaimStatus"
+          $ref: "#/components/schemas/TaskStageClaimStatus"
+        outcome:
+          $ref: "#/components/schemas/TaskStageClaimOutcome"
         version:
           type: integer
           format: int64
@@ -2368,8 +2409,6 @@ components:
         expires_at:
           type: string
           format: date-time
-        terminal_reason:
-          type: string
         created_at:
           type: string
           format: date-time
@@ -2379,56 +2418,7 @@ components:
         completed_at:
           type: string
           format: date-time
-    TaskClaimMessage:
-      type: object
-      additionalProperties: false
-      required:
-        - id
-        - claim_id
-        - task_id
-        - author_type
-        - kind
-        - body
-        - created_at
-      properties:
-        id:
-          type: string
-          format: uuid
-        claim_id:
-          type: string
-          format: uuid
-        task_id:
-          type: string
-          format: uuid
-        author_type:
-          type: string
-          enum: [agent, human]
-        author_user_id:
-          type: string
-          format: uuid
-        kind:
-          type: string
-          enum: [progress, question, answer, handoff, submission]
-        body:
-          type: string
-        reply_to_message_id:
-          type: string
-          format: uuid
-        token_name:
-          type: string
-        created_at:
-          type: string
-          format: date-time
-    TaskClaimAction:
-      type: object
-      additionalProperties: false
-      required: [claim, message]
-      properties:
-        claim:
-          $ref: "#/components/schemas/TaskClaim"
-        message:
-          $ref: "#/components/schemas/TaskClaimMessage"
-    TaskClaimMessageList:
+    TaskStageClaimList:
       type: object
       additionalProperties: false
       required: [items]
@@ -2436,64 +2426,81 @@ components:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/TaskClaimMessage"
-    TaskClaimConversation:
+            $ref: "#/components/schemas/TaskStageClaim"
+    TaskStageClaimCommand:
       type: object
       additionalProperties: false
-      required: [claim, messages]
+      required: [task, claim]
       properties:
+        task:
+          $ref: "#/components/schemas/TaskWorkflow"
         claim:
-          $ref: "#/components/schemas/TaskClaim"
-        messages:
-          type: array
-          items:
-            $ref: "#/components/schemas/TaskClaimMessage"
-    TaskClaimConversationList:
+          $ref: "#/components/schemas/TaskStageClaim"
+    TaskWorkSubmissionCommand:
       type: object
       additionalProperties: false
-      required: [items]
+      required: [task, claim, submission]
       properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/TaskClaimConversation"
-    CommentCreateWrite:
+        task:
+          $ref: "#/components/schemas/TaskWorkflow"
+        claim:
+          $ref: "#/components/schemas/TaskStageClaim"
+        submission:
+          $ref: "#/components/schemas/TaskThreadItem"
+    TaskExecutionCompletionCommand:
       type: object
       additionalProperties: false
-      required: [body]
+      required: [task, claim, completion]
       properties:
+        task:
+          $ref: "#/components/schemas/TaskWorkflow"
+        claim:
+          $ref: "#/components/schemas/TaskStageClaim"
+        completion:
+          $ref: "#/components/schemas/TaskThreadItem"
+    TaskStageClaimCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        client_kind:
+          type: string
+          maxLength: 100
+        client_session_id:
+          type: string
+          maxLength: 255
+    TaskStageClaimFinish:
+      type: object
+      additionalProperties: false
+      required: [claim_version, body]
+      properties:
+        claim_version:
+          type: integer
+          format: int64
+          minimum: 1
         body:
           type: string
           minLength: 1
-        reply_to_comment_id:
-          type: string
-          format: uuid
-        mentioned_user_ids:
-          type: array
-          maxItems: 100
-          uniqueItems: true
-          items:
-            type: string
-            format: uuid
-    CommentUpdateWrite:
+    ReasonWrite:
       type: object
       additionalProperties: false
-      required: [body]
+      required: [reason]
       properties:
-        body:
+        reason:
           type: string
           minLength: 1
-        mentioned_user_ids:
-          type: array
-          maxItems: 100
-          uniqueItems: true
-          items:
-            type: string
-            format: uuid
-    Comment:
+    IssueThreadType:
+      type: string
+      enum: [decision_required, dependency_required]
+    IssueThreadStatus:
+      type: string
+      enum: [open, resolved]
+    TaskThreadRole:
+      type: string
+      enum: [main, issue]
+    TaskThread:
       type: object
       additionalProperties: false
-      required: [id, task_id, author_id, body, thread_root_id, mentioned_user_ids, deleted, version, created_at, updated_at]
+      required: [id, task_id, role, version, created_at, updated_at]
       properties:
         id:
           type: string
@@ -2501,24 +2508,18 @@ components:
         task_id:
           type: string
           format: uuid
-        author_id:
-          type: string
-          format: uuid
-        body:
-          type: string
-        reply_to_comment_id:
-          type: string
-          format: uuid
-        thread_root_id:
-          type: string
-          format: uuid
-        mentioned_user_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
-        deleted:
-          type: boolean
+        role:
+          $ref: "#/components/schemas/TaskThreadRole"
+        issue_type:
+          $ref: "#/components/schemas/IssueThreadType"
+        issue_status:
+          $ref: "#/components/schemas/IssueThreadStatus"
+        opened_from_phase:
+          $ref: "#/components/schemas/TaskPhase"
+        opened_by:
+          $ref: "#/components/schemas/Actor"
+        resolved_by:
+          $ref: "#/components/schemas/Actor"
         version:
           type: integer
           format: int64
@@ -2529,17 +2530,266 @@ components:
         updated_at:
           type: string
           format: date-time
-    CommentList:
-      allOf:
-        - $ref: "#/components/schemas/Page"
-        - type: object
-          additionalProperties: false
-          required: [items]
-          properties:
-            items:
-              type: array
-              items:
-                $ref: "#/components/schemas/Comment"
+        resolved_at:
+          type: string
+          format: date-time
+    TaskThreadList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaskThread"
+    TaskResolutionRequest:
+      type: object
+      additionalProperties: false
+      required: [claim_version, issue_type, request]
+      properties:
+        claim_version:
+          type: integer
+          format: int64
+          minimum: 1
+        issue_type:
+          $ref: "#/components/schemas/IssueThreadType"
+        request:
+          type: string
+          minLength: 1
+    TaskResolutionRequested:
+      type: object
+      additionalProperties: false
+      required: [task, claim, issue]
+      properties:
+        task:
+          $ref: "#/components/schemas/TaskWorkflow"
+        claim:
+          $ref: "#/components/schemas/TaskStageClaim"
+        issue:
+          $ref: "#/components/schemas/TaskThread"
+    TaskIssueResolve:
+      type: object
+      additionalProperties: false
+      required: [thread_version, resolution]
+      properties:
+        thread_version:
+          type: integer
+          format: int64
+          minimum: 1
+        resolution:
+          type: string
+          minLength: 1
+    TaskIssueResolved:
+      type: object
+      additionalProperties: false
+      required: [task, issue]
+      properties:
+        task:
+          $ref: "#/components/schemas/TaskWorkflow"
+        issue:
+          $ref: "#/components/schemas/TaskThread"
+    TaskCancelResult:
+      type: object
+      additionalProperties: false
+      required: [task]
+      properties:
+        task:
+          $ref: "#/components/schemas/TaskWorkflow"
+        ended_claim:
+          $ref: "#/components/schemas/TaskStageClaim"
+        resolved_issue:
+          $ref: "#/components/schemas/TaskThread"
+    TaskStageAcceptanceCheckWrite:
+      type: object
+      additionalProperties: false
+      required: [claim_version, criterion_revision, outcome, evidence]
+      properties:
+        claim_version:
+          type: integer
+          format: int64
+          minimum: 1
+        criterion_revision:
+          type: integer
+          minimum: 1
+        outcome:
+          $ref: "#/components/schemas/AcceptanceOutcome"
+        evidence:
+          type: string
+          minLength: 1
+    TaskThreadItemKind:
+      type: string
+      enum:
+        - message
+        - progress
+        - handoff
+        - work_submission
+        - execution_completed
+        - review_outcome
+        - resolution_request
+        - resolution
+        - issue_resolution
+        - system_event
+    IssueResolutionPayload:
+      type: object
+      additionalProperties: false
+      required:
+        - issue_thread_id
+        - issue_type
+        - request
+        - resolution
+        - opened_by
+        - resolved_by
+        - opened_at
+        - resolved_at
+      properties:
+        issue_thread_id:
+          type: string
+          format: uuid
+        issue_type:
+          $ref: "#/components/schemas/IssueThreadType"
+        request:
+          type: string
+        resolution:
+          type: string
+        opened_by:
+          $ref: "#/components/schemas/Actor"
+        resolved_by:
+          $ref: "#/components/schemas/Actor"
+        opened_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: string
+          format: date-time
+    CriterionRevisionSnapshot:
+      type: object
+      additionalProperties: false
+      required: [criterion_id, revision]
+      properties:
+        criterion_id:
+          type: string
+          format: uuid
+        revision:
+          type: integer
+          format: int64
+          minimum: 1
+    ExecutionCompletedPayload:
+      type: object
+      additionalProperties: false
+      required: [review_cycle, submission_item_ids, execution_check_ids, criterion_revisions]
+      properties:
+        review_cycle:
+          type: integer
+          format: int64
+          minimum: 1
+        submission_item_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        execution_check_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        criterion_revisions:
+          type: array
+          items:
+            $ref: "#/components/schemas/CriterionRevisionSnapshot"
+    TaskThreadItem:
+      type: object
+      additionalProperties: false
+      required: [id, thread_id, kind, author, version, created_at, updated_at, mentioned_user_ids]
+      properties:
+        id:
+          type: string
+          format: uuid
+        thread_id:
+          type: string
+          format: uuid
+        kind:
+          $ref: "#/components/schemas/TaskThreadItemKind"
+        author:
+          $ref: "#/components/schemas/Actor"
+        body:
+          type: string
+        issue_resolution:
+          $ref: "#/components/schemas/IssueResolutionPayload"
+        execution_completed:
+          $ref: "#/components/schemas/ExecutionCompletedPayload"
+        task_stage_claim_id:
+          type: string
+          format: uuid
+        task_review_cycle:
+          type: integer
+          format: int64
+          minimum: 1
+        reply_to_item_id:
+          type: string
+          format: uuid
+        mentioned_user_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type: string
+          format: date-time
+    TaskThreadItemList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaskThreadItem"
+        next_cursor:
+          type: string
+    TaskThreadMessageWrite:
+      type: object
+      additionalProperties: false
+      required: [kind, body]
+      properties:
+        kind:
+          type: string
+          enum: [message, progress]
+        body:
+          type: string
+          minLength: 1
+        reply_to_item_id:
+          type: string
+          format: uuid
+        mentioned_user_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+    TaskThreadMessageUpdate:
+      type: object
+      additionalProperties: false
+      required: [body]
+      properties:
+        body:
+          type: string
+          minLength: 1
+        mentioned_user_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
     TaskAttachmentUploadWrite:
       type: object
       additionalProperties: false
@@ -3172,6 +3422,16 @@ components:
           format: uuid
         checker_ref:
           type: string
+        purpose:
+          type: string
+          enum: [execution_verification, acceptance]
+        task_claim_id:
+          type: string
+          format: uuid
+        review_cycle:
+          type: integer
+          format: int64
+          minimum: 0
         checked_at:
           type: string
           format: date-time

@@ -91,32 +91,43 @@ production `X-User-Id` fallback.
 
 ## Current Task-Product Invariants
 
-- Task statuses are labels, not a gated state graph. Any valid status may move
-  to any other valid status. Entering `done` is the sole readiness gate: a task
-  with no active acceptance criteria completes directly; otherwise every
-  active criterion's current revision must be `passed` or human-`waived`.
-  After an Agent submission, only post-submission human checks satisfy this
-  gate; Agent checks remain self-verification evidence for the reviewer.
+- Task lifecycle is command-driven. Phase is
+  `backlog | ready | in_progress | in_review | done | cancelled`.
+  `in_progress` and `in_review` additionally use
+  `available | working | needs_resolution`; other phases have no activity.
 - A Project is a long-lived workspace, not a delivery lifecycle. It has no
   status, outcome, target date, or acceptance criteria. Administrator-only
   archive/restore controls visibility; archiving requires no active/planned
   milestones and no unfinished tasks.
 - Every task belongs to exactly one Project. A task without a Milestone belongs
-  to that Project's Backlog; the Project association cannot be cleared.
+  to that Project's structural Backlog; this is distinct from lifecycle phase
+  `backlog`. The Project association is immutable.
 - Milestones and tasks share the revisioned `AcceptanceCriterion` and immutable
   `AcceptanceCheck` entities. A criterion has exactly one owner scope.
 - Milestones are owned delivery windows with
   `planned | active | completed | cancelled` lifecycle states. Multiple
   milestones may be active in one Project.
 - Priorities are labels, not scheduling constraints.
-- `execution_mode` is explicit delegation: only an assigned, unarchived
-  `agent_allowed` Task in `todo` may be claimed by an external Codex session.
-- A third-party `TaskClaim` is bound to the real client session ID. One session
-  may hold at most one unfinished Claim; Claims are never transferred between
-  sessions. Claiming moves `todo` to `in_progress`, submission moves
-  `in_progress` to `in_review`, and only a human may finish the Task.
-- Agent conversation messages are immutable and separate from ordinary
-  comments, although the task communication timeline presents both streams.
+- People and Agents use the same execution and review Claims and lifecycle
+  commands. Actor type and authentication method are provenance, not a
+  capability distinction. Self-review is allowed.
+- One Task has at most one active Claim. `working` has exactly one Claim of the
+  phase's inferred stage; `available` has none. Claims are never transferred or
+  resumed. Release and lazy expiry preserve phase and return to `available`.
+- Every Task has one Main Thread. A Task in `needs_resolution` has no active
+  Claim and exactly one open typed Issue Thread. Requesting resolution ends the
+  Claim atomically; resolving merges request plus conclusion to Main and makes
+  the same phase available without reviving the old Claim.
+- Work submission is repeatable: it appends an immutable Main Thread Item and
+  preserves the active execution Claim, Task version, Claim version, and
+  review cycle. Explicitly completing execution freezes the delivery snapshot,
+  ends the Claim, moves to `in_review.available`, and increments
+  `review_cycle`. A review Claim may request changes to
+  `in_progress.available` or accept the Task as `done`.
+- Task acceptance checks are Claim-owned: execution Claims produce
+  `execution_verification`; review Claims produce current-cycle `acceptance`.
+  Completion considers only current criterion revisions and current review
+  cycle acceptance.
 - The `work:execute` scope permits Claim-owned transitions and acceptance
   checks but not task-definition, criterion, Project, or comment mutation.
 - Tasks are archived/restored, never hard-deleted. Their sequential numbers are
@@ -127,8 +138,8 @@ production `X-User-Id` fallback.
   `domain.TaskPatch`.
 - Task responses embed creator, optional assignee, and labels. Avoid introducing
   frontend N+1 fetches for data the task view already supplies.
-- Comment edit/delete ownership is enforced; ordinary task status changes are
-  not permission gates.
+- Editable Thread-message ownership is enforced. Phase, activity, Claim,
+  review-cycle, Issue, and Project changes are not generic Task PATCH fields.
 - `/api/v1` errors use RFC 9457 Problem Details with stable machine-readable
   codes and request IDs. Internal account/Admin routes retain the
   `{"error":"..."}` envelope. Expected rejections are mapped to a domain error

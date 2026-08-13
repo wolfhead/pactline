@@ -31,7 +31,10 @@ const TASK: Task = {
   context: 'The task area should remain the primary surface.',
   expected_result: 'Project details stay available without crowding tasks.',
   description: '',
-  status: 'in_progress',
+  phase: 'in_progress',
+  activity: 'working',
+  review_cycle: 0,
+  main_thread_id: 'thread-main-501',
   priority: 'high',
   assignee: { id: 'u1', name: 'Alex', email: 'a@example.com' },
   creator: { id: 'u1', name: 'Alex', email: 'a@example.com' },
@@ -96,10 +99,8 @@ describe('ProjectDetailPage', () => {
     vi.mocked(tasksApi.listTasks).mockResolvedValue({ items: [TASK], has_more: false })
     vi.mocked(tasksApi.listLabels).mockResolvedValue([])
     vi.mocked(tasksApi.getTask).mockResolvedValue(TASK)
-    vi.mocked(tasksApi.listComments).mockResolvedValue([])
     vi.mocked(tasksApi.listActivity).mockResolvedValue([])
     vi.mocked(tasksApi.listTaskAttachments).mockResolvedValue([])
-    vi.mocked(tasksApi.listTaskAgentConversations).mockResolvedValue([])
     vi.mocked(acceptanceApi.listTaskCriteria).mockResolvedValue([])
   })
   afterEach(() => {

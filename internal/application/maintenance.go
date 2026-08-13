@@ -14,28 +14,30 @@ const (
 
 type MaintenanceStore interface {
 	DeleteAccessAuditBefore(context.Context, time.Time) (int64, error)
+	DeleteLarkAPIAuditBefore(context.Context, time.Time) (int64, error)
 	DeleteIdempotencyBefore(context.Context, time.Time) (int64, error)
 	DeleteAgentRunsBefore(context.Context, time.Time) (int64, error)
 }
 
 type Maintenance struct {
-	Store  MaintenanceStore
-	Claims interface {
-		ExpireDue(context.Context, time.Time, int) (int, error)
-	}
+	Store MaintenanceStore
 }
 
 type MaintenanceResult struct {
 	AccessAuditRemoved int64
+	LarkAuditRemoved   int64
 	IdempotencyRemoved int64
 	AgentRunsRemoved   int64
-	TaskClaimsExpired  int
 }
 
 func (m Maintenance) RunOnce(ctx context.Context, now time.Time) (MaintenanceResult, error) {
 	accessRemoved, err := m.Store.DeleteAccessAuditBefore(ctx, now.Add(-AccessAuditRetention))
 	if err != nil {
 		return MaintenanceResult{}, fmt.Errorf("expire API access audit: %w", err)
+	}
+	larkRemoved, err := m.Store.DeleteLarkAPIAuditBefore(ctx, now.Add(-AccessAuditRetention))
+	if err != nil {
+		return MaintenanceResult{}, fmt.Errorf("expire Lark API audit: %w", err)
 	}
 	idempotencyRemoved, err := m.Store.DeleteIdempotencyBefore(ctx, now)
 	if err != nil {
@@ -47,16 +49,10 @@ func (m Maintenance) RunOnce(ctx context.Context, now time.Time) (MaintenanceRes
 	if err != nil {
 		return MaintenanceResult{}, fmt.Errorf("expire Agent runs: %w", err)
 	}
-	claimsExpired := 0
-	if m.Claims != nil {
-		claimsExpired, err = m.Claims.ExpireDue(ctx, now, 200)
-		if err != nil {
-			return MaintenanceResult{}, fmt.Errorf("expire Task Claims: %w", err)
-		}
-	}
 	return MaintenanceResult{
-		AccessAuditRemoved: accessRemoved, IdempotencyRemoved: idempotencyRemoved,
-		AgentRunsRemoved: agentRunsRemoved, TaskClaimsExpired: claimsExpired,
+		AccessAuditRemoved: accessRemoved, LarkAuditRemoved: larkRemoved,
+		IdempotencyRemoved: idempotencyRemoved,
+		AgentRunsRemoved:   agentRunsRemoved,
 	}, nil
 }
 
@@ -69,9 +65,9 @@ func (m Maintenance) Run(ctx context.Context) {
 		}
 		slog.Info("maintenance completed",
 			"access_audit_removed", result.AccessAuditRemoved,
+			"lark_api_audit_removed", result.LarkAuditRemoved,
 			"idempotency_removed", result.IdempotencyRemoved,
-			"agent_runs_removed", result.AgentRunsRemoved,
-			"task_claims_expired", result.TaskClaimsExpired)
+			"agent_runs_removed", result.AgentRunsRemoved)
 	}
 	run()
 	ticker := time.NewTicker(MaintenanceInterval)

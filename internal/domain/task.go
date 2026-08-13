@@ -7,10 +7,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// TaskStatus is the task's place in its lifecycle. Every status may move to
-// every other status and there is no terminal state. Entering done is the
-// one readiness gate: if the task defines acceptance criteria, their current
-// revisions must all be passed or human-waived.
+// TaskStatus is the compatibility representation retained during the additive
+// migration window. New product behavior uses TaskPhase and TaskActivityState.
 type TaskStatus string
 
 const (
@@ -21,7 +19,7 @@ const (
 	TaskStatusCancelled  TaskStatus = "cancelled"
 )
 
-// Valid reports whether s is one of the five defined statuses.
+// Valid reports whether s is one of the five legacy statuses.
 func (s TaskStatus) Valid() bool {
 	switch s {
 	case TaskStatusTodo, TaskStatusInProgress, TaskStatusInReview, TaskStatusDone, TaskStatusCancelled:
@@ -50,10 +48,8 @@ func (p TaskPriority) Valid() bool {
 	return false
 }
 
-// TaskExecutionMode expresses whether the assigned human has made a Task
-// available to their external coding Agent. It is independent from Task
-// status: status describes the work, while execution mode controls who may
-// claim it.
+// TaskExecutionMode is retained only for legacy-row migration. The target
+// workflow gives authorized human and Agent actors equivalent capabilities.
 type TaskExecutionMode string
 
 const (
@@ -79,27 +75,40 @@ func (m TaskExecutionMode) Valid() bool {
 // AssigneeID is nullable: unassigned is a normal, first-class state, not an
 // error or a placeholder to fill in later.
 type Task struct {
-	ID             uuid.UUID
-	Number         int64
-	Version        int64
-	Title          string
-	Context        string
-	ExpectedResult string
-	Description    string
-	Status         TaskStatus
-	Priority       TaskPriority
-	ExecutionMode  TaskExecutionMode
-	AssigneeID     *uuid.UUID
-	CreatorID      uuid.UUID
-	StartDate      *time.Time
-	DueDate        *time.Time
-	ProjectID      uuid.UUID
-	MilestoneID    *uuid.UUID
-	ParentTaskID   *uuid.UUID
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	CompletedAt    *time.Time
-	ArchivedAt     *time.Time
+	ID                  uuid.UUID
+	Number              int64
+	Version             int64
+	Title               string
+	Context             string
+	ExpectedResult      string
+	Description         string
+	Phase               TaskPhase
+	Activity            TaskActivityState
+	ReviewCycle         int64
+	ActiveIssueThreadID *uuid.UUID
+	MainThreadID        uuid.UUID
+	// Status and ExecutionMode remain readable during the additive rollout.
+	// New workflow commands use Phase and Activity exclusively.
+	Status        TaskStatus
+	Priority      TaskPriority
+	ExecutionMode TaskExecutionMode
+	AssigneeID    *uuid.UUID
+	CreatorID     uuid.UUID
+	StartDate     *time.Time
+	DueDate       *time.Time
+	ProjectID     uuid.UUID
+	MilestoneID   *uuid.UUID
+	ParentTaskID  *uuid.UUID
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	CompletedAt   *time.Time
+	ArchivedAt    *time.Time
+}
+
+func (t Task) TargetLifecycle() TaskLifecycle {
+	return TaskLifecycle{
+		Phase: t.Phase, Activity: t.Activity, ReviewCycle: t.ReviewCycle,
+	}
 }
 
 // TaskCompletionReadiness is a snapshot taken while the task row is locked.
@@ -151,9 +160,10 @@ func ValidateSchedule(startDate, dueDate *time.Time) error {
 // *Set booleans distinguish "not provided, leave unchanged" from "provided
 // as null, clear the value" for the nullable fields (AssigneeID, DueDate),
 // which a plain pointer cannot: encoding/json sets a *T field to nil for
-// both a missing key and an explicit JSON null. Title/Description/Status/
+// both a missing key and an explicit JSON null. Title, Description, and
 // Priority are never null-valued, so a plain pointer (nil = not provided) is
-// enough for them.
+// enough for them. Status and ExecutionMode remain internal compatibility
+// inputs until the contract migration; /api/v1 does not expose them.
 type TaskPatch struct {
 	Title          *string
 	Context        *string

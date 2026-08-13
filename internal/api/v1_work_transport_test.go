@@ -14,20 +14,13 @@ import (
 )
 
 type v1TaskJSON struct {
-	ID            uuid.UUID `json:"id"`
-	Number        int64     `json:"number"`
-	Version       int64     `json:"version"`
-	Title         string    `json:"title"`
-	ExecutionMode string    `json:"execution_mode"`
-	Labels        []struct {
+	ID      uuid.UUID `json:"id"`
+	Number  int64     `json:"number"`
+	Version int64     `json:"version"`
+	Title   string    `json:"title"`
+	Labels  []struct {
 		ID uuid.UUID `json:"id"`
 	} `json:"labels"`
-}
-
-type v1CommentJSON struct {
-	ID      uuid.UUID `json:"id"`
-	Version int64     `json:"version"`
-	Body    string    `json:"body"`
 }
 
 type v1LabelJSON struct {
@@ -36,7 +29,7 @@ type v1LabelJSON struct {
 	Name    string    `json:"name"`
 }
 
-func TestV1TaskCommentAndLabelVersions(t *testing.T) {
+func TestV1TaskThreadAndLabelVersions(t *testing.T) {
 	handler, db := newTaskTestServer(t)
 
 	labelCreated := do(t, handler, http.MethodPost, "/api/v1/labels", userA, map[string]any{
@@ -107,36 +100,60 @@ func TestV1TaskCommentAndLabelVersions(t *testing.T) {
 	decodeJSON(t, missingPrecondition, &missingProblem)
 	require.Equal(t, "PRECONDITION_REQUIRED", missingProblem.Code)
 
-	commentCreated := doWithHeaders(
+	mainThreadID := taskMainThreadID(t, handler, task.Number)
+	threadMessageCreated := do(
 		t, handler, http.MethodPost,
-		"/api/v1/tasks/"+strconv.FormatInt(task.Number, 10)+"/comments", userA,
-		http.Header{"If-Match": {`"2"`}},
-		map[string]any{"body": "First comment"},
+		"/api/v1/threads/"+mainThreadID.String()+"/items",
+		userA, map[string]any{"kind": "message", "body": "First Thread message"},
 	)
-	require.Equal(t, http.StatusCreated, commentCreated.Code, commentCreated.Body.String())
-	require.Equal(t, `"1"`, commentCreated.Header().Get("ETag"))
-	var comment v1CommentJSON
-	decodeJSON(t, commentCreated, &comment)
+	require.Equal(t, http.StatusCreated, threadMessageCreated.Code, threadMessageCreated.Body.String())
+	require.Equal(t, `"1"`, threadMessageCreated.Header().Get("ETag"))
+	var threadItem struct {
+		ID      uuid.UUID `json:"id"`
+		Version int64     `json:"version"`
+	}
+	decodeJSON(t, threadMessageCreated, &threadItem)
 
-	taskAfterComment := do(
-		t, handler, http.MethodGet, "/api/v1/tasks/"+strconv.FormatInt(task.Number, 10),
+	threadMessageUpdated := doWithHeaders(
+		t, handler, http.MethodPatch,
+		"/api/v1/thread-items/"+threadItem.ID.String(), userA,
+		http.Header{"If-Match": {`"1"`}}, map[string]any{"body": "Edited Thread message"},
+	)
+	require.Equal(t, http.StatusOK, threadMessageUpdated.Code, threadMessageUpdated.Body.String())
+	require.Equal(t, `"2"`, threadMessageUpdated.Header().Get("ETag"))
+
+	secondThreadMessage := do(
+		t, handler, http.MethodPost,
+		"/api/v1/threads/"+mainThreadID.String()+"/items",
+		userA, map[string]any{"kind": "message", "body": "Second Thread message"},
+	)
+	require.Equal(t, http.StatusCreated, secondThreadMessage.Code, secondThreadMessage.Body.String())
+	firstPage := do(
+		t, handler, http.MethodGet,
+		"/api/v1/threads/"+mainThreadID.String()+"/items?limit=1", userA, nil,
+	)
+	require.Equal(t, http.StatusOK, firstPage.Code, firstPage.Body.String())
+	var page struct {
+		Items      []json.RawMessage `json:"items"`
+		NextCursor string            `json:"next_cursor"`
+	}
+	decodeJSON(t, firstPage, &page)
+	require.Len(t, page.Items, 1)
+	require.NotEmpty(t, page.NextCursor)
+	secondPage := do(
+		t, handler, http.MethodGet,
+		"/api/v1/threads/"+mainThreadID.String()+"/items?limit=1&cursor="+page.NextCursor,
 		userA, nil,
 	)
-	require.Equal(t, http.StatusOK, taskAfterComment.Code, taskAfterComment.Body.String())
-	require.Equal(t, `"3"`, taskAfterComment.Header().Get("ETag"))
-
-	commentUpdated := doWithHeaders(
-		t, handler, http.MethodPatch,
-		"/api/v1/tasks/"+strconv.FormatInt(task.Number, 10)+"/comments/"+comment.ID.String(), userA,
-		http.Header{"If-Match": {`"1"`}},
-		map[string]any{"body": "Edited comment"},
-	)
-	require.Equal(t, http.StatusOK, commentUpdated.Code, commentUpdated.Body.String())
-	require.Equal(t, `"2"`, commentUpdated.Header().Get("ETag"))
+	require.Equal(t, http.StatusOK, secondPage.Code, secondPage.Body.String())
+	page.NextCursor = ""
+	decodeJSON(t, secondPage, &page)
+	require.Len(t, page.Items, 1)
+	require.Empty(t, page.NextCursor)
 
 	for _, path := range []string{
 		"/api/v1/tasks?limit=1&sort=updated_at&order=desc",
-		"/api/v1/tasks/" + strconv.FormatInt(task.Number, 10) + "/comments",
+		"/api/v1/tasks/" + strconv.FormatInt(task.Number, 10) + "/threads",
 		"/api/v1/tasks/" + strconv.FormatInt(task.Number, 10) + "/activity",
 		"/api/v1/labels",
 	} {
@@ -144,36 +161,36 @@ func TestV1TaskCommentAndLabelVersions(t *testing.T) {
 		require.Equal(t, http.StatusOK, listed.Code, "%s: %s", path, listed.Body.String())
 	}
 
-	staleComment := doWithHeaders(
+	staleThreadMessage := doWithHeaders(
 		t, handler, http.MethodPatch,
-		"/api/v1/tasks/"+strconv.FormatInt(task.Number, 10)+"/comments/"+comment.ID.String(), userA,
+		"/api/v1/thread-items/"+threadItem.ID.String(), userA,
 		http.Header{"If-Match": {`"1"`}},
 		map[string]any{"body": "stale"},
 	)
-	assertVersionConflict(t, staleComment, 2)
+	assertVersionConflict(t, staleThreadMessage, 2)
 
 	archived := doWithHeaders(
 		t, handler, http.MethodPost,
 		"/api/v1/tasks/"+strconv.FormatInt(task.Number, 10)+"/archive", userA,
-		http.Header{"If-Match": {`"3"`}}, nil,
+		http.Header{"If-Match": {`"2"`}}, nil,
 	)
 	require.Equal(t, http.StatusOK, archived.Code, archived.Body.String())
-	require.Equal(t, `"4"`, archived.Header().Get("ETag"))
+	require.Equal(t, `"3"`, archived.Header().Get("ETag"))
 
 	restored := doWithHeaders(
 		t, handler, http.MethodPost,
 		"/api/v1/tasks/"+strconv.FormatInt(task.Number, 10)+"/restore", userA,
-		http.Header{"If-Match": {`"4"`}}, nil,
+		http.Header{"If-Match": {`"3"`}}, nil,
 	)
 	require.Equal(t, http.StatusOK, restored.Code, restored.Body.String())
-	require.Equal(t, `"5"`, restored.Header().Get("ETag"))
+	require.Equal(t, `"4"`, restored.Header().Get("ETag"))
 
-	commentDeleted := doWithHeaders(
+	threadMessageDeleted := doWithHeaders(
 		t, handler, http.MethodDelete,
-		"/api/v1/tasks/"+strconv.FormatInt(task.Number, 10)+"/comments/"+comment.ID.String(), userA,
+		"/api/v1/thread-items/"+threadItem.ID.String(), userA,
 		http.Header{"If-Match": {`"2"`}}, nil,
 	)
-	require.Equal(t, http.StatusNoContent, commentDeleted.Code, commentDeleted.Body.String())
+	require.Equal(t, http.StatusOK, threadMessageDeleted.Code, threadMessageDeleted.Body.String())
 
 	labelDeleted := doWithHeaders(
 		t, handler, http.MethodDelete, "/api/v1/labels/"+label.ID.String(), userA,
@@ -186,9 +203,21 @@ func TestV1TaskCommentAndLabelVersions(t *testing.T) {
 		userA, nil,
 	)
 	require.Equal(t, http.StatusOK, taskAfterLabelDelete.Code, taskAfterLabelDelete.Body.String())
-	require.Equal(t, `"6"`, taskAfterLabelDelete.Header().Get("ETag"))
+	require.Equal(t, `"5"`, taskAfterLabelDelete.Header().Get("ETag"))
 	decodeJSON(t, taskAfterLabelDelete, &task)
 	require.Empty(t, task.Labels)
+}
+
+func taskMainThreadID(t *testing.T, handler http.Handler, taskNumber int64) uuid.UUID {
+	t.Helper()
+	response := do(t, handler, http.MethodGet,
+		"/api/v1/tasks/"+strconv.FormatInt(taskNumber, 10), userA, nil)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	var task struct {
+		MainThreadID uuid.UUID `json:"main_thread_id"`
+	}
+	decodeJSON(t, response, &task)
+	return task.MainThreadID
 }
 
 func assertVersionConflict(t *testing.T, response interface {

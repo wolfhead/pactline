@@ -15,6 +15,197 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+func encodeAcceptTaskResponse(response AcceptTaskRes, w http.ResponseWriter, span trace.Span) error {
+	switch response := response.(type) {
+	case *TaskStageClaimCommandHeaders:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Access-Control-Expose-Headers", "Etag,Idempotency-Replayed,X-Request-Id")
+		// Encoding response headers.
+		{
+			h := uri.NewHeaderEncoder(w.Header())
+			// Encode "Etag" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Etag",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.Etag.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Etag header")
+				}
+			}
+			// Encode "Idempotency-Replayed" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Idempotency-Replayed",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.IdempotencyReplayed.Get(); ok {
+						return e.EncodeValue(conv.BoolToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Idempotency-Replayed header")
+				}
+			}
+			// Encode "X-Request-Id" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "X-Request-Id",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.XRequestID.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode X-Request-Id header")
+				}
+			}
+		}
+		w.WriteHeader(200)
+		span.SetStatus(codes.Ok, http.StatusText(200))
+
+		e := new(jx.Encoder)
+		response.Response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *ProblemStatusCodeWithHeaders:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.Header().Set("Access-Control-Expose-Headers", "Ratelimit-Limit,Ratelimit-Remaining,Ratelimit-Reset,Retry-After,X-Request-Id")
+		// Encoding response headers.
+		{
+			h := uri.NewHeaderEncoder(w.Header())
+			// Encode "Ratelimit-Limit" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Limit",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitLimit.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Limit header")
+				}
+			}
+			// Encode "Ratelimit-Remaining" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Remaining",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitRemaining.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Remaining header")
+				}
+			}
+			// Encode "Ratelimit-Reset" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Reset",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitReset.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Reset header")
+				}
+			}
+			// Encode "Retry-After" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Retry-After",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RetryAfter.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Retry-After header")
+				}
+			}
+			// Encode "X-Request-Id" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "X-Request-Id",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.XRequestID.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode X-Request-Id header")
+				}
+			}
+		}
+		code := response.StatusCode
+		if code == 0 {
+			// Set default status code.
+			code = http.StatusOK
+		}
+		w.WriteHeader(code)
+		if st := http.StatusText(code); code >= http.StatusBadRequest {
+			span.SetStatus(codes.Error, st)
+		} else {
+			span.SetStatus(codes.Ok, st)
+		}
+
+		e := new(jx.Encoder)
+		response.Response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		if code >= http.StatusInternalServerError {
+			return errors.Wrapf(ht.ErrInternalServerErrorResponse, "code: %d, message: %s", code, http.StatusText(code))
+		}
+		return nil
+
+	default:
+		return errors.Errorf("unexpected response type: %T", response)
+	}
+}
+
 func encodeActivateMilestoneResponse(response ActivateMilestoneRes, w http.ResponseWriter, span trace.Span) error {
 	switch response := response.(type) {
 	case *MilestoneHeaders:
@@ -315,388 +506,6 @@ func encodeAddProjectMemberResponse(response AddProjectMemberRes, w http.Respons
 		}
 		w.WriteHeader(201)
 		span.SetStatus(codes.Ok, http.StatusText(201))
-
-		e := new(jx.Encoder)
-		response.Response.Encode(e)
-		if _, err := e.WriteTo(w); err != nil {
-			return errors.Wrap(err, "write")
-		}
-
-		return nil
-
-	case *ProblemStatusCodeWithHeaders:
-		if err := func() error {
-			if err := response.Validate(); err != nil {
-				return err
-			}
-			return nil
-		}(); err != nil {
-			return errors.Wrap(err, "validate")
-		}
-		w.Header().Set("Content-Type", "application/problem+json")
-		w.Header().Set("Access-Control-Expose-Headers", "Ratelimit-Limit,Ratelimit-Remaining,Ratelimit-Reset,Retry-After,X-Request-Id")
-		// Encoding response headers.
-		{
-			h := uri.NewHeaderEncoder(w.Header())
-			// Encode "Ratelimit-Limit" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Limit",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitLimit.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Limit header")
-				}
-			}
-			// Encode "Ratelimit-Remaining" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Remaining",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitRemaining.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Remaining header")
-				}
-			}
-			// Encode "Ratelimit-Reset" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Reset",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitReset.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Reset header")
-				}
-			}
-			// Encode "Retry-After" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Retry-After",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RetryAfter.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Retry-After header")
-				}
-			}
-			// Encode "X-Request-Id" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "X-Request-Id",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.XRequestID.Get(); ok {
-						return e.EncodeValue(conv.StringToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode X-Request-Id header")
-				}
-			}
-		}
-		code := response.StatusCode
-		if code == 0 {
-			// Set default status code.
-			code = http.StatusOK
-		}
-		w.WriteHeader(code)
-		if st := http.StatusText(code); code >= http.StatusBadRequest {
-			span.SetStatus(codes.Error, st)
-		} else {
-			span.SetStatus(codes.Ok, st)
-		}
-
-		e := new(jx.Encoder)
-		response.Response.Encode(e)
-		if _, err := e.WriteTo(w); err != nil {
-			return errors.Wrap(err, "write")
-		}
-
-		if code >= http.StatusInternalServerError {
-			return errors.Wrapf(ht.ErrInternalServerErrorResponse, "code: %d, message: %s", code, http.StatusText(code))
-		}
-		return nil
-
-	default:
-		return errors.Errorf("unexpected response type: %T", response)
-	}
-}
-
-func encodeAddTaskClaimProgressResponse(response AddTaskClaimProgressRes, w http.ResponseWriter, span trace.Span) error {
-	switch response := response.(type) {
-	case *TaskClaimMessageCreatedHeaders:
-		if err := func() error {
-			if err := response.Validate(); err != nil {
-				return err
-			}
-			return nil
-		}(); err != nil {
-			return errors.Wrap(err, "validate")
-		}
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.Header().Set("Access-Control-Expose-Headers", "Idempotency-Replayed,Location,X-Request-Id")
-		// Encoding response headers.
-		{
-			h := uri.NewHeaderEncoder(w.Header())
-			// Encode "Idempotency-Replayed" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Idempotency-Replayed",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.IdempotencyReplayed.Get(); ok {
-						return e.EncodeValue(conv.BoolToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Idempotency-Replayed header")
-				}
-			}
-			// Encode "Location" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Location",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.Location.Get(); ok {
-						return e.EncodeValue(conv.StringToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Location header")
-				}
-			}
-			// Encode "X-Request-Id" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "X-Request-Id",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.XRequestID.Get(); ok {
-						return e.EncodeValue(conv.StringToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode X-Request-Id header")
-				}
-			}
-		}
-		w.WriteHeader(201)
-		span.SetStatus(codes.Ok, http.StatusText(201))
-
-		e := new(jx.Encoder)
-		response.Response.Encode(e)
-		if _, err := e.WriteTo(w); err != nil {
-			return errors.Wrap(err, "write")
-		}
-
-		return nil
-
-	case *ProblemStatusCodeWithHeaders:
-		if err := func() error {
-			if err := response.Validate(); err != nil {
-				return err
-			}
-			return nil
-		}(); err != nil {
-			return errors.Wrap(err, "validate")
-		}
-		w.Header().Set("Content-Type", "application/problem+json")
-		w.Header().Set("Access-Control-Expose-Headers", "Ratelimit-Limit,Ratelimit-Remaining,Ratelimit-Reset,Retry-After,X-Request-Id")
-		// Encoding response headers.
-		{
-			h := uri.NewHeaderEncoder(w.Header())
-			// Encode "Ratelimit-Limit" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Limit",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitLimit.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Limit header")
-				}
-			}
-			// Encode "Ratelimit-Remaining" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Remaining",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitRemaining.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Remaining header")
-				}
-			}
-			// Encode "Ratelimit-Reset" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Reset",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitReset.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Reset header")
-				}
-			}
-			// Encode "Retry-After" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Retry-After",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RetryAfter.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Retry-After header")
-				}
-			}
-			// Encode "X-Request-Id" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "X-Request-Id",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.XRequestID.Get(); ok {
-						return e.EncodeValue(conv.StringToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode X-Request-Id header")
-				}
-			}
-		}
-		code := response.StatusCode
-		if code == 0 {
-			// Set default status code.
-			code = http.StatusOK
-		}
-		w.WriteHeader(code)
-		if st := http.StatusText(code); code >= http.StatusBadRequest {
-			span.SetStatus(codes.Error, st)
-		} else {
-			span.SetStatus(codes.Ok, st)
-		}
-
-		e := new(jx.Encoder)
-		response.Response.Encode(e)
-		if _, err := e.WriteTo(w); err != nil {
-			return errors.Wrap(err, "write")
-		}
-
-		if code >= http.StatusInternalServerError {
-			return errors.Wrapf(ht.ErrInternalServerErrorResponse, "code: %d, message: %s", code, http.StatusText(code))
-		}
-		return nil
-
-	default:
-		return errors.Errorf("unexpected response type: %T", response)
-	}
-}
-
-func encodeAnswerTaskClaimQuestionResponse(response AnswerTaskClaimQuestionRes, w http.ResponseWriter, span trace.Span) error {
-	switch response := response.(type) {
-	case *TaskClaimActionHeaders:
-		if err := func() error {
-			if err := response.Validate(); err != nil {
-				return err
-			}
-			return nil
-		}(); err != nil {
-			return errors.Wrap(err, "validate")
-		}
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.Header().Set("Access-Control-Expose-Headers", "Etag,Idempotency-Replayed,X-Request-Id")
-		// Encoding response headers.
-		{
-			h := uri.NewHeaderEncoder(w.Header())
-			// Encode "Etag" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Etag",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.Etag.Get(); ok {
-						return e.EncodeValue(conv.StringToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Etag header")
-				}
-			}
-			// Encode "Idempotency-Replayed" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Idempotency-Replayed",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.IdempotencyReplayed.Get(); ok {
-						return e.EncodeValue(conv.BoolToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Idempotency-Replayed header")
-				}
-			}
-			// Encode "X-Request-Id" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "X-Request-Id",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.XRequestID.Get(); ok {
-						return e.EncodeValue(conv.StringToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode X-Request-Id header")
-				}
-			}
-		}
-		w.WriteHeader(200)
-		span.SetStatus(codes.Ok, http.StatusText(200))
 
 		e := new(jx.Encoder)
 		response.Response.Encode(e)
@@ -1296,197 +1105,6 @@ func encodeArchiveTaskResponse(response ArchiveTaskRes, w http.ResponseWriter, s
 	}
 }
 
-func encodeAskTaskClaimQuestionResponse(response AskTaskClaimQuestionRes, w http.ResponseWriter, span trace.Span) error {
-	switch response := response.(type) {
-	case *TaskClaimActionHeaders:
-		if err := func() error {
-			if err := response.Validate(); err != nil {
-				return err
-			}
-			return nil
-		}(); err != nil {
-			return errors.Wrap(err, "validate")
-		}
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.Header().Set("Access-Control-Expose-Headers", "Etag,Idempotency-Replayed,X-Request-Id")
-		// Encoding response headers.
-		{
-			h := uri.NewHeaderEncoder(w.Header())
-			// Encode "Etag" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Etag",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.Etag.Get(); ok {
-						return e.EncodeValue(conv.StringToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Etag header")
-				}
-			}
-			// Encode "Idempotency-Replayed" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Idempotency-Replayed",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.IdempotencyReplayed.Get(); ok {
-						return e.EncodeValue(conv.BoolToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Idempotency-Replayed header")
-				}
-			}
-			// Encode "X-Request-Id" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "X-Request-Id",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.XRequestID.Get(); ok {
-						return e.EncodeValue(conv.StringToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode X-Request-Id header")
-				}
-			}
-		}
-		w.WriteHeader(200)
-		span.SetStatus(codes.Ok, http.StatusText(200))
-
-		e := new(jx.Encoder)
-		response.Response.Encode(e)
-		if _, err := e.WriteTo(w); err != nil {
-			return errors.Wrap(err, "write")
-		}
-
-		return nil
-
-	case *ProblemStatusCodeWithHeaders:
-		if err := func() error {
-			if err := response.Validate(); err != nil {
-				return err
-			}
-			return nil
-		}(); err != nil {
-			return errors.Wrap(err, "validate")
-		}
-		w.Header().Set("Content-Type", "application/problem+json")
-		w.Header().Set("Access-Control-Expose-Headers", "Ratelimit-Limit,Ratelimit-Remaining,Ratelimit-Reset,Retry-After,X-Request-Id")
-		// Encoding response headers.
-		{
-			h := uri.NewHeaderEncoder(w.Header())
-			// Encode "Ratelimit-Limit" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Limit",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitLimit.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Limit header")
-				}
-			}
-			// Encode "Ratelimit-Remaining" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Remaining",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitRemaining.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Remaining header")
-				}
-			}
-			// Encode "Ratelimit-Reset" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Reset",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitReset.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Reset header")
-				}
-			}
-			// Encode "Retry-After" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Retry-After",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RetryAfter.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Retry-After header")
-				}
-			}
-			// Encode "X-Request-Id" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "X-Request-Id",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.XRequestID.Get(); ok {
-						return e.EncodeValue(conv.StringToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode X-Request-Id header")
-				}
-			}
-		}
-		code := response.StatusCode
-		if code == 0 {
-			// Set default status code.
-			code = http.StatusOK
-		}
-		w.WriteHeader(code)
-		if st := http.StatusText(code); code >= http.StatusBadRequest {
-			span.SetStatus(codes.Error, st)
-		} else {
-			span.SetStatus(codes.Ok, st)
-		}
-
-		e := new(jx.Encoder)
-		response.Response.Encode(e)
-		if _, err := e.WriteTo(w); err != nil {
-			return errors.Wrap(err, "write")
-		}
-
-		if code >= http.StatusInternalServerError {
-			return errors.Wrapf(ht.ErrInternalServerErrorResponse, "code: %d, message: %s", code, http.StatusText(code))
-		}
-		return nil
-
-	default:
-		return errors.Errorf("unexpected response type: %T", response)
-	}
-}
-
 func encodeCancelMilestoneResponse(response CancelMilestoneRes, w http.ResponseWriter, span trace.Span) error {
 	switch response := response.(type) {
 	case *MilestoneHeaders:
@@ -1723,9 +1341,9 @@ func encodeCancelMilestoneResponse(response CancelMilestoneRes, w http.ResponseW
 	}
 }
 
-func encodeClaimTaskResponse(response ClaimTaskRes, w http.ResponseWriter, span trace.Span) error {
+func encodeCancelTaskResponse(response CancelTaskRes, w http.ResponseWriter, span trace.Span) error {
 	switch response := response.(type) {
-	case *TaskClaimCreatedHeaders:
+	case *TaskCancelResultHeaders:
 		if err := func() error {
 			if err := response.Validate(); err != nil {
 				return err
@@ -1735,7 +1353,7 @@ func encodeClaimTaskResponse(response ClaimTaskRes, w http.ResponseWriter, span 
 			return errors.Wrap(err, "validate")
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.Header().Set("Access-Control-Expose-Headers", "Etag,Idempotency-Replayed,Location,X-Request-Id")
+		w.Header().Set("Access-Control-Expose-Headers", "Etag,X-Request-Id")
 		// Encoding response headers.
 		{
 			h := uri.NewHeaderEncoder(w.Header())
@@ -1754,36 +1372,6 @@ func encodeClaimTaskResponse(response ClaimTaskRes, w http.ResponseWriter, span 
 					return errors.Wrap(err, "encode Etag header")
 				}
 			}
-			// Encode "Idempotency-Replayed" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Idempotency-Replayed",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.IdempotencyReplayed.Get(); ok {
-						return e.EncodeValue(conv.BoolToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Idempotency-Replayed header")
-				}
-			}
-			// Encode "Location" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Location",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.Location.Get(); ok {
-						return e.EncodeValue(conv.StringToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Location header")
-				}
-			}
 			// Encode "X-Request-Id" header.
 			{
 				cfg := uri.HeaderParameterEncodingConfig{
@@ -1800,8 +1388,8 @@ func encodeClaimTaskResponse(response ClaimTaskRes, w http.ResponseWriter, span 
 				}
 			}
 		}
-		w.WriteHeader(201)
-		span.SetStatus(codes.Ok, http.StatusText(201))
+		w.WriteHeader(200)
+		span.SetStatus(codes.Ok, http.StatusText(200))
 
 		e := new(jx.Encoder)
 		response.Response.Encode(e)
@@ -2244,6 +1832,197 @@ func encodeCompleteTaskAttachmentUploadResponse(response CompleteTaskAttachmentU
 		}
 		w.WriteHeader(201)
 		span.SetStatus(codes.Ok, http.StatusText(201))
+
+		e := new(jx.Encoder)
+		response.Response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *ProblemStatusCodeWithHeaders:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.Header().Set("Access-Control-Expose-Headers", "Ratelimit-Limit,Ratelimit-Remaining,Ratelimit-Reset,Retry-After,X-Request-Id")
+		// Encoding response headers.
+		{
+			h := uri.NewHeaderEncoder(w.Header())
+			// Encode "Ratelimit-Limit" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Limit",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitLimit.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Limit header")
+				}
+			}
+			// Encode "Ratelimit-Remaining" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Remaining",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitRemaining.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Remaining header")
+				}
+			}
+			// Encode "Ratelimit-Reset" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Reset",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitReset.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Reset header")
+				}
+			}
+			// Encode "Retry-After" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Retry-After",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RetryAfter.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Retry-After header")
+				}
+			}
+			// Encode "X-Request-Id" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "X-Request-Id",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.XRequestID.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode X-Request-Id header")
+				}
+			}
+		}
+		code := response.StatusCode
+		if code == 0 {
+			// Set default status code.
+			code = http.StatusOK
+		}
+		w.WriteHeader(code)
+		if st := http.StatusText(code); code >= http.StatusBadRequest {
+			span.SetStatus(codes.Error, st)
+		} else {
+			span.SetStatus(codes.Ok, st)
+		}
+
+		e := new(jx.Encoder)
+		response.Response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		if code >= http.StatusInternalServerError {
+			return errors.Wrapf(ht.ErrInternalServerErrorResponse, "code: %d, message: %s", code, http.StatusText(code))
+		}
+		return nil
+
+	default:
+		return errors.Errorf("unexpected response type: %T", response)
+	}
+}
+
+func encodeCompleteTaskExecutionResponse(response CompleteTaskExecutionRes, w http.ResponseWriter, span trace.Span) error {
+	switch response := response.(type) {
+	case *TaskExecutionCompletionCommandHeaders:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Access-Control-Expose-Headers", "Etag,Idempotency-Replayed,X-Request-Id")
+		// Encoding response headers.
+		{
+			h := uri.NewHeaderEncoder(w.Header())
+			// Encode "Etag" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Etag",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.Etag.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Etag header")
+				}
+			}
+			// Encode "Idempotency-Replayed" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Idempotency-Replayed",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.IdempotencyReplayed.Get(); ok {
+						return e.EncodeValue(conv.BoolToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Idempotency-Replayed header")
+				}
+			}
+			// Encode "X-Request-Id" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "X-Request-Id",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.XRequestID.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode X-Request-Id header")
+				}
+			}
+		}
+		w.WriteHeader(200)
+		span.SetStatus(codes.Ok, http.StatusText(200))
 
 		e := new(jx.Encoder)
 		response.Response.Encode(e)
@@ -4053,9 +3832,9 @@ func encodeCreateTaskAttachmentUploadResponse(response CreateTaskAttachmentUploa
 	}
 }
 
-func encodeCreateTaskCommentResponse(response CreateTaskCommentRes, w http.ResponseWriter, span trace.Span) error {
+func encodeCreateTaskCriterionResponse(response CreateTaskCriterionRes, w http.ResponseWriter, span trace.Span) error {
 	switch response := response.(type) {
-	case *CommentCreatedHeaders:
+	case *CriterionCreatedHeaders:
 		if err := func() error {
 			if err := response.Validate(); err != nil {
 				return err
@@ -4304,9 +4083,9 @@ func encodeCreateTaskCommentResponse(response CreateTaskCommentRes, w http.Respo
 	}
 }
 
-func encodeCreateTaskCriterionResponse(response CreateTaskCriterionRes, w http.ResponseWriter, span trace.Span) error {
+func encodeCreateTaskStageClaimResponse(response CreateTaskStageClaimRes, w http.ResponseWriter, span trace.Span) error {
 	switch response := response.(type) {
-	case *CriterionCreatedHeaders:
+	case *TaskStageClaimCommandHeaders:
 		if err := func() error {
 			if err := response.Validate(); err != nil {
 				return err
@@ -4316,7 +4095,7 @@ func encodeCreateTaskCriterionResponse(response CreateTaskCriterionRes, w http.R
 			return errors.Wrap(err, "validate")
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.Header().Set("Access-Control-Expose-Headers", "Etag,Idempotency-Replayed,Location,Ratelimit-Limit,Ratelimit-Remaining,Ratelimit-Reset,X-Request-Id")
+		w.Header().Set("Access-Control-Expose-Headers", "Etag,Idempotency-Replayed,X-Request-Id")
 		// Encoding response headers.
 		{
 			h := uri.NewHeaderEncoder(w.Header())
@@ -4350,21 +4129,47 @@ func encodeCreateTaskCriterionResponse(response CreateTaskCriterionRes, w http.R
 					return errors.Wrap(err, "encode Idempotency-Replayed header")
 				}
 			}
-			// Encode "Location" header.
+			// Encode "X-Request-Id" header.
 			{
 				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Location",
+					Name:    "X-Request-Id",
 					Explode: false,
 				}
 				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.Location.Get(); ok {
+					if val, ok := response.XRequestID.Get(); ok {
 						return e.EncodeValue(conv.StringToString(val))
 					}
 					return nil
 				}); err != nil {
-					return errors.Wrap(err, "encode Location header")
+					return errors.Wrap(err, "encode X-Request-Id header")
 				}
 			}
+		}
+		w.WriteHeader(201)
+		span.SetStatus(codes.Ok, http.StatusText(201))
+
+		e := new(jx.Encoder)
+		response.Response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *ProblemStatusCodeWithHeaders:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.Header().Set("Access-Control-Expose-Headers", "Ratelimit-Limit,Ratelimit-Remaining,Ratelimit-Reset,Retry-After,X-Request-Id")
+		// Encoding response headers.
+		{
+			h := uri.NewHeaderEncoder(w.Header())
 			// Encode "Ratelimit-Limit" header.
 			{
 				cfg := uri.HeaderParameterEncodingConfig{
@@ -4408,6 +4213,96 @@ func encodeCreateTaskCriterionResponse(response CreateTaskCriterionRes, w http.R
 					return nil
 				}); err != nil {
 					return errors.Wrap(err, "encode Ratelimit-Reset header")
+				}
+			}
+			// Encode "Retry-After" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Retry-After",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RetryAfter.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Retry-After header")
+				}
+			}
+			// Encode "X-Request-Id" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "X-Request-Id",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.XRequestID.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode X-Request-Id header")
+				}
+			}
+		}
+		code := response.StatusCode
+		if code == 0 {
+			// Set default status code.
+			code = http.StatusOK
+		}
+		w.WriteHeader(code)
+		if st := http.StatusText(code); code >= http.StatusBadRequest {
+			span.SetStatus(codes.Error, st)
+		} else {
+			span.SetStatus(codes.Ok, st)
+		}
+
+		e := new(jx.Encoder)
+		response.Response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		if code >= http.StatusInternalServerError {
+			return errors.Wrapf(ht.ErrInternalServerErrorResponse, "code: %d, message: %s", code, http.StatusText(code))
+		}
+		return nil
+
+	default:
+		return errors.Errorf("unexpected response type: %T", response)
+	}
+}
+
+func encodeCreateTaskThreadMessageResponse(response CreateTaskThreadMessageRes, w http.ResponseWriter, span trace.Span) error {
+	switch response := response.(type) {
+	case *TaskThreadItemHeaders:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Access-Control-Expose-Headers", "Etag,X-Request-Id")
+		// Encoding response headers.
+		{
+			h := uri.NewHeaderEncoder(w.Header())
+			// Encode "Etag" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Etag",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.Etag.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Etag header")
 				}
 			}
 			// Encode "X-Request-Id" header.
@@ -5197,223 +5092,9 @@ func encodeDeleteTaskAttachmentResponse(response DeleteTaskAttachmentRes, w http
 	}
 }
 
-func encodeDeleteTaskCommentResponse(response DeleteTaskCommentRes, w http.ResponseWriter, span trace.Span) error {
+func encodeDeleteTaskThreadMessageResponse(response DeleteTaskThreadMessageRes, w http.ResponseWriter, span trace.Span) error {
 	switch response := response.(type) {
-	case *NoContent:
-		if err := func() error {
-			if err := response.Validate(); err != nil {
-				return err
-			}
-			return nil
-		}(); err != nil {
-			return errors.Wrap(err, "validate")
-		}
-		w.Header().Set("Access-Control-Expose-Headers", "Idempotency-Replayed,Ratelimit-Limit,Ratelimit-Remaining,Ratelimit-Reset,X-Request-Id")
-		// Encoding response headers.
-		{
-			h := uri.NewHeaderEncoder(w.Header())
-			// Encode "Idempotency-Replayed" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Idempotency-Replayed",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.IdempotencyReplayed.Get(); ok {
-						return e.EncodeValue(conv.BoolToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Idempotency-Replayed header")
-				}
-			}
-			// Encode "Ratelimit-Limit" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Limit",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitLimit.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Limit header")
-				}
-			}
-			// Encode "Ratelimit-Remaining" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Remaining",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitRemaining.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Remaining header")
-				}
-			}
-			// Encode "Ratelimit-Reset" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Reset",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitReset.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Reset header")
-				}
-			}
-			// Encode "X-Request-Id" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "X-Request-Id",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.XRequestID.Get(); ok {
-						return e.EncodeValue(conv.StringToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode X-Request-Id header")
-				}
-			}
-		}
-		w.WriteHeader(204)
-		span.SetStatus(codes.Ok, http.StatusText(204))
-
-		return nil
-
-	case *ProblemStatusCodeWithHeaders:
-		if err := func() error {
-			if err := response.Validate(); err != nil {
-				return err
-			}
-			return nil
-		}(); err != nil {
-			return errors.Wrap(err, "validate")
-		}
-		w.Header().Set("Content-Type", "application/problem+json")
-		w.Header().Set("Access-Control-Expose-Headers", "Ratelimit-Limit,Ratelimit-Remaining,Ratelimit-Reset,Retry-After,X-Request-Id")
-		// Encoding response headers.
-		{
-			h := uri.NewHeaderEncoder(w.Header())
-			// Encode "Ratelimit-Limit" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Limit",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitLimit.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Limit header")
-				}
-			}
-			// Encode "Ratelimit-Remaining" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Remaining",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitRemaining.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Remaining header")
-				}
-			}
-			// Encode "Ratelimit-Reset" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Reset",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitReset.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Reset header")
-				}
-			}
-			// Encode "Retry-After" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Retry-After",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RetryAfter.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Retry-After header")
-				}
-			}
-			// Encode "X-Request-Id" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "X-Request-Id",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.XRequestID.Get(); ok {
-						return e.EncodeValue(conv.StringToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode X-Request-Id header")
-				}
-			}
-		}
-		code := response.StatusCode
-		if code == 0 {
-			// Set default status code.
-			code = http.StatusOK
-		}
-		w.WriteHeader(code)
-		if st := http.StatusText(code); code >= http.StatusBadRequest {
-			span.SetStatus(codes.Error, st)
-		} else {
-			span.SetStatus(codes.Ok, st)
-		}
-
-		e := new(jx.Encoder)
-		response.Response.Encode(e)
-		if _, err := e.WriteTo(w); err != nil {
-			return errors.Wrap(err, "write")
-		}
-
-		if code >= http.StatusInternalServerError {
-			return errors.Wrapf(ht.ErrInternalServerErrorResponse, "code: %d, message: %s", code, http.StatusText(code))
-		}
-		return nil
-
-	default:
-		return errors.Errorf("unexpected response type: %T", response)
-	}
-}
-
-func encodeExtendTaskClaimResponse(response ExtendTaskClaimRes, w http.ResponseWriter, span trace.Span) error {
-	switch response := response.(type) {
-	case *TaskClaimHeaders:
+	case *TaskThreadItemHeaders:
 		if err := func() error {
 			if err := response.Validate(); err != nil {
 				return err
@@ -5423,7 +5104,7 @@ func encodeExtendTaskClaimResponse(response ExtendTaskClaimRes, w http.ResponseW
 			return errors.Wrap(err, "validate")
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.Header().Set("Access-Control-Expose-Headers", "Etag,Idempotency-Replayed,X-Request-Id")
+		w.Header().Set("Access-Control-Expose-Headers", "Etag,X-Request-Id")
 		// Encoding response headers.
 		{
 			h := uri.NewHeaderEncoder(w.Header())
@@ -5440,21 +5121,6 @@ func encodeExtendTaskClaimResponse(response ExtendTaskClaimRes, w http.ResponseW
 					return nil
 				}); err != nil {
 					return errors.Wrap(err, "encode Etag header")
-				}
-			}
-			// Encode "Idempotency-Replayed" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Idempotency-Replayed",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.IdempotencyReplayed.Get(); ok {
-						return e.EncodeValue(conv.BoolToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Idempotency-Replayed header")
 				}
 			}
 			// Encode "X-Request-Id" header.
@@ -6190,9 +5856,9 @@ func encodeGetCurrentPrincipalResponse(response GetCurrentPrincipalRes, w http.R
 	}
 }
 
-func encodeGetCurrentTaskClaimResponse(response GetCurrentTaskClaimRes, w http.ResponseWriter, span trace.Span) error {
+func encodeGetCurrentTaskStageClaimResponse(response GetCurrentTaskStageClaimRes, w http.ResponseWriter, span trace.Span) error {
 	switch response := response.(type) {
-	case *TaskClaimHeaders:
+	case *TaskStageClaimHeaders:
 		if err := func() error {
 			if err := response.Validate(); err != nil {
 				return err
@@ -6202,7 +5868,7 @@ func encodeGetCurrentTaskClaimResponse(response GetCurrentTaskClaimRes, w http.R
 			return errors.Wrap(err, "validate")
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.Header().Set("Access-Control-Expose-Headers", "Etag,Idempotency-Replayed,X-Request-Id")
+		w.Header().Set("Access-Control-Expose-Headers", "Etag,X-Request-Id")
 		// Encoding response headers.
 		{
 			h := uri.NewHeaderEncoder(w.Header())
@@ -6219,21 +5885,6 @@ func encodeGetCurrentTaskClaimResponse(response GetCurrentTaskClaimRes, w http.R
 					return nil
 				}); err != nil {
 					return errors.Wrap(err, "encode Etag header")
-				}
-			}
-			// Encode "Idempotency-Replayed" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Idempotency-Replayed",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.IdempotencyReplayed.Get(); ok {
-						return e.EncodeValue(conv.BoolToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Idempotency-Replayed header")
 				}
 			}
 			// Encode "X-Request-Id" header.
@@ -6870,197 +6521,6 @@ func encodeGetTaskAttachmentContentResponse(response GetTaskAttachmentContentRes
 			defer closer.Close()
 		}
 		if _, err := io.Copy(writer, response.Response); err != nil {
-			return errors.Wrap(err, "write")
-		}
-
-		return nil
-
-	case *ProblemStatusCodeWithHeaders:
-		if err := func() error {
-			if err := response.Validate(); err != nil {
-				return err
-			}
-			return nil
-		}(); err != nil {
-			return errors.Wrap(err, "validate")
-		}
-		w.Header().Set("Content-Type", "application/problem+json")
-		w.Header().Set("Access-Control-Expose-Headers", "Ratelimit-Limit,Ratelimit-Remaining,Ratelimit-Reset,Retry-After,X-Request-Id")
-		// Encoding response headers.
-		{
-			h := uri.NewHeaderEncoder(w.Header())
-			// Encode "Ratelimit-Limit" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Limit",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitLimit.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Limit header")
-				}
-			}
-			// Encode "Ratelimit-Remaining" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Remaining",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitRemaining.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Remaining header")
-				}
-			}
-			// Encode "Ratelimit-Reset" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Reset",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitReset.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Reset header")
-				}
-			}
-			// Encode "Retry-After" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Retry-After",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RetryAfter.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Retry-After header")
-				}
-			}
-			// Encode "X-Request-Id" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "X-Request-Id",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.XRequestID.Get(); ok {
-						return e.EncodeValue(conv.StringToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode X-Request-Id header")
-				}
-			}
-		}
-		code := response.StatusCode
-		if code == 0 {
-			// Set default status code.
-			code = http.StatusOK
-		}
-		w.WriteHeader(code)
-		if st := http.StatusText(code); code >= http.StatusBadRequest {
-			span.SetStatus(codes.Error, st)
-		} else {
-			span.SetStatus(codes.Ok, st)
-		}
-
-		e := new(jx.Encoder)
-		response.Response.Encode(e)
-		if _, err := e.WriteTo(w); err != nil {
-			return errors.Wrap(err, "write")
-		}
-
-		if code >= http.StatusInternalServerError {
-			return errors.Wrapf(ht.ErrInternalServerErrorResponse, "code: %d, message: %s", code, http.StatusText(code))
-		}
-		return nil
-
-	default:
-		return errors.Errorf("unexpected response type: %T", response)
-	}
-}
-
-func encodeGetTaskClaimResponse(response GetTaskClaimRes, w http.ResponseWriter, span trace.Span) error {
-	switch response := response.(type) {
-	case *TaskClaimHeaders:
-		if err := func() error {
-			if err := response.Validate(); err != nil {
-				return err
-			}
-			return nil
-		}(); err != nil {
-			return errors.Wrap(err, "validate")
-		}
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.Header().Set("Access-Control-Expose-Headers", "Etag,Idempotency-Replayed,X-Request-Id")
-		// Encoding response headers.
-		{
-			h := uri.NewHeaderEncoder(w.Header())
-			// Encode "Etag" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Etag",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.Etag.Get(); ok {
-						return e.EncodeValue(conv.StringToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Etag header")
-				}
-			}
-			// Encode "Idempotency-Replayed" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Idempotency-Replayed",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.IdempotencyReplayed.Get(); ok {
-						return e.EncodeValue(conv.BoolToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Idempotency-Replayed header")
-				}
-			}
-			// Encode "X-Request-Id" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "X-Request-Id",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.XRequestID.Get(); ok {
-						return e.EncodeValue(conv.StringToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode X-Request-Id header")
-				}
-			}
-		}
-		w.WriteHeader(200)
-		span.SetStatus(codes.Ok, http.StatusText(200))
-
-		e := new(jx.Encoder)
-		response.Response.Encode(e)
-		if _, err := e.WriteTo(w); err != nil {
 			return errors.Wrap(err, "write")
 		}
 
@@ -8330,167 +7790,6 @@ func encodeListTaskActivityResponse(response ListTaskActivityRes, w http.Respons
 	}
 }
 
-func encodeListTaskAgentConversationsResponse(response ListTaskAgentConversationsRes, w http.ResponseWriter, span trace.Span) error {
-	switch response := response.(type) {
-	case *TaskClaimConversationListHeaders:
-		if err := func() error {
-			if err := response.Validate(); err != nil {
-				return err
-			}
-			return nil
-		}(); err != nil {
-			return errors.Wrap(err, "validate")
-		}
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.Header().Set("Access-Control-Expose-Headers", "X-Request-Id")
-		// Encoding response headers.
-		{
-			h := uri.NewHeaderEncoder(w.Header())
-			// Encode "X-Request-Id" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "X-Request-Id",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.XRequestID.Get(); ok {
-						return e.EncodeValue(conv.StringToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode X-Request-Id header")
-				}
-			}
-		}
-		w.WriteHeader(200)
-		span.SetStatus(codes.Ok, http.StatusText(200))
-
-		e := new(jx.Encoder)
-		response.Response.Encode(e)
-		if _, err := e.WriteTo(w); err != nil {
-			return errors.Wrap(err, "write")
-		}
-
-		return nil
-
-	case *ProblemStatusCodeWithHeaders:
-		if err := func() error {
-			if err := response.Validate(); err != nil {
-				return err
-			}
-			return nil
-		}(); err != nil {
-			return errors.Wrap(err, "validate")
-		}
-		w.Header().Set("Content-Type", "application/problem+json")
-		w.Header().Set("Access-Control-Expose-Headers", "Ratelimit-Limit,Ratelimit-Remaining,Ratelimit-Reset,Retry-After,X-Request-Id")
-		// Encoding response headers.
-		{
-			h := uri.NewHeaderEncoder(w.Header())
-			// Encode "Ratelimit-Limit" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Limit",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitLimit.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Limit header")
-				}
-			}
-			// Encode "Ratelimit-Remaining" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Remaining",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitRemaining.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Remaining header")
-				}
-			}
-			// Encode "Ratelimit-Reset" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Reset",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitReset.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Reset header")
-				}
-			}
-			// Encode "Retry-After" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Retry-After",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RetryAfter.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Retry-After header")
-				}
-			}
-			// Encode "X-Request-Id" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "X-Request-Id",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.XRequestID.Get(); ok {
-						return e.EncodeValue(conv.StringToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode X-Request-Id header")
-				}
-			}
-		}
-		code := response.StatusCode
-		if code == 0 {
-			// Set default status code.
-			code = http.StatusOK
-		}
-		w.WriteHeader(code)
-		if st := http.StatusText(code); code >= http.StatusBadRequest {
-			span.SetStatus(codes.Error, st)
-		} else {
-			span.SetStatus(codes.Ok, st)
-		}
-
-		e := new(jx.Encoder)
-		response.Response.Encode(e)
-		if _, err := e.WriteTo(w); err != nil {
-			return errors.Wrap(err, "write")
-		}
-
-		if code >= http.StatusInternalServerError {
-			return errors.Wrapf(ht.ErrInternalServerErrorResponse, "code: %d, message: %s", code, http.StatusText(code))
-		}
-		return nil
-
-	default:
-		return errors.Errorf("unexpected response type: %T", response)
-	}
-}
-
 func encodeListTaskAttachmentsResponse(response ListTaskAttachmentsRes, w http.ResponseWriter, span trace.Span) error {
 	switch response := response.(type) {
 	case *TaskAttachmentListHeaders:
@@ -8507,373 +7806,6 @@ func encodeListTaskAttachmentsResponse(response ListTaskAttachmentsRes, w http.R
 		// Encoding response headers.
 		{
 			h := uri.NewHeaderEncoder(w.Header())
-			// Encode "X-Request-Id" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "X-Request-Id",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.XRequestID.Get(); ok {
-						return e.EncodeValue(conv.StringToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode X-Request-Id header")
-				}
-			}
-		}
-		w.WriteHeader(200)
-		span.SetStatus(codes.Ok, http.StatusText(200))
-
-		e := new(jx.Encoder)
-		response.Response.Encode(e)
-		if _, err := e.WriteTo(w); err != nil {
-			return errors.Wrap(err, "write")
-		}
-
-		return nil
-
-	case *ProblemStatusCodeWithHeaders:
-		if err := func() error {
-			if err := response.Validate(); err != nil {
-				return err
-			}
-			return nil
-		}(); err != nil {
-			return errors.Wrap(err, "validate")
-		}
-		w.Header().Set("Content-Type", "application/problem+json")
-		w.Header().Set("Access-Control-Expose-Headers", "Ratelimit-Limit,Ratelimit-Remaining,Ratelimit-Reset,Retry-After,X-Request-Id")
-		// Encoding response headers.
-		{
-			h := uri.NewHeaderEncoder(w.Header())
-			// Encode "Ratelimit-Limit" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Limit",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitLimit.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Limit header")
-				}
-			}
-			// Encode "Ratelimit-Remaining" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Remaining",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitRemaining.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Remaining header")
-				}
-			}
-			// Encode "Ratelimit-Reset" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Reset",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitReset.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Reset header")
-				}
-			}
-			// Encode "Retry-After" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Retry-After",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RetryAfter.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Retry-After header")
-				}
-			}
-			// Encode "X-Request-Id" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "X-Request-Id",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.XRequestID.Get(); ok {
-						return e.EncodeValue(conv.StringToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode X-Request-Id header")
-				}
-			}
-		}
-		code := response.StatusCode
-		if code == 0 {
-			// Set default status code.
-			code = http.StatusOK
-		}
-		w.WriteHeader(code)
-		if st := http.StatusText(code); code >= http.StatusBadRequest {
-			span.SetStatus(codes.Error, st)
-		} else {
-			span.SetStatus(codes.Ok, st)
-		}
-
-		e := new(jx.Encoder)
-		response.Response.Encode(e)
-		if _, err := e.WriteTo(w); err != nil {
-			return errors.Wrap(err, "write")
-		}
-
-		if code >= http.StatusInternalServerError {
-			return errors.Wrapf(ht.ErrInternalServerErrorResponse, "code: %d, message: %s", code, http.StatusText(code))
-		}
-		return nil
-
-	default:
-		return errors.Errorf("unexpected response type: %T", response)
-	}
-}
-
-func encodeListTaskClaimMessagesResponse(response ListTaskClaimMessagesRes, w http.ResponseWriter, span trace.Span) error {
-	switch response := response.(type) {
-	case *TaskClaimMessageListHeaders:
-		if err := func() error {
-			if err := response.Validate(); err != nil {
-				return err
-			}
-			return nil
-		}(); err != nil {
-			return errors.Wrap(err, "validate")
-		}
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.Header().Set("Access-Control-Expose-Headers", "X-Request-Id")
-		// Encoding response headers.
-		{
-			h := uri.NewHeaderEncoder(w.Header())
-			// Encode "X-Request-Id" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "X-Request-Id",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.XRequestID.Get(); ok {
-						return e.EncodeValue(conv.StringToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode X-Request-Id header")
-				}
-			}
-		}
-		w.WriteHeader(200)
-		span.SetStatus(codes.Ok, http.StatusText(200))
-
-		e := new(jx.Encoder)
-		response.Response.Encode(e)
-		if _, err := e.WriteTo(w); err != nil {
-			return errors.Wrap(err, "write")
-		}
-
-		return nil
-
-	case *ProblemStatusCodeWithHeaders:
-		if err := func() error {
-			if err := response.Validate(); err != nil {
-				return err
-			}
-			return nil
-		}(); err != nil {
-			return errors.Wrap(err, "validate")
-		}
-		w.Header().Set("Content-Type", "application/problem+json")
-		w.Header().Set("Access-Control-Expose-Headers", "Ratelimit-Limit,Ratelimit-Remaining,Ratelimit-Reset,Retry-After,X-Request-Id")
-		// Encoding response headers.
-		{
-			h := uri.NewHeaderEncoder(w.Header())
-			// Encode "Ratelimit-Limit" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Limit",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitLimit.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Limit header")
-				}
-			}
-			// Encode "Ratelimit-Remaining" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Remaining",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitRemaining.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Remaining header")
-				}
-			}
-			// Encode "Ratelimit-Reset" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Reset",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitReset.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Reset header")
-				}
-			}
-			// Encode "Retry-After" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Retry-After",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RetryAfter.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Retry-After header")
-				}
-			}
-			// Encode "X-Request-Id" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "X-Request-Id",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.XRequestID.Get(); ok {
-						return e.EncodeValue(conv.StringToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode X-Request-Id header")
-				}
-			}
-		}
-		code := response.StatusCode
-		if code == 0 {
-			// Set default status code.
-			code = http.StatusOK
-		}
-		w.WriteHeader(code)
-		if st := http.StatusText(code); code >= http.StatusBadRequest {
-			span.SetStatus(codes.Error, st)
-		} else {
-			span.SetStatus(codes.Ok, st)
-		}
-
-		e := new(jx.Encoder)
-		response.Response.Encode(e)
-		if _, err := e.WriteTo(w); err != nil {
-			return errors.Wrap(err, "write")
-		}
-
-		if code >= http.StatusInternalServerError {
-			return errors.Wrapf(ht.ErrInternalServerErrorResponse, "code: %d, message: %s", code, http.StatusText(code))
-		}
-		return nil
-
-	default:
-		return errors.Errorf("unexpected response type: %T", response)
-	}
-}
-
-func encodeListTaskCommentsResponse(response ListTaskCommentsRes, w http.ResponseWriter, span trace.Span) error {
-	switch response := response.(type) {
-	case *CommentListHeaders:
-		if err := func() error {
-			if err := response.Validate(); err != nil {
-				return err
-			}
-			return nil
-		}(); err != nil {
-			return errors.Wrap(err, "validate")
-		}
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.Header().Set("Access-Control-Expose-Headers", "Ratelimit-Limit,Ratelimit-Remaining,Ratelimit-Reset,X-Request-Id")
-		// Encoding response headers.
-		{
-			h := uri.NewHeaderEncoder(w.Header())
-			// Encode "Ratelimit-Limit" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Limit",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitLimit.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Limit header")
-				}
-			}
-			// Encode "Ratelimit-Remaining" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Remaining",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitRemaining.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Remaining header")
-				}
-			}
-			// Encode "Ratelimit-Reset" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Reset",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitReset.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Reset header")
-				}
-			}
 			// Encode "X-Request-Id" header.
 			{
 				cfg := uri.HeaderParameterEncodingConfig{
@@ -9080,6 +8012,489 @@ func encodeListTaskCriteriaResponse(response ListTaskCriteriaRes, w http.Respons
 					return errors.Wrap(err, "encode Ratelimit-Reset header")
 				}
 			}
+			// Encode "X-Request-Id" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "X-Request-Id",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.XRequestID.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode X-Request-Id header")
+				}
+			}
+		}
+		w.WriteHeader(200)
+		span.SetStatus(codes.Ok, http.StatusText(200))
+
+		e := new(jx.Encoder)
+		response.Response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *ProblemStatusCodeWithHeaders:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.Header().Set("Access-Control-Expose-Headers", "Ratelimit-Limit,Ratelimit-Remaining,Ratelimit-Reset,Retry-After,X-Request-Id")
+		// Encoding response headers.
+		{
+			h := uri.NewHeaderEncoder(w.Header())
+			// Encode "Ratelimit-Limit" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Limit",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitLimit.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Limit header")
+				}
+			}
+			// Encode "Ratelimit-Remaining" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Remaining",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitRemaining.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Remaining header")
+				}
+			}
+			// Encode "Ratelimit-Reset" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Reset",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitReset.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Reset header")
+				}
+			}
+			// Encode "Retry-After" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Retry-After",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RetryAfter.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Retry-After header")
+				}
+			}
+			// Encode "X-Request-Id" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "X-Request-Id",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.XRequestID.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode X-Request-Id header")
+				}
+			}
+		}
+		code := response.StatusCode
+		if code == 0 {
+			// Set default status code.
+			code = http.StatusOK
+		}
+		w.WriteHeader(code)
+		if st := http.StatusText(code); code >= http.StatusBadRequest {
+			span.SetStatus(codes.Error, st)
+		} else {
+			span.SetStatus(codes.Ok, st)
+		}
+
+		e := new(jx.Encoder)
+		response.Response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		if code >= http.StatusInternalServerError {
+			return errors.Wrapf(ht.ErrInternalServerErrorResponse, "code: %d, message: %s", code, http.StatusText(code))
+		}
+		return nil
+
+	default:
+		return errors.Errorf("unexpected response type: %T", response)
+	}
+}
+
+func encodeListTaskStageClaimsResponse(response ListTaskStageClaimsRes, w http.ResponseWriter, span trace.Span) error {
+	switch response := response.(type) {
+	case *TaskStageClaimListHeaders:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Access-Control-Expose-Headers", "X-Request-Id")
+		// Encoding response headers.
+		{
+			h := uri.NewHeaderEncoder(w.Header())
+			// Encode "X-Request-Id" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "X-Request-Id",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.XRequestID.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode X-Request-Id header")
+				}
+			}
+		}
+		w.WriteHeader(200)
+		span.SetStatus(codes.Ok, http.StatusText(200))
+
+		e := new(jx.Encoder)
+		response.Response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *ProblemStatusCodeWithHeaders:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.Header().Set("Access-Control-Expose-Headers", "Ratelimit-Limit,Ratelimit-Remaining,Ratelimit-Reset,Retry-After,X-Request-Id")
+		// Encoding response headers.
+		{
+			h := uri.NewHeaderEncoder(w.Header())
+			// Encode "Ratelimit-Limit" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Limit",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitLimit.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Limit header")
+				}
+			}
+			// Encode "Ratelimit-Remaining" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Remaining",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitRemaining.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Remaining header")
+				}
+			}
+			// Encode "Ratelimit-Reset" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Reset",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitReset.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Reset header")
+				}
+			}
+			// Encode "Retry-After" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Retry-After",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RetryAfter.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Retry-After header")
+				}
+			}
+			// Encode "X-Request-Id" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "X-Request-Id",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.XRequestID.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode X-Request-Id header")
+				}
+			}
+		}
+		code := response.StatusCode
+		if code == 0 {
+			// Set default status code.
+			code = http.StatusOK
+		}
+		w.WriteHeader(code)
+		if st := http.StatusText(code); code >= http.StatusBadRequest {
+			span.SetStatus(codes.Error, st)
+		} else {
+			span.SetStatus(codes.Ok, st)
+		}
+
+		e := new(jx.Encoder)
+		response.Response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		if code >= http.StatusInternalServerError {
+			return errors.Wrapf(ht.ErrInternalServerErrorResponse, "code: %d, message: %s", code, http.StatusText(code))
+		}
+		return nil
+
+	default:
+		return errors.Errorf("unexpected response type: %T", response)
+	}
+}
+
+func encodeListTaskThreadItemsResponse(response ListTaskThreadItemsRes, w http.ResponseWriter, span trace.Span) error {
+	switch response := response.(type) {
+	case *TaskThreadItemListHeaders:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Access-Control-Expose-Headers", "X-Request-Id")
+		// Encoding response headers.
+		{
+			h := uri.NewHeaderEncoder(w.Header())
+			// Encode "X-Request-Id" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "X-Request-Id",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.XRequestID.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode X-Request-Id header")
+				}
+			}
+		}
+		w.WriteHeader(200)
+		span.SetStatus(codes.Ok, http.StatusText(200))
+
+		e := new(jx.Encoder)
+		response.Response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *ProblemStatusCodeWithHeaders:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.Header().Set("Access-Control-Expose-Headers", "Ratelimit-Limit,Ratelimit-Remaining,Ratelimit-Reset,Retry-After,X-Request-Id")
+		// Encoding response headers.
+		{
+			h := uri.NewHeaderEncoder(w.Header())
+			// Encode "Ratelimit-Limit" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Limit",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitLimit.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Limit header")
+				}
+			}
+			// Encode "Ratelimit-Remaining" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Remaining",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitRemaining.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Remaining header")
+				}
+			}
+			// Encode "Ratelimit-Reset" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Reset",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitReset.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Reset header")
+				}
+			}
+			// Encode "Retry-After" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Retry-After",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RetryAfter.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Retry-After header")
+				}
+			}
+			// Encode "X-Request-Id" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "X-Request-Id",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.XRequestID.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode X-Request-Id header")
+				}
+			}
+		}
+		code := response.StatusCode
+		if code == 0 {
+			// Set default status code.
+			code = http.StatusOK
+		}
+		w.WriteHeader(code)
+		if st := http.StatusText(code); code >= http.StatusBadRequest {
+			span.SetStatus(codes.Error, st)
+		} else {
+			span.SetStatus(codes.Ok, st)
+		}
+
+		e := new(jx.Encoder)
+		response.Response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		if code >= http.StatusInternalServerError {
+			return errors.Wrapf(ht.ErrInternalServerErrorResponse, "code: %d, message: %s", code, http.StatusText(code))
+		}
+		return nil
+
+	default:
+		return errors.Errorf("unexpected response type: %T", response)
+	}
+}
+
+func encodeListTaskThreadsResponse(response ListTaskThreadsRes, w http.ResponseWriter, span trace.Span) error {
+	switch response := response.(type) {
+	case *TaskThreadListHeaders:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Access-Control-Expose-Headers", "X-Request-Id")
+		// Encoding response headers.
+		{
+			h := uri.NewHeaderEncoder(w.Header())
 			// Encode "X-Request-Id" header.
 			{
 				cfg := uri.HeaderParameterEncodingConfig{
@@ -9637,7 +9052,198 @@ func encodeListUsersResponse(response ListUsersRes, w http.ResponseWriter, span 
 	}
 }
 
-func encodeRecordTaskClaimAcceptanceCheckResponse(response RecordTaskClaimAcceptanceCheckRes, w http.ResponseWriter, span trace.Span) error {
+func encodeMarkTaskReadyResponse(response MarkTaskReadyRes, w http.ResponseWriter, span trace.Span) error {
+	switch response := response.(type) {
+	case *TaskWorkflowHeaders:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Access-Control-Expose-Headers", "Etag,Idempotency-Replayed,X-Request-Id")
+		// Encoding response headers.
+		{
+			h := uri.NewHeaderEncoder(w.Header())
+			// Encode "Etag" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Etag",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.Etag.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Etag header")
+				}
+			}
+			// Encode "Idempotency-Replayed" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Idempotency-Replayed",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.IdempotencyReplayed.Get(); ok {
+						return e.EncodeValue(conv.BoolToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Idempotency-Replayed header")
+				}
+			}
+			// Encode "X-Request-Id" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "X-Request-Id",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.XRequestID.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode X-Request-Id header")
+				}
+			}
+		}
+		w.WriteHeader(200)
+		span.SetStatus(codes.Ok, http.StatusText(200))
+
+		e := new(jx.Encoder)
+		response.Response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *ProblemStatusCodeWithHeaders:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.Header().Set("Access-Control-Expose-Headers", "Ratelimit-Limit,Ratelimit-Remaining,Ratelimit-Reset,Retry-After,X-Request-Id")
+		// Encoding response headers.
+		{
+			h := uri.NewHeaderEncoder(w.Header())
+			// Encode "Ratelimit-Limit" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Limit",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitLimit.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Limit header")
+				}
+			}
+			// Encode "Ratelimit-Remaining" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Remaining",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitRemaining.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Remaining header")
+				}
+			}
+			// Encode "Ratelimit-Reset" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Reset",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitReset.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Reset header")
+				}
+			}
+			// Encode "Retry-After" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Retry-After",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RetryAfter.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Retry-After header")
+				}
+			}
+			// Encode "X-Request-Id" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "X-Request-Id",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.XRequestID.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode X-Request-Id header")
+				}
+			}
+		}
+		code := response.StatusCode
+		if code == 0 {
+			// Set default status code.
+			code = http.StatusOK
+		}
+		w.WriteHeader(code)
+		if st := http.StatusText(code); code >= http.StatusBadRequest {
+			span.SetStatus(codes.Error, st)
+		} else {
+			span.SetStatus(codes.Ok, st)
+		}
+
+		e := new(jx.Encoder)
+		response.Response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		if code >= http.StatusInternalServerError {
+			return errors.Wrapf(ht.ErrInternalServerErrorResponse, "code: %d, message: %s", code, http.StatusText(code))
+		}
+		return nil
+
+	default:
+		return errors.Errorf("unexpected response type: %T", response)
+	}
+}
+
+func encodeRecordTaskStageAcceptanceCheckResponse(response RecordTaskStageAcceptanceCheckRes, w http.ResponseWriter, span trace.Span) error {
 	switch response := response.(type) {
 	case *AcceptanceCheckCreatedHeaders:
 		if err := func() error {
@@ -9873,9 +9479,200 @@ func encodeRecordTaskClaimAcceptanceCheckResponse(response RecordTaskClaimAccept
 	}
 }
 
-func encodeReleaseTaskClaimResponse(response ReleaseTaskClaimRes, w http.ResponseWriter, span trace.Span) error {
+func encodeRecordTaskWorkSubmissionResponse(response RecordTaskWorkSubmissionRes, w http.ResponseWriter, span trace.Span) error {
 	switch response := response.(type) {
-	case *TaskClaimHeaders:
+	case *TaskWorkSubmissionCommandHeaders:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Access-Control-Expose-Headers", "Etag,Idempotency-Replayed,X-Request-Id")
+		// Encoding response headers.
+		{
+			h := uri.NewHeaderEncoder(w.Header())
+			// Encode "Etag" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Etag",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.Etag.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Etag header")
+				}
+			}
+			// Encode "Idempotency-Replayed" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Idempotency-Replayed",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.IdempotencyReplayed.Get(); ok {
+						return e.EncodeValue(conv.BoolToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Idempotency-Replayed header")
+				}
+			}
+			// Encode "X-Request-Id" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "X-Request-Id",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.XRequestID.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode X-Request-Id header")
+				}
+			}
+		}
+		w.WriteHeader(201)
+		span.SetStatus(codes.Ok, http.StatusText(201))
+
+		e := new(jx.Encoder)
+		response.Response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *ProblemStatusCodeWithHeaders:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.Header().Set("Access-Control-Expose-Headers", "Ratelimit-Limit,Ratelimit-Remaining,Ratelimit-Reset,Retry-After,X-Request-Id")
+		// Encoding response headers.
+		{
+			h := uri.NewHeaderEncoder(w.Header())
+			// Encode "Ratelimit-Limit" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Limit",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitLimit.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Limit header")
+				}
+			}
+			// Encode "Ratelimit-Remaining" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Remaining",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitRemaining.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Remaining header")
+				}
+			}
+			// Encode "Ratelimit-Reset" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Reset",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitReset.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Reset header")
+				}
+			}
+			// Encode "Retry-After" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Retry-After",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RetryAfter.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Retry-After header")
+				}
+			}
+			// Encode "X-Request-Id" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "X-Request-Id",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.XRequestID.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode X-Request-Id header")
+				}
+			}
+		}
+		code := response.StatusCode
+		if code == 0 {
+			// Set default status code.
+			code = http.StatusOK
+		}
+		w.WriteHeader(code)
+		if st := http.StatusText(code); code >= http.StatusBadRequest {
+			span.SetStatus(codes.Error, st)
+		} else {
+			span.SetStatus(codes.Ok, st)
+		}
+
+		e := new(jx.Encoder)
+		response.Response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		if code >= http.StatusInternalServerError {
+			return errors.Wrapf(ht.ErrInternalServerErrorResponse, "code: %d, message: %s", code, http.StatusText(code))
+		}
+		return nil
+
+	default:
+		return errors.Errorf("unexpected response type: %T", response)
+	}
+}
+
+func encodeReleaseTaskStageClaimResponse(response ReleaseTaskStageClaimRes, w http.ResponseWriter, span trace.Span) error {
+	switch response := response.(type) {
+	case *TaskStageClaimCommandHeaders:
 		if err := func() error {
 			if err := response.Validate(); err != nil {
 				return err
@@ -10491,6 +10288,549 @@ func encodeReopenMilestoneResponse(response ReopenMilestoneRes, w http.ResponseW
 	}
 }
 
+func encodeRequestTaskChangesResponse(response RequestTaskChangesRes, w http.ResponseWriter, span trace.Span) error {
+	switch response := response.(type) {
+	case *TaskStageClaimCommandHeaders:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Access-Control-Expose-Headers", "Etag,Idempotency-Replayed,X-Request-Id")
+		// Encoding response headers.
+		{
+			h := uri.NewHeaderEncoder(w.Header())
+			// Encode "Etag" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Etag",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.Etag.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Etag header")
+				}
+			}
+			// Encode "Idempotency-Replayed" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Idempotency-Replayed",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.IdempotencyReplayed.Get(); ok {
+						return e.EncodeValue(conv.BoolToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Idempotency-Replayed header")
+				}
+			}
+			// Encode "X-Request-Id" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "X-Request-Id",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.XRequestID.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode X-Request-Id header")
+				}
+			}
+		}
+		w.WriteHeader(200)
+		span.SetStatus(codes.Ok, http.StatusText(200))
+
+		e := new(jx.Encoder)
+		response.Response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *ProblemStatusCodeWithHeaders:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.Header().Set("Access-Control-Expose-Headers", "Ratelimit-Limit,Ratelimit-Remaining,Ratelimit-Reset,Retry-After,X-Request-Id")
+		// Encoding response headers.
+		{
+			h := uri.NewHeaderEncoder(w.Header())
+			// Encode "Ratelimit-Limit" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Limit",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitLimit.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Limit header")
+				}
+			}
+			// Encode "Ratelimit-Remaining" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Remaining",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitRemaining.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Remaining header")
+				}
+			}
+			// Encode "Ratelimit-Reset" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Reset",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitReset.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Reset header")
+				}
+			}
+			// Encode "Retry-After" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Retry-After",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RetryAfter.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Retry-After header")
+				}
+			}
+			// Encode "X-Request-Id" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "X-Request-Id",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.XRequestID.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode X-Request-Id header")
+				}
+			}
+		}
+		code := response.StatusCode
+		if code == 0 {
+			// Set default status code.
+			code = http.StatusOK
+		}
+		w.WriteHeader(code)
+		if st := http.StatusText(code); code >= http.StatusBadRequest {
+			span.SetStatus(codes.Error, st)
+		} else {
+			span.SetStatus(codes.Ok, st)
+		}
+
+		e := new(jx.Encoder)
+		response.Response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		if code >= http.StatusInternalServerError {
+			return errors.Wrapf(ht.ErrInternalServerErrorResponse, "code: %d, message: %s", code, http.StatusText(code))
+		}
+		return nil
+
+	default:
+		return errors.Errorf("unexpected response type: %T", response)
+	}
+}
+
+func encodeRequestTaskResolutionResponse(response RequestTaskResolutionRes, w http.ResponseWriter, span trace.Span) error {
+	switch response := response.(type) {
+	case *TaskResolutionRequestedHeaders:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Access-Control-Expose-Headers", "Etag,X-Request-Id")
+		// Encoding response headers.
+		{
+			h := uri.NewHeaderEncoder(w.Header())
+			// Encode "Etag" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Etag",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.Etag.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Etag header")
+				}
+			}
+			// Encode "X-Request-Id" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "X-Request-Id",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.XRequestID.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode X-Request-Id header")
+				}
+			}
+		}
+		w.WriteHeader(200)
+		span.SetStatus(codes.Ok, http.StatusText(200))
+
+		e := new(jx.Encoder)
+		response.Response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *ProblemStatusCodeWithHeaders:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.Header().Set("Access-Control-Expose-Headers", "Ratelimit-Limit,Ratelimit-Remaining,Ratelimit-Reset,Retry-After,X-Request-Id")
+		// Encoding response headers.
+		{
+			h := uri.NewHeaderEncoder(w.Header())
+			// Encode "Ratelimit-Limit" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Limit",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitLimit.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Limit header")
+				}
+			}
+			// Encode "Ratelimit-Remaining" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Remaining",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitRemaining.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Remaining header")
+				}
+			}
+			// Encode "Ratelimit-Reset" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Reset",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitReset.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Reset header")
+				}
+			}
+			// Encode "Retry-After" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Retry-After",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RetryAfter.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Retry-After header")
+				}
+			}
+			// Encode "X-Request-Id" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "X-Request-Id",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.XRequestID.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode X-Request-Id header")
+				}
+			}
+		}
+		code := response.StatusCode
+		if code == 0 {
+			// Set default status code.
+			code = http.StatusOK
+		}
+		w.WriteHeader(code)
+		if st := http.StatusText(code); code >= http.StatusBadRequest {
+			span.SetStatus(codes.Error, st)
+		} else {
+			span.SetStatus(codes.Ok, st)
+		}
+
+		e := new(jx.Encoder)
+		response.Response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		if code >= http.StatusInternalServerError {
+			return errors.Wrapf(ht.ErrInternalServerErrorResponse, "code: %d, message: %s", code, http.StatusText(code))
+		}
+		return nil
+
+	default:
+		return errors.Errorf("unexpected response type: %T", response)
+	}
+}
+
+func encodeResolveTaskIssueResponse(response ResolveTaskIssueRes, w http.ResponseWriter, span trace.Span) error {
+	switch response := response.(type) {
+	case *TaskIssueResolvedHeaders:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Access-Control-Expose-Headers", "Etag,X-Request-Id")
+		// Encoding response headers.
+		{
+			h := uri.NewHeaderEncoder(w.Header())
+			// Encode "Etag" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Etag",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.Etag.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Etag header")
+				}
+			}
+			// Encode "X-Request-Id" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "X-Request-Id",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.XRequestID.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode X-Request-Id header")
+				}
+			}
+		}
+		w.WriteHeader(200)
+		span.SetStatus(codes.Ok, http.StatusText(200))
+
+		e := new(jx.Encoder)
+		response.Response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *ProblemStatusCodeWithHeaders:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.Header().Set("Access-Control-Expose-Headers", "Ratelimit-Limit,Ratelimit-Remaining,Ratelimit-Reset,Retry-After,X-Request-Id")
+		// Encoding response headers.
+		{
+			h := uri.NewHeaderEncoder(w.Header())
+			// Encode "Ratelimit-Limit" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Limit",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitLimit.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Limit header")
+				}
+			}
+			// Encode "Ratelimit-Remaining" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Remaining",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitRemaining.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Remaining header")
+				}
+			}
+			// Encode "Ratelimit-Reset" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Reset",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitReset.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Reset header")
+				}
+			}
+			// Encode "Retry-After" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Retry-After",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RetryAfter.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Retry-After header")
+				}
+			}
+			// Encode "X-Request-Id" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "X-Request-Id",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.XRequestID.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode X-Request-Id header")
+				}
+			}
+		}
+		code := response.StatusCode
+		if code == 0 {
+			// Set default status code.
+			code = http.StatusOK
+		}
+		w.WriteHeader(code)
+		if st := http.StatusText(code); code >= http.StatusBadRequest {
+			span.SetStatus(codes.Error, st)
+		} else {
+			span.SetStatus(codes.Ok, st)
+		}
+
+		e := new(jx.Encoder)
+		response.Response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		if code >= http.StatusInternalServerError {
+			return errors.Wrapf(ht.ErrInternalServerErrorResponse, "code: %d, message: %s", code, http.StatusText(code))
+		}
+		return nil
+
+	default:
+		return errors.Errorf("unexpected response type: %T", response)
+	}
+}
+
 func encodeRestoreProjectResponse(response RestoreProjectRes, w http.ResponseWriter, span trace.Span) error {
 	switch response := response.(type) {
 	case *ProjectHeaders:
@@ -10816,197 +11156,6 @@ func encodeRestoreTaskResponse(response RestoreTaskRes, w http.ResponseWriter, s
 					return nil
 				}); err != nil {
 					return errors.Wrap(err, "encode Ratelimit-Reset header")
-				}
-			}
-			// Encode "X-Request-Id" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "X-Request-Id",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.XRequestID.Get(); ok {
-						return e.EncodeValue(conv.StringToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode X-Request-Id header")
-				}
-			}
-		}
-		w.WriteHeader(200)
-		span.SetStatus(codes.Ok, http.StatusText(200))
-
-		e := new(jx.Encoder)
-		response.Response.Encode(e)
-		if _, err := e.WriteTo(w); err != nil {
-			return errors.Wrap(err, "write")
-		}
-
-		return nil
-
-	case *ProblemStatusCodeWithHeaders:
-		if err := func() error {
-			if err := response.Validate(); err != nil {
-				return err
-			}
-			return nil
-		}(); err != nil {
-			return errors.Wrap(err, "validate")
-		}
-		w.Header().Set("Content-Type", "application/problem+json")
-		w.Header().Set("Access-Control-Expose-Headers", "Ratelimit-Limit,Ratelimit-Remaining,Ratelimit-Reset,Retry-After,X-Request-Id")
-		// Encoding response headers.
-		{
-			h := uri.NewHeaderEncoder(w.Header())
-			// Encode "Ratelimit-Limit" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Limit",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitLimit.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Limit header")
-				}
-			}
-			// Encode "Ratelimit-Remaining" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Remaining",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitRemaining.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Remaining header")
-				}
-			}
-			// Encode "Ratelimit-Reset" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Reset",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitReset.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Reset header")
-				}
-			}
-			// Encode "Retry-After" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Retry-After",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RetryAfter.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Retry-After header")
-				}
-			}
-			// Encode "X-Request-Id" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "X-Request-Id",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.XRequestID.Get(); ok {
-						return e.EncodeValue(conv.StringToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode X-Request-Id header")
-				}
-			}
-		}
-		code := response.StatusCode
-		if code == 0 {
-			// Set default status code.
-			code = http.StatusOK
-		}
-		w.WriteHeader(code)
-		if st := http.StatusText(code); code >= http.StatusBadRequest {
-			span.SetStatus(codes.Error, st)
-		} else {
-			span.SetStatus(codes.Ok, st)
-		}
-
-		e := new(jx.Encoder)
-		response.Response.Encode(e)
-		if _, err := e.WriteTo(w); err != nil {
-			return errors.Wrap(err, "write")
-		}
-
-		if code >= http.StatusInternalServerError {
-			return errors.Wrapf(ht.ErrInternalServerErrorResponse, "code: %d, message: %s", code, http.StatusText(code))
-		}
-		return nil
-
-	default:
-		return errors.Errorf("unexpected response type: %T", response)
-	}
-}
-
-func encodeSubmitTaskClaimResponse(response SubmitTaskClaimRes, w http.ResponseWriter, span trace.Span) error {
-	switch response := response.(type) {
-	case *TaskClaimActionHeaders:
-		if err := func() error {
-			if err := response.Validate(); err != nil {
-				return err
-			}
-			return nil
-		}(); err != nil {
-			return errors.Wrap(err, "validate")
-		}
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.Header().Set("Access-Control-Expose-Headers", "Etag,Idempotency-Replayed,X-Request-Id")
-		// Encoding response headers.
-		{
-			h := uri.NewHeaderEncoder(w.Header())
-			// Encode "Etag" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Etag",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.Etag.Get(); ok {
-						return e.EncodeValue(conv.StringToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Etag header")
-				}
-			}
-			// Encode "Idempotency-Replayed" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Idempotency-Replayed",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.IdempotencyReplayed.Get(); ok {
-						return e.EncodeValue(conv.BoolToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Idempotency-Replayed header")
 				}
 			}
 			// Encode "X-Request-Id" header.
@@ -12907,9 +13056,9 @@ func encodeUpdateTaskResponse(response UpdateTaskRes, w http.ResponseWriter, spa
 	}
 }
 
-func encodeUpdateTaskCommentResponse(response UpdateTaskCommentRes, w http.ResponseWriter, span trace.Span) error {
+func encodeUpdateTaskThreadMessageResponse(response UpdateTaskThreadMessageRes, w http.ResponseWriter, span trace.Span) error {
 	switch response := response.(type) {
-	case *CommentHeaders:
+	case *TaskThreadItemHeaders:
 		if err := func() error {
 			if err := response.Validate(); err != nil {
 				return err
@@ -12919,7 +13068,7 @@ func encodeUpdateTaskCommentResponse(response UpdateTaskCommentRes, w http.Respo
 			return errors.Wrap(err, "validate")
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.Header().Set("Access-Control-Expose-Headers", "Etag,Idempotency-Replayed,Ratelimit-Limit,Ratelimit-Remaining,Ratelimit-Reset,X-Request-Id")
+		w.Header().Set("Access-Control-Expose-Headers", "Etag,X-Request-Id")
 		// Encoding response headers.
 		{
 			h := uri.NewHeaderEncoder(w.Header())
@@ -12936,66 +13085,6 @@ func encodeUpdateTaskCommentResponse(response UpdateTaskCommentRes, w http.Respo
 					return nil
 				}); err != nil {
 					return errors.Wrap(err, "encode Etag header")
-				}
-			}
-			// Encode "Idempotency-Replayed" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Idempotency-Replayed",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.IdempotencyReplayed.Get(); ok {
-						return e.EncodeValue(conv.BoolToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Idempotency-Replayed header")
-				}
-			}
-			// Encode "Ratelimit-Limit" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Limit",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitLimit.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Limit header")
-				}
-			}
-			// Encode "Ratelimit-Remaining" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Remaining",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitRemaining.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Remaining header")
-				}
-			}
-			// Encode "Ratelimit-Reset" header.
-			{
-				cfg := uri.HeaderParameterEncodingConfig{
-					Name:    "Ratelimit-Reset",
-					Explode: false,
-				}
-				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
-					if val, ok := response.RatelimitReset.Get(); ok {
-						return e.EncodeValue(conv.IntToString(val))
-					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "encode Ratelimit-Reset header")
 				}
 			}
 			// Encode "X-Request-Id" header.
@@ -13236,6 +13325,197 @@ func encodeUploadTaskAttachmentContentResponse(response UploadTaskAttachmentCont
 		}
 		w.WriteHeader(204)
 		span.SetStatus(codes.Ok, http.StatusText(204))
+
+		return nil
+
+	case *ProblemStatusCodeWithHeaders:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.Header().Set("Access-Control-Expose-Headers", "Ratelimit-Limit,Ratelimit-Remaining,Ratelimit-Reset,Retry-After,X-Request-Id")
+		// Encoding response headers.
+		{
+			h := uri.NewHeaderEncoder(w.Header())
+			// Encode "Ratelimit-Limit" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Limit",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitLimit.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Limit header")
+				}
+			}
+			// Encode "Ratelimit-Remaining" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Remaining",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitRemaining.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Remaining header")
+				}
+			}
+			// Encode "Ratelimit-Reset" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Ratelimit-Reset",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RatelimitReset.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Ratelimit-Reset header")
+				}
+			}
+			// Encode "Retry-After" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Retry-After",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.RetryAfter.Get(); ok {
+						return e.EncodeValue(conv.IntToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Retry-After header")
+				}
+			}
+			// Encode "X-Request-Id" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "X-Request-Id",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.XRequestID.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode X-Request-Id header")
+				}
+			}
+		}
+		code := response.StatusCode
+		if code == 0 {
+			// Set default status code.
+			code = http.StatusOK
+		}
+		w.WriteHeader(code)
+		if st := http.StatusText(code); code >= http.StatusBadRequest {
+			span.SetStatus(codes.Error, st)
+		} else {
+			span.SetStatus(codes.Ok, st)
+		}
+
+		e := new(jx.Encoder)
+		response.Response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		if code >= http.StatusInternalServerError {
+			return errors.Wrapf(ht.ErrInternalServerErrorResponse, "code: %d, message: %s", code, http.StatusText(code))
+		}
+		return nil
+
+	default:
+		return errors.Errorf("unexpected response type: %T", response)
+	}
+}
+
+func encodeWithdrawTaskReadinessResponse(response WithdrawTaskReadinessRes, w http.ResponseWriter, span trace.Span) error {
+	switch response := response.(type) {
+	case *TaskWorkflowHeaders:
+		if err := func() error {
+			if err := response.Validate(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "validate")
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Access-Control-Expose-Headers", "Etag,Idempotency-Replayed,X-Request-Id")
+		// Encoding response headers.
+		{
+			h := uri.NewHeaderEncoder(w.Header())
+			// Encode "Etag" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Etag",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.Etag.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Etag header")
+				}
+			}
+			// Encode "Idempotency-Replayed" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "Idempotency-Replayed",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.IdempotencyReplayed.Get(); ok {
+						return e.EncodeValue(conv.BoolToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode Idempotency-Replayed header")
+				}
+			}
+			// Encode "X-Request-Id" header.
+			{
+				cfg := uri.HeaderParameterEncodingConfig{
+					Name:    "X-Request-Id",
+					Explode: false,
+				}
+				if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+					if val, ok := response.XRequestID.Get(); ok {
+						return e.EncodeValue(conv.StringToString(val))
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "encode X-Request-Id header")
+				}
+			}
+		}
+		w.WriteHeader(200)
+		span.SetStatus(codes.Ok, http.StatusText(200))
+
+		e := new(jx.Encoder)
+		response.Response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
 
 		return nil
 

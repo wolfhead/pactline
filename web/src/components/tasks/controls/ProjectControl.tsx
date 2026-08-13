@@ -1,36 +1,21 @@
 import { useEffect, useState } from 'react'
-import { getProject, listProjects, type Milestone, type Project } from '@/api/projects'
+import { getProject, type Milestone } from '@/api/projects'
 import type { TaskMilestoneRef, TaskProjectRef } from '@/task-types'
 
 interface ProjectControlProps {
   project: TaskProjectRef
   milestone: TaskMilestoneRef | null
-  onProjectChange: (project: TaskProjectRef) => void
+  /** @deprecated A Task's Project is immutable after creation. */
+  onProjectChange?: (project: TaskProjectRef) => void
   onMilestoneChange: (milestone: TaskMilestoneRef | null) => void
 }
 
 export default function ProjectControl({
   project,
   milestone,
-  onProjectChange,
   onMilestoneChange,
 }: ProjectControlProps) {
-  const [projects, setProjects] = useState<Project[]>([])
   const [milestones, setMilestones] = useState<Milestone[]>([])
-
-  useEffect(() => {
-    let cancelled = false
-    listProjects()
-      .then((items) => {
-        if (!cancelled) setProjects(items)
-      })
-      .catch(() => {
-        if (!cancelled) setProjects([])
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -49,25 +34,16 @@ export default function ProjectControl({
   return (
     <>
       <div className="contents">
-        <label htmlFor="task-project" className="text-sm text-fg-muted">项目</label>
+        <span className="text-sm text-fg-muted">项目</span>
         <div className="grid max-w-64 grid-cols-[1rem_minmax(0,1fr)] items-center gap-1.5">
           <span aria-hidden="true" />
-          <select
+          <span
             id="task-project"
-            value={project.number}
-            onChange={(event) => {
-              const number = Number(event.target.value)
-              const selected = projects.find((item) => item.number === number)
-              if (selected) {
-                onProjectChange({ id: selected.id, number: selected.number, name: selected.name })
-              }
-            }}
-            className="min-w-0 rounded-md border border-transparent bg-transparent px-2 py-1.5 text-sm text-fg outline-none transition-colors hover:bg-surface-subtle focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/30"
+            className="min-w-0 px-2 py-1.5 text-sm text-fg"
+            title="任务创建后不能移到其他项目"
           >
-            {projects.map((item) => (
-              <option key={item.id} value={item.number}>#{item.number} {item.name}</option>
-            ))}
-          </select>
+            #{project.number} {project.name}
+          </span>
         </div>
       </div>
       <div className="contents">

@@ -7,6 +7,7 @@ import (
 	"github.com/wolfhead/pactline/internal/domain"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAcceptanceCriterionHasExactlyOneOwner(t *testing.T) {
@@ -69,7 +70,7 @@ func TestAcceptanceCheckRequiresEvidenceAndCurrentRevision(t *testing.T) {
 	}
 }
 
-func TestOnlyHumanUsersMayWaiveAcceptance(t *testing.T) {
+func TestAcceptanceWaiverDoesNotDependOnActorType(t *testing.T) {
 	criterion := domain.AcceptanceCriterion{ID: uuid.New(), Revision: 1}
 	check := domain.AcceptanceCheck{
 		CriterionID:       criterion.ID,
@@ -78,9 +79,7 @@ func TestOnlyHumanUsersMayWaiveAcceptance(t *testing.T) {
 		Evidence:          "Risk accepted",
 		Checker:           domain.Actor{Type: domain.ActorTypeAgent, Ref: "codex"},
 	}
-	if err := check.ValidateAgainst(criterion); !errors.Is(err, domain.ErrForbidden) {
-		t.Fatalf("agent waiver error = %v, want ErrForbidden", err)
-	}
+	require.NoError(t, check.ValidateAgainst(criterion))
 }
 
 func TestTaskCompletionRequiresConfiguredAcceptanceToBeSatisfied(t *testing.T) {
@@ -98,4 +97,34 @@ func TestTaskCompletionRequiresConfiguredAcceptanceToBeSatisfied(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("satisfied task should complete: %v", err)
 	}
+}
+
+func TestTaskAcceptancePurposeFollowsClaimStageNotActorType(t *testing.T) {
+	criterion := domain.AcceptanceCriterion{ID: uuid.New(), Revision: 2}
+	claimID := uuid.New()
+	cycle := int64(3)
+	userID := uuid.New()
+
+	execution := domain.AcceptanceCheck{
+		CriterionID: criterion.ID, CriterionRevision: criterion.Revision,
+		Outcome: domain.AcceptanceOutcomePassed, Evidence: "Focused test passed",
+		Checker:     domain.Actor{Type: domain.ActorTypeUser, UserID: &userID},
+		Purpose:     domain.AcceptanceCheckPurposeExecutionVerification,
+		TaskClaimID: &claimID, TaskReviewCycle: &cycle,
+	}
+	require.NoError(t, execution.ValidateForTaskClaim(
+		criterion, claimID, domain.TaskClaimStageExecution, cycle,
+	))
+	require.False(t, execution.SatisfiesTaskReview(cycle),
+		"a human execution check is still self-verification")
+
+	agentAcceptance := execution
+	agentAcceptance.Checker = domain.Actor{Type: domain.ActorTypeAgent, Ref: "review-agent"}
+	agentAcceptance.Purpose = domain.AcceptanceCheckPurposeAcceptance
+	require.NoError(t, agentAcceptance.ValidateForTaskClaim(
+		criterion, claimID, domain.TaskClaimStageReview, cycle,
+	))
+	require.True(t, agentAcceptance.SatisfiesTaskReview(cycle),
+		"an Agent review check may satisfy acceptance")
+	require.False(t, agentAcceptance.SatisfiesTaskReview(cycle+1))
 }

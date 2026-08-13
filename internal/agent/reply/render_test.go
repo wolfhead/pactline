@@ -16,13 +16,13 @@ func TestRendererUsesFixedUserVisibleFormats(t *testing.T) {
 	require.NoError(t, err)
 	renderer := Renderer{AppBaseURL: baseURL}
 	require.Equal(t,
-		"# ✅ Task #42 已创建 · 整理群聊需求\n\n**项目**：Pactline\n**位置**：Backlog\n**负责人**：未指派\n**截止日期**：未设置\n**状态**：backlog\n**附件**：无\n\n[在 Pactline 中打开 Task](https://tasks.example.test/tasks/42)\n\n---\n`Run aaaaaaaa`",
+		"# ✅ Task #42 已创建 · 整理群聊需求\n\n**项目**：Pactline\n**位置**：Backlog\n**负责人**：未指派\n**截止日期**：未设置\n**阶段**：backlog\n**附件**：无\n\n[在 Pactline 中打开 Task](https://tasks.example.test/tasks/42)\n\n---\n`Run aaaaaaaa`",
 		renderer.Success(runID, agenttools.CreatedTask{
-			Number: 42, Title: "整理群聊需求", ProjectName: "Pactline", Status: "backlog",
+			Number: 42, Title: "整理群聊需求", ProjectName: "Pactline", Phase: "backlog",
 		}),
 	)
 	withAttachments := renderer.Success(runID, agenttools.CreatedTask{
-		Number: 43, Title: "保留证据", ProjectName: "Pactline", Status: "todo",
+		Number: 43, Title: "保留证据", ProjectName: "Pactline", Phase: "ready",
 		AttachedArtifacts:  []agenttools.AttachedArtifact{{ArtifactID: "image"}},
 		AttachmentFailures: []agenttools.AttachmentFailure{{ArtifactID: "file"}},
 	})
@@ -51,15 +51,15 @@ func TestRendererFormatsVerifiedStatusResponses(t *testing.T) {
 		Type:    agenttools.ResponseTaskDetail,
 		Summary: "This Task is active.",
 		TaskDetail: &agenttools.TaskDetail{TaskSummary: agenttools.TaskSummary{
-			Number: 42, Title: "Inspect status", Status: "in_progress",
+			Number: 42, Title: "Inspect status", Phase: "in_progress",
 			Priority: "high", ProjectName: "Pactline", DueDate: &dueDate,
 			Blocked: true,
 		}},
 	})
 	require.NoError(t, err)
 	require.Contains(t, taskBody, "Task #42")
-	require.Contains(t, taskBody, "**状态**：in\\_progress")
-	require.Contains(t, taskBody, "**阻塞**：是")
+	require.Contains(t, taskBody, "**阶段**：in\\_progress")
+	require.Contains(t, taskBody, "**依赖阻塞**：是")
 	require.Contains(t, taskBody, "https://tasks.example.test/tasks/42")
 
 	projectBody, err := renderer.Response(runID, agenttools.ResponseSelection{
@@ -67,15 +67,15 @@ func TestRendererFormatsVerifiedStatusResponses(t *testing.T) {
 		Summary: "**Two** Tasks are complete.",
 		ProjectOverview: &agenttools.ProjectOverview{
 			ProjectNumber: 7, ProjectName: "Pactline", TaskCount: 5,
-			StatusCounts: agenttools.TaskStatusCounts{
-				Todo: 2, InProgress: 1, Done: 2,
+			PhaseCounts: agenttools.TaskPhaseCounts{
+				Ready: 2, InProgress: 1, Done: 2,
 			},
 			BacklogCount: 2, OverdueCount: 1,
 		},
 	})
 	require.NoError(t, err)
 	require.Contains(t, projectBody, "Project #7")
-	require.Contains(t, projectBody, "Backlog：2")
+	require.Contains(t, projectBody, "未排入 Milestone：2")
 	require.Contains(t, projectBody, "逾期：1")
 
 	configurationBody, err := renderer.Response(runID, agenttools.ResponseSelection{

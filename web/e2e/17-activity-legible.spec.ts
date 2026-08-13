@@ -3,7 +3,7 @@ import { switchIdentity } from './support/identity'
 import { USERS } from './support/config'
 
 /**
- * Scenario: activity is legible and live. After a status change and an
+ * Scenario: activity is legible and live. After a priority change and an
  * assignee change, the activity log names what changed in readable Chinese
  * prose, not raw enum strings or bare user UUIDs — and it appears without a
  * reload.
@@ -14,14 +14,14 @@ import { USERS } from './support/config'
  * task.number) never re-triggered it. It now also depends on
  * `task.updated_at`, which every server-confirmed mutation bumps.
  */
-test('activity log reads as legible prose and updates live after a status change and an assignee change', async ({
+test('activity log reads as legible prose and updates live after a priority change and an assignee change', async ({
   page,
   uniqueTitle,
   trackTask,
   tasksApi,
 }) => {
   const title = uniqueTitle('Activity prose')
-  const task = await tasksApi.createTask(USERS.leadB.id, { title, status: 'todo' })
+  const task = await tasksApi.createTask(USERS.leadB.id, { title })
   trackTask(task.id)
   const actorName = task.creator.name
 
@@ -39,20 +39,16 @@ test('activity log reads as legible prose and updates live after a status change
   const isPatch = (res: import('@playwright/test').Response) =>
     res.url().endsWith(`/api/v1/tasks/${task.number}`) && res.request().method() === 'PATCH'
 
-  // Status and assignee are permanently visible Radix Selects (Task 14) —
-  // not native <select>s, so `selectOption()` does not apply: open the
-  // combobox, click the option. `exact: true` on the name because at xl the
-  // list column beside the detail names its own controls 任务 #<n> 状态.
-  const statusPatch = page.waitForResponse(isPatch)
-  await page.getByRole('combobox', { name: '状态', exact: true }).click()
-  await page.getByRole('option', { name: '进行中', exact: true }).click()
-  await expect(page.getByRole('combobox', { name: '状态', exact: true })).toHaveText(/进行中/)
-  await statusPatch
+  const priorityPatch = page.waitForResponse(isPatch)
+  await page.getByRole('combobox', { name: '优先级', exact: true }).click()
+  await page.getByRole('option', { name: '高', exact: true }).click()
+  await expect(page.getByRole('combobox', { name: '优先级', exact: true })).toHaveText(/高/)
+  await priorityPatch
 
   // No reload: the new entry must appear purely from the activity fetch
   // re-firing off the task's own updated_at.
   await expect(
-    activitySection.getByText(`${actorName} 将状态从「待办」改为「进行中」`, { exact: true }),
+    activitySection.getByText(`${actorName} 将优先级从「无优先级」改为「高」`, { exact: true }),
   ).toBeVisible()
 
   const assigneePatch = page.waitForResponse(isPatch)

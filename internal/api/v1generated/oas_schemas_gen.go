@@ -21,6 +21,9 @@ type AcceptanceCheck struct {
 	CheckerType       AcceptanceCheckCheckerType `json:"checker_type"`
 	CheckedByUserID   OptUUID                    `json:"checked_by_user_id"`
 	CheckerRef        OptString                  `json:"checker_ref"`
+	Purpose           OptAcceptanceCheckPurpose  `json:"purpose"`
+	TaskClaimID       OptUUID                    `json:"task_claim_id"`
+	ReviewCycle       OptInt64                   `json:"review_cycle"`
 	CheckedAt         time.Time                  `json:"checked_at"`
 }
 
@@ -62,6 +65,21 @@ func (s *AcceptanceCheck) GetCheckedByUserID() OptUUID {
 // GetCheckerRef returns the value of CheckerRef.
 func (s *AcceptanceCheck) GetCheckerRef() OptString {
 	return s.CheckerRef
+}
+
+// GetPurpose returns the value of Purpose.
+func (s *AcceptanceCheck) GetPurpose() OptAcceptanceCheckPurpose {
+	return s.Purpose
+}
+
+// GetTaskClaimID returns the value of TaskClaimID.
+func (s *AcceptanceCheck) GetTaskClaimID() OptUUID {
+	return s.TaskClaimID
+}
+
+// GetReviewCycle returns the value of ReviewCycle.
+func (s *AcceptanceCheck) GetReviewCycle() OptInt64 {
+	return s.ReviewCycle
 }
 
 // GetCheckedAt returns the value of CheckedAt.
@@ -107,6 +125,21 @@ func (s *AcceptanceCheck) SetCheckedByUserID(val OptUUID) {
 // SetCheckerRef sets the value of CheckerRef.
 func (s *AcceptanceCheck) SetCheckerRef(val OptString) {
 	s.CheckerRef = val
+}
+
+// SetPurpose sets the value of Purpose.
+func (s *AcceptanceCheck) SetPurpose(val OptAcceptanceCheckPurpose) {
+	s.Purpose = val
+}
+
+// SetTaskClaimID sets the value of TaskClaimID.
+func (s *AcceptanceCheck) SetTaskClaimID(val OptUUID) {
+	s.TaskClaimID = val
+}
+
+// SetReviewCycle sets the value of ReviewCycle.
+func (s *AcceptanceCheck) SetReviewCycle(val OptInt64) {
+	s.ReviewCycle = val
 }
 
 // SetCheckedAt sets the value of CheckedAt.
@@ -281,7 +314,48 @@ func (s *AcceptanceCheckCreatedHeaders) SetResponse(val AcceptanceCheck) {
 }
 
 func (*AcceptanceCheckCreatedHeaders) createAcceptanceCheckRes()          {}
-func (*AcceptanceCheckCreatedHeaders) recordTaskClaimAcceptanceCheckRes() {}
+func (*AcceptanceCheckCreatedHeaders) recordTaskStageAcceptanceCheckRes() {}
+
+type AcceptanceCheckPurpose string
+
+const (
+	AcceptanceCheckPurposeExecutionVerification AcceptanceCheckPurpose = "execution_verification"
+	AcceptanceCheckPurposeAcceptance            AcceptanceCheckPurpose = "acceptance"
+)
+
+// AllValues returns all AcceptanceCheckPurpose values.
+func (AcceptanceCheckPurpose) AllValues() []AcceptanceCheckPurpose {
+	return []AcceptanceCheckPurpose{
+		AcceptanceCheckPurposeExecutionVerification,
+		AcceptanceCheckPurposeAcceptance,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s AcceptanceCheckPurpose) MarshalText() ([]byte, error) {
+	switch s {
+	case AcceptanceCheckPurposeExecutionVerification:
+		return []byte(s), nil
+	case AcceptanceCheckPurposeAcceptance:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *AcceptanceCheckPurpose) UnmarshalText(data []byte) error {
+	switch AcceptanceCheckPurpose(data) {
+	case AcceptanceCheckPurposeExecutionVerification:
+		*s = AcceptanceCheckPurposeExecutionVerification
+		return nil
+	case AcceptanceCheckPurposeAcceptance:
+		*s = AcceptanceCheckPurposeAcceptance
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
 
 // Ref: #/components/schemas/AcceptanceCriterion
 type AcceptanceCriterion struct {
@@ -458,6 +532,92 @@ func (s *AcceptanceOutcome) UnmarshalText(data []byte) error {
 		return nil
 	case AcceptanceOutcomeWaived:
 		*s = AcceptanceOutcomeWaived
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/Actor
+type Actor struct {
+	Type   ActorType `json:"type"`
+	UserID OptUUID   `json:"user_id"`
+	Ref    OptString `json:"ref"`
+}
+
+// GetType returns the value of Type.
+func (s *Actor) GetType() ActorType {
+	return s.Type
+}
+
+// GetUserID returns the value of UserID.
+func (s *Actor) GetUserID() OptUUID {
+	return s.UserID
+}
+
+// GetRef returns the value of Ref.
+func (s *Actor) GetRef() OptString {
+	return s.Ref
+}
+
+// SetType sets the value of Type.
+func (s *Actor) SetType(val ActorType) {
+	s.Type = val
+}
+
+// SetUserID sets the value of UserID.
+func (s *Actor) SetUserID(val OptUUID) {
+	s.UserID = val
+}
+
+// SetRef sets the value of Ref.
+func (s *Actor) SetRef(val OptString) {
+	s.Ref = val
+}
+
+// Ref: #/components/schemas/ActorType
+type ActorType string
+
+const (
+	ActorTypeUser   ActorType = "user"
+	ActorTypeAgent  ActorType = "agent"
+	ActorTypeSystem ActorType = "system"
+)
+
+// AllValues returns all ActorType values.
+func (ActorType) AllValues() []ActorType {
+	return []ActorType{
+		ActorTypeUser,
+		ActorTypeAgent,
+		ActorTypeSystem,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s ActorType) MarshalText() ([]byte, error) {
+	switch s {
+	case ActorTypeUser:
+		return []byte(s), nil
+	case ActorTypeAgent:
+		return []byte(s), nil
+	case ActorTypeSystem:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *ActorType) UnmarshalText(data []byte) error {
+	switch ActorType(data) {
+	case ActorTypeUser:
+		*s = ActorTypeUser
+		return nil
+	case ActorTypeAgent:
+		*s = ActorTypeAgent
+		return nil
+	case ActorTypeSystem:
+		*s = ActorTypeSystem
 		return nil
 	default:
 		return errors.Errorf("invalid value: %q", data)
@@ -836,459 +996,6 @@ func (s *BearerAuth) SetRoles(val []string) {
 	s.Roles = val
 }
 
-// Ref: #/components/schemas/Comment
-type Comment struct {
-	ID               uuid.UUID   `json:"id"`
-	TaskID           uuid.UUID   `json:"task_id"`
-	AuthorID         uuid.UUID   `json:"author_id"`
-	Body             string      `json:"body"`
-	ReplyToCommentID OptUUID     `json:"reply_to_comment_id"`
-	ThreadRootID     uuid.UUID   `json:"thread_root_id"`
-	MentionedUserIds []uuid.UUID `json:"mentioned_user_ids"`
-	Deleted          bool        `json:"deleted"`
-	Version          int64       `json:"version"`
-	CreatedAt        time.Time   `json:"created_at"`
-	UpdatedAt        time.Time   `json:"updated_at"`
-}
-
-// GetID returns the value of ID.
-func (s *Comment) GetID() uuid.UUID {
-	return s.ID
-}
-
-// GetTaskID returns the value of TaskID.
-func (s *Comment) GetTaskID() uuid.UUID {
-	return s.TaskID
-}
-
-// GetAuthorID returns the value of AuthorID.
-func (s *Comment) GetAuthorID() uuid.UUID {
-	return s.AuthorID
-}
-
-// GetBody returns the value of Body.
-func (s *Comment) GetBody() string {
-	return s.Body
-}
-
-// GetReplyToCommentID returns the value of ReplyToCommentID.
-func (s *Comment) GetReplyToCommentID() OptUUID {
-	return s.ReplyToCommentID
-}
-
-// GetThreadRootID returns the value of ThreadRootID.
-func (s *Comment) GetThreadRootID() uuid.UUID {
-	return s.ThreadRootID
-}
-
-// GetMentionedUserIds returns the value of MentionedUserIds.
-func (s *Comment) GetMentionedUserIds() []uuid.UUID {
-	return s.MentionedUserIds
-}
-
-// GetDeleted returns the value of Deleted.
-func (s *Comment) GetDeleted() bool {
-	return s.Deleted
-}
-
-// GetVersion returns the value of Version.
-func (s *Comment) GetVersion() int64 {
-	return s.Version
-}
-
-// GetCreatedAt returns the value of CreatedAt.
-func (s *Comment) GetCreatedAt() time.Time {
-	return s.CreatedAt
-}
-
-// GetUpdatedAt returns the value of UpdatedAt.
-func (s *Comment) GetUpdatedAt() time.Time {
-	return s.UpdatedAt
-}
-
-// SetID sets the value of ID.
-func (s *Comment) SetID(val uuid.UUID) {
-	s.ID = val
-}
-
-// SetTaskID sets the value of TaskID.
-func (s *Comment) SetTaskID(val uuid.UUID) {
-	s.TaskID = val
-}
-
-// SetAuthorID sets the value of AuthorID.
-func (s *Comment) SetAuthorID(val uuid.UUID) {
-	s.AuthorID = val
-}
-
-// SetBody sets the value of Body.
-func (s *Comment) SetBody(val string) {
-	s.Body = val
-}
-
-// SetReplyToCommentID sets the value of ReplyToCommentID.
-func (s *Comment) SetReplyToCommentID(val OptUUID) {
-	s.ReplyToCommentID = val
-}
-
-// SetThreadRootID sets the value of ThreadRootID.
-func (s *Comment) SetThreadRootID(val uuid.UUID) {
-	s.ThreadRootID = val
-}
-
-// SetMentionedUserIds sets the value of MentionedUserIds.
-func (s *Comment) SetMentionedUserIds(val []uuid.UUID) {
-	s.MentionedUserIds = val
-}
-
-// SetDeleted sets the value of Deleted.
-func (s *Comment) SetDeleted(val bool) {
-	s.Deleted = val
-}
-
-// SetVersion sets the value of Version.
-func (s *Comment) SetVersion(val int64) {
-	s.Version = val
-}
-
-// SetCreatedAt sets the value of CreatedAt.
-func (s *Comment) SetCreatedAt(val time.Time) {
-	s.CreatedAt = val
-}
-
-// SetUpdatedAt sets the value of UpdatedAt.
-func (s *Comment) SetUpdatedAt(val time.Time) {
-	s.UpdatedAt = val
-}
-
-// Ref: #/components/schemas/CommentCreateWrite
-type CommentCreateWrite struct {
-	Body             string      `json:"body"`
-	ReplyToCommentID OptUUID     `json:"reply_to_comment_id"`
-	MentionedUserIds []uuid.UUID `json:"mentioned_user_ids"`
-}
-
-// GetBody returns the value of Body.
-func (s *CommentCreateWrite) GetBody() string {
-	return s.Body
-}
-
-// GetReplyToCommentID returns the value of ReplyToCommentID.
-func (s *CommentCreateWrite) GetReplyToCommentID() OptUUID {
-	return s.ReplyToCommentID
-}
-
-// GetMentionedUserIds returns the value of MentionedUserIds.
-func (s *CommentCreateWrite) GetMentionedUserIds() []uuid.UUID {
-	return s.MentionedUserIds
-}
-
-// SetBody sets the value of Body.
-func (s *CommentCreateWrite) SetBody(val string) {
-	s.Body = val
-}
-
-// SetReplyToCommentID sets the value of ReplyToCommentID.
-func (s *CommentCreateWrite) SetReplyToCommentID(val OptUUID) {
-	s.ReplyToCommentID = val
-}
-
-// SetMentionedUserIds sets the value of MentionedUserIds.
-func (s *CommentCreateWrite) SetMentionedUserIds(val []uuid.UUID) {
-	s.MentionedUserIds = val
-}
-
-// CommentCreatedHeaders wraps Comment with response headers.
-type CommentCreatedHeaders struct {
-	Etag                OptString
-	IdempotencyReplayed OptBool
-	Location            OptString
-	RatelimitLimit      OptInt
-	RatelimitRemaining  OptInt
-	RatelimitReset      OptInt
-	XRequestID          OptString
-	Response            Comment
-}
-
-// GetEtag returns the value of Etag.
-func (s *CommentCreatedHeaders) GetEtag() OptString {
-	return s.Etag
-}
-
-// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
-func (s *CommentCreatedHeaders) GetIdempotencyReplayed() OptBool {
-	return s.IdempotencyReplayed
-}
-
-// GetLocation returns the value of Location.
-func (s *CommentCreatedHeaders) GetLocation() OptString {
-	return s.Location
-}
-
-// GetRatelimitLimit returns the value of RatelimitLimit.
-func (s *CommentCreatedHeaders) GetRatelimitLimit() OptInt {
-	return s.RatelimitLimit
-}
-
-// GetRatelimitRemaining returns the value of RatelimitRemaining.
-func (s *CommentCreatedHeaders) GetRatelimitRemaining() OptInt {
-	return s.RatelimitRemaining
-}
-
-// GetRatelimitReset returns the value of RatelimitReset.
-func (s *CommentCreatedHeaders) GetRatelimitReset() OptInt {
-	return s.RatelimitReset
-}
-
-// GetXRequestID returns the value of XRequestID.
-func (s *CommentCreatedHeaders) GetXRequestID() OptString {
-	return s.XRequestID
-}
-
-// GetResponse returns the value of Response.
-func (s *CommentCreatedHeaders) GetResponse() Comment {
-	return s.Response
-}
-
-// SetEtag sets the value of Etag.
-func (s *CommentCreatedHeaders) SetEtag(val OptString) {
-	s.Etag = val
-}
-
-// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
-func (s *CommentCreatedHeaders) SetIdempotencyReplayed(val OptBool) {
-	s.IdempotencyReplayed = val
-}
-
-// SetLocation sets the value of Location.
-func (s *CommentCreatedHeaders) SetLocation(val OptString) {
-	s.Location = val
-}
-
-// SetRatelimitLimit sets the value of RatelimitLimit.
-func (s *CommentCreatedHeaders) SetRatelimitLimit(val OptInt) {
-	s.RatelimitLimit = val
-}
-
-// SetRatelimitRemaining sets the value of RatelimitRemaining.
-func (s *CommentCreatedHeaders) SetRatelimitRemaining(val OptInt) {
-	s.RatelimitRemaining = val
-}
-
-// SetRatelimitReset sets the value of RatelimitReset.
-func (s *CommentCreatedHeaders) SetRatelimitReset(val OptInt) {
-	s.RatelimitReset = val
-}
-
-// SetXRequestID sets the value of XRequestID.
-func (s *CommentCreatedHeaders) SetXRequestID(val OptString) {
-	s.XRequestID = val
-}
-
-// SetResponse sets the value of Response.
-func (s *CommentCreatedHeaders) SetResponse(val Comment) {
-	s.Response = val
-}
-
-func (*CommentCreatedHeaders) createTaskCommentRes() {}
-
-// CommentHeaders wraps Comment with response headers.
-type CommentHeaders struct {
-	Etag                OptString
-	IdempotencyReplayed OptBool
-	RatelimitLimit      OptInt
-	RatelimitRemaining  OptInt
-	RatelimitReset      OptInt
-	XRequestID          OptString
-	Response            Comment
-}
-
-// GetEtag returns the value of Etag.
-func (s *CommentHeaders) GetEtag() OptString {
-	return s.Etag
-}
-
-// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
-func (s *CommentHeaders) GetIdempotencyReplayed() OptBool {
-	return s.IdempotencyReplayed
-}
-
-// GetRatelimitLimit returns the value of RatelimitLimit.
-func (s *CommentHeaders) GetRatelimitLimit() OptInt {
-	return s.RatelimitLimit
-}
-
-// GetRatelimitRemaining returns the value of RatelimitRemaining.
-func (s *CommentHeaders) GetRatelimitRemaining() OptInt {
-	return s.RatelimitRemaining
-}
-
-// GetRatelimitReset returns the value of RatelimitReset.
-func (s *CommentHeaders) GetRatelimitReset() OptInt {
-	return s.RatelimitReset
-}
-
-// GetXRequestID returns the value of XRequestID.
-func (s *CommentHeaders) GetXRequestID() OptString {
-	return s.XRequestID
-}
-
-// GetResponse returns the value of Response.
-func (s *CommentHeaders) GetResponse() Comment {
-	return s.Response
-}
-
-// SetEtag sets the value of Etag.
-func (s *CommentHeaders) SetEtag(val OptString) {
-	s.Etag = val
-}
-
-// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
-func (s *CommentHeaders) SetIdempotencyReplayed(val OptBool) {
-	s.IdempotencyReplayed = val
-}
-
-// SetRatelimitLimit sets the value of RatelimitLimit.
-func (s *CommentHeaders) SetRatelimitLimit(val OptInt) {
-	s.RatelimitLimit = val
-}
-
-// SetRatelimitRemaining sets the value of RatelimitRemaining.
-func (s *CommentHeaders) SetRatelimitRemaining(val OptInt) {
-	s.RatelimitRemaining = val
-}
-
-// SetRatelimitReset sets the value of RatelimitReset.
-func (s *CommentHeaders) SetRatelimitReset(val OptInt) {
-	s.RatelimitReset = val
-}
-
-// SetXRequestID sets the value of XRequestID.
-func (s *CommentHeaders) SetXRequestID(val OptString) {
-	s.XRequestID = val
-}
-
-// SetResponse sets the value of Response.
-func (s *CommentHeaders) SetResponse(val Comment) {
-	s.Response = val
-}
-
-func (*CommentHeaders) updateTaskCommentRes() {}
-
-// Merged schema.
-// Ref: #/components/schemas/CommentList
-type CommentList struct {
-	NextCursor OptString `json:"next_cursor"`
-	Items      []Comment `json:"items"`
-}
-
-// GetNextCursor returns the value of NextCursor.
-func (s *CommentList) GetNextCursor() OptString {
-	return s.NextCursor
-}
-
-// GetItems returns the value of Items.
-func (s *CommentList) GetItems() []Comment {
-	return s.Items
-}
-
-// SetNextCursor sets the value of NextCursor.
-func (s *CommentList) SetNextCursor(val OptString) {
-	s.NextCursor = val
-}
-
-// SetItems sets the value of Items.
-func (s *CommentList) SetItems(val []Comment) {
-	s.Items = val
-}
-
-// CommentListHeaders wraps CommentList with response headers.
-type CommentListHeaders struct {
-	RatelimitLimit     OptInt
-	RatelimitRemaining OptInt
-	RatelimitReset     OptInt
-	XRequestID         OptString
-	Response           CommentList
-}
-
-// GetRatelimitLimit returns the value of RatelimitLimit.
-func (s *CommentListHeaders) GetRatelimitLimit() OptInt {
-	return s.RatelimitLimit
-}
-
-// GetRatelimitRemaining returns the value of RatelimitRemaining.
-func (s *CommentListHeaders) GetRatelimitRemaining() OptInt {
-	return s.RatelimitRemaining
-}
-
-// GetRatelimitReset returns the value of RatelimitReset.
-func (s *CommentListHeaders) GetRatelimitReset() OptInt {
-	return s.RatelimitReset
-}
-
-// GetXRequestID returns the value of XRequestID.
-func (s *CommentListHeaders) GetXRequestID() OptString {
-	return s.XRequestID
-}
-
-// GetResponse returns the value of Response.
-func (s *CommentListHeaders) GetResponse() CommentList {
-	return s.Response
-}
-
-// SetRatelimitLimit sets the value of RatelimitLimit.
-func (s *CommentListHeaders) SetRatelimitLimit(val OptInt) {
-	s.RatelimitLimit = val
-}
-
-// SetRatelimitRemaining sets the value of RatelimitRemaining.
-func (s *CommentListHeaders) SetRatelimitRemaining(val OptInt) {
-	s.RatelimitRemaining = val
-}
-
-// SetRatelimitReset sets the value of RatelimitReset.
-func (s *CommentListHeaders) SetRatelimitReset(val OptInt) {
-	s.RatelimitReset = val
-}
-
-// SetXRequestID sets the value of XRequestID.
-func (s *CommentListHeaders) SetXRequestID(val OptString) {
-	s.XRequestID = val
-}
-
-// SetResponse sets the value of Response.
-func (s *CommentListHeaders) SetResponse(val CommentList) {
-	s.Response = val
-}
-
-func (*CommentListHeaders) listTaskCommentsRes() {}
-
-// Ref: #/components/schemas/CommentUpdateWrite
-type CommentUpdateWrite struct {
-	Body             string      `json:"body"`
-	MentionedUserIds []uuid.UUID `json:"mentioned_user_ids"`
-}
-
-// GetBody returns the value of Body.
-func (s *CommentUpdateWrite) GetBody() string {
-	return s.Body
-}
-
-// GetMentionedUserIds returns the value of MentionedUserIds.
-func (s *CommentUpdateWrite) GetMentionedUserIds() []uuid.UUID {
-	return s.MentionedUserIds
-}
-
-// SetBody sets the value of Body.
-func (s *CommentUpdateWrite) SetBody(val string) {
-	s.Body = val
-}
-
-// SetMentionedUserIds sets the value of MentionedUserIds.
-func (s *CommentUpdateWrite) SetMentionedUserIds(val []uuid.UUID) {
-	s.MentionedUserIds = val
-}
-
 // Ref: #/components/schemas/CriterionCreate
 type CriterionCreate struct {
 	Criterion                string `json:"criterion"`
@@ -1630,6 +1337,32 @@ func (s *CriterionPatch) SetPosition(val OptInt) {
 	s.Position = val
 }
 
+// Ref: #/components/schemas/CriterionRevisionSnapshot
+type CriterionRevisionSnapshot struct {
+	CriterionID uuid.UUID `json:"criterion_id"`
+	Revision    int64     `json:"revision"`
+}
+
+// GetCriterionID returns the value of CriterionID.
+func (s *CriterionRevisionSnapshot) GetCriterionID() uuid.UUID {
+	return s.CriterionID
+}
+
+// GetRevision returns the value of Revision.
+func (s *CriterionRevisionSnapshot) GetRevision() int64 {
+	return s.Revision
+}
+
+// SetCriterionID sets the value of CriterionID.
+func (s *CriterionRevisionSnapshot) SetCriterionID(val uuid.UUID) {
+	s.CriterionID = val
+}
+
+// SetRevision sets the value of Revision.
+func (s *CriterionRevisionSnapshot) SetRevision(val int64) {
+	s.Revision = val
+}
+
 // Ref: #/components/schemas/CurrentPrincipal
 type CurrentPrincipal struct {
 	Actor                User                                 `json:"actor"`
@@ -1846,6 +1579,54 @@ func (s *CurrentPrincipalScopesItem) UnmarshalText(data []byte) error {
 	}
 }
 
+// Ref: #/components/schemas/ExecutionCompletedPayload
+type ExecutionCompletedPayload struct {
+	ReviewCycle        int64                       `json:"review_cycle"`
+	SubmissionItemIds  []uuid.UUID                 `json:"submission_item_ids"`
+	ExecutionCheckIds  []uuid.UUID                 `json:"execution_check_ids"`
+	CriterionRevisions []CriterionRevisionSnapshot `json:"criterion_revisions"`
+}
+
+// GetReviewCycle returns the value of ReviewCycle.
+func (s *ExecutionCompletedPayload) GetReviewCycle() int64 {
+	return s.ReviewCycle
+}
+
+// GetSubmissionItemIds returns the value of SubmissionItemIds.
+func (s *ExecutionCompletedPayload) GetSubmissionItemIds() []uuid.UUID {
+	return s.SubmissionItemIds
+}
+
+// GetExecutionCheckIds returns the value of ExecutionCheckIds.
+func (s *ExecutionCompletedPayload) GetExecutionCheckIds() []uuid.UUID {
+	return s.ExecutionCheckIds
+}
+
+// GetCriterionRevisions returns the value of CriterionRevisions.
+func (s *ExecutionCompletedPayload) GetCriterionRevisions() []CriterionRevisionSnapshot {
+	return s.CriterionRevisions
+}
+
+// SetReviewCycle sets the value of ReviewCycle.
+func (s *ExecutionCompletedPayload) SetReviewCycle(val int64) {
+	s.ReviewCycle = val
+}
+
+// SetSubmissionItemIds sets the value of SubmissionItemIds.
+func (s *ExecutionCompletedPayload) SetSubmissionItemIds(val []uuid.UUID) {
+	s.SubmissionItemIds = val
+}
+
+// SetExecutionCheckIds sets the value of ExecutionCheckIds.
+func (s *ExecutionCompletedPayload) SetExecutionCheckIds(val []uuid.UUID) {
+	s.ExecutionCheckIds = val
+}
+
+// SetCriterionRevisions sets the value of CriterionRevisions.
+func (s *ExecutionCompletedPayload) SetCriterionRevisions(val []CriterionRevisionSnapshot) {
+	s.CriterionRevisions = val
+}
+
 type GetTaskAttachmentContentDisposition string
 
 const (
@@ -1928,6 +1709,182 @@ func (s *GetTaskAttachmentContentOKHeaders) SetResponse(val GetTaskAttachmentCon
 }
 
 func (*GetTaskAttachmentContentOKHeaders) getTaskAttachmentContentRes() {}
+
+// Ref: #/components/schemas/IssueResolutionPayload
+type IssueResolutionPayload struct {
+	IssueThreadID uuid.UUID       `json:"issue_thread_id"`
+	IssueType     IssueThreadType `json:"issue_type"`
+	Request       string          `json:"request"`
+	Resolution    string          `json:"resolution"`
+	OpenedBy      Actor           `json:"opened_by"`
+	ResolvedBy    Actor           `json:"resolved_by"`
+	OpenedAt      time.Time       `json:"opened_at"`
+	ResolvedAt    time.Time       `json:"resolved_at"`
+}
+
+// GetIssueThreadID returns the value of IssueThreadID.
+func (s *IssueResolutionPayload) GetIssueThreadID() uuid.UUID {
+	return s.IssueThreadID
+}
+
+// GetIssueType returns the value of IssueType.
+func (s *IssueResolutionPayload) GetIssueType() IssueThreadType {
+	return s.IssueType
+}
+
+// GetRequest returns the value of Request.
+func (s *IssueResolutionPayload) GetRequest() string {
+	return s.Request
+}
+
+// GetResolution returns the value of Resolution.
+func (s *IssueResolutionPayload) GetResolution() string {
+	return s.Resolution
+}
+
+// GetOpenedBy returns the value of OpenedBy.
+func (s *IssueResolutionPayload) GetOpenedBy() Actor {
+	return s.OpenedBy
+}
+
+// GetResolvedBy returns the value of ResolvedBy.
+func (s *IssueResolutionPayload) GetResolvedBy() Actor {
+	return s.ResolvedBy
+}
+
+// GetOpenedAt returns the value of OpenedAt.
+func (s *IssueResolutionPayload) GetOpenedAt() time.Time {
+	return s.OpenedAt
+}
+
+// GetResolvedAt returns the value of ResolvedAt.
+func (s *IssueResolutionPayload) GetResolvedAt() time.Time {
+	return s.ResolvedAt
+}
+
+// SetIssueThreadID sets the value of IssueThreadID.
+func (s *IssueResolutionPayload) SetIssueThreadID(val uuid.UUID) {
+	s.IssueThreadID = val
+}
+
+// SetIssueType sets the value of IssueType.
+func (s *IssueResolutionPayload) SetIssueType(val IssueThreadType) {
+	s.IssueType = val
+}
+
+// SetRequest sets the value of Request.
+func (s *IssueResolutionPayload) SetRequest(val string) {
+	s.Request = val
+}
+
+// SetResolution sets the value of Resolution.
+func (s *IssueResolutionPayload) SetResolution(val string) {
+	s.Resolution = val
+}
+
+// SetOpenedBy sets the value of OpenedBy.
+func (s *IssueResolutionPayload) SetOpenedBy(val Actor) {
+	s.OpenedBy = val
+}
+
+// SetResolvedBy sets the value of ResolvedBy.
+func (s *IssueResolutionPayload) SetResolvedBy(val Actor) {
+	s.ResolvedBy = val
+}
+
+// SetOpenedAt sets the value of OpenedAt.
+func (s *IssueResolutionPayload) SetOpenedAt(val time.Time) {
+	s.OpenedAt = val
+}
+
+// SetResolvedAt sets the value of ResolvedAt.
+func (s *IssueResolutionPayload) SetResolvedAt(val time.Time) {
+	s.ResolvedAt = val
+}
+
+// Ref: #/components/schemas/IssueThreadStatus
+type IssueThreadStatus string
+
+const (
+	IssueThreadStatusOpen     IssueThreadStatus = "open"
+	IssueThreadStatusResolved IssueThreadStatus = "resolved"
+)
+
+// AllValues returns all IssueThreadStatus values.
+func (IssueThreadStatus) AllValues() []IssueThreadStatus {
+	return []IssueThreadStatus{
+		IssueThreadStatusOpen,
+		IssueThreadStatusResolved,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s IssueThreadStatus) MarshalText() ([]byte, error) {
+	switch s {
+	case IssueThreadStatusOpen:
+		return []byte(s), nil
+	case IssueThreadStatusResolved:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *IssueThreadStatus) UnmarshalText(data []byte) error {
+	switch IssueThreadStatus(data) {
+	case IssueThreadStatusOpen:
+		*s = IssueThreadStatusOpen
+		return nil
+	case IssueThreadStatusResolved:
+		*s = IssueThreadStatusResolved
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/IssueThreadType
+type IssueThreadType string
+
+const (
+	IssueThreadTypeDecisionRequired   IssueThreadType = "decision_required"
+	IssueThreadTypeDependencyRequired IssueThreadType = "dependency_required"
+)
+
+// AllValues returns all IssueThreadType values.
+func (IssueThreadType) AllValues() []IssueThreadType {
+	return []IssueThreadType{
+		IssueThreadTypeDecisionRequired,
+		IssueThreadTypeDependencyRequired,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s IssueThreadType) MarshalText() ([]byte, error) {
+	switch s {
+	case IssueThreadTypeDecisionRequired:
+		return []byte(s), nil
+	case IssueThreadTypeDependencyRequired:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *IssueThreadType) UnmarshalText(data []byte) error {
+	switch IssueThreadType(data) {
+	case IssueThreadTypeDecisionRequired:
+		*s = IssueThreadTypeDecisionRequired
+		return nil
+	case IssueThreadTypeDependencyRequired:
+		*s = IssueThreadTypeDependencyRequired
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
 
 // Ref: #/components/schemas/Label
 type Label struct {
@@ -3098,7 +3055,6 @@ func (s *NoContent) SetXRequestID(val OptString) {
 func (*NoContent) deleteCriterionRes()             {}
 func (*NoContent) deleteLabelRes()                 {}
 func (*NoContent) deleteTaskAttachmentRes()        {}
-func (*NoContent) deleteTaskCommentRes()           {}
 func (*NoContent) uploadTaskAttachmentContentRes() {}
 
 // NewOptAcceptanceCheck returns new OptAcceptanceCheck with value set to v.
@@ -3141,6 +3097,98 @@ func (o OptAcceptanceCheck) Get() (v AcceptanceCheck, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptAcceptanceCheck) Or(d AcceptanceCheck) AcceptanceCheck {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptAcceptanceCheckPurpose returns new OptAcceptanceCheckPurpose with value set to v.
+func NewOptAcceptanceCheckPurpose(v AcceptanceCheckPurpose) OptAcceptanceCheckPurpose {
+	return OptAcceptanceCheckPurpose{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptAcceptanceCheckPurpose is optional AcceptanceCheckPurpose.
+type OptAcceptanceCheckPurpose struct {
+	Value AcceptanceCheckPurpose
+	Set   bool
+}
+
+// IsSet returns true if OptAcceptanceCheckPurpose was set.
+func (o OptAcceptanceCheckPurpose) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptAcceptanceCheckPurpose) Reset() {
+	var v AcceptanceCheckPurpose
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptAcceptanceCheckPurpose) SetTo(v AcceptanceCheckPurpose) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptAcceptanceCheckPurpose) Get() (v AcceptanceCheckPurpose, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptAcceptanceCheckPurpose) Or(d AcceptanceCheckPurpose) AcceptanceCheckPurpose {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptActor returns new OptActor with value set to v.
+func NewOptActor(v Actor) OptActor {
+	return OptActor{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptActor is optional Actor.
+type OptActor struct {
+	Value Actor
+	Set   bool
+}
+
+// IsSet returns true if OptActor was set.
+func (o OptActor) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptActor) Reset() {
+	var v Actor
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptActor) SetTo(v Actor) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptActor) Get() (v Actor, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptActor) Or(d Actor) Actor {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -3285,6 +3333,52 @@ func (o OptDateTime) Or(d time.Time) time.Time {
 	return d
 }
 
+// NewOptExecutionCompletedPayload returns new OptExecutionCompletedPayload with value set to v.
+func NewOptExecutionCompletedPayload(v ExecutionCompletedPayload) OptExecutionCompletedPayload {
+	return OptExecutionCompletedPayload{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptExecutionCompletedPayload is optional ExecutionCompletedPayload.
+type OptExecutionCompletedPayload struct {
+	Value ExecutionCompletedPayload
+	Set   bool
+}
+
+// IsSet returns true if OptExecutionCompletedPayload was set.
+func (o OptExecutionCompletedPayload) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptExecutionCompletedPayload) Reset() {
+	var v ExecutionCompletedPayload
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptExecutionCompletedPayload) SetTo(v ExecutionCompletedPayload) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptExecutionCompletedPayload) Get() (v ExecutionCompletedPayload, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptExecutionCompletedPayload) Or(d ExecutionCompletedPayload) ExecutionCompletedPayload {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptGetTaskAttachmentContentDisposition returns new OptGetTaskAttachmentContentDisposition with value set to v.
 func NewOptGetTaskAttachmentContentDisposition(v GetTaskAttachmentContentDisposition) OptGetTaskAttachmentContentDisposition {
 	return OptGetTaskAttachmentContentDisposition{
@@ -3417,6 +3511,144 @@ func (o OptInt64) Get() (v int64, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptInt64) Or(d int64) int64 {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptIssueResolutionPayload returns new OptIssueResolutionPayload with value set to v.
+func NewOptIssueResolutionPayload(v IssueResolutionPayload) OptIssueResolutionPayload {
+	return OptIssueResolutionPayload{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptIssueResolutionPayload is optional IssueResolutionPayload.
+type OptIssueResolutionPayload struct {
+	Value IssueResolutionPayload
+	Set   bool
+}
+
+// IsSet returns true if OptIssueResolutionPayload was set.
+func (o OptIssueResolutionPayload) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptIssueResolutionPayload) Reset() {
+	var v IssueResolutionPayload
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptIssueResolutionPayload) SetTo(v IssueResolutionPayload) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptIssueResolutionPayload) Get() (v IssueResolutionPayload, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptIssueResolutionPayload) Or(d IssueResolutionPayload) IssueResolutionPayload {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptIssueThreadStatus returns new OptIssueThreadStatus with value set to v.
+func NewOptIssueThreadStatus(v IssueThreadStatus) OptIssueThreadStatus {
+	return OptIssueThreadStatus{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptIssueThreadStatus is optional IssueThreadStatus.
+type OptIssueThreadStatus struct {
+	Value IssueThreadStatus
+	Set   bool
+}
+
+// IsSet returns true if OptIssueThreadStatus was set.
+func (o OptIssueThreadStatus) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptIssueThreadStatus) Reset() {
+	var v IssueThreadStatus
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptIssueThreadStatus) SetTo(v IssueThreadStatus) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptIssueThreadStatus) Get() (v IssueThreadStatus, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptIssueThreadStatus) Or(d IssueThreadStatus) IssueThreadStatus {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptIssueThreadType returns new OptIssueThreadType with value set to v.
+func NewOptIssueThreadType(v IssueThreadType) OptIssueThreadType {
+	return OptIssueThreadType{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptIssueThreadType is optional IssueThreadType.
+type OptIssueThreadType struct {
+	Value IssueThreadType
+	Set   bool
+}
+
+// IsSet returns true if OptIssueThreadType was set.
+func (o OptIssueThreadType) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptIssueThreadType) Reset() {
+	var v IssueThreadType
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptIssueThreadType) SetTo(v IssueThreadType) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptIssueThreadType) Get() (v IssueThreadType, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptIssueThreadType) Or(d IssueThreadType) IssueThreadType {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -4118,38 +4350,38 @@ func (o OptTaskActivityAuthenticationMethod) Or(d TaskActivityAuthenticationMeth
 	return d
 }
 
-// NewOptTaskAgentWorkSummary returns new OptTaskAgentWorkSummary with value set to v.
-func NewOptTaskAgentWorkSummary(v TaskAgentWorkSummary) OptTaskAgentWorkSummary {
-	return OptTaskAgentWorkSummary{
+// NewOptTaskActivityState returns new OptTaskActivityState with value set to v.
+func NewOptTaskActivityState(v TaskActivityState) OptTaskActivityState {
+	return OptTaskActivityState{
 		Value: v,
 		Set:   true,
 	}
 }
 
-// OptTaskAgentWorkSummary is optional TaskAgentWorkSummary.
-type OptTaskAgentWorkSummary struct {
-	Value TaskAgentWorkSummary
+// OptTaskActivityState is optional TaskActivityState.
+type OptTaskActivityState struct {
+	Value TaskActivityState
 	Set   bool
 }
 
-// IsSet returns true if OptTaskAgentWorkSummary was set.
-func (o OptTaskAgentWorkSummary) IsSet() bool { return o.Set }
+// IsSet returns true if OptTaskActivityState was set.
+func (o OptTaskActivityState) IsSet() bool { return o.Set }
 
 // Reset unsets value.
-func (o *OptTaskAgentWorkSummary) Reset() {
-	var v TaskAgentWorkSummary
+func (o *OptTaskActivityState) Reset() {
+	var v TaskActivityState
 	o.Value = v
 	o.Set = false
 }
 
 // SetTo sets value to v.
-func (o *OptTaskAgentWorkSummary) SetTo(v TaskAgentWorkSummary) {
+func (o *OptTaskActivityState) SetTo(v TaskActivityState) {
 	o.Set = true
 	o.Value = v
 }
 
 // Get returns value and boolean that denotes whether value was set.
-func (o OptTaskAgentWorkSummary) Get() (v TaskAgentWorkSummary, ok bool) {
+func (o OptTaskActivityState) Get() (v TaskActivityState, ok bool) {
 	if !o.Set {
 		return v, false
 	}
@@ -4157,45 +4389,45 @@ func (o OptTaskAgentWorkSummary) Get() (v TaskAgentWorkSummary, ok bool) {
 }
 
 // Or returns value if set, or given parameter if does not.
-func (o OptTaskAgentWorkSummary) Or(d TaskAgentWorkSummary) TaskAgentWorkSummary {
+func (o OptTaskActivityState) Or(d TaskActivityState) TaskActivityState {
 	if v, ok := o.Get(); ok {
 		return v
 	}
 	return d
 }
 
-// NewOptTaskExecutionMode returns new OptTaskExecutionMode with value set to v.
-func NewOptTaskExecutionMode(v TaskExecutionMode) OptTaskExecutionMode {
-	return OptTaskExecutionMode{
+// NewOptTaskPhase returns new OptTaskPhase with value set to v.
+func NewOptTaskPhase(v TaskPhase) OptTaskPhase {
+	return OptTaskPhase{
 		Value: v,
 		Set:   true,
 	}
 }
 
-// OptTaskExecutionMode is optional TaskExecutionMode.
-type OptTaskExecutionMode struct {
-	Value TaskExecutionMode
+// OptTaskPhase is optional TaskPhase.
+type OptTaskPhase struct {
+	Value TaskPhase
 	Set   bool
 }
 
-// IsSet returns true if OptTaskExecutionMode was set.
-func (o OptTaskExecutionMode) IsSet() bool { return o.Set }
+// IsSet returns true if OptTaskPhase was set.
+func (o OptTaskPhase) IsSet() bool { return o.Set }
 
 // Reset unsets value.
-func (o *OptTaskExecutionMode) Reset() {
-	var v TaskExecutionMode
+func (o *OptTaskPhase) Reset() {
+	var v TaskPhase
 	o.Value = v
 	o.Set = false
 }
 
 // SetTo sets value to v.
-func (o *OptTaskExecutionMode) SetTo(v TaskExecutionMode) {
+func (o *OptTaskPhase) SetTo(v TaskPhase) {
 	o.Set = true
 	o.Value = v
 }
 
 // Get returns value and boolean that denotes whether value was set.
-func (o OptTaskExecutionMode) Get() (v TaskExecutionMode, ok bool) {
+func (o OptTaskPhase) Get() (v TaskPhase, ok bool) {
 	if !o.Set {
 		return v, false
 	}
@@ -4203,7 +4435,7 @@ func (o OptTaskExecutionMode) Get() (v TaskExecutionMode, ok bool) {
 }
 
 // Or returns value if set, or given parameter if does not.
-func (o OptTaskExecutionMode) Or(d TaskExecutionMode) TaskExecutionMode {
+func (o OptTaskPhase) Or(d TaskPhase) TaskPhase {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -4302,38 +4534,38 @@ func (o OptTaskRelationRef) Or(d TaskRelationRef) TaskRelationRef {
 	return d
 }
 
-// NewOptTaskStatus returns new OptTaskStatus with value set to v.
-func NewOptTaskStatus(v TaskStatus) OptTaskStatus {
-	return OptTaskStatus{
+// NewOptTaskStageClaim returns new OptTaskStageClaim with value set to v.
+func NewOptTaskStageClaim(v TaskStageClaim) OptTaskStageClaim {
+	return OptTaskStageClaim{
 		Value: v,
 		Set:   true,
 	}
 }
 
-// OptTaskStatus is optional TaskStatus.
-type OptTaskStatus struct {
-	Value TaskStatus
+// OptTaskStageClaim is optional TaskStageClaim.
+type OptTaskStageClaim struct {
+	Value TaskStageClaim
 	Set   bool
 }
 
-// IsSet returns true if OptTaskStatus was set.
-func (o OptTaskStatus) IsSet() bool { return o.Set }
+// IsSet returns true if OptTaskStageClaim was set.
+func (o OptTaskStageClaim) IsSet() bool { return o.Set }
 
 // Reset unsets value.
-func (o *OptTaskStatus) Reset() {
-	var v TaskStatus
+func (o *OptTaskStageClaim) Reset() {
+	var v TaskStageClaim
 	o.Value = v
 	o.Set = false
 }
 
 // SetTo sets value to v.
-func (o *OptTaskStatus) SetTo(v TaskStatus) {
+func (o *OptTaskStageClaim) SetTo(v TaskStageClaim) {
 	o.Set = true
 	o.Value = v
 }
 
 // Get returns value and boolean that denotes whether value was set.
-func (o OptTaskStatus) Get() (v TaskStatus, ok bool) {
+func (o OptTaskStageClaim) Get() (v TaskStageClaim, ok bool) {
 	if !o.Set {
 		return v, false
 	}
@@ -4341,7 +4573,99 @@ func (o OptTaskStatus) Get() (v TaskStatus, ok bool) {
 }
 
 // Or returns value if set, or given parameter if does not.
-func (o OptTaskStatus) Or(d TaskStatus) TaskStatus {
+func (o OptTaskStageClaim) Or(d TaskStageClaim) TaskStageClaim {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptTaskStageClaimOutcome returns new OptTaskStageClaimOutcome with value set to v.
+func NewOptTaskStageClaimOutcome(v TaskStageClaimOutcome) OptTaskStageClaimOutcome {
+	return OptTaskStageClaimOutcome{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptTaskStageClaimOutcome is optional TaskStageClaimOutcome.
+type OptTaskStageClaimOutcome struct {
+	Value TaskStageClaimOutcome
+	Set   bool
+}
+
+// IsSet returns true if OptTaskStageClaimOutcome was set.
+func (o OptTaskStageClaimOutcome) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptTaskStageClaimOutcome) Reset() {
+	var v TaskStageClaimOutcome
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptTaskStageClaimOutcome) SetTo(v TaskStageClaimOutcome) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptTaskStageClaimOutcome) Get() (v TaskStageClaimOutcome, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptTaskStageClaimOutcome) Or(d TaskStageClaimOutcome) TaskStageClaimOutcome {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptTaskThread returns new OptTaskThread with value set to v.
+func NewOptTaskThread(v TaskThread) OptTaskThread {
+	return OptTaskThread{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptTaskThread is optional TaskThread.
+type OptTaskThread struct {
+	Value TaskThread
+	Set   bool
+}
+
+// IsSet returns true if OptTaskThread was set.
+func (o OptTaskThread) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptTaskThread) Reset() {
+	var v TaskThread
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptTaskThread) SetTo(v TaskThread) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptTaskThread) Get() (v TaskThread, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptTaskThread) Or(d TaskThread) TaskThread {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -4835,38 +5159,36 @@ func (s *ProblemStatusCodeWithHeaders) SetResponse(val Problem) {
 	s.Response = val
 }
 
+func (*ProblemStatusCodeWithHeaders) acceptTaskRes()                                  {}
 func (*ProblemStatusCodeWithHeaders) activateMilestoneRes()                           {}
 func (*ProblemStatusCodeWithHeaders) addProjectMemberRes()                            {}
-func (*ProblemStatusCodeWithHeaders) addTaskClaimProgressRes()                        {}
-func (*ProblemStatusCodeWithHeaders) answerTaskClaimQuestionRes()                     {}
 func (*ProblemStatusCodeWithHeaders) archiveProjectRes()                              {}
 func (*ProblemStatusCodeWithHeaders) archiveTaskRes()                                 {}
-func (*ProblemStatusCodeWithHeaders) askTaskClaimQuestionRes()                        {}
 func (*ProblemStatusCodeWithHeaders) cancelMilestoneRes()                             {}
-func (*ProblemStatusCodeWithHeaders) claimTaskRes()                                   {}
+func (*ProblemStatusCodeWithHeaders) cancelTaskRes()                                  {}
 func (*ProblemStatusCodeWithHeaders) completeMilestoneRes()                           {}
 func (*ProblemStatusCodeWithHeaders) completeTaskAttachmentUploadRes()                {}
+func (*ProblemStatusCodeWithHeaders) completeTaskExecutionRes()                       {}
 func (*ProblemStatusCodeWithHeaders) createAcceptanceCheckRes()                       {}
 func (*ProblemStatusCodeWithHeaders) createLabelRes()                                 {}
 func (*ProblemStatusCodeWithHeaders) createMilestoneCriterionRes()                    {}
 func (*ProblemStatusCodeWithHeaders) createMilestoneRes()                             {}
 func (*ProblemStatusCodeWithHeaders) createProjectRes()                               {}
 func (*ProblemStatusCodeWithHeaders) createTaskAttachmentUploadRes()                  {}
-func (*ProblemStatusCodeWithHeaders) createTaskCommentRes()                           {}
 func (*ProblemStatusCodeWithHeaders) createTaskCriterionRes()                         {}
 func (*ProblemStatusCodeWithHeaders) createTaskRes()                                  {}
+func (*ProblemStatusCodeWithHeaders) createTaskStageClaimRes()                        {}
+func (*ProblemStatusCodeWithHeaders) createTaskThreadMessageRes()                     {}
 func (*ProblemStatusCodeWithHeaders) deleteCriterionRes()                             {}
 func (*ProblemStatusCodeWithHeaders) deleteLabelRes()                                 {}
 func (*ProblemStatusCodeWithHeaders) deleteTaskAttachmentRes()                        {}
-func (*ProblemStatusCodeWithHeaders) deleteTaskCommentRes()                           {}
-func (*ProblemStatusCodeWithHeaders) extendTaskClaimRes()                             {}
+func (*ProblemStatusCodeWithHeaders) deleteTaskThreadMessageRes()                     {}
 func (*ProblemStatusCodeWithHeaders) getAgentConversationRes()                        {}
 func (*ProblemStatusCodeWithHeaders) getCurrentAgentConversationConfigurationRes()    {}
 func (*ProblemStatusCodeWithHeaders) getCurrentPrincipalRes()                         {}
-func (*ProblemStatusCodeWithHeaders) getCurrentTaskClaimRes()                         {}
+func (*ProblemStatusCodeWithHeaders) getCurrentTaskStageClaimRes()                    {}
 func (*ProblemStatusCodeWithHeaders) getProjectRes()                                  {}
 func (*ProblemStatusCodeWithHeaders) getTaskAttachmentContentRes()                    {}
-func (*ProblemStatusCodeWithHeaders) getTaskClaimRes()                                {}
 func (*ProblemStatusCodeWithHeaders) getTaskRes()                                     {}
 func (*ProblemStatusCodeWithHeaders) listAgentConversationsRes()                      {}
 func (*ProblemStatusCodeWithHeaders) listLabelsRes()                                  {}
@@ -4874,20 +5196,24 @@ func (*ProblemStatusCodeWithHeaders) listMilestoneCriteriaRes()                 
 func (*ProblemStatusCodeWithHeaders) listProjectMembersRes()                          {}
 func (*ProblemStatusCodeWithHeaders) listProjectsRes()                                {}
 func (*ProblemStatusCodeWithHeaders) listTaskActivityRes()                            {}
-func (*ProblemStatusCodeWithHeaders) listTaskAgentConversationsRes()                  {}
 func (*ProblemStatusCodeWithHeaders) listTaskAttachmentsRes()                         {}
-func (*ProblemStatusCodeWithHeaders) listTaskClaimMessagesRes()                       {}
-func (*ProblemStatusCodeWithHeaders) listTaskCommentsRes()                            {}
 func (*ProblemStatusCodeWithHeaders) listTaskCriteriaRes()                            {}
+func (*ProblemStatusCodeWithHeaders) listTaskStageClaimsRes()                         {}
+func (*ProblemStatusCodeWithHeaders) listTaskThreadItemsRes()                         {}
+func (*ProblemStatusCodeWithHeaders) listTaskThreadsRes()                             {}
 func (*ProblemStatusCodeWithHeaders) listTasksRes()                                   {}
 func (*ProblemStatusCodeWithHeaders) listUsersRes()                                   {}
-func (*ProblemStatusCodeWithHeaders) recordTaskClaimAcceptanceCheckRes()              {}
-func (*ProblemStatusCodeWithHeaders) releaseTaskClaimRes()                            {}
+func (*ProblemStatusCodeWithHeaders) markTaskReadyRes()                               {}
+func (*ProblemStatusCodeWithHeaders) recordTaskStageAcceptanceCheckRes()              {}
+func (*ProblemStatusCodeWithHeaders) recordTaskWorkSubmissionRes()                    {}
+func (*ProblemStatusCodeWithHeaders) releaseTaskStageClaimRes()                       {}
 func (*ProblemStatusCodeWithHeaders) removeProjectMemberRes()                         {}
 func (*ProblemStatusCodeWithHeaders) reopenMilestoneRes()                             {}
+func (*ProblemStatusCodeWithHeaders) requestTaskChangesRes()                          {}
+func (*ProblemStatusCodeWithHeaders) requestTaskResolutionRes()                       {}
+func (*ProblemStatusCodeWithHeaders) resolveTaskIssueRes()                            {}
 func (*ProblemStatusCodeWithHeaders) restoreProjectRes()                              {}
 func (*ProblemStatusCodeWithHeaders) restoreTaskRes()                                 {}
-func (*ProblemStatusCodeWithHeaders) submitTaskClaimRes()                             {}
 func (*ProblemStatusCodeWithHeaders) updateAgentConversationRes()                     {}
 func (*ProblemStatusCodeWithHeaders) updateCriterionRes()                             {}
 func (*ProblemStatusCodeWithHeaders) updateCurrentAgentConversationConfigurationRes() {}
@@ -4895,9 +5221,10 @@ func (*ProblemStatusCodeWithHeaders) updateLabelRes()                           
 func (*ProblemStatusCodeWithHeaders) updateMilestoneRes()                             {}
 func (*ProblemStatusCodeWithHeaders) updateProjectMemberRes()                         {}
 func (*ProblemStatusCodeWithHeaders) updateProjectRes()                               {}
-func (*ProblemStatusCodeWithHeaders) updateTaskCommentRes()                           {}
 func (*ProblemStatusCodeWithHeaders) updateTaskRes()                                  {}
+func (*ProblemStatusCodeWithHeaders) updateTaskThreadMessageRes()                     {}
 func (*ProblemStatusCodeWithHeaders) uploadTaskAttachmentContentRes()                 {}
+func (*ProblemStatusCodeWithHeaders) withdrawTaskReadinessRes()                       {}
 
 // Ref: #/components/schemas/Project
 type Project struct {
@@ -6000,6 +6327,21 @@ func (s *ProjectRole) UnmarshalText(data []byte) error {
 	}
 }
 
+// Ref: #/components/schemas/ReasonWrite
+type ReasonWrite struct {
+	Reason string `json:"reason"`
+}
+
+// GetReason returns the value of Reason.
+func (s *ReasonWrite) GetReason() string {
+	return s.Reason
+}
+
+// SetReason sets the value of Reason.
+func (s *ReasonWrite) SetReason(val string) {
+	s.Reason = val
+}
+
 type SessionCookie struct {
 	APIKey string
 	Roles  []string
@@ -6027,28 +6369,30 @@ func (s *SessionCookie) SetRoles(val []string) {
 
 // Ref: #/components/schemas/Task
 type Task struct {
-	ID             uuid.UUID               `json:"id"`
-	Number         int64                   `json:"number"`
-	Version        int64                   `json:"version"`
-	Title          string                  `json:"title"`
-	Context        string                  `json:"context"`
-	ExpectedResult string                  `json:"expected_result"`
-	Description    string                  `json:"description"`
-	Status         TaskStatus              `json:"status"`
-	Priority       TaskPriority            `json:"priority"`
-	ExecutionMode  TaskExecutionMode       `json:"execution_mode"`
-	AgentWork      OptTaskAgentWorkSummary `json:"agent_work"`
-	Assignee       OptUserRef              `json:"assignee"`
-	Creator        UserRef                 `json:"creator"`
-	StartDate      OptDate                 `json:"start_date"`
-	DueDate        OptDate                 `json:"due_date"`
-	Project        ProjectRef              `json:"project"`
-	Milestone      OptMilestoneRef         `json:"milestone"`
-	Labels         []Label                 `json:"labels"`
-	Parent         OptTaskRelationRef      `json:"parent"`
-	Children       []TaskRelationRef       `json:"children"`
-	Dependencies   []TaskRelationRef       `json:"dependencies"`
-	Dependents     []TaskRelationRef       `json:"dependents"`
+	ID                  uuid.UUID            `json:"id"`
+	Number              int64                `json:"number"`
+	Version             int64                `json:"version"`
+	Title               string               `json:"title"`
+	Context             string               `json:"context"`
+	ExpectedResult      string               `json:"expected_result"`
+	Description         string               `json:"description"`
+	Phase               TaskPhase            `json:"phase"`
+	Activity            OptTaskActivityState `json:"activity"`
+	ReviewCycle         int64                `json:"review_cycle"`
+	ActiveIssueThreadID OptUUID              `json:"active_issue_thread_id"`
+	MainThreadID        uuid.UUID            `json:"main_thread_id"`
+	Priority            TaskPriority         `json:"priority"`
+	Assignee            OptUserRef           `json:"assignee"`
+	Creator             UserRef              `json:"creator"`
+	StartDate           OptDate              `json:"start_date"`
+	DueDate             OptDate              `json:"due_date"`
+	Project             ProjectRef           `json:"project"`
+	Milestone           OptMilestoneRef      `json:"milestone"`
+	Labels              []Label              `json:"labels"`
+	Parent              OptTaskRelationRef   `json:"parent"`
+	Children            []TaskRelationRef    `json:"children"`
+	Dependencies        []TaskRelationRef    `json:"dependencies"`
+	Dependents          []TaskRelationRef    `json:"dependents"`
 	// True when at least one dependency is not done or cancelled. Blocked tasks may start but may not
 	// enter done.
 	Blocked     bool        `json:"blocked"`
@@ -6093,24 +6437,34 @@ func (s *Task) GetDescription() string {
 	return s.Description
 }
 
-// GetStatus returns the value of Status.
-func (s *Task) GetStatus() TaskStatus {
-	return s.Status
+// GetPhase returns the value of Phase.
+func (s *Task) GetPhase() TaskPhase {
+	return s.Phase
+}
+
+// GetActivity returns the value of Activity.
+func (s *Task) GetActivity() OptTaskActivityState {
+	return s.Activity
+}
+
+// GetReviewCycle returns the value of ReviewCycle.
+func (s *Task) GetReviewCycle() int64 {
+	return s.ReviewCycle
+}
+
+// GetActiveIssueThreadID returns the value of ActiveIssueThreadID.
+func (s *Task) GetActiveIssueThreadID() OptUUID {
+	return s.ActiveIssueThreadID
+}
+
+// GetMainThreadID returns the value of MainThreadID.
+func (s *Task) GetMainThreadID() uuid.UUID {
+	return s.MainThreadID
 }
 
 // GetPriority returns the value of Priority.
 func (s *Task) GetPriority() TaskPriority {
 	return s.Priority
-}
-
-// GetExecutionMode returns the value of ExecutionMode.
-func (s *Task) GetExecutionMode() TaskExecutionMode {
-	return s.ExecutionMode
-}
-
-// GetAgentWork returns the value of AgentWork.
-func (s *Task) GetAgentWork() OptTaskAgentWorkSummary {
-	return s.AgentWork
 }
 
 // GetAssignee returns the value of Assignee.
@@ -6228,24 +6582,34 @@ func (s *Task) SetDescription(val string) {
 	s.Description = val
 }
 
-// SetStatus sets the value of Status.
-func (s *Task) SetStatus(val TaskStatus) {
-	s.Status = val
+// SetPhase sets the value of Phase.
+func (s *Task) SetPhase(val TaskPhase) {
+	s.Phase = val
+}
+
+// SetActivity sets the value of Activity.
+func (s *Task) SetActivity(val OptTaskActivityState) {
+	s.Activity = val
+}
+
+// SetReviewCycle sets the value of ReviewCycle.
+func (s *Task) SetReviewCycle(val int64) {
+	s.ReviewCycle = val
+}
+
+// SetActiveIssueThreadID sets the value of ActiveIssueThreadID.
+func (s *Task) SetActiveIssueThreadID(val OptUUID) {
+	s.ActiveIssueThreadID = val
+}
+
+// SetMainThreadID sets the value of MainThreadID.
+func (s *Task) SetMainThreadID(val uuid.UUID) {
+	s.MainThreadID = val
 }
 
 // SetPriority sets the value of Priority.
 func (s *Task) SetPriority(val TaskPriority) {
 	s.Priority = val
-}
-
-// SetExecutionMode sets the value of ExecutionMode.
-func (s *Task) SetExecutionMode(val TaskExecutionMode) {
-	s.ExecutionMode = val
-}
-
-// SetAgentWork sets the value of AgentWork.
-func (s *Task) SetAgentWork(val OptTaskAgentWorkSummary) {
-	s.AgentWork = val
 }
 
 // SetAssignee sets the value of Assignee.
@@ -6560,74 +6924,53 @@ func (s *TaskActivityListHeaders) SetResponse(val TaskActivityList) {
 
 func (*TaskActivityListHeaders) listTaskActivityRes() {}
 
-// Ref: #/components/schemas/TaskAgentWorkSummary
-type TaskAgentWorkSummary struct {
-	ClaimID     uuid.UUID       `json:"claim_id"`
-	Status      TaskClaimStatus `json:"status"`
-	TokenName   string          `json:"token_name"`
-	ClientKind  string          `json:"client_kind"`
-	UpdatedAt   time.Time       `json:"updated_at"`
-	CompletedAt OptDateTime     `json:"completed_at"`
+// Ref: #/components/schemas/TaskActivityState
+type TaskActivityState string
+
+const (
+	TaskActivityStateAvailable       TaskActivityState = "available"
+	TaskActivityStateWorking         TaskActivityState = "working"
+	TaskActivityStateNeedsResolution TaskActivityState = "needs_resolution"
+)
+
+// AllValues returns all TaskActivityState values.
+func (TaskActivityState) AllValues() []TaskActivityState {
+	return []TaskActivityState{
+		TaskActivityStateAvailable,
+		TaskActivityStateWorking,
+		TaskActivityStateNeedsResolution,
+	}
 }
 
-// GetClaimID returns the value of ClaimID.
-func (s *TaskAgentWorkSummary) GetClaimID() uuid.UUID {
-	return s.ClaimID
+// MarshalText implements encoding.TextMarshaler.
+func (s TaskActivityState) MarshalText() ([]byte, error) {
+	switch s {
+	case TaskActivityStateAvailable:
+		return []byte(s), nil
+	case TaskActivityStateWorking:
+		return []byte(s), nil
+	case TaskActivityStateNeedsResolution:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
 }
 
-// GetStatus returns the value of Status.
-func (s *TaskAgentWorkSummary) GetStatus() TaskClaimStatus {
-	return s.Status
-}
-
-// GetTokenName returns the value of TokenName.
-func (s *TaskAgentWorkSummary) GetTokenName() string {
-	return s.TokenName
-}
-
-// GetClientKind returns the value of ClientKind.
-func (s *TaskAgentWorkSummary) GetClientKind() string {
-	return s.ClientKind
-}
-
-// GetUpdatedAt returns the value of UpdatedAt.
-func (s *TaskAgentWorkSummary) GetUpdatedAt() time.Time {
-	return s.UpdatedAt
-}
-
-// GetCompletedAt returns the value of CompletedAt.
-func (s *TaskAgentWorkSummary) GetCompletedAt() OptDateTime {
-	return s.CompletedAt
-}
-
-// SetClaimID sets the value of ClaimID.
-func (s *TaskAgentWorkSummary) SetClaimID(val uuid.UUID) {
-	s.ClaimID = val
-}
-
-// SetStatus sets the value of Status.
-func (s *TaskAgentWorkSummary) SetStatus(val TaskClaimStatus) {
-	s.Status = val
-}
-
-// SetTokenName sets the value of TokenName.
-func (s *TaskAgentWorkSummary) SetTokenName(val string) {
-	s.TokenName = val
-}
-
-// SetClientKind sets the value of ClientKind.
-func (s *TaskAgentWorkSummary) SetClientKind(val string) {
-	s.ClientKind = val
-}
-
-// SetUpdatedAt sets the value of UpdatedAt.
-func (s *TaskAgentWorkSummary) SetUpdatedAt(val time.Time) {
-	s.UpdatedAt = val
-}
-
-// SetCompletedAt sets the value of CompletedAt.
-func (s *TaskAgentWorkSummary) SetCompletedAt(val OptDateTime) {
-	s.CompletedAt = val
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *TaskActivityState) UnmarshalText(data []byte) error {
+	switch TaskActivityState(data) {
+	case TaskActivityStateAvailable:
+		*s = TaskActivityStateAvailable
+		return nil
+	case TaskActivityStateWorking:
+		*s = TaskActivityStateWorking
+		return nil
+	case TaskActivityStateNeedsResolution:
+		*s = TaskActivityStateNeedsResolution
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
 }
 
 // Ref: #/components/schemas/TaskAttachment
@@ -7219,660 +7562,104 @@ func (s *TaskAttachmentUploadWrite) SetSizeBytes(val int64) {
 	s.SizeBytes = val
 }
 
-// Ref: #/components/schemas/TaskClaim
-type TaskClaim struct {
-	ID              uuid.UUID       `json:"id"`
-	TaskID          uuid.UUID       `json:"task_id"`
-	TaskNumber      int64           `json:"task_number"`
-	ClaimedByUserID uuid.UUID       `json:"claimed_by_user_id"`
-	TokenName       string          `json:"token_name"`
-	ClientKind      string          `json:"client_kind"`
-	Status          TaskClaimStatus `json:"status"`
-	Version         int64           `json:"version"`
-	ExpiresAt       time.Time       `json:"expires_at"`
-	TerminalReason  OptString       `json:"terminal_reason"`
-	CreatedAt       time.Time       `json:"created_at"`
-	UpdatedAt       time.Time       `json:"updated_at"`
-	CompletedAt     OptDateTime     `json:"completed_at"`
+// Ref: #/components/schemas/TaskCancelResult
+type TaskCancelResult struct {
+	Task          TaskWorkflow      `json:"task"`
+	EndedClaim    OptTaskStageClaim `json:"ended_claim"`
+	ResolvedIssue OptTaskThread     `json:"resolved_issue"`
 }
 
-// GetID returns the value of ID.
-func (s *TaskClaim) GetID() uuid.UUID {
-	return s.ID
+// GetTask returns the value of Task.
+func (s *TaskCancelResult) GetTask() TaskWorkflow {
+	return s.Task
 }
 
-// GetTaskID returns the value of TaskID.
-func (s *TaskClaim) GetTaskID() uuid.UUID {
-	return s.TaskID
+// GetEndedClaim returns the value of EndedClaim.
+func (s *TaskCancelResult) GetEndedClaim() OptTaskStageClaim {
+	return s.EndedClaim
 }
 
-// GetTaskNumber returns the value of TaskNumber.
-func (s *TaskClaim) GetTaskNumber() int64 {
-	return s.TaskNumber
+// GetResolvedIssue returns the value of ResolvedIssue.
+func (s *TaskCancelResult) GetResolvedIssue() OptTaskThread {
+	return s.ResolvedIssue
 }
 
-// GetClaimedByUserID returns the value of ClaimedByUserID.
-func (s *TaskClaim) GetClaimedByUserID() uuid.UUID {
-	return s.ClaimedByUserID
+// SetTask sets the value of Task.
+func (s *TaskCancelResult) SetTask(val TaskWorkflow) {
+	s.Task = val
 }
 
-// GetTokenName returns the value of TokenName.
-func (s *TaskClaim) GetTokenName() string {
-	return s.TokenName
+// SetEndedClaim sets the value of EndedClaim.
+func (s *TaskCancelResult) SetEndedClaim(val OptTaskStageClaim) {
+	s.EndedClaim = val
 }
 
-// GetClientKind returns the value of ClientKind.
-func (s *TaskClaim) GetClientKind() string {
-	return s.ClientKind
+// SetResolvedIssue sets the value of ResolvedIssue.
+func (s *TaskCancelResult) SetResolvedIssue(val OptTaskThread) {
+	s.ResolvedIssue = val
 }
 
-// GetStatus returns the value of Status.
-func (s *TaskClaim) GetStatus() TaskClaimStatus {
-	return s.Status
-}
-
-// GetVersion returns the value of Version.
-func (s *TaskClaim) GetVersion() int64 {
-	return s.Version
-}
-
-// GetExpiresAt returns the value of ExpiresAt.
-func (s *TaskClaim) GetExpiresAt() time.Time {
-	return s.ExpiresAt
-}
-
-// GetTerminalReason returns the value of TerminalReason.
-func (s *TaskClaim) GetTerminalReason() OptString {
-	return s.TerminalReason
-}
-
-// GetCreatedAt returns the value of CreatedAt.
-func (s *TaskClaim) GetCreatedAt() time.Time {
-	return s.CreatedAt
-}
-
-// GetUpdatedAt returns the value of UpdatedAt.
-func (s *TaskClaim) GetUpdatedAt() time.Time {
-	return s.UpdatedAt
-}
-
-// GetCompletedAt returns the value of CompletedAt.
-func (s *TaskClaim) GetCompletedAt() OptDateTime {
-	return s.CompletedAt
-}
-
-// SetID sets the value of ID.
-func (s *TaskClaim) SetID(val uuid.UUID) {
-	s.ID = val
-}
-
-// SetTaskID sets the value of TaskID.
-func (s *TaskClaim) SetTaskID(val uuid.UUID) {
-	s.TaskID = val
-}
-
-// SetTaskNumber sets the value of TaskNumber.
-func (s *TaskClaim) SetTaskNumber(val int64) {
-	s.TaskNumber = val
-}
-
-// SetClaimedByUserID sets the value of ClaimedByUserID.
-func (s *TaskClaim) SetClaimedByUserID(val uuid.UUID) {
-	s.ClaimedByUserID = val
-}
-
-// SetTokenName sets the value of TokenName.
-func (s *TaskClaim) SetTokenName(val string) {
-	s.TokenName = val
-}
-
-// SetClientKind sets the value of ClientKind.
-func (s *TaskClaim) SetClientKind(val string) {
-	s.ClientKind = val
-}
-
-// SetStatus sets the value of Status.
-func (s *TaskClaim) SetStatus(val TaskClaimStatus) {
-	s.Status = val
-}
-
-// SetVersion sets the value of Version.
-func (s *TaskClaim) SetVersion(val int64) {
-	s.Version = val
-}
-
-// SetExpiresAt sets the value of ExpiresAt.
-func (s *TaskClaim) SetExpiresAt(val time.Time) {
-	s.ExpiresAt = val
-}
-
-// SetTerminalReason sets the value of TerminalReason.
-func (s *TaskClaim) SetTerminalReason(val OptString) {
-	s.TerminalReason = val
-}
-
-// SetCreatedAt sets the value of CreatedAt.
-func (s *TaskClaim) SetCreatedAt(val time.Time) {
-	s.CreatedAt = val
-}
-
-// SetUpdatedAt sets the value of UpdatedAt.
-func (s *TaskClaim) SetUpdatedAt(val time.Time) {
-	s.UpdatedAt = val
-}
-
-// SetCompletedAt sets the value of CompletedAt.
-func (s *TaskClaim) SetCompletedAt(val OptDateTime) {
-	s.CompletedAt = val
-}
-
-// Ref: #/components/schemas/TaskClaimAcceptanceCheckCreate
-type TaskClaimAcceptanceCheckCreate struct {
-	ClientKind        string            `json:"client_kind"`
-	ClientSessionID   string            `json:"client_session_id"`
-	CriterionRevision int               `json:"criterion_revision"`
-	Outcome           AcceptanceOutcome `json:"outcome"`
-	Evidence          string            `json:"evidence"`
-}
-
-// GetClientKind returns the value of ClientKind.
-func (s *TaskClaimAcceptanceCheckCreate) GetClientKind() string {
-	return s.ClientKind
-}
-
-// GetClientSessionID returns the value of ClientSessionID.
-func (s *TaskClaimAcceptanceCheckCreate) GetClientSessionID() string {
-	return s.ClientSessionID
-}
-
-// GetCriterionRevision returns the value of CriterionRevision.
-func (s *TaskClaimAcceptanceCheckCreate) GetCriterionRevision() int {
-	return s.CriterionRevision
-}
-
-// GetOutcome returns the value of Outcome.
-func (s *TaskClaimAcceptanceCheckCreate) GetOutcome() AcceptanceOutcome {
-	return s.Outcome
-}
-
-// GetEvidence returns the value of Evidence.
-func (s *TaskClaimAcceptanceCheckCreate) GetEvidence() string {
-	return s.Evidence
-}
-
-// SetClientKind sets the value of ClientKind.
-func (s *TaskClaimAcceptanceCheckCreate) SetClientKind(val string) {
-	s.ClientKind = val
-}
-
-// SetClientSessionID sets the value of ClientSessionID.
-func (s *TaskClaimAcceptanceCheckCreate) SetClientSessionID(val string) {
-	s.ClientSessionID = val
-}
-
-// SetCriterionRevision sets the value of CriterionRevision.
-func (s *TaskClaimAcceptanceCheckCreate) SetCriterionRevision(val int) {
-	s.CriterionRevision = val
-}
-
-// SetOutcome sets the value of Outcome.
-func (s *TaskClaimAcceptanceCheckCreate) SetOutcome(val AcceptanceOutcome) {
-	s.Outcome = val
-}
-
-// SetEvidence sets the value of Evidence.
-func (s *TaskClaimAcceptanceCheckCreate) SetEvidence(val string) {
-	s.Evidence = val
-}
-
-// Ref: #/components/schemas/TaskClaimAction
-type TaskClaimAction struct {
-	Claim   TaskClaim        `json:"claim"`
-	Message TaskClaimMessage `json:"message"`
-}
-
-// GetClaim returns the value of Claim.
-func (s *TaskClaimAction) GetClaim() TaskClaim {
-	return s.Claim
-}
-
-// GetMessage returns the value of Message.
-func (s *TaskClaimAction) GetMessage() TaskClaimMessage {
-	return s.Message
-}
-
-// SetClaim sets the value of Claim.
-func (s *TaskClaimAction) SetClaim(val TaskClaim) {
-	s.Claim = val
-}
-
-// SetMessage sets the value of Message.
-func (s *TaskClaimAction) SetMessage(val TaskClaimMessage) {
-	s.Message = val
-}
-
-// TaskClaimActionHeaders wraps TaskClaimAction with response headers.
-type TaskClaimActionHeaders struct {
-	Etag                OptString
-	IdempotencyReplayed OptBool
-	XRequestID          OptString
-	Response            TaskClaimAction
-}
-
-// GetEtag returns the value of Etag.
-func (s *TaskClaimActionHeaders) GetEtag() OptString {
-	return s.Etag
-}
-
-// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
-func (s *TaskClaimActionHeaders) GetIdempotencyReplayed() OptBool {
-	return s.IdempotencyReplayed
-}
-
-// GetXRequestID returns the value of XRequestID.
-func (s *TaskClaimActionHeaders) GetXRequestID() OptString {
-	return s.XRequestID
-}
-
-// GetResponse returns the value of Response.
-func (s *TaskClaimActionHeaders) GetResponse() TaskClaimAction {
-	return s.Response
-}
-
-// SetEtag sets the value of Etag.
-func (s *TaskClaimActionHeaders) SetEtag(val OptString) {
-	s.Etag = val
-}
-
-// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
-func (s *TaskClaimActionHeaders) SetIdempotencyReplayed(val OptBool) {
-	s.IdempotencyReplayed = val
-}
-
-// SetXRequestID sets the value of XRequestID.
-func (s *TaskClaimActionHeaders) SetXRequestID(val OptString) {
-	s.XRequestID = val
-}
-
-// SetResponse sets the value of Response.
-func (s *TaskClaimActionHeaders) SetResponse(val TaskClaimAction) {
-	s.Response = val
-}
-
-func (*TaskClaimActionHeaders) answerTaskClaimQuestionRes() {}
-func (*TaskClaimActionHeaders) askTaskClaimQuestionRes()    {}
-func (*TaskClaimActionHeaders) submitTaskClaimRes()         {}
-
-// Ref: #/components/schemas/TaskClaimAgentMessage
-type TaskClaimAgentMessage struct {
-	ClientKind      string `json:"client_kind"`
-	ClientSessionID string `json:"client_session_id"`
-	Body            string `json:"body"`
-}
-
-// GetClientKind returns the value of ClientKind.
-func (s *TaskClaimAgentMessage) GetClientKind() string {
-	return s.ClientKind
-}
-
-// GetClientSessionID returns the value of ClientSessionID.
-func (s *TaskClaimAgentMessage) GetClientSessionID() string {
-	return s.ClientSessionID
-}
-
-// GetBody returns the value of Body.
-func (s *TaskClaimAgentMessage) GetBody() string {
-	return s.Body
-}
-
-// SetClientKind sets the value of ClientKind.
-func (s *TaskClaimAgentMessage) SetClientKind(val string) {
-	s.ClientKind = val
-}
-
-// SetClientSessionID sets the value of ClientSessionID.
-func (s *TaskClaimAgentMessage) SetClientSessionID(val string) {
-	s.ClientSessionID = val
-}
-
-// SetBody sets the value of Body.
-func (s *TaskClaimAgentMessage) SetBody(val string) {
-	s.Body = val
-}
-
-// Ref: #/components/schemas/TaskClaimConversation
-type TaskClaimConversation struct {
-	Claim    TaskClaim          `json:"claim"`
-	Messages []TaskClaimMessage `json:"messages"`
-}
-
-// GetClaim returns the value of Claim.
-func (s *TaskClaimConversation) GetClaim() TaskClaim {
-	return s.Claim
-}
-
-// GetMessages returns the value of Messages.
-func (s *TaskClaimConversation) GetMessages() []TaskClaimMessage {
-	return s.Messages
-}
-
-// SetClaim sets the value of Claim.
-func (s *TaskClaimConversation) SetClaim(val TaskClaim) {
-	s.Claim = val
-}
-
-// SetMessages sets the value of Messages.
-func (s *TaskClaimConversation) SetMessages(val []TaskClaimMessage) {
-	s.Messages = val
-}
-
-// Ref: #/components/schemas/TaskClaimConversationList
-type TaskClaimConversationList struct {
-	Items []TaskClaimConversation `json:"items"`
-}
-
-// GetItems returns the value of Items.
-func (s *TaskClaimConversationList) GetItems() []TaskClaimConversation {
-	return s.Items
-}
-
-// SetItems sets the value of Items.
-func (s *TaskClaimConversationList) SetItems(val []TaskClaimConversation) {
-	s.Items = val
-}
-
-// TaskClaimConversationListHeaders wraps TaskClaimConversationList with response headers.
-type TaskClaimConversationListHeaders struct {
+// TaskCancelResultHeaders wraps TaskCancelResult with response headers.
+type TaskCancelResultHeaders struct {
+	Etag       OptString
 	XRequestID OptString
-	Response   TaskClaimConversationList
-}
-
-// GetXRequestID returns the value of XRequestID.
-func (s *TaskClaimConversationListHeaders) GetXRequestID() OptString {
-	return s.XRequestID
-}
-
-// GetResponse returns the value of Response.
-func (s *TaskClaimConversationListHeaders) GetResponse() TaskClaimConversationList {
-	return s.Response
-}
-
-// SetXRequestID sets the value of XRequestID.
-func (s *TaskClaimConversationListHeaders) SetXRequestID(val OptString) {
-	s.XRequestID = val
-}
-
-// SetResponse sets the value of Response.
-func (s *TaskClaimConversationListHeaders) SetResponse(val TaskClaimConversationList) {
-	s.Response = val
-}
-
-func (*TaskClaimConversationListHeaders) listTaskAgentConversationsRes() {}
-
-// TaskClaimCreatedHeaders wraps TaskClaim with response headers.
-type TaskClaimCreatedHeaders struct {
-	Etag                OptString
-	IdempotencyReplayed OptBool
-	Location            OptString
-	XRequestID          OptString
-	Response            TaskClaim
+	Response   TaskCancelResult
 }
 
 // GetEtag returns the value of Etag.
-func (s *TaskClaimCreatedHeaders) GetEtag() OptString {
+func (s *TaskCancelResultHeaders) GetEtag() OptString {
 	return s.Etag
 }
 
-// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
-func (s *TaskClaimCreatedHeaders) GetIdempotencyReplayed() OptBool {
-	return s.IdempotencyReplayed
-}
-
-// GetLocation returns the value of Location.
-func (s *TaskClaimCreatedHeaders) GetLocation() OptString {
-	return s.Location
-}
-
 // GetXRequestID returns the value of XRequestID.
-func (s *TaskClaimCreatedHeaders) GetXRequestID() OptString {
+func (s *TaskCancelResultHeaders) GetXRequestID() OptString {
 	return s.XRequestID
 }
 
 // GetResponse returns the value of Response.
-func (s *TaskClaimCreatedHeaders) GetResponse() TaskClaim {
+func (s *TaskCancelResultHeaders) GetResponse() TaskCancelResult {
 	return s.Response
 }
 
 // SetEtag sets the value of Etag.
-func (s *TaskClaimCreatedHeaders) SetEtag(val OptString) {
+func (s *TaskCancelResultHeaders) SetEtag(val OptString) {
 	s.Etag = val
 }
 
-// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
-func (s *TaskClaimCreatedHeaders) SetIdempotencyReplayed(val OptBool) {
-	s.IdempotencyReplayed = val
-}
-
-// SetLocation sets the value of Location.
-func (s *TaskClaimCreatedHeaders) SetLocation(val OptString) {
-	s.Location = val
-}
-
 // SetXRequestID sets the value of XRequestID.
-func (s *TaskClaimCreatedHeaders) SetXRequestID(val OptString) {
+func (s *TaskCancelResultHeaders) SetXRequestID(val OptString) {
 	s.XRequestID = val
 }
 
 // SetResponse sets the value of Response.
-func (s *TaskClaimCreatedHeaders) SetResponse(val TaskClaim) {
+func (s *TaskCancelResultHeaders) SetResponse(val TaskCancelResult) {
 	s.Response = val
 }
 
-func (*TaskClaimCreatedHeaders) claimTaskRes() {}
+func (*TaskCancelResultHeaders) cancelTaskRes() {}
 
-// TaskClaimHeaders wraps TaskClaim with response headers.
-type TaskClaimHeaders struct {
-	Etag                OptString
-	IdempotencyReplayed OptBool
-	XRequestID          OptString
-	Response            TaskClaim
-}
-
-// GetEtag returns the value of Etag.
-func (s *TaskClaimHeaders) GetEtag() OptString {
-	return s.Etag
-}
-
-// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
-func (s *TaskClaimHeaders) GetIdempotencyReplayed() OptBool {
-	return s.IdempotencyReplayed
-}
-
-// GetXRequestID returns the value of XRequestID.
-func (s *TaskClaimHeaders) GetXRequestID() OptString {
-	return s.XRequestID
-}
-
-// GetResponse returns the value of Response.
-func (s *TaskClaimHeaders) GetResponse() TaskClaim {
-	return s.Response
-}
-
-// SetEtag sets the value of Etag.
-func (s *TaskClaimHeaders) SetEtag(val OptString) {
-	s.Etag = val
-}
-
-// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
-func (s *TaskClaimHeaders) SetIdempotencyReplayed(val OptBool) {
-	s.IdempotencyReplayed = val
-}
-
-// SetXRequestID sets the value of XRequestID.
-func (s *TaskClaimHeaders) SetXRequestID(val OptString) {
-	s.XRequestID = val
-}
-
-// SetResponse sets the value of Response.
-func (s *TaskClaimHeaders) SetResponse(val TaskClaim) {
-	s.Response = val
-}
-
-func (*TaskClaimHeaders) extendTaskClaimRes()     {}
-func (*TaskClaimHeaders) getCurrentTaskClaimRes() {}
-func (*TaskClaimHeaders) getTaskClaimRes()        {}
-func (*TaskClaimHeaders) releaseTaskClaimRes()    {}
-
-// Ref: #/components/schemas/TaskClaimHumanAnswer
-type TaskClaimHumanAnswer struct {
-	Body string `json:"body"`
-}
-
-// GetBody returns the value of Body.
-func (s *TaskClaimHumanAnswer) GetBody() string {
-	return s.Body
-}
-
-// SetBody sets the value of Body.
-func (s *TaskClaimHumanAnswer) SetBody(val string) {
-	s.Body = val
-}
-
-// Ref: #/components/schemas/TaskClaimMessage
-type TaskClaimMessage struct {
-	ID               uuid.UUID                  `json:"id"`
-	ClaimID          uuid.UUID                  `json:"claim_id"`
-	TaskID           uuid.UUID                  `json:"task_id"`
-	AuthorType       TaskClaimMessageAuthorType `json:"author_type"`
-	AuthorUserID     OptUUID                    `json:"author_user_id"`
-	Kind             TaskClaimMessageKind       `json:"kind"`
-	Body             string                     `json:"body"`
-	ReplyToMessageID OptUUID                    `json:"reply_to_message_id"`
-	TokenName        OptString                  `json:"token_name"`
-	CreatedAt        time.Time                  `json:"created_at"`
-}
-
-// GetID returns the value of ID.
-func (s *TaskClaimMessage) GetID() uuid.UUID {
-	return s.ID
-}
-
-// GetClaimID returns the value of ClaimID.
-func (s *TaskClaimMessage) GetClaimID() uuid.UUID {
-	return s.ClaimID
-}
-
-// GetTaskID returns the value of TaskID.
-func (s *TaskClaimMessage) GetTaskID() uuid.UUID {
-	return s.TaskID
-}
-
-// GetAuthorType returns the value of AuthorType.
-func (s *TaskClaimMessage) GetAuthorType() TaskClaimMessageAuthorType {
-	return s.AuthorType
-}
-
-// GetAuthorUserID returns the value of AuthorUserID.
-func (s *TaskClaimMessage) GetAuthorUserID() OptUUID {
-	return s.AuthorUserID
-}
-
-// GetKind returns the value of Kind.
-func (s *TaskClaimMessage) GetKind() TaskClaimMessageKind {
-	return s.Kind
-}
-
-// GetBody returns the value of Body.
-func (s *TaskClaimMessage) GetBody() string {
-	return s.Body
-}
-
-// GetReplyToMessageID returns the value of ReplyToMessageID.
-func (s *TaskClaimMessage) GetReplyToMessageID() OptUUID {
-	return s.ReplyToMessageID
-}
-
-// GetTokenName returns the value of TokenName.
-func (s *TaskClaimMessage) GetTokenName() OptString {
-	return s.TokenName
-}
-
-// GetCreatedAt returns the value of CreatedAt.
-func (s *TaskClaimMessage) GetCreatedAt() time.Time {
-	return s.CreatedAt
-}
-
-// SetID sets the value of ID.
-func (s *TaskClaimMessage) SetID(val uuid.UUID) {
-	s.ID = val
-}
-
-// SetClaimID sets the value of ClaimID.
-func (s *TaskClaimMessage) SetClaimID(val uuid.UUID) {
-	s.ClaimID = val
-}
-
-// SetTaskID sets the value of TaskID.
-func (s *TaskClaimMessage) SetTaskID(val uuid.UUID) {
-	s.TaskID = val
-}
-
-// SetAuthorType sets the value of AuthorType.
-func (s *TaskClaimMessage) SetAuthorType(val TaskClaimMessageAuthorType) {
-	s.AuthorType = val
-}
-
-// SetAuthorUserID sets the value of AuthorUserID.
-func (s *TaskClaimMessage) SetAuthorUserID(val OptUUID) {
-	s.AuthorUserID = val
-}
-
-// SetKind sets the value of Kind.
-func (s *TaskClaimMessage) SetKind(val TaskClaimMessageKind) {
-	s.Kind = val
-}
-
-// SetBody sets the value of Body.
-func (s *TaskClaimMessage) SetBody(val string) {
-	s.Body = val
-}
-
-// SetReplyToMessageID sets the value of ReplyToMessageID.
-func (s *TaskClaimMessage) SetReplyToMessageID(val OptUUID) {
-	s.ReplyToMessageID = val
-}
-
-// SetTokenName sets the value of TokenName.
-func (s *TaskClaimMessage) SetTokenName(val OptString) {
-	s.TokenName = val
-}
-
-// SetCreatedAt sets the value of CreatedAt.
-func (s *TaskClaimMessage) SetCreatedAt(val time.Time) {
-	s.CreatedAt = val
-}
-
-type TaskClaimMessageAuthorType string
+// Ref: #/components/schemas/TaskClaimStage
+type TaskClaimStage string
 
 const (
-	TaskClaimMessageAuthorTypeAgent TaskClaimMessageAuthorType = "agent"
-	TaskClaimMessageAuthorTypeHuman TaskClaimMessageAuthorType = "human"
+	TaskClaimStageExecution TaskClaimStage = "execution"
+	TaskClaimStageReview    TaskClaimStage = "review"
 )
 
-// AllValues returns all TaskClaimMessageAuthorType values.
-func (TaskClaimMessageAuthorType) AllValues() []TaskClaimMessageAuthorType {
-	return []TaskClaimMessageAuthorType{
-		TaskClaimMessageAuthorTypeAgent,
-		TaskClaimMessageAuthorTypeHuman,
+// AllValues returns all TaskClaimStage values.
+func (TaskClaimStage) AllValues() []TaskClaimStage {
+	return []TaskClaimStage{
+		TaskClaimStageExecution,
+		TaskClaimStageReview,
 	}
 }
 
 // MarshalText implements encoding.TextMarshaler.
-func (s TaskClaimMessageAuthorType) MarshalText() ([]byte, error) {
+func (s TaskClaimStage) MarshalText() ([]byte, error) {
 	switch s {
-	case TaskClaimMessageAuthorTypeAgent:
+	case TaskClaimStageExecution:
 		return []byte(s), nil
-	case TaskClaimMessageAuthorTypeHuman:
+	case TaskClaimStageReview:
 		return []byte(s), nil
 	default:
 		return nil, errors.Errorf("invalid value: %q", s)
@@ -7880,294 +7667,13 @@ func (s TaskClaimMessageAuthorType) MarshalText() ([]byte, error) {
 }
 
 // UnmarshalText implements encoding.TextUnmarshaler.
-func (s *TaskClaimMessageAuthorType) UnmarshalText(data []byte) error {
-	switch TaskClaimMessageAuthorType(data) {
-	case TaskClaimMessageAuthorTypeAgent:
-		*s = TaskClaimMessageAuthorTypeAgent
+func (s *TaskClaimStage) UnmarshalText(data []byte) error {
+	switch TaskClaimStage(data) {
+	case TaskClaimStageExecution:
+		*s = TaskClaimStageExecution
 		return nil
-	case TaskClaimMessageAuthorTypeHuman:
-		*s = TaskClaimMessageAuthorTypeHuman
-		return nil
-	default:
-		return errors.Errorf("invalid value: %q", data)
-	}
-}
-
-// TaskClaimMessageCreatedHeaders wraps TaskClaimMessage with response headers.
-type TaskClaimMessageCreatedHeaders struct {
-	IdempotencyReplayed OptBool
-	Location            OptString
-	XRequestID          OptString
-	Response            TaskClaimMessage
-}
-
-// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
-func (s *TaskClaimMessageCreatedHeaders) GetIdempotencyReplayed() OptBool {
-	return s.IdempotencyReplayed
-}
-
-// GetLocation returns the value of Location.
-func (s *TaskClaimMessageCreatedHeaders) GetLocation() OptString {
-	return s.Location
-}
-
-// GetXRequestID returns the value of XRequestID.
-func (s *TaskClaimMessageCreatedHeaders) GetXRequestID() OptString {
-	return s.XRequestID
-}
-
-// GetResponse returns the value of Response.
-func (s *TaskClaimMessageCreatedHeaders) GetResponse() TaskClaimMessage {
-	return s.Response
-}
-
-// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
-func (s *TaskClaimMessageCreatedHeaders) SetIdempotencyReplayed(val OptBool) {
-	s.IdempotencyReplayed = val
-}
-
-// SetLocation sets the value of Location.
-func (s *TaskClaimMessageCreatedHeaders) SetLocation(val OptString) {
-	s.Location = val
-}
-
-// SetXRequestID sets the value of XRequestID.
-func (s *TaskClaimMessageCreatedHeaders) SetXRequestID(val OptString) {
-	s.XRequestID = val
-}
-
-// SetResponse sets the value of Response.
-func (s *TaskClaimMessageCreatedHeaders) SetResponse(val TaskClaimMessage) {
-	s.Response = val
-}
-
-func (*TaskClaimMessageCreatedHeaders) addTaskClaimProgressRes() {}
-
-type TaskClaimMessageKind string
-
-const (
-	TaskClaimMessageKindProgress   TaskClaimMessageKind = "progress"
-	TaskClaimMessageKindQuestion   TaskClaimMessageKind = "question"
-	TaskClaimMessageKindAnswer     TaskClaimMessageKind = "answer"
-	TaskClaimMessageKindHandoff    TaskClaimMessageKind = "handoff"
-	TaskClaimMessageKindSubmission TaskClaimMessageKind = "submission"
-)
-
-// AllValues returns all TaskClaimMessageKind values.
-func (TaskClaimMessageKind) AllValues() []TaskClaimMessageKind {
-	return []TaskClaimMessageKind{
-		TaskClaimMessageKindProgress,
-		TaskClaimMessageKindQuestion,
-		TaskClaimMessageKindAnswer,
-		TaskClaimMessageKindHandoff,
-		TaskClaimMessageKindSubmission,
-	}
-}
-
-// MarshalText implements encoding.TextMarshaler.
-func (s TaskClaimMessageKind) MarshalText() ([]byte, error) {
-	switch s {
-	case TaskClaimMessageKindProgress:
-		return []byte(s), nil
-	case TaskClaimMessageKindQuestion:
-		return []byte(s), nil
-	case TaskClaimMessageKindAnswer:
-		return []byte(s), nil
-	case TaskClaimMessageKindHandoff:
-		return []byte(s), nil
-	case TaskClaimMessageKindSubmission:
-		return []byte(s), nil
-	default:
-		return nil, errors.Errorf("invalid value: %q", s)
-	}
-}
-
-// UnmarshalText implements encoding.TextUnmarshaler.
-func (s *TaskClaimMessageKind) UnmarshalText(data []byte) error {
-	switch TaskClaimMessageKind(data) {
-	case TaskClaimMessageKindProgress:
-		*s = TaskClaimMessageKindProgress
-		return nil
-	case TaskClaimMessageKindQuestion:
-		*s = TaskClaimMessageKindQuestion
-		return nil
-	case TaskClaimMessageKindAnswer:
-		*s = TaskClaimMessageKindAnswer
-		return nil
-	case TaskClaimMessageKindHandoff:
-		*s = TaskClaimMessageKindHandoff
-		return nil
-	case TaskClaimMessageKindSubmission:
-		*s = TaskClaimMessageKindSubmission
-		return nil
-	default:
-		return errors.Errorf("invalid value: %q", data)
-	}
-}
-
-// Ref: #/components/schemas/TaskClaimMessageList
-type TaskClaimMessageList struct {
-	Items []TaskClaimMessage `json:"items"`
-}
-
-// GetItems returns the value of Items.
-func (s *TaskClaimMessageList) GetItems() []TaskClaimMessage {
-	return s.Items
-}
-
-// SetItems sets the value of Items.
-func (s *TaskClaimMessageList) SetItems(val []TaskClaimMessage) {
-	s.Items = val
-}
-
-// TaskClaimMessageListHeaders wraps TaskClaimMessageList with response headers.
-type TaskClaimMessageListHeaders struct {
-	XRequestID OptString
-	Response   TaskClaimMessageList
-}
-
-// GetXRequestID returns the value of XRequestID.
-func (s *TaskClaimMessageListHeaders) GetXRequestID() OptString {
-	return s.XRequestID
-}
-
-// GetResponse returns the value of Response.
-func (s *TaskClaimMessageListHeaders) GetResponse() TaskClaimMessageList {
-	return s.Response
-}
-
-// SetXRequestID sets the value of XRequestID.
-func (s *TaskClaimMessageListHeaders) SetXRequestID(val OptString) {
-	s.XRequestID = val
-}
-
-// SetResponse sets the value of Response.
-func (s *TaskClaimMessageListHeaders) SetResponse(val TaskClaimMessageList) {
-	s.Response = val
-}
-
-func (*TaskClaimMessageListHeaders) listTaskClaimMessagesRes() {}
-
-// Ref: #/components/schemas/TaskClaimRelease
-type TaskClaimRelease struct {
-	ClientKind      OptString `json:"client_kind"`
-	ClientSessionID OptString `json:"client_session_id"`
-	Handoff         OptString `json:"handoff"`
-}
-
-// GetClientKind returns the value of ClientKind.
-func (s *TaskClaimRelease) GetClientKind() OptString {
-	return s.ClientKind
-}
-
-// GetClientSessionID returns the value of ClientSessionID.
-func (s *TaskClaimRelease) GetClientSessionID() OptString {
-	return s.ClientSessionID
-}
-
-// GetHandoff returns the value of Handoff.
-func (s *TaskClaimRelease) GetHandoff() OptString {
-	return s.Handoff
-}
-
-// SetClientKind sets the value of ClientKind.
-func (s *TaskClaimRelease) SetClientKind(val OptString) {
-	s.ClientKind = val
-}
-
-// SetClientSessionID sets the value of ClientSessionID.
-func (s *TaskClaimRelease) SetClientSessionID(val OptString) {
-	s.ClientSessionID = val
-}
-
-// SetHandoff sets the value of Handoff.
-func (s *TaskClaimRelease) SetHandoff(val OptString) {
-	s.Handoff = val
-}
-
-// Ref: #/components/schemas/TaskClaimSession
-type TaskClaimSession struct {
-	ClientKind      string `json:"client_kind"`
-	ClientSessionID string `json:"client_session_id"`
-}
-
-// GetClientKind returns the value of ClientKind.
-func (s *TaskClaimSession) GetClientKind() string {
-	return s.ClientKind
-}
-
-// GetClientSessionID returns the value of ClientSessionID.
-func (s *TaskClaimSession) GetClientSessionID() string {
-	return s.ClientSessionID
-}
-
-// SetClientKind sets the value of ClientKind.
-func (s *TaskClaimSession) SetClientKind(val string) {
-	s.ClientKind = val
-}
-
-// SetClientSessionID sets the value of ClientSessionID.
-func (s *TaskClaimSession) SetClientSessionID(val string) {
-	s.ClientSessionID = val
-}
-
-// Ref: #/components/schemas/TaskClaimStatus
-type TaskClaimStatus string
-
-const (
-	TaskClaimStatusActive       TaskClaimStatus = "active"
-	TaskClaimStatusWaitingHuman TaskClaimStatus = "waiting_human"
-	TaskClaimStatusSubmitted    TaskClaimStatus = "submitted"
-	TaskClaimStatusReleased     TaskClaimStatus = "released"
-	TaskClaimStatusExpired      TaskClaimStatus = "expired"
-)
-
-// AllValues returns all TaskClaimStatus values.
-func (TaskClaimStatus) AllValues() []TaskClaimStatus {
-	return []TaskClaimStatus{
-		TaskClaimStatusActive,
-		TaskClaimStatusWaitingHuman,
-		TaskClaimStatusSubmitted,
-		TaskClaimStatusReleased,
-		TaskClaimStatusExpired,
-	}
-}
-
-// MarshalText implements encoding.TextMarshaler.
-func (s TaskClaimStatus) MarshalText() ([]byte, error) {
-	switch s {
-	case TaskClaimStatusActive:
-		return []byte(s), nil
-	case TaskClaimStatusWaitingHuman:
-		return []byte(s), nil
-	case TaskClaimStatusSubmitted:
-		return []byte(s), nil
-	case TaskClaimStatusReleased:
-		return []byte(s), nil
-	case TaskClaimStatusExpired:
-		return []byte(s), nil
-	default:
-		return nil, errors.Errorf("invalid value: %q", s)
-	}
-}
-
-// UnmarshalText implements encoding.TextUnmarshaler.
-func (s *TaskClaimStatus) UnmarshalText(data []byte) error {
-	switch TaskClaimStatus(data) {
-	case TaskClaimStatusActive:
-		*s = TaskClaimStatusActive
-		return nil
-	case TaskClaimStatusWaitingHuman:
-		*s = TaskClaimStatusWaitingHuman
-		return nil
-	case TaskClaimStatusSubmitted:
-		*s = TaskClaimStatusSubmitted
-		return nil
-	case TaskClaimStatusReleased:
-		*s = TaskClaimStatusReleased
-		return nil
-	case TaskClaimStatusExpired:
-		*s = TaskClaimStatusExpired
+	case TaskClaimStageReview:
+		*s = TaskClaimStageReview
 		return nil
 	default:
 		return errors.Errorf("invalid value: %q", data)
@@ -8180,12 +7686,10 @@ type TaskCreate struct {
 	// Why the task is needed or what current problem it addresses.
 	Context string `json:"context"`
 	// The observable result expected when the task is complete.
-	ExpectedResult string               `json:"expected_result"`
-	Description    OptString            `json:"description"`
-	Status         OptTaskStatus        `json:"status"`
-	Priority       OptTaskPriority      `json:"priority"`
-	ExecutionMode  OptTaskExecutionMode `json:"execution_mode"`
-	AssigneeID     OptNilUUID           `json:"assignee_id"`
+	ExpectedResult string          `json:"expected_result"`
+	Description    OptString       `json:"description"`
+	Priority       OptTaskPriority `json:"priority"`
+	AssigneeID     OptNilUUID      `json:"assignee_id"`
 	// Optional first scheduled day. Must not be after due_date.
 	StartDate     OptNilDate  `json:"start_date"`
 	DueDate       OptNilDate  `json:"due_date"`
@@ -8219,19 +7723,9 @@ func (s *TaskCreate) GetDescription() OptString {
 	return s.Description
 }
 
-// GetStatus returns the value of Status.
-func (s *TaskCreate) GetStatus() OptTaskStatus {
-	return s.Status
-}
-
 // GetPriority returns the value of Priority.
 func (s *TaskCreate) GetPriority() OptTaskPriority {
 	return s.Priority
-}
-
-// GetExecutionMode returns the value of ExecutionMode.
-func (s *TaskCreate) GetExecutionMode() OptTaskExecutionMode {
-	return s.ExecutionMode
 }
 
 // GetAssigneeID returns the value of AssigneeID.
@@ -8294,19 +7788,9 @@ func (s *TaskCreate) SetDescription(val OptString) {
 	s.Description = val
 }
 
-// SetStatus sets the value of Status.
-func (s *TaskCreate) SetStatus(val OptTaskStatus) {
-	s.Status = val
-}
-
 // SetPriority sets the value of Priority.
 func (s *TaskCreate) SetPriority(val OptTaskPriority) {
 	s.Priority = val
-}
-
-// SetExecutionMode sets the value of ExecutionMode.
-func (s *TaskCreate) SetExecutionMode(val OptTaskExecutionMode) {
-	s.ExecutionMode = val
 }
 
 // SetAssigneeID sets the value of AssigneeID.
@@ -8443,47 +7927,92 @@ func (s *TaskCreatedHeaders) SetResponse(val Task) {
 
 func (*TaskCreatedHeaders) createTaskRes() {}
 
-// Ref: #/components/schemas/TaskExecutionMode
-type TaskExecutionMode string
-
-const (
-	TaskExecutionModeHumanOnly    TaskExecutionMode = "human_only"
-	TaskExecutionModeAgentAllowed TaskExecutionMode = "agent_allowed"
-)
-
-// AllValues returns all TaskExecutionMode values.
-func (TaskExecutionMode) AllValues() []TaskExecutionMode {
-	return []TaskExecutionMode{
-		TaskExecutionModeHumanOnly,
-		TaskExecutionModeAgentAllowed,
-	}
+// Ref: #/components/schemas/TaskExecutionCompletionCommand
+type TaskExecutionCompletionCommand struct {
+	Task       TaskWorkflow   `json:"task"`
+	Claim      TaskStageClaim `json:"claim"`
+	Completion TaskThreadItem `json:"completion"`
 }
 
-// MarshalText implements encoding.TextMarshaler.
-func (s TaskExecutionMode) MarshalText() ([]byte, error) {
-	switch s {
-	case TaskExecutionModeHumanOnly:
-		return []byte(s), nil
-	case TaskExecutionModeAgentAllowed:
-		return []byte(s), nil
-	default:
-		return nil, errors.Errorf("invalid value: %q", s)
-	}
+// GetTask returns the value of Task.
+func (s *TaskExecutionCompletionCommand) GetTask() TaskWorkflow {
+	return s.Task
 }
 
-// UnmarshalText implements encoding.TextUnmarshaler.
-func (s *TaskExecutionMode) UnmarshalText(data []byte) error {
-	switch TaskExecutionMode(data) {
-	case TaskExecutionModeHumanOnly:
-		*s = TaskExecutionModeHumanOnly
-		return nil
-	case TaskExecutionModeAgentAllowed:
-		*s = TaskExecutionModeAgentAllowed
-		return nil
-	default:
-		return errors.Errorf("invalid value: %q", data)
-	}
+// GetClaim returns the value of Claim.
+func (s *TaskExecutionCompletionCommand) GetClaim() TaskStageClaim {
+	return s.Claim
 }
+
+// GetCompletion returns the value of Completion.
+func (s *TaskExecutionCompletionCommand) GetCompletion() TaskThreadItem {
+	return s.Completion
+}
+
+// SetTask sets the value of Task.
+func (s *TaskExecutionCompletionCommand) SetTask(val TaskWorkflow) {
+	s.Task = val
+}
+
+// SetClaim sets the value of Claim.
+func (s *TaskExecutionCompletionCommand) SetClaim(val TaskStageClaim) {
+	s.Claim = val
+}
+
+// SetCompletion sets the value of Completion.
+func (s *TaskExecutionCompletionCommand) SetCompletion(val TaskThreadItem) {
+	s.Completion = val
+}
+
+// TaskExecutionCompletionCommandHeaders wraps TaskExecutionCompletionCommand with response headers.
+type TaskExecutionCompletionCommandHeaders struct {
+	Etag                OptString
+	IdempotencyReplayed OptBool
+	XRequestID          OptString
+	Response            TaskExecutionCompletionCommand
+}
+
+// GetEtag returns the value of Etag.
+func (s *TaskExecutionCompletionCommandHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *TaskExecutionCompletionCommandHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskExecutionCompletionCommandHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskExecutionCompletionCommandHeaders) GetResponse() TaskExecutionCompletionCommand {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *TaskExecutionCompletionCommandHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *TaskExecutionCompletionCommandHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskExecutionCompletionCommandHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskExecutionCompletionCommandHeaders) SetResponse(val TaskExecutionCompletionCommand) {
+	s.Response = val
+}
+
+func (*TaskExecutionCompletionCommandHeaders) completeTaskExecutionRes() {}
 
 // TaskHeaders wraps Task with response headers.
 type TaskHeaders struct {
@@ -8570,6 +8099,97 @@ func (*TaskHeaders) archiveTaskRes() {}
 func (*TaskHeaders) getTaskRes()     {}
 func (*TaskHeaders) restoreTaskRes() {}
 func (*TaskHeaders) updateTaskRes()  {}
+
+// Ref: #/components/schemas/TaskIssueResolve
+type TaskIssueResolve struct {
+	ThreadVersion int64  `json:"thread_version"`
+	Resolution    string `json:"resolution"`
+}
+
+// GetThreadVersion returns the value of ThreadVersion.
+func (s *TaskIssueResolve) GetThreadVersion() int64 {
+	return s.ThreadVersion
+}
+
+// GetResolution returns the value of Resolution.
+func (s *TaskIssueResolve) GetResolution() string {
+	return s.Resolution
+}
+
+// SetThreadVersion sets the value of ThreadVersion.
+func (s *TaskIssueResolve) SetThreadVersion(val int64) {
+	s.ThreadVersion = val
+}
+
+// SetResolution sets the value of Resolution.
+func (s *TaskIssueResolve) SetResolution(val string) {
+	s.Resolution = val
+}
+
+// Ref: #/components/schemas/TaskIssueResolved
+type TaskIssueResolved struct {
+	Task  TaskWorkflow `json:"task"`
+	Issue TaskThread   `json:"issue"`
+}
+
+// GetTask returns the value of Task.
+func (s *TaskIssueResolved) GetTask() TaskWorkflow {
+	return s.Task
+}
+
+// GetIssue returns the value of Issue.
+func (s *TaskIssueResolved) GetIssue() TaskThread {
+	return s.Issue
+}
+
+// SetTask sets the value of Task.
+func (s *TaskIssueResolved) SetTask(val TaskWorkflow) {
+	s.Task = val
+}
+
+// SetIssue sets the value of Issue.
+func (s *TaskIssueResolved) SetIssue(val TaskThread) {
+	s.Issue = val
+}
+
+// TaskIssueResolvedHeaders wraps TaskIssueResolved with response headers.
+type TaskIssueResolvedHeaders struct {
+	Etag       OptString
+	XRequestID OptString
+	Response   TaskIssueResolved
+}
+
+// GetEtag returns the value of Etag.
+func (s *TaskIssueResolvedHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskIssueResolvedHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskIssueResolvedHeaders) GetResponse() TaskIssueResolved {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *TaskIssueResolvedHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskIssueResolvedHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskIssueResolvedHeaders) SetResponse(val TaskIssueResolved) {
+	s.Response = val
+}
+
+func (*TaskIssueResolvedHeaders) resolveTaskIssueRes() {}
 
 // Merged schema.
 // Ref: #/components/schemas/TaskList
@@ -8661,20 +8281,17 @@ func (*TaskListHeaders) listTasksRes() {}
 
 // Ref: #/components/schemas/TaskPatch
 type TaskPatch struct {
-	Title          OptString            `json:"title"`
-	Context        OptString            `json:"context"`
-	ExpectedResult OptString            `json:"expected_result"`
-	Description    OptString            `json:"description"`
-	Status         OptTaskStatus        `json:"status"`
-	Priority       OptTaskPriority      `json:"priority"`
-	ExecutionMode  OptTaskExecutionMode `json:"execution_mode"`
-	AssigneeID     OptNilUUID           `json:"assignee_id"`
+	Title          OptString       `json:"title"`
+	Context        OptString       `json:"context"`
+	ExpectedResult OptString       `json:"expected_result"`
+	Description    OptString       `json:"description"`
+	Priority       OptTaskPriority `json:"priority"`
+	AssigneeID     OptNilUUID      `json:"assignee_id"`
 	// Set or clear the first scheduled day. Must not be after due_date.
-	StartDate     OptNilDate  `json:"start_date"`
-	DueDate       OptNilDate  `json:"due_date"`
-	LabelIds      []uuid.UUID `json:"label_ids"`
-	ProjectNumber OptInt64    `json:"project_number"`
-	MilestoneID   OptNilUUID  `json:"milestone_id"`
+	StartDate   OptNilDate  `json:"start_date"`
+	DueDate     OptNilDate  `json:"due_date"`
+	LabelIds    []uuid.UUID `json:"label_ids"`
+	MilestoneID OptNilUUID  `json:"milestone_id"`
 	// Set or clear the one-level parent relationship. Moving a child to another Project or Milestone
 	// requires clearing this field in the same request.
 	ParentNumber OptNilInt64 `json:"parent_number"`
@@ -8706,19 +8323,9 @@ func (s *TaskPatch) GetDescription() OptString {
 	return s.Description
 }
 
-// GetStatus returns the value of Status.
-func (s *TaskPatch) GetStatus() OptTaskStatus {
-	return s.Status
-}
-
 // GetPriority returns the value of Priority.
 func (s *TaskPatch) GetPriority() OptTaskPriority {
 	return s.Priority
-}
-
-// GetExecutionMode returns the value of ExecutionMode.
-func (s *TaskPatch) GetExecutionMode() OptTaskExecutionMode {
-	return s.ExecutionMode
 }
 
 // GetAssigneeID returns the value of AssigneeID.
@@ -8739,11 +8346,6 @@ func (s *TaskPatch) GetDueDate() OptNilDate {
 // GetLabelIds returns the value of LabelIds.
 func (s *TaskPatch) GetLabelIds() []uuid.UUID {
 	return s.LabelIds
-}
-
-// GetProjectNumber returns the value of ProjectNumber.
-func (s *TaskPatch) GetProjectNumber() OptInt64 {
-	return s.ProjectNumber
 }
 
 // GetMilestoneID returns the value of MilestoneID.
@@ -8786,19 +8388,9 @@ func (s *TaskPatch) SetDescription(val OptString) {
 	s.Description = val
 }
 
-// SetStatus sets the value of Status.
-func (s *TaskPatch) SetStatus(val OptTaskStatus) {
-	s.Status = val
-}
-
 // SetPriority sets the value of Priority.
 func (s *TaskPatch) SetPriority(val OptTaskPriority) {
 	s.Priority = val
-}
-
-// SetExecutionMode sets the value of ExecutionMode.
-func (s *TaskPatch) SetExecutionMode(val OptTaskExecutionMode) {
-	s.ExecutionMode = val
 }
 
 // SetAssigneeID sets the value of AssigneeID.
@@ -8821,11 +8413,6 @@ func (s *TaskPatch) SetLabelIds(val []uuid.UUID) {
 	s.LabelIds = val
 }
 
-// SetProjectNumber sets the value of ProjectNumber.
-func (s *TaskPatch) SetProjectNumber(val OptInt64) {
-	s.ProjectNumber = val
-}
-
 // SetMilestoneID sets the value of MilestoneID.
 func (s *TaskPatch) SetMilestoneID(val OptNilUUID) {
 	s.MilestoneID = val
@@ -8844,6 +8431,76 @@ func (s *TaskPatch) SetDependencyNumbers(val []int64) {
 // SetScheduleShiftDays sets the value of ScheduleShiftDays.
 func (s *TaskPatch) SetScheduleShiftDays(val OptInt) {
 	s.ScheduleShiftDays = val
+}
+
+// Ref: #/components/schemas/TaskPhase
+type TaskPhase string
+
+const (
+	TaskPhaseBacklog    TaskPhase = "backlog"
+	TaskPhaseReady      TaskPhase = "ready"
+	TaskPhaseInProgress TaskPhase = "in_progress"
+	TaskPhaseInReview   TaskPhase = "in_review"
+	TaskPhaseDone       TaskPhase = "done"
+	TaskPhaseCancelled  TaskPhase = "cancelled"
+)
+
+// AllValues returns all TaskPhase values.
+func (TaskPhase) AllValues() []TaskPhase {
+	return []TaskPhase{
+		TaskPhaseBacklog,
+		TaskPhaseReady,
+		TaskPhaseInProgress,
+		TaskPhaseInReview,
+		TaskPhaseDone,
+		TaskPhaseCancelled,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s TaskPhase) MarshalText() ([]byte, error) {
+	switch s {
+	case TaskPhaseBacklog:
+		return []byte(s), nil
+	case TaskPhaseReady:
+		return []byte(s), nil
+	case TaskPhaseInProgress:
+		return []byte(s), nil
+	case TaskPhaseInReview:
+		return []byte(s), nil
+	case TaskPhaseDone:
+		return []byte(s), nil
+	case TaskPhaseCancelled:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *TaskPhase) UnmarshalText(data []byte) error {
+	switch TaskPhase(data) {
+	case TaskPhaseBacklog:
+		*s = TaskPhaseBacklog
+		return nil
+	case TaskPhaseReady:
+		*s = TaskPhaseReady
+		return nil
+	case TaskPhaseInProgress:
+		*s = TaskPhaseInProgress
+		return nil
+	case TaskPhaseInReview:
+		*s = TaskPhaseInReview
+		return nil
+	case TaskPhaseDone:
+		*s = TaskPhaseDone
+		return nil
+	case TaskPhaseCancelled:
+		*s = TaskPhaseCancelled
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
 }
 
 // Ref: #/components/schemas/TaskPriority
@@ -8914,7 +8571,7 @@ type TaskRelationRef struct {
 	ID        uuid.UUID       `json:"id"`
 	Number    int64           `json:"number"`
 	Title     string          `json:"title"`
-	Status    TaskStatus      `json:"status"`
+	Phase     TaskPhase       `json:"phase"`
 	Archived  bool            `json:"archived"`
 	Milestone OptMilestoneRef `json:"milestone"`
 }
@@ -8934,9 +8591,9 @@ func (s *TaskRelationRef) GetTitle() string {
 	return s.Title
 }
 
-// GetStatus returns the value of Status.
-func (s *TaskRelationRef) GetStatus() TaskStatus {
-	return s.Status
+// GetPhase returns the value of Phase.
+func (s *TaskRelationRef) GetPhase() TaskPhase {
+	return s.Phase
 }
 
 // GetArchived returns the value of Archived.
@@ -8964,9 +8621,9 @@ func (s *TaskRelationRef) SetTitle(val string) {
 	s.Title = val
 }
 
-// SetStatus sets the value of Status.
-func (s *TaskRelationRef) SetStatus(val TaskStatus) {
-	s.Status = val
+// SetPhase sets the value of Phase.
+func (s *TaskRelationRef) SetPhase(val TaskPhase) {
+	s.Phase = val
 }
 
 // SetArchived sets the value of Archived.
@@ -8979,40 +8636,372 @@ func (s *TaskRelationRef) SetMilestone(val OptMilestoneRef) {
 	s.Milestone = val
 }
 
-// Ref: #/components/schemas/TaskStatus
-type TaskStatus string
+// Ref: #/components/schemas/TaskResolutionRequest
+type TaskResolutionRequest struct {
+	ClaimVersion int64           `json:"claim_version"`
+	IssueType    IssueThreadType `json:"issue_type"`
+	Request      string          `json:"request"`
+}
+
+// GetClaimVersion returns the value of ClaimVersion.
+func (s *TaskResolutionRequest) GetClaimVersion() int64 {
+	return s.ClaimVersion
+}
+
+// GetIssueType returns the value of IssueType.
+func (s *TaskResolutionRequest) GetIssueType() IssueThreadType {
+	return s.IssueType
+}
+
+// GetRequest returns the value of Request.
+func (s *TaskResolutionRequest) GetRequest() string {
+	return s.Request
+}
+
+// SetClaimVersion sets the value of ClaimVersion.
+func (s *TaskResolutionRequest) SetClaimVersion(val int64) {
+	s.ClaimVersion = val
+}
+
+// SetIssueType sets the value of IssueType.
+func (s *TaskResolutionRequest) SetIssueType(val IssueThreadType) {
+	s.IssueType = val
+}
+
+// SetRequest sets the value of Request.
+func (s *TaskResolutionRequest) SetRequest(val string) {
+	s.Request = val
+}
+
+// Ref: #/components/schemas/TaskResolutionRequested
+type TaskResolutionRequested struct {
+	Task  TaskWorkflow   `json:"task"`
+	Claim TaskStageClaim `json:"claim"`
+	Issue TaskThread     `json:"issue"`
+}
+
+// GetTask returns the value of Task.
+func (s *TaskResolutionRequested) GetTask() TaskWorkflow {
+	return s.Task
+}
+
+// GetClaim returns the value of Claim.
+func (s *TaskResolutionRequested) GetClaim() TaskStageClaim {
+	return s.Claim
+}
+
+// GetIssue returns the value of Issue.
+func (s *TaskResolutionRequested) GetIssue() TaskThread {
+	return s.Issue
+}
+
+// SetTask sets the value of Task.
+func (s *TaskResolutionRequested) SetTask(val TaskWorkflow) {
+	s.Task = val
+}
+
+// SetClaim sets the value of Claim.
+func (s *TaskResolutionRequested) SetClaim(val TaskStageClaim) {
+	s.Claim = val
+}
+
+// SetIssue sets the value of Issue.
+func (s *TaskResolutionRequested) SetIssue(val TaskThread) {
+	s.Issue = val
+}
+
+// TaskResolutionRequestedHeaders wraps TaskResolutionRequested with response headers.
+type TaskResolutionRequestedHeaders struct {
+	Etag       OptString
+	XRequestID OptString
+	Response   TaskResolutionRequested
+}
+
+// GetEtag returns the value of Etag.
+func (s *TaskResolutionRequestedHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskResolutionRequestedHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskResolutionRequestedHeaders) GetResponse() TaskResolutionRequested {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *TaskResolutionRequestedHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskResolutionRequestedHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskResolutionRequestedHeaders) SetResponse(val TaskResolutionRequested) {
+	s.Response = val
+}
+
+func (*TaskResolutionRequestedHeaders) requestTaskResolutionRes() {}
+
+// Ref: #/components/schemas/TaskStageAcceptanceCheckWrite
+type TaskStageAcceptanceCheckWrite struct {
+	ClaimVersion      int64             `json:"claim_version"`
+	CriterionRevision int               `json:"criterion_revision"`
+	Outcome           AcceptanceOutcome `json:"outcome"`
+	Evidence          string            `json:"evidence"`
+}
+
+// GetClaimVersion returns the value of ClaimVersion.
+func (s *TaskStageAcceptanceCheckWrite) GetClaimVersion() int64 {
+	return s.ClaimVersion
+}
+
+// GetCriterionRevision returns the value of CriterionRevision.
+func (s *TaskStageAcceptanceCheckWrite) GetCriterionRevision() int {
+	return s.CriterionRevision
+}
+
+// GetOutcome returns the value of Outcome.
+func (s *TaskStageAcceptanceCheckWrite) GetOutcome() AcceptanceOutcome {
+	return s.Outcome
+}
+
+// GetEvidence returns the value of Evidence.
+func (s *TaskStageAcceptanceCheckWrite) GetEvidence() string {
+	return s.Evidence
+}
+
+// SetClaimVersion sets the value of ClaimVersion.
+func (s *TaskStageAcceptanceCheckWrite) SetClaimVersion(val int64) {
+	s.ClaimVersion = val
+}
+
+// SetCriterionRevision sets the value of CriterionRevision.
+func (s *TaskStageAcceptanceCheckWrite) SetCriterionRevision(val int) {
+	s.CriterionRevision = val
+}
+
+// SetOutcome sets the value of Outcome.
+func (s *TaskStageAcceptanceCheckWrite) SetOutcome(val AcceptanceOutcome) {
+	s.Outcome = val
+}
+
+// SetEvidence sets the value of Evidence.
+func (s *TaskStageAcceptanceCheckWrite) SetEvidence(val string) {
+	s.Evidence = val
+}
+
+// Ref: #/components/schemas/TaskStageClaim
+type TaskStageClaim struct {
+	ID                   uuid.UUID                          `json:"id"`
+	TaskID               uuid.UUID                          `json:"task_id"`
+	TaskNumber           int64                              `json:"task_number"`
+	Stage                TaskClaimStage                     `json:"stage"`
+	ClaimedBy            Actor                              `json:"claimed_by"`
+	SubjectUserID        uuid.UUID                          `json:"subject_user_id"`
+	AuthenticationMethod TaskStageClaimAuthenticationMethod `json:"authentication_method"`
+	TokenName            OptString                          `json:"token_name"`
+	ClientKind           string                             `json:"client_kind"`
+	Status               TaskStageClaimStatus               `json:"status"`
+	Outcome              OptTaskStageClaimOutcome           `json:"outcome"`
+	Version              int64                              `json:"version"`
+	ExpiresAt            time.Time                          `json:"expires_at"`
+	CreatedAt            time.Time                          `json:"created_at"`
+	UpdatedAt            time.Time                          `json:"updated_at"`
+	CompletedAt          OptDateTime                        `json:"completed_at"`
+}
+
+// GetID returns the value of ID.
+func (s *TaskStageClaim) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetTaskID returns the value of TaskID.
+func (s *TaskStageClaim) GetTaskID() uuid.UUID {
+	return s.TaskID
+}
+
+// GetTaskNumber returns the value of TaskNumber.
+func (s *TaskStageClaim) GetTaskNumber() int64 {
+	return s.TaskNumber
+}
+
+// GetStage returns the value of Stage.
+func (s *TaskStageClaim) GetStage() TaskClaimStage {
+	return s.Stage
+}
+
+// GetClaimedBy returns the value of ClaimedBy.
+func (s *TaskStageClaim) GetClaimedBy() Actor {
+	return s.ClaimedBy
+}
+
+// GetSubjectUserID returns the value of SubjectUserID.
+func (s *TaskStageClaim) GetSubjectUserID() uuid.UUID {
+	return s.SubjectUserID
+}
+
+// GetAuthenticationMethod returns the value of AuthenticationMethod.
+func (s *TaskStageClaim) GetAuthenticationMethod() TaskStageClaimAuthenticationMethod {
+	return s.AuthenticationMethod
+}
+
+// GetTokenName returns the value of TokenName.
+func (s *TaskStageClaim) GetTokenName() OptString {
+	return s.TokenName
+}
+
+// GetClientKind returns the value of ClientKind.
+func (s *TaskStageClaim) GetClientKind() string {
+	return s.ClientKind
+}
+
+// GetStatus returns the value of Status.
+func (s *TaskStageClaim) GetStatus() TaskStageClaimStatus {
+	return s.Status
+}
+
+// GetOutcome returns the value of Outcome.
+func (s *TaskStageClaim) GetOutcome() OptTaskStageClaimOutcome {
+	return s.Outcome
+}
+
+// GetVersion returns the value of Version.
+func (s *TaskStageClaim) GetVersion() int64 {
+	return s.Version
+}
+
+// GetExpiresAt returns the value of ExpiresAt.
+func (s *TaskStageClaim) GetExpiresAt() time.Time {
+	return s.ExpiresAt
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *TaskStageClaim) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *TaskStageClaim) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// GetCompletedAt returns the value of CompletedAt.
+func (s *TaskStageClaim) GetCompletedAt() OptDateTime {
+	return s.CompletedAt
+}
+
+// SetID sets the value of ID.
+func (s *TaskStageClaim) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetTaskID sets the value of TaskID.
+func (s *TaskStageClaim) SetTaskID(val uuid.UUID) {
+	s.TaskID = val
+}
+
+// SetTaskNumber sets the value of TaskNumber.
+func (s *TaskStageClaim) SetTaskNumber(val int64) {
+	s.TaskNumber = val
+}
+
+// SetStage sets the value of Stage.
+func (s *TaskStageClaim) SetStage(val TaskClaimStage) {
+	s.Stage = val
+}
+
+// SetClaimedBy sets the value of ClaimedBy.
+func (s *TaskStageClaim) SetClaimedBy(val Actor) {
+	s.ClaimedBy = val
+}
+
+// SetSubjectUserID sets the value of SubjectUserID.
+func (s *TaskStageClaim) SetSubjectUserID(val uuid.UUID) {
+	s.SubjectUserID = val
+}
+
+// SetAuthenticationMethod sets the value of AuthenticationMethod.
+func (s *TaskStageClaim) SetAuthenticationMethod(val TaskStageClaimAuthenticationMethod) {
+	s.AuthenticationMethod = val
+}
+
+// SetTokenName sets the value of TokenName.
+func (s *TaskStageClaim) SetTokenName(val OptString) {
+	s.TokenName = val
+}
+
+// SetClientKind sets the value of ClientKind.
+func (s *TaskStageClaim) SetClientKind(val string) {
+	s.ClientKind = val
+}
+
+// SetStatus sets the value of Status.
+func (s *TaskStageClaim) SetStatus(val TaskStageClaimStatus) {
+	s.Status = val
+}
+
+// SetOutcome sets the value of Outcome.
+func (s *TaskStageClaim) SetOutcome(val OptTaskStageClaimOutcome) {
+	s.Outcome = val
+}
+
+// SetVersion sets the value of Version.
+func (s *TaskStageClaim) SetVersion(val int64) {
+	s.Version = val
+}
+
+// SetExpiresAt sets the value of ExpiresAt.
+func (s *TaskStageClaim) SetExpiresAt(val time.Time) {
+	s.ExpiresAt = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *TaskStageClaim) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *TaskStageClaim) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// SetCompletedAt sets the value of CompletedAt.
+func (s *TaskStageClaim) SetCompletedAt(val OptDateTime) {
+	s.CompletedAt = val
+}
+
+type TaskStageClaimAuthenticationMethod string
 
 const (
-	TaskStatusTodo       TaskStatus = "todo"
-	TaskStatusInProgress TaskStatus = "in_progress"
-	TaskStatusInReview   TaskStatus = "in_review"
-	TaskStatusDone       TaskStatus = "done"
-	TaskStatusCancelled  TaskStatus = "cancelled"
+	TaskStageClaimAuthenticationMethodSession       TaskStageClaimAuthenticationMethod = "session"
+	TaskStageClaimAuthenticationMethodAPIToken      TaskStageClaimAuthenticationMethod = "api_token"
+	TaskStageClaimAuthenticationMethodAgentDelegate TaskStageClaimAuthenticationMethod = "agent_delegate"
 )
 
-// AllValues returns all TaskStatus values.
-func (TaskStatus) AllValues() []TaskStatus {
-	return []TaskStatus{
-		TaskStatusTodo,
-		TaskStatusInProgress,
-		TaskStatusInReview,
-		TaskStatusDone,
-		TaskStatusCancelled,
+// AllValues returns all TaskStageClaimAuthenticationMethod values.
+func (TaskStageClaimAuthenticationMethod) AllValues() []TaskStageClaimAuthenticationMethod {
+	return []TaskStageClaimAuthenticationMethod{
+		TaskStageClaimAuthenticationMethodSession,
+		TaskStageClaimAuthenticationMethodAPIToken,
+		TaskStageClaimAuthenticationMethodAgentDelegate,
 	}
 }
 
 // MarshalText implements encoding.TextMarshaler.
-func (s TaskStatus) MarshalText() ([]byte, error) {
+func (s TaskStageClaimAuthenticationMethod) MarshalText() ([]byte, error) {
 	switch s {
-	case TaskStatusTodo:
+	case TaskStageClaimAuthenticationMethodSession:
 		return []byte(s), nil
-	case TaskStatusInProgress:
+	case TaskStageClaimAuthenticationMethodAPIToken:
 		return []byte(s), nil
-	case TaskStatusInReview:
-		return []byte(s), nil
-	case TaskStatusDone:
-		return []byte(s), nil
-	case TaskStatusCancelled:
+	case TaskStageClaimAuthenticationMethodAgentDelegate:
 		return []byte(s), nil
 	default:
 		return nil, errors.Errorf("invalid value: %q", s)
@@ -9020,27 +9009,1302 @@ func (s TaskStatus) MarshalText() ([]byte, error) {
 }
 
 // UnmarshalText implements encoding.TextUnmarshaler.
-func (s *TaskStatus) UnmarshalText(data []byte) error {
-	switch TaskStatus(data) {
-	case TaskStatusTodo:
-		*s = TaskStatusTodo
+func (s *TaskStageClaimAuthenticationMethod) UnmarshalText(data []byte) error {
+	switch TaskStageClaimAuthenticationMethod(data) {
+	case TaskStageClaimAuthenticationMethodSession:
+		*s = TaskStageClaimAuthenticationMethodSession
 		return nil
-	case TaskStatusInProgress:
-		*s = TaskStatusInProgress
+	case TaskStageClaimAuthenticationMethodAPIToken:
+		*s = TaskStageClaimAuthenticationMethodAPIToken
 		return nil
-	case TaskStatusInReview:
-		*s = TaskStatusInReview
-		return nil
-	case TaskStatusDone:
-		*s = TaskStatusDone
-		return nil
-	case TaskStatusCancelled:
-		*s = TaskStatusCancelled
+	case TaskStageClaimAuthenticationMethodAgentDelegate:
+		*s = TaskStageClaimAuthenticationMethodAgentDelegate
 		return nil
 	default:
 		return errors.Errorf("invalid value: %q", data)
 	}
 }
+
+// Ref: #/components/schemas/TaskStageClaimCommand
+type TaskStageClaimCommand struct {
+	Task  TaskWorkflow   `json:"task"`
+	Claim TaskStageClaim `json:"claim"`
+}
+
+// GetTask returns the value of Task.
+func (s *TaskStageClaimCommand) GetTask() TaskWorkflow {
+	return s.Task
+}
+
+// GetClaim returns the value of Claim.
+func (s *TaskStageClaimCommand) GetClaim() TaskStageClaim {
+	return s.Claim
+}
+
+// SetTask sets the value of Task.
+func (s *TaskStageClaimCommand) SetTask(val TaskWorkflow) {
+	s.Task = val
+}
+
+// SetClaim sets the value of Claim.
+func (s *TaskStageClaimCommand) SetClaim(val TaskStageClaim) {
+	s.Claim = val
+}
+
+// TaskStageClaimCommandHeaders wraps TaskStageClaimCommand with response headers.
+type TaskStageClaimCommandHeaders struct {
+	Etag                OptString
+	IdempotencyReplayed OptBool
+	XRequestID          OptString
+	Response            TaskStageClaimCommand
+}
+
+// GetEtag returns the value of Etag.
+func (s *TaskStageClaimCommandHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *TaskStageClaimCommandHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskStageClaimCommandHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskStageClaimCommandHeaders) GetResponse() TaskStageClaimCommand {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *TaskStageClaimCommandHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *TaskStageClaimCommandHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskStageClaimCommandHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskStageClaimCommandHeaders) SetResponse(val TaskStageClaimCommand) {
+	s.Response = val
+}
+
+func (*TaskStageClaimCommandHeaders) acceptTaskRes()            {}
+func (*TaskStageClaimCommandHeaders) createTaskStageClaimRes()  {}
+func (*TaskStageClaimCommandHeaders) releaseTaskStageClaimRes() {}
+func (*TaskStageClaimCommandHeaders) requestTaskChangesRes()    {}
+
+// Ref: #/components/schemas/TaskStageClaimCreate
+type TaskStageClaimCreate struct {
+	ClientKind      OptString `json:"client_kind"`
+	ClientSessionID OptString `json:"client_session_id"`
+}
+
+// GetClientKind returns the value of ClientKind.
+func (s *TaskStageClaimCreate) GetClientKind() OptString {
+	return s.ClientKind
+}
+
+// GetClientSessionID returns the value of ClientSessionID.
+func (s *TaskStageClaimCreate) GetClientSessionID() OptString {
+	return s.ClientSessionID
+}
+
+// SetClientKind sets the value of ClientKind.
+func (s *TaskStageClaimCreate) SetClientKind(val OptString) {
+	s.ClientKind = val
+}
+
+// SetClientSessionID sets the value of ClientSessionID.
+func (s *TaskStageClaimCreate) SetClientSessionID(val OptString) {
+	s.ClientSessionID = val
+}
+
+// Ref: #/components/schemas/TaskStageClaimFinish
+type TaskStageClaimFinish struct {
+	ClaimVersion int64  `json:"claim_version"`
+	Body         string `json:"body"`
+}
+
+// GetClaimVersion returns the value of ClaimVersion.
+func (s *TaskStageClaimFinish) GetClaimVersion() int64 {
+	return s.ClaimVersion
+}
+
+// GetBody returns the value of Body.
+func (s *TaskStageClaimFinish) GetBody() string {
+	return s.Body
+}
+
+// SetClaimVersion sets the value of ClaimVersion.
+func (s *TaskStageClaimFinish) SetClaimVersion(val int64) {
+	s.ClaimVersion = val
+}
+
+// SetBody sets the value of Body.
+func (s *TaskStageClaimFinish) SetBody(val string) {
+	s.Body = val
+}
+
+// TaskStageClaimHeaders wraps TaskStageClaim with response headers.
+type TaskStageClaimHeaders struct {
+	Etag       OptString
+	XRequestID OptString
+	Response   TaskStageClaim
+}
+
+// GetEtag returns the value of Etag.
+func (s *TaskStageClaimHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskStageClaimHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskStageClaimHeaders) GetResponse() TaskStageClaim {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *TaskStageClaimHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskStageClaimHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskStageClaimHeaders) SetResponse(val TaskStageClaim) {
+	s.Response = val
+}
+
+func (*TaskStageClaimHeaders) getCurrentTaskStageClaimRes() {}
+
+// Ref: #/components/schemas/TaskStageClaimList
+type TaskStageClaimList struct {
+	Items []TaskStageClaim `json:"items"`
+}
+
+// GetItems returns the value of Items.
+func (s *TaskStageClaimList) GetItems() []TaskStageClaim {
+	return s.Items
+}
+
+// SetItems sets the value of Items.
+func (s *TaskStageClaimList) SetItems(val []TaskStageClaim) {
+	s.Items = val
+}
+
+// TaskStageClaimListHeaders wraps TaskStageClaimList with response headers.
+type TaskStageClaimListHeaders struct {
+	XRequestID OptString
+	Response   TaskStageClaimList
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskStageClaimListHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskStageClaimListHeaders) GetResponse() TaskStageClaimList {
+	return s.Response
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskStageClaimListHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskStageClaimListHeaders) SetResponse(val TaskStageClaimList) {
+	s.Response = val
+}
+
+func (*TaskStageClaimListHeaders) listTaskStageClaimsRes() {}
+
+// Ref: #/components/schemas/TaskStageClaimOutcome
+type TaskStageClaimOutcome string
+
+const (
+	TaskStageClaimOutcomeExecutionCompleted  TaskStageClaimOutcome = "execution_completed"
+	TaskStageClaimOutcomeTaskAccepted        TaskStageClaimOutcome = "task_accepted"
+	TaskStageClaimOutcomeChangesRequested    TaskStageClaimOutcome = "changes_requested"
+	TaskStageClaimOutcomeNeedsResolution     TaskStageClaimOutcome = "needs_resolution"
+	TaskStageClaimOutcomeVoluntarilyReleased TaskStageClaimOutcome = "voluntarily_released"
+	TaskStageClaimOutcomeDeadlineElapsed     TaskStageClaimOutcome = "deadline_elapsed"
+	TaskStageClaimOutcomeTaskCancelled       TaskStageClaimOutcome = "task_cancelled"
+)
+
+// AllValues returns all TaskStageClaimOutcome values.
+func (TaskStageClaimOutcome) AllValues() []TaskStageClaimOutcome {
+	return []TaskStageClaimOutcome{
+		TaskStageClaimOutcomeExecutionCompleted,
+		TaskStageClaimOutcomeTaskAccepted,
+		TaskStageClaimOutcomeChangesRequested,
+		TaskStageClaimOutcomeNeedsResolution,
+		TaskStageClaimOutcomeVoluntarilyReleased,
+		TaskStageClaimOutcomeDeadlineElapsed,
+		TaskStageClaimOutcomeTaskCancelled,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s TaskStageClaimOutcome) MarshalText() ([]byte, error) {
+	switch s {
+	case TaskStageClaimOutcomeExecutionCompleted:
+		return []byte(s), nil
+	case TaskStageClaimOutcomeTaskAccepted:
+		return []byte(s), nil
+	case TaskStageClaimOutcomeChangesRequested:
+		return []byte(s), nil
+	case TaskStageClaimOutcomeNeedsResolution:
+		return []byte(s), nil
+	case TaskStageClaimOutcomeVoluntarilyReleased:
+		return []byte(s), nil
+	case TaskStageClaimOutcomeDeadlineElapsed:
+		return []byte(s), nil
+	case TaskStageClaimOutcomeTaskCancelled:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *TaskStageClaimOutcome) UnmarshalText(data []byte) error {
+	switch TaskStageClaimOutcome(data) {
+	case TaskStageClaimOutcomeExecutionCompleted:
+		*s = TaskStageClaimOutcomeExecutionCompleted
+		return nil
+	case TaskStageClaimOutcomeTaskAccepted:
+		*s = TaskStageClaimOutcomeTaskAccepted
+		return nil
+	case TaskStageClaimOutcomeChangesRequested:
+		*s = TaskStageClaimOutcomeChangesRequested
+		return nil
+	case TaskStageClaimOutcomeNeedsResolution:
+		*s = TaskStageClaimOutcomeNeedsResolution
+		return nil
+	case TaskStageClaimOutcomeVoluntarilyReleased:
+		*s = TaskStageClaimOutcomeVoluntarilyReleased
+		return nil
+	case TaskStageClaimOutcomeDeadlineElapsed:
+		*s = TaskStageClaimOutcomeDeadlineElapsed
+		return nil
+	case TaskStageClaimOutcomeTaskCancelled:
+		*s = TaskStageClaimOutcomeTaskCancelled
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/TaskStageClaimStatus
+type TaskStageClaimStatus string
+
+const (
+	TaskStageClaimStatusActive    TaskStageClaimStatus = "active"
+	TaskStageClaimStatusCompleted TaskStageClaimStatus = "completed"
+	TaskStageClaimStatusReleased  TaskStageClaimStatus = "released"
+	TaskStageClaimStatusExpired   TaskStageClaimStatus = "expired"
+	TaskStageClaimStatusCancelled TaskStageClaimStatus = "cancelled"
+)
+
+// AllValues returns all TaskStageClaimStatus values.
+func (TaskStageClaimStatus) AllValues() []TaskStageClaimStatus {
+	return []TaskStageClaimStatus{
+		TaskStageClaimStatusActive,
+		TaskStageClaimStatusCompleted,
+		TaskStageClaimStatusReleased,
+		TaskStageClaimStatusExpired,
+		TaskStageClaimStatusCancelled,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s TaskStageClaimStatus) MarshalText() ([]byte, error) {
+	switch s {
+	case TaskStageClaimStatusActive:
+		return []byte(s), nil
+	case TaskStageClaimStatusCompleted:
+		return []byte(s), nil
+	case TaskStageClaimStatusReleased:
+		return []byte(s), nil
+	case TaskStageClaimStatusExpired:
+		return []byte(s), nil
+	case TaskStageClaimStatusCancelled:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *TaskStageClaimStatus) UnmarshalText(data []byte) error {
+	switch TaskStageClaimStatus(data) {
+	case TaskStageClaimStatusActive:
+		*s = TaskStageClaimStatusActive
+		return nil
+	case TaskStageClaimStatusCompleted:
+		*s = TaskStageClaimStatusCompleted
+		return nil
+	case TaskStageClaimStatusReleased:
+		*s = TaskStageClaimStatusReleased
+		return nil
+	case TaskStageClaimStatusExpired:
+		*s = TaskStageClaimStatusExpired
+		return nil
+	case TaskStageClaimStatusCancelled:
+		*s = TaskStageClaimStatusCancelled
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/TaskThread
+type TaskThread struct {
+	ID              uuid.UUID            `json:"id"`
+	TaskID          uuid.UUID            `json:"task_id"`
+	Role            TaskThreadRole       `json:"role"`
+	IssueType       OptIssueThreadType   `json:"issue_type"`
+	IssueStatus     OptIssueThreadStatus `json:"issue_status"`
+	OpenedFromPhase OptTaskPhase         `json:"opened_from_phase"`
+	OpenedBy        OptActor             `json:"opened_by"`
+	ResolvedBy      OptActor             `json:"resolved_by"`
+	Version         int64                `json:"version"`
+	CreatedAt       time.Time            `json:"created_at"`
+	UpdatedAt       time.Time            `json:"updated_at"`
+	ResolvedAt      OptDateTime          `json:"resolved_at"`
+}
+
+// GetID returns the value of ID.
+func (s *TaskThread) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetTaskID returns the value of TaskID.
+func (s *TaskThread) GetTaskID() uuid.UUID {
+	return s.TaskID
+}
+
+// GetRole returns the value of Role.
+func (s *TaskThread) GetRole() TaskThreadRole {
+	return s.Role
+}
+
+// GetIssueType returns the value of IssueType.
+func (s *TaskThread) GetIssueType() OptIssueThreadType {
+	return s.IssueType
+}
+
+// GetIssueStatus returns the value of IssueStatus.
+func (s *TaskThread) GetIssueStatus() OptIssueThreadStatus {
+	return s.IssueStatus
+}
+
+// GetOpenedFromPhase returns the value of OpenedFromPhase.
+func (s *TaskThread) GetOpenedFromPhase() OptTaskPhase {
+	return s.OpenedFromPhase
+}
+
+// GetOpenedBy returns the value of OpenedBy.
+func (s *TaskThread) GetOpenedBy() OptActor {
+	return s.OpenedBy
+}
+
+// GetResolvedBy returns the value of ResolvedBy.
+func (s *TaskThread) GetResolvedBy() OptActor {
+	return s.ResolvedBy
+}
+
+// GetVersion returns the value of Version.
+func (s *TaskThread) GetVersion() int64 {
+	return s.Version
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *TaskThread) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *TaskThread) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// GetResolvedAt returns the value of ResolvedAt.
+func (s *TaskThread) GetResolvedAt() OptDateTime {
+	return s.ResolvedAt
+}
+
+// SetID sets the value of ID.
+func (s *TaskThread) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetTaskID sets the value of TaskID.
+func (s *TaskThread) SetTaskID(val uuid.UUID) {
+	s.TaskID = val
+}
+
+// SetRole sets the value of Role.
+func (s *TaskThread) SetRole(val TaskThreadRole) {
+	s.Role = val
+}
+
+// SetIssueType sets the value of IssueType.
+func (s *TaskThread) SetIssueType(val OptIssueThreadType) {
+	s.IssueType = val
+}
+
+// SetIssueStatus sets the value of IssueStatus.
+func (s *TaskThread) SetIssueStatus(val OptIssueThreadStatus) {
+	s.IssueStatus = val
+}
+
+// SetOpenedFromPhase sets the value of OpenedFromPhase.
+func (s *TaskThread) SetOpenedFromPhase(val OptTaskPhase) {
+	s.OpenedFromPhase = val
+}
+
+// SetOpenedBy sets the value of OpenedBy.
+func (s *TaskThread) SetOpenedBy(val OptActor) {
+	s.OpenedBy = val
+}
+
+// SetResolvedBy sets the value of ResolvedBy.
+func (s *TaskThread) SetResolvedBy(val OptActor) {
+	s.ResolvedBy = val
+}
+
+// SetVersion sets the value of Version.
+func (s *TaskThread) SetVersion(val int64) {
+	s.Version = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *TaskThread) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *TaskThread) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// SetResolvedAt sets the value of ResolvedAt.
+func (s *TaskThread) SetResolvedAt(val OptDateTime) {
+	s.ResolvedAt = val
+}
+
+// Ref: #/components/schemas/TaskThreadItem
+type TaskThreadItem struct {
+	ID                 uuid.UUID                    `json:"id"`
+	ThreadID           uuid.UUID                    `json:"thread_id"`
+	Kind               TaskThreadItemKind           `json:"kind"`
+	Author             Actor                        `json:"author"`
+	Body               OptString                    `json:"body"`
+	IssueResolution    OptIssueResolutionPayload    `json:"issue_resolution"`
+	ExecutionCompleted OptExecutionCompletedPayload `json:"execution_completed"`
+	TaskStageClaimID   OptUUID                      `json:"task_stage_claim_id"`
+	TaskReviewCycle    OptInt64                     `json:"task_review_cycle"`
+	ReplyToItemID      OptUUID                      `json:"reply_to_item_id"`
+	MentionedUserIds   []uuid.UUID                  `json:"mentioned_user_ids"`
+	Version            int64                        `json:"version"`
+	CreatedAt          time.Time                    `json:"created_at"`
+	UpdatedAt          time.Time                    `json:"updated_at"`
+	DeletedAt          OptDateTime                  `json:"deleted_at"`
+}
+
+// GetID returns the value of ID.
+func (s *TaskThreadItem) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetThreadID returns the value of ThreadID.
+func (s *TaskThreadItem) GetThreadID() uuid.UUID {
+	return s.ThreadID
+}
+
+// GetKind returns the value of Kind.
+func (s *TaskThreadItem) GetKind() TaskThreadItemKind {
+	return s.Kind
+}
+
+// GetAuthor returns the value of Author.
+func (s *TaskThreadItem) GetAuthor() Actor {
+	return s.Author
+}
+
+// GetBody returns the value of Body.
+func (s *TaskThreadItem) GetBody() OptString {
+	return s.Body
+}
+
+// GetIssueResolution returns the value of IssueResolution.
+func (s *TaskThreadItem) GetIssueResolution() OptIssueResolutionPayload {
+	return s.IssueResolution
+}
+
+// GetExecutionCompleted returns the value of ExecutionCompleted.
+func (s *TaskThreadItem) GetExecutionCompleted() OptExecutionCompletedPayload {
+	return s.ExecutionCompleted
+}
+
+// GetTaskStageClaimID returns the value of TaskStageClaimID.
+func (s *TaskThreadItem) GetTaskStageClaimID() OptUUID {
+	return s.TaskStageClaimID
+}
+
+// GetTaskReviewCycle returns the value of TaskReviewCycle.
+func (s *TaskThreadItem) GetTaskReviewCycle() OptInt64 {
+	return s.TaskReviewCycle
+}
+
+// GetReplyToItemID returns the value of ReplyToItemID.
+func (s *TaskThreadItem) GetReplyToItemID() OptUUID {
+	return s.ReplyToItemID
+}
+
+// GetMentionedUserIds returns the value of MentionedUserIds.
+func (s *TaskThreadItem) GetMentionedUserIds() []uuid.UUID {
+	return s.MentionedUserIds
+}
+
+// GetVersion returns the value of Version.
+func (s *TaskThreadItem) GetVersion() int64 {
+	return s.Version
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *TaskThreadItem) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *TaskThreadItem) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// GetDeletedAt returns the value of DeletedAt.
+func (s *TaskThreadItem) GetDeletedAt() OptDateTime {
+	return s.DeletedAt
+}
+
+// SetID sets the value of ID.
+func (s *TaskThreadItem) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetThreadID sets the value of ThreadID.
+func (s *TaskThreadItem) SetThreadID(val uuid.UUID) {
+	s.ThreadID = val
+}
+
+// SetKind sets the value of Kind.
+func (s *TaskThreadItem) SetKind(val TaskThreadItemKind) {
+	s.Kind = val
+}
+
+// SetAuthor sets the value of Author.
+func (s *TaskThreadItem) SetAuthor(val Actor) {
+	s.Author = val
+}
+
+// SetBody sets the value of Body.
+func (s *TaskThreadItem) SetBody(val OptString) {
+	s.Body = val
+}
+
+// SetIssueResolution sets the value of IssueResolution.
+func (s *TaskThreadItem) SetIssueResolution(val OptIssueResolutionPayload) {
+	s.IssueResolution = val
+}
+
+// SetExecutionCompleted sets the value of ExecutionCompleted.
+func (s *TaskThreadItem) SetExecutionCompleted(val OptExecutionCompletedPayload) {
+	s.ExecutionCompleted = val
+}
+
+// SetTaskStageClaimID sets the value of TaskStageClaimID.
+func (s *TaskThreadItem) SetTaskStageClaimID(val OptUUID) {
+	s.TaskStageClaimID = val
+}
+
+// SetTaskReviewCycle sets the value of TaskReviewCycle.
+func (s *TaskThreadItem) SetTaskReviewCycle(val OptInt64) {
+	s.TaskReviewCycle = val
+}
+
+// SetReplyToItemID sets the value of ReplyToItemID.
+func (s *TaskThreadItem) SetReplyToItemID(val OptUUID) {
+	s.ReplyToItemID = val
+}
+
+// SetMentionedUserIds sets the value of MentionedUserIds.
+func (s *TaskThreadItem) SetMentionedUserIds(val []uuid.UUID) {
+	s.MentionedUserIds = val
+}
+
+// SetVersion sets the value of Version.
+func (s *TaskThreadItem) SetVersion(val int64) {
+	s.Version = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *TaskThreadItem) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *TaskThreadItem) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// SetDeletedAt sets the value of DeletedAt.
+func (s *TaskThreadItem) SetDeletedAt(val OptDateTime) {
+	s.DeletedAt = val
+}
+
+// TaskThreadItemHeaders wraps TaskThreadItem with response headers.
+type TaskThreadItemHeaders struct {
+	Etag       OptString
+	XRequestID OptString
+	Response   TaskThreadItem
+}
+
+// GetEtag returns the value of Etag.
+func (s *TaskThreadItemHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskThreadItemHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskThreadItemHeaders) GetResponse() TaskThreadItem {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *TaskThreadItemHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskThreadItemHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskThreadItemHeaders) SetResponse(val TaskThreadItem) {
+	s.Response = val
+}
+
+func (*TaskThreadItemHeaders) createTaskThreadMessageRes() {}
+func (*TaskThreadItemHeaders) deleteTaskThreadMessageRes() {}
+func (*TaskThreadItemHeaders) updateTaskThreadMessageRes() {}
+
+// Ref: #/components/schemas/TaskThreadItemKind
+type TaskThreadItemKind string
+
+const (
+	TaskThreadItemKindMessage            TaskThreadItemKind = "message"
+	TaskThreadItemKindProgress           TaskThreadItemKind = "progress"
+	TaskThreadItemKindHandoff            TaskThreadItemKind = "handoff"
+	TaskThreadItemKindWorkSubmission     TaskThreadItemKind = "work_submission"
+	TaskThreadItemKindExecutionCompleted TaskThreadItemKind = "execution_completed"
+	TaskThreadItemKindReviewOutcome      TaskThreadItemKind = "review_outcome"
+	TaskThreadItemKindResolutionRequest  TaskThreadItemKind = "resolution_request"
+	TaskThreadItemKindResolution         TaskThreadItemKind = "resolution"
+	TaskThreadItemKindIssueResolution    TaskThreadItemKind = "issue_resolution"
+	TaskThreadItemKindSystemEvent        TaskThreadItemKind = "system_event"
+)
+
+// AllValues returns all TaskThreadItemKind values.
+func (TaskThreadItemKind) AllValues() []TaskThreadItemKind {
+	return []TaskThreadItemKind{
+		TaskThreadItemKindMessage,
+		TaskThreadItemKindProgress,
+		TaskThreadItemKindHandoff,
+		TaskThreadItemKindWorkSubmission,
+		TaskThreadItemKindExecutionCompleted,
+		TaskThreadItemKindReviewOutcome,
+		TaskThreadItemKindResolutionRequest,
+		TaskThreadItemKindResolution,
+		TaskThreadItemKindIssueResolution,
+		TaskThreadItemKindSystemEvent,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s TaskThreadItemKind) MarshalText() ([]byte, error) {
+	switch s {
+	case TaskThreadItemKindMessage:
+		return []byte(s), nil
+	case TaskThreadItemKindProgress:
+		return []byte(s), nil
+	case TaskThreadItemKindHandoff:
+		return []byte(s), nil
+	case TaskThreadItemKindWorkSubmission:
+		return []byte(s), nil
+	case TaskThreadItemKindExecutionCompleted:
+		return []byte(s), nil
+	case TaskThreadItemKindReviewOutcome:
+		return []byte(s), nil
+	case TaskThreadItemKindResolutionRequest:
+		return []byte(s), nil
+	case TaskThreadItemKindResolution:
+		return []byte(s), nil
+	case TaskThreadItemKindIssueResolution:
+		return []byte(s), nil
+	case TaskThreadItemKindSystemEvent:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *TaskThreadItemKind) UnmarshalText(data []byte) error {
+	switch TaskThreadItemKind(data) {
+	case TaskThreadItemKindMessage:
+		*s = TaskThreadItemKindMessage
+		return nil
+	case TaskThreadItemKindProgress:
+		*s = TaskThreadItemKindProgress
+		return nil
+	case TaskThreadItemKindHandoff:
+		*s = TaskThreadItemKindHandoff
+		return nil
+	case TaskThreadItemKindWorkSubmission:
+		*s = TaskThreadItemKindWorkSubmission
+		return nil
+	case TaskThreadItemKindExecutionCompleted:
+		*s = TaskThreadItemKindExecutionCompleted
+		return nil
+	case TaskThreadItemKindReviewOutcome:
+		*s = TaskThreadItemKindReviewOutcome
+		return nil
+	case TaskThreadItemKindResolutionRequest:
+		*s = TaskThreadItemKindResolutionRequest
+		return nil
+	case TaskThreadItemKindResolution:
+		*s = TaskThreadItemKindResolution
+		return nil
+	case TaskThreadItemKindIssueResolution:
+		*s = TaskThreadItemKindIssueResolution
+		return nil
+	case TaskThreadItemKindSystemEvent:
+		*s = TaskThreadItemKindSystemEvent
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/TaskThreadItemList
+type TaskThreadItemList struct {
+	Items      []TaskThreadItem `json:"items"`
+	NextCursor OptString        `json:"next_cursor"`
+}
+
+// GetItems returns the value of Items.
+func (s *TaskThreadItemList) GetItems() []TaskThreadItem {
+	return s.Items
+}
+
+// GetNextCursor returns the value of NextCursor.
+func (s *TaskThreadItemList) GetNextCursor() OptString {
+	return s.NextCursor
+}
+
+// SetItems sets the value of Items.
+func (s *TaskThreadItemList) SetItems(val []TaskThreadItem) {
+	s.Items = val
+}
+
+// SetNextCursor sets the value of NextCursor.
+func (s *TaskThreadItemList) SetNextCursor(val OptString) {
+	s.NextCursor = val
+}
+
+// TaskThreadItemListHeaders wraps TaskThreadItemList with response headers.
+type TaskThreadItemListHeaders struct {
+	XRequestID OptString
+	Response   TaskThreadItemList
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskThreadItemListHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskThreadItemListHeaders) GetResponse() TaskThreadItemList {
+	return s.Response
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskThreadItemListHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskThreadItemListHeaders) SetResponse(val TaskThreadItemList) {
+	s.Response = val
+}
+
+func (*TaskThreadItemListHeaders) listTaskThreadItemsRes() {}
+
+// Ref: #/components/schemas/TaskThreadList
+type TaskThreadList struct {
+	Items []TaskThread `json:"items"`
+}
+
+// GetItems returns the value of Items.
+func (s *TaskThreadList) GetItems() []TaskThread {
+	return s.Items
+}
+
+// SetItems sets the value of Items.
+func (s *TaskThreadList) SetItems(val []TaskThread) {
+	s.Items = val
+}
+
+// TaskThreadListHeaders wraps TaskThreadList with response headers.
+type TaskThreadListHeaders struct {
+	XRequestID OptString
+	Response   TaskThreadList
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskThreadListHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskThreadListHeaders) GetResponse() TaskThreadList {
+	return s.Response
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskThreadListHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskThreadListHeaders) SetResponse(val TaskThreadList) {
+	s.Response = val
+}
+
+func (*TaskThreadListHeaders) listTaskThreadsRes() {}
+
+// Ref: #/components/schemas/TaskThreadMessageUpdate
+type TaskThreadMessageUpdate struct {
+	Body             string      `json:"body"`
+	MentionedUserIds []uuid.UUID `json:"mentioned_user_ids"`
+}
+
+// GetBody returns the value of Body.
+func (s *TaskThreadMessageUpdate) GetBody() string {
+	return s.Body
+}
+
+// GetMentionedUserIds returns the value of MentionedUserIds.
+func (s *TaskThreadMessageUpdate) GetMentionedUserIds() []uuid.UUID {
+	return s.MentionedUserIds
+}
+
+// SetBody sets the value of Body.
+func (s *TaskThreadMessageUpdate) SetBody(val string) {
+	s.Body = val
+}
+
+// SetMentionedUserIds sets the value of MentionedUserIds.
+func (s *TaskThreadMessageUpdate) SetMentionedUserIds(val []uuid.UUID) {
+	s.MentionedUserIds = val
+}
+
+// Ref: #/components/schemas/TaskThreadMessageWrite
+type TaskThreadMessageWrite struct {
+	Kind             TaskThreadMessageWriteKind `json:"kind"`
+	Body             string                     `json:"body"`
+	ReplyToItemID    OptUUID                    `json:"reply_to_item_id"`
+	MentionedUserIds []uuid.UUID                `json:"mentioned_user_ids"`
+}
+
+// GetKind returns the value of Kind.
+func (s *TaskThreadMessageWrite) GetKind() TaskThreadMessageWriteKind {
+	return s.Kind
+}
+
+// GetBody returns the value of Body.
+func (s *TaskThreadMessageWrite) GetBody() string {
+	return s.Body
+}
+
+// GetReplyToItemID returns the value of ReplyToItemID.
+func (s *TaskThreadMessageWrite) GetReplyToItemID() OptUUID {
+	return s.ReplyToItemID
+}
+
+// GetMentionedUserIds returns the value of MentionedUserIds.
+func (s *TaskThreadMessageWrite) GetMentionedUserIds() []uuid.UUID {
+	return s.MentionedUserIds
+}
+
+// SetKind sets the value of Kind.
+func (s *TaskThreadMessageWrite) SetKind(val TaskThreadMessageWriteKind) {
+	s.Kind = val
+}
+
+// SetBody sets the value of Body.
+func (s *TaskThreadMessageWrite) SetBody(val string) {
+	s.Body = val
+}
+
+// SetReplyToItemID sets the value of ReplyToItemID.
+func (s *TaskThreadMessageWrite) SetReplyToItemID(val OptUUID) {
+	s.ReplyToItemID = val
+}
+
+// SetMentionedUserIds sets the value of MentionedUserIds.
+func (s *TaskThreadMessageWrite) SetMentionedUserIds(val []uuid.UUID) {
+	s.MentionedUserIds = val
+}
+
+type TaskThreadMessageWriteKind string
+
+const (
+	TaskThreadMessageWriteKindMessage  TaskThreadMessageWriteKind = "message"
+	TaskThreadMessageWriteKindProgress TaskThreadMessageWriteKind = "progress"
+)
+
+// AllValues returns all TaskThreadMessageWriteKind values.
+func (TaskThreadMessageWriteKind) AllValues() []TaskThreadMessageWriteKind {
+	return []TaskThreadMessageWriteKind{
+		TaskThreadMessageWriteKindMessage,
+		TaskThreadMessageWriteKindProgress,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s TaskThreadMessageWriteKind) MarshalText() ([]byte, error) {
+	switch s {
+	case TaskThreadMessageWriteKindMessage:
+		return []byte(s), nil
+	case TaskThreadMessageWriteKindProgress:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *TaskThreadMessageWriteKind) UnmarshalText(data []byte) error {
+	switch TaskThreadMessageWriteKind(data) {
+	case TaskThreadMessageWriteKindMessage:
+		*s = TaskThreadMessageWriteKindMessage
+		return nil
+	case TaskThreadMessageWriteKindProgress:
+		*s = TaskThreadMessageWriteKindProgress
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/TaskThreadRole
+type TaskThreadRole string
+
+const (
+	TaskThreadRoleMain  TaskThreadRole = "main"
+	TaskThreadRoleIssue TaskThreadRole = "issue"
+)
+
+// AllValues returns all TaskThreadRole values.
+func (TaskThreadRole) AllValues() []TaskThreadRole {
+	return []TaskThreadRole{
+		TaskThreadRoleMain,
+		TaskThreadRoleIssue,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s TaskThreadRole) MarshalText() ([]byte, error) {
+	switch s {
+	case TaskThreadRoleMain:
+		return []byte(s), nil
+	case TaskThreadRoleIssue:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *TaskThreadRole) UnmarshalText(data []byte) error {
+	switch TaskThreadRole(data) {
+	case TaskThreadRoleMain:
+		*s = TaskThreadRoleMain
+		return nil
+	case TaskThreadRoleIssue:
+		*s = TaskThreadRoleIssue
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/TaskWorkSubmissionCommand
+type TaskWorkSubmissionCommand struct {
+	Task       TaskWorkflow   `json:"task"`
+	Claim      TaskStageClaim `json:"claim"`
+	Submission TaskThreadItem `json:"submission"`
+}
+
+// GetTask returns the value of Task.
+func (s *TaskWorkSubmissionCommand) GetTask() TaskWorkflow {
+	return s.Task
+}
+
+// GetClaim returns the value of Claim.
+func (s *TaskWorkSubmissionCommand) GetClaim() TaskStageClaim {
+	return s.Claim
+}
+
+// GetSubmission returns the value of Submission.
+func (s *TaskWorkSubmissionCommand) GetSubmission() TaskThreadItem {
+	return s.Submission
+}
+
+// SetTask sets the value of Task.
+func (s *TaskWorkSubmissionCommand) SetTask(val TaskWorkflow) {
+	s.Task = val
+}
+
+// SetClaim sets the value of Claim.
+func (s *TaskWorkSubmissionCommand) SetClaim(val TaskStageClaim) {
+	s.Claim = val
+}
+
+// SetSubmission sets the value of Submission.
+func (s *TaskWorkSubmissionCommand) SetSubmission(val TaskThreadItem) {
+	s.Submission = val
+}
+
+// TaskWorkSubmissionCommandHeaders wraps TaskWorkSubmissionCommand with response headers.
+type TaskWorkSubmissionCommandHeaders struct {
+	Etag                OptString
+	IdempotencyReplayed OptBool
+	XRequestID          OptString
+	Response            TaskWorkSubmissionCommand
+}
+
+// GetEtag returns the value of Etag.
+func (s *TaskWorkSubmissionCommandHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *TaskWorkSubmissionCommandHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskWorkSubmissionCommandHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskWorkSubmissionCommandHeaders) GetResponse() TaskWorkSubmissionCommand {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *TaskWorkSubmissionCommandHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *TaskWorkSubmissionCommandHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskWorkSubmissionCommandHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskWorkSubmissionCommandHeaders) SetResponse(val TaskWorkSubmissionCommand) {
+	s.Response = val
+}
+
+func (*TaskWorkSubmissionCommandHeaders) recordTaskWorkSubmissionRes() {}
+
+// Ref: #/components/schemas/TaskWorkflow
+type TaskWorkflow struct {
+	TaskID              uuid.UUID            `json:"task_id"`
+	TaskNumber          int64                `json:"task_number"`
+	Version             int64                `json:"version"`
+	Phase               TaskPhase            `json:"phase"`
+	Activity            OptTaskActivityState `json:"activity"`
+	ReviewCycle         int64                `json:"review_cycle"`
+	ActiveIssueThreadID OptUUID              `json:"active_issue_thread_id"`
+	MainThreadID        uuid.UUID            `json:"main_thread_id"`
+}
+
+// GetTaskID returns the value of TaskID.
+func (s *TaskWorkflow) GetTaskID() uuid.UUID {
+	return s.TaskID
+}
+
+// GetTaskNumber returns the value of TaskNumber.
+func (s *TaskWorkflow) GetTaskNumber() int64 {
+	return s.TaskNumber
+}
+
+// GetVersion returns the value of Version.
+func (s *TaskWorkflow) GetVersion() int64 {
+	return s.Version
+}
+
+// GetPhase returns the value of Phase.
+func (s *TaskWorkflow) GetPhase() TaskPhase {
+	return s.Phase
+}
+
+// GetActivity returns the value of Activity.
+func (s *TaskWorkflow) GetActivity() OptTaskActivityState {
+	return s.Activity
+}
+
+// GetReviewCycle returns the value of ReviewCycle.
+func (s *TaskWorkflow) GetReviewCycle() int64 {
+	return s.ReviewCycle
+}
+
+// GetActiveIssueThreadID returns the value of ActiveIssueThreadID.
+func (s *TaskWorkflow) GetActiveIssueThreadID() OptUUID {
+	return s.ActiveIssueThreadID
+}
+
+// GetMainThreadID returns the value of MainThreadID.
+func (s *TaskWorkflow) GetMainThreadID() uuid.UUID {
+	return s.MainThreadID
+}
+
+// SetTaskID sets the value of TaskID.
+func (s *TaskWorkflow) SetTaskID(val uuid.UUID) {
+	s.TaskID = val
+}
+
+// SetTaskNumber sets the value of TaskNumber.
+func (s *TaskWorkflow) SetTaskNumber(val int64) {
+	s.TaskNumber = val
+}
+
+// SetVersion sets the value of Version.
+func (s *TaskWorkflow) SetVersion(val int64) {
+	s.Version = val
+}
+
+// SetPhase sets the value of Phase.
+func (s *TaskWorkflow) SetPhase(val TaskPhase) {
+	s.Phase = val
+}
+
+// SetActivity sets the value of Activity.
+func (s *TaskWorkflow) SetActivity(val OptTaskActivityState) {
+	s.Activity = val
+}
+
+// SetReviewCycle sets the value of ReviewCycle.
+func (s *TaskWorkflow) SetReviewCycle(val int64) {
+	s.ReviewCycle = val
+}
+
+// SetActiveIssueThreadID sets the value of ActiveIssueThreadID.
+func (s *TaskWorkflow) SetActiveIssueThreadID(val OptUUID) {
+	s.ActiveIssueThreadID = val
+}
+
+// SetMainThreadID sets the value of MainThreadID.
+func (s *TaskWorkflow) SetMainThreadID(val uuid.UUID) {
+	s.MainThreadID = val
+}
+
+// TaskWorkflowHeaders wraps TaskWorkflow with response headers.
+type TaskWorkflowHeaders struct {
+	Etag                OptString
+	IdempotencyReplayed OptBool
+	XRequestID          OptString
+	Response            TaskWorkflow
+}
+
+// GetEtag returns the value of Etag.
+func (s *TaskWorkflowHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *TaskWorkflowHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskWorkflowHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskWorkflowHeaders) GetResponse() TaskWorkflow {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *TaskWorkflowHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *TaskWorkflowHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskWorkflowHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskWorkflowHeaders) SetResponse(val TaskWorkflow) {
+	s.Response = val
+}
+
+func (*TaskWorkflowHeaders) markTaskReadyRes()         {}
+func (*TaskWorkflowHeaders) withdrawTaskReadinessRes() {}
 
 type UploadTaskAttachmentContentReq struct {
 	Data io.Reader

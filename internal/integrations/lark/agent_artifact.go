@@ -4,8 +4,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"mime"
 	"net/http"
@@ -133,29 +133,7 @@ func (c *Client) Resolve(
 	path := "/open-apis/im/v1/messages/" + url.PathEscape(registered.MessageID) +
 		"/resources/" + url.PathEscape(registered.ProviderKey) +
 		"?type=" + url.QueryEscape(registered.ResourceType)
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
-	if err != nil {
-		return artifact.LocalFile{}, fmt.Errorf("construct Lark artifact request: %w", err)
-	}
-	request.Header.Set("Authorization", "Bearer "+token)
-	response, err := c.httpClient.Do(request)
-	if err != nil {
-		return artifact.LocalFile{}, fmt.Errorf("download Lark artifact: %w", err)
-	}
-	defer response.Body.Close()
-	requestID := response.Header.Get("X-Tt-Logid")
-	if response.StatusCode != http.StatusOK {
-		slog.Warn("Lark Agent artifact download rejected",
-			"artifact_id", artifactID,
-			"status", response.StatusCode,
-			"request_id", requestID)
-		return artifact.LocalFile{}, fmt.Errorf("download Lark artifact: provider HTTP %d", response.StatusCode)
-	}
-	mediaType, _, _ := mime.ParseMediaType(response.Header.Get("Content-Type"))
 	reference := registered.Reference
-	if mediaType != "" && mediaType != "application/octet-stream" {
-		reference.MediaType = mediaType
-	}
 	extension := filepath.Ext(reference.Name)
 	temporary, err := os.CreateTemp("", "pactline-artifact-*"+extension)
 	if err != nil {
@@ -163,24 +141,31 @@ func (c *Client) Resolve(
 	}
 	pathName := temporary.Name()
 	cleanup := func() error { return os.Remove(pathName) }
-	written, copyErr := io.Copy(temporary, io.LimitReader(response.Body, artifact.MaxFileSize+1))
+	result, downloadErr := c.transport.Download(ctx, DownloadCall{
+		Descriptor: descriptorFor("download_agent_artifact", http.MethodGet),
+		Path:       path, Token: token, Target: temporary, MaxBytes: artifact.MaxFileSize,
+	})
 	closeErr := temporary.Close()
-	if copyErr != nil || closeErr != nil || written > artifact.MaxFileSize {
+	if downloadErr != nil || closeErr != nil {
 		_ = cleanup()
 		switch {
-		case copyErr != nil:
-			return artifact.LocalFile{}, fmt.Errorf("write Lark artifact temporary file: %w", copyErr)
+		case errors.Is(downloadErr, errResponseTooLarge):
+			return artifact.LocalFile{}, artifact.ErrTooLarge
+		case downloadErr != nil:
+			return artifact.LocalFile{}, fmt.Errorf("download Lark artifact: %w", downloadErr)
 		case closeErr != nil:
 			return artifact.LocalFile{}, fmt.Errorf("close Lark artifact temporary file: %w", closeErr)
-		default:
-			return artifact.LocalFile{}, artifact.ErrTooLarge
 		}
+	}
+	mediaType, _, _ := mime.ParseMediaType(result.ContentType)
+	if mediaType != "" && mediaType != "application/octet-stream" {
+		reference.MediaType = mediaType
 	}
 	slog.Debug("Lark Agent artifact downloaded",
 		"artifact_id", artifactID,
-		"size_bytes", written,
+		"size_bytes", result.ResponseBytes,
 		"media_type", reference.MediaType,
-		"request_id", requestID)
+		"request_id", result.ProviderRequestID)
 	return artifact.LocalFile{Reference: reference, Path: pathName, Cleanup: cleanup}, nil
 }
 

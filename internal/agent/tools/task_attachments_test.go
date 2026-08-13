@@ -89,7 +89,7 @@ func TestCreateTaskPreservesSelectedArtifactInMutationReceipt(t *testing.T) {
 		Response: generated.Task{
 			ID: taskID, Number: 42, Version: 1, Title: "Build prototype",
 			Project: generated.ProjectRef{Number: 7, Name: "Pactline"},
-			Status:  generated.TaskStatusTodo, Priority: generated.TaskPriorityNone,
+			Phase:   generated.TaskPhaseBacklog, Priority: generated.TaskPriorityNone,
 		},
 	}}
 	repository := &createTaskRepositoryStub{run: run}

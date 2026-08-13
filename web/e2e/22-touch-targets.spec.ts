@@ -150,14 +150,14 @@ test('every covered control clears 44px on a phone', async ({ page, uniqueTitle,
   await expect(page.getByRole('link', { name: title, exact: true })).toBeVisible()
   await expectAllFloored(page, 'phone 390 list')
 
-  // FilterBar's 状态 popover: a `Checkbox` per row, wrapped in a `<label>`.
+  // FilterBar's 阶段 popover: a `Checkbox` per row, wrapped in a `<label>`.
   // This is the exact case the previous review missed — `button` matched
   // Radix's `role="checkbox"` button and clamped the 16px glyph to 44x44.
-  await page.getByRole('button', { name: '状态', exact: true }).click()
-  await expect(page.getByRole('group', { name: '按状态筛选' })).toBeVisible()
+  await page.getByRole('button', { name: '阶段', exact: true }).click()
+  await expect(page.getByRole('group', { name: '按阶段筛选' })).toBeVisible()
   await page.waitForTimeout(300)
-  await expectAllFloored(page, 'phone 390 状态 popover')
-  await expectCheckboxGlyphsNotOversized(page, 'phone 390 状态 popover')
+  await expectAllFloored(page, 'phone 390 阶段 popover')
+  await expectCheckboxGlyphsNotOversized(page, 'phone 390 阶段 popover')
   await page.keyboard.press('Escape')
 
   // RowActionsMenu's "⋯" menu: 打开详情 renders as a plain `<a>` outside any

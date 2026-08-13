@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/wolfhead/pactline/internal/domain"
+	"github.com/wolfhead/pactline/internal/events"
 	"github.com/wolfhead/pactline/internal/identity"
 	"github.com/wolfhead/pactline/internal/store"
 
@@ -330,6 +331,16 @@ func TestPendingAccessRegistrationAndApprovalAreTransactional(t *testing.T) {
 	ctx := context.Background()
 	repository := store.NewIdentityStore(db)
 	now := time.Now().UTC().Truncate(time.Microsecond)
+	var previousRole domain.PlatformRole
+	require.NoError(t, db.Pool.QueryRow(ctx,
+		`SELECT platform_role FROM users WHERE id=$1`, primarySeedID).Scan(&previousRole))
+	_, err := db.Pool.Exec(ctx, `UPDATE users SET platform_role='ADMIN' WHERE id=$1`, primarySeedID)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, cleanupErr := db.Pool.Exec(context.Background(),
+			`UPDATE users SET platform_role=$1 WHERE id=$2`, previousRole, primarySeedID)
+		require.NoError(t, cleanupErr)
+	})
 	userID, sessionID := uuid.New(), uuid.New()
 	key := identity.PrincipalKey{
 		Provider: "lark", TenantID: "tenant-" + uuid.NewString(), SubjectID: "subject",
@@ -353,7 +364,9 @@ func TestPendingAccessRegistrationAndApprovalAreTransactional(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()
-		_, err := db.Pool.Exec(cleanupCtx, `DELETE FROM identity_audit_events WHERE subject_user_id=$1`, userID)
+		_, err := db.Pool.Exec(cleanupCtx, `DELETE FROM outbox_events WHERE aggregate_id=$1`, userID)
+		require.NoError(t, err)
+		_, err = db.Pool.Exec(cleanupCtx, `DELETE FROM identity_audit_events WHERE subject_user_id=$1`, userID)
 		require.NoError(t, err)
 		_, err = db.Pool.Exec(cleanupCtx, `DELETE FROM sessions WHERE user_id=$1`, userID)
 		require.NoError(t, err)
@@ -366,6 +379,16 @@ func TestPendingAccessRegistrationAndApprovalAreTransactional(t *testing.T) {
 	created, err := repository.RegisterAccessRequest(ctx, command)
 	require.NoError(t, err)
 	require.Equal(t, domain.AccessStatusPending, created.AccessStatus)
+	var requestedRecipient uuid.UUID
+	var requestedPayload []byte
+	require.NoError(t, db.Pool.QueryRow(ctx, `SELECT recipient_id, payload FROM outbox_events
+		WHERE aggregate_id=$1 AND event_type=$2`, userID, events.AccessRequested).
+		Scan(&requestedRecipient, &requestedPayload))
+	require.Equal(t, primarySeedID, requestedRecipient)
+	var requestEvent events.AccessRequestedPayload
+	require.NoError(t, json.Unmarshal(requestedPayload, &requestEvent))
+	require.Equal(t, userID, requestEvent.RequesterID)
+	require.Equal(t, "Pending Member", requestEvent.RequesterName)
 	bundle, err := repository.ResolveSession(ctx, sessionID, sessionHash[:], now)
 	require.NoError(t, err)
 	require.Equal(t, domain.AccessStatusPending, bundle.User.AccessStatus)
@@ -382,6 +405,16 @@ func TestPendingAccessRegistrationAndApprovalAreTransactional(t *testing.T) {
 	approved, err := store.NewUserStore(db).GetByID(ctx, userID)
 	require.NoError(t, err)
 	require.True(t, approved.CanUseApplication())
+	var approvedRecipient uuid.UUID
+	var approvedPayload []byte
+	require.NoError(t, db.Pool.QueryRow(ctx, `SELECT recipient_id, payload FROM outbox_events
+		WHERE aggregate_id=$1 AND event_type=$2`, userID, events.AccessApproved).
+		Scan(&approvedRecipient, &approvedPayload))
+	require.Equal(t, userID, approvedRecipient)
+	var approvalEvent events.AccessApprovedPayload
+	require.NoError(t, json.Unmarshal(approvedPayload, &approvalEvent))
+	require.Equal(t, userID, approvalEvent.UserID)
+	require.Equal(t, primarySeedID, approvalEvent.ApprovedByID)
 	require.ErrorIs(t, repository.SetUserAccessStatus(
 		ctx, userID, primarySeedID, domain.AccessStatusRejected, now.Add(3*time.Minute), "request-regress",
 	), domain.ErrConflict)
@@ -414,6 +447,17 @@ func TestCredentialRefreshLockedReusesConcurrentRotation(t *testing.T) {
 	audit := auditEvent("identity_bound", now)
 	audit.SubjectUserID = &userID
 	require.NoError(t, repository.BindExternalIdentity(ctx, external, expired, audit))
+	externalUsers, err := repository.ListExternalIdentityUsers(ctx, "lark")
+	require.NoError(t, err)
+	foundExternalUser := false
+	for _, candidate := range externalUsers {
+		if candidate.ID == userID {
+			foundExternalUser = true
+			require.Equal(t, "Refresh User", candidate.Name)
+			require.True(t, candidate.CanUseApplication())
+		}
+	}
+	require.True(t, foundExternalUser)
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()
 		_, cleanupErr := db.Pool.Exec(cleanupCtx,

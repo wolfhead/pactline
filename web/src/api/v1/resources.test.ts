@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { listTasks, updateTask } from '../tasks'
+import { completeTaskAttachmentUploadVersioned, listTasks, updateTask } from '../tasks'
 import { updateMilestone } from '../projects'
 
 describe('versioned work resource clients', () => {
@@ -58,6 +58,27 @@ describe('versioned work resource clients', () => {
           'If-Match': '"5"',
           'X-Project-If-Match': '"9"',
         }),
+      }),
+    ])
+  })
+
+  it('retains the next Task version after completing an attachment upload', async () => {
+    const attachment = { id: 'attachment-1', filename: 'brief.md' }
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(attachment), {
+      status: 201,
+      headers: { ETag: '"4"' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(completeTaskAttachmentUploadVersioned(42, 'upload-1', 3)).resolves.toEqual({
+      attachment,
+      taskVersion: 4,
+    })
+    expect(fetchMock.mock.calls[0]).toEqual([
+      '/api/v1/tasks/42/attachments/uploads/upload-1/complete',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'If-Match': '"3"' }),
       }),
     ])
   })

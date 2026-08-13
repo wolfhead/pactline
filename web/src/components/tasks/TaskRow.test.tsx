@@ -13,7 +13,8 @@ const TASK: Task = {
   title: '修复竞价超时导致的丢量',
   context: '竞价请求近期频繁超时', expected_result: '恢复稳定流量',
   description: '',
-  status: 'todo', priority: 'high', assignee: USERS[0],
+  phase: 'backlog', activity: null, review_cycle: 0, main_thread_id: 'thread-main-142',
+  priority: 'high', assignee: USERS[0],
   creator: USERS[0], start_date: null, due_date: '2026-07-30',
   project: { id: 'p1', number: 12, name: 'Task Manager' }, milestone: null, labels: [],
   parent: null, children: [], dependencies: [], dependents: [], blocked: false,
@@ -38,47 +39,33 @@ describe('TaskRow', () => {
     cleanup()
   })
 
-  it('shows all three controls without any hover or click first', () => {
+  it('shows phase plus editable priority and assignee without hover', () => {
     renderRow()
     // This is the whole point of the rewrite: the old QuietSelect only
     // rendered a control after interaction. A regression to that fails here.
-    expect(screen.getByRole('combobox', { name: '任务 #142 状态' })).toBeVisible()
+    expect(screen.getByRole('status', { name: '待规划' })).toBeVisible()
     expect(screen.getByRole('combobox', { name: '任务 #142 优先级' })).toBeVisible()
     expect(screen.getByRole('combobox', { name: '任务 #142 负责人' })).toBeVisible()
   })
 
-  it('shows Agent work separately from the editable task status', () => {
+  it('shows the actor-neutral working activity inside the phase marker', () => {
     renderRow({
-      status: 'in_progress',
-      execution_mode: 'agent_allowed',
-      agent_work: {
-        claim_id: 'claim-1',
-        status: 'active',
-        token_name: 'Codex worker',
-        client_kind: 'codex',
-        updated_at: '2026-07-31T00:00:00Z',
-      },
+      phase: 'in_progress',
+      activity: 'working',
     })
 
-    expect(screen.getByRole('combobox', { name: '任务 #142 状态' })).toBeVisible()
-    expect(screen.getByRole('img', { name: 'Agent 执行中' })).toBeVisible()
+    expect(screen.getByRole('status', { name: '执行中 · 正在处理' })).toBeVisible()
+    expect(screen.queryByRole('combobox', { name: /状态/ })).not.toBeInTheDocument()
   })
 
-  it('uses a reduced-motion-safe attention ring while Agent waits for a reply', () => {
-    const { container } = render(
+  it('shows needs_resolution without encoding who requested help', () => {
+    render(
       <MemoryRouter>
         <TaskRow
           task={{
             ...TASK,
-            status: 'in_progress',
-            execution_mode: 'agent_allowed',
-            agent_work: {
-              claim_id: 'claim-2',
-              status: 'waiting_human',
-              token_name: 'Codex worker',
-              client_kind: 'codex',
-              updated_at: '2026-07-31T00:00:00Z',
-            },
+            phase: 'in_progress',
+            activity: 'needs_resolution',
           }}
           selected={false}
           tier="xl"
@@ -90,20 +77,13 @@ describe('TaskRow', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByRole('img', { name: 'Agent 等待你回复' })).toBeVisible()
-    expect(container.querySelector('[data-agent-attention]'))
-      .toHaveClass('agent-attention-breathe')
+    expect(screen.getByRole('status', { name: '执行中 · 等待解决' })).toBeVisible()
   })
 
-  it('sends an optimistic patch carrying both the wire value and the display value', async () => {
+  it('does not expose phase as an arbitrary optimistic patch', () => {
     const onPatch = renderRow()
-    fireEvent.click(screen.getByRole('combobox', { name: '任务 #142 状态' }))
-    fireEvent.click(await screen.findByRole('option', { name: '进行中' }))
-    expect(onPatch).toHaveBeenCalledWith(
-      expect.objectContaining({ number: 142 }),
-      { status: 'in_progress' },
-      { status: 'in_progress' },
-    )
+    expect(screen.queryByRole('combobox', { name: /状态|阶段/ })).not.toBeInTheDocument()
+    expect(onPatch).not.toHaveBeenCalled()
   })
 
   it('maps an assignee change to both the id patch and the resolved user object', async () => {

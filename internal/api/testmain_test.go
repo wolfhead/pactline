@@ -82,7 +82,6 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 	memberships := store.NewProjectMembershipStore(db)
 	milestones := store.NewMilestoneStore(db)
 	acceptance := store.NewAcceptanceStore(db)
-	claims := store.NewTaskClaimStore(db)
 	attachmentObjects, err := blob.NewLocalStore(t.TempDir())
 	require.NoError(t, err)
 	attachmentService := &application.AttachmentService{
@@ -123,7 +122,9 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 		Tasks: &application.TaskService{
 			Tasks: tasks, Comments: comments, Projects: projectService,
 		},
-		Claims:             claims,
+		Workflow:           store.NewTaskWorkflowStore(db),
+		StageClaims:        store.NewTaskStageClaimStore(db),
+		Threads:            store.NewTaskThreadStore(db),
 		Labels:             &application.LabelService{Labels: labels},
 		Projects:           projectService,
 		Access:             projectAccess,
@@ -136,7 +137,8 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 		Auth: api.AuthSurface{
 			Sessions: identityService, Tokens: tokenService,
 			Delegates:   delegateService,
-			AccessAudit: accessAuditStore, Idempotency: store.NewIdempotencyStore(db),
+			AccessAudit: accessAuditStore, LarkAudit: accessAuditStore,
+			Idempotency: store.NewIdempotencyStore(db),
 			Development: devauth.New(users, identityService), AppBaseURL: baseURL,
 		},
 		V1:      v1Handler,
