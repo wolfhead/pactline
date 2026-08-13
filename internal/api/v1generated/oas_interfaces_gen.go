@@ -21,6 +21,10 @@ type ArchiveTaskRes interface {
 	archiveTaskRes()
 }
 
+type BindProjectRepositoryRes interface {
+	bindProjectRepositoryRes()
+}
+
 type CancelMilestoneRes interface {
 	cancelMilestoneRes()
 }
@@ -121,8 +125,16 @@ type GetTaskAttachmentContentRes interface {
 	getTaskAttachmentContentRes()
 }
 
+type GetTaskDeliveryRes interface {
+	getTaskDeliveryRes()
+}
+
 type GetTaskRes interface {
 	getTaskRes()
+}
+
+type LinkTaskMergeRequestRes interface {
+	linkTaskMergeRequestRes()
 }
 
 type ListAgentConversationsRes interface {
@@ -139,6 +151,10 @@ type ListMilestoneCriteriaRes interface {
 
 type ListProjectMembersRes interface {
 	listProjectMembersRes()
+}
+
+type ListProjectRepositoriesRes interface {
+	listProjectRepositoriesRes()
 }
 
 type ListProjectsRes interface {
@@ -219,6 +235,14 @@ type RestoreProjectRes interface {
 
 type RestoreTaskRes interface {
 	restoreTaskRes()
+}
+
+type UnbindProjectRepositoryRes interface {
+	unbindProjectRepositoryRes()
+}
+
+type UnlinkTaskMergeRequestRes interface {
+	unlinkTaskMergeRequestRes()
 }
 
 type UpdateAgentConversationRes interface {

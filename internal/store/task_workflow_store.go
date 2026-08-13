@@ -439,6 +439,23 @@ func (s *TaskWorkflowStore) CompleteExecution(
 	operation domain.OperationActor,
 	now time.Time,
 ) (TaskWorkflowSnapshot, domain.TaskStageClaim, domain.ThreadItem, error) {
+	return s.CompleteExecutionWithDelivery(
+		ctx, taskNumber, claimID, expectedTaskVersion, expectedClaimVersion,
+		summary, nil, actor, operation, now,
+	)
+}
+
+func (s *TaskWorkflowStore) CompleteExecutionWithDelivery(
+	ctx context.Context,
+	taskNumber int64,
+	claimID uuid.UUID,
+	expectedTaskVersion, expectedClaimVersion int64,
+	summary string,
+	mergeRequests []domain.MergeRequestSnapshot,
+	actor domain.Actor,
+	operation domain.OperationActor,
+	now time.Time,
+) (TaskWorkflowSnapshot, domain.TaskStageClaim, domain.ThreadItem, error) {
 	if strings.TrimSpace(summary) == "" {
 		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, domain.ThreadItem{}, fmt.Errorf("%w: completion summary is required", domain.ErrInvalidInput)
 	}
@@ -459,7 +476,9 @@ func (s *TaskWorkflowStore) CompleteExecution(
 	if err := task.Lifecycle.CompleteExecution(); err != nil {
 		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, domain.ThreadItem{}, err
 	}
-	payload, err := executionCompletionPayload(ctx, tx, task, task.Lifecycle.ReviewCycle)
+	payload, err := executionCompletionPayload(
+		ctx, tx, task, task.Lifecycle.ReviewCycle, mergeRequests,
+	)
 	if err != nil {
 		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, domain.ThreadItem{}, err
 	}
@@ -629,9 +648,53 @@ func executionCompletionPayload(
 	tx pgx.Tx,
 	task workflowTask,
 	reviewCycle int64,
+	mergeRequests []domain.MergeRequestSnapshot,
 ) (domain.ExecutionCompletedPayload, error) {
-	payload := domain.ExecutionCompletedPayload{ReviewCycle: reviewCycle}
+	payload := domain.ExecutionCompletedPayload{
+		ReviewCycle: reviewCycle,
+		MergeRequests: append([]domain.MergeRequestSnapshot{}, mergeRequests...),
+	}
 	rows, err := tx.Query(ctx, `
+		SELECT id
+		FROM task_merge_requests
+		WHERE task_id=$1 AND unlinked_at IS NULL
+		ORDER BY project_repository_id,merge_request_iid,id`, task.TaskID)
+	if err != nil {
+		return payload, fmt.Errorf("list active merge requests for completion: %w", err)
+	}
+	activeMergeRequestIDs := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return payload, fmt.Errorf("scan active merge request for completion: %w", err)
+		}
+		activeMergeRequestIDs = append(activeMergeRequestIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return payload, fmt.Errorf("iterate active merge requests for completion: %w", err)
+	}
+	rows.Close()
+	if len(activeMergeRequestIDs) != len(payload.MergeRequests) {
+		return payload, fmt.Errorf("%w: Task merge request delivery changed", domain.ErrConflict)
+	}
+	preparedByID := make(map[uuid.UUID]domain.MergeRequestSnapshot, len(payload.MergeRequests))
+	for _, snapshot := range payload.MergeRequests {
+		if err := snapshot.Validate(); err != nil {
+			return payload, err
+		}
+		if _, duplicate := preparedByID[snapshot.TaskMergeRequestID]; duplicate {
+			return payload, fmt.Errorf("%w: duplicate merge request delivery snapshot", domain.ErrInvalidInput)
+		}
+		preparedByID[snapshot.TaskMergeRequestID] = snapshot
+	}
+	for _, id := range activeMergeRequestIDs {
+		if _, ok := preparedByID[id]; !ok {
+			return payload, fmt.Errorf("%w: Task merge request delivery changed", domain.ErrConflict)
+		}
+	}
+	rows, err = tx.Query(ctx, `
 		SELECT item.id
 		FROM task_thread_items item
 		WHERE item.thread_id=$1

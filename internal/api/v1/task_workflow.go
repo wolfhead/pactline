@@ -187,9 +187,22 @@ func (h *Handler) CompleteTaskExecution(
 	if err != nil {
 		return nil, err
 	}
-	task, claim, completion, err := h.Workflow.CompleteExecution(
+	mergeRequests := []domain.MergeRequestSnapshot{}
+	if h.Delivery != nil {
+		subject, subjectErr := accessSubject(ctx)
+		if subjectErr != nil {
+			return nil, subjectErr
+		}
+		mergeRequests, err = h.Delivery.PrepareCompletion(
+			ctx, params.Number, subject, baseapi.RequestIDFromContext(ctx),
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+	task, claim, completion, err := h.Workflow.CompleteExecutionWithDelivery(
 		ctx, params.Number, params.ID, expectedVersion, req.ClaimVersion,
-		req.Body, actor, operation, time.Now().UTC(),
+		req.Body, mergeRequests, actor, operation, time.Now().UTC(),
 	)
 	if err != nil {
 		return nil, err
@@ -738,11 +751,16 @@ func taskThreadItemFromDomain(item domain.ThreadItem) generated.TaskThreadItem {
 				CriterionID: revision.CriterionID, Revision: revision.Revision,
 			}
 		}
+		mergeRequests := make([]generated.MergeRequestSnapshot, len(payload.MergeRequests))
+		for index, mergeRequest := range payload.MergeRequests {
+			mergeRequests[index] = mergeRequestSnapshotFromDomain(mergeRequest)
+		}
 		out.ExecutionCompleted = generated.NewOptExecutionCompletedPayload(generated.ExecutionCompletedPayload{
 			ReviewCycle:        payload.ReviewCycle,
 			SubmissionItemIds:  submissionItemIDs,
 			ExecutionCheckIds:  executionCheckIDs,
 			CriterionRevisions: criterionRevisions,
+			MergeRequests:      mergeRequests,
 		})
 	}
 	if item.TaskStageClaimID != nil {

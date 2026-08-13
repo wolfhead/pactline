@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -21,8 +22,10 @@ import (
 	apiv1 "github.com/wolfhead/pactline/internal/api/v1"
 	"github.com/wolfhead/pactline/internal/application"
 	"github.com/wolfhead/pactline/internal/blob"
+	"github.com/wolfhead/pactline/internal/domain"
 	"github.com/wolfhead/pactline/internal/identity"
 	"github.com/wolfhead/pactline/internal/integrations/devauth"
+	gitlabintegration "github.com/wolfhead/pactline/internal/integrations/gitlab"
 	legacyapi "github.com/wolfhead/pactline/internal/legacy/api"
 	legacystore "github.com/wolfhead/pactline/internal/legacy/store"
 	"github.com/wolfhead/pactline/internal/store"
@@ -42,6 +45,60 @@ const (
 // DATABASE_URL, so TestMain can print a warning no one can mistake for a
 // clean, full run. Mirrors internal/legacy/api's own testDSN/TestMain.
 var skippedForNoDatabase atomic.Int64
+
+type apiTestGitLabProvider struct {
+	mu                sync.Mutex
+	pathWithNamespace string
+	mergeRequestCalls map[int64]int
+}
+
+func (p *apiTestGitLabProvider) ResolveProject(
+	_ context.Context,
+	origin string,
+	pathWithNamespace string,
+	_ []byte,
+	_ string,
+) (domain.GitLabProjectIdentity, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.pathWithNamespace = pathWithNamespace
+	return domain.GitLabProjectIdentity{
+		ID: 42001, PathWithNamespace: pathWithNamespace,
+		WebURL: origin + "/" + pathWithNamespace, DefaultBranch: "main",
+	}, nil
+}
+
+func (p *apiTestGitLabProvider) GetMergeRequest(
+	_ context.Context,
+	origin string,
+	_ int64,
+	iid int64,
+	_ []byte,
+	_ string,
+) (domain.GitLabMergeRequest, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.mergeRequestCalls == nil {
+		p.mergeRequestCalls = make(map[int64]int)
+	}
+	p.mergeRequestCalls[iid]++
+	if iid == 503 && p.mergeRequestCalls[iid] > 1 {
+		return domain.GitLabMergeRequest{}, &gitlabintegration.ProviderError{
+			Category: gitlabintegration.ErrorUnreachable,
+		}
+	}
+	now := time.Date(2026, 8, 13, 8, 0, 0, 0, time.UTC)
+	return domain.GitLabMergeRequest{
+		ID: 91000 + iid, IID: iid,
+		WebURL: fmt.Sprintf("%s/%s/-/merge_requests/%d", origin, p.pathWithNamespace, iid),
+		Observation: domain.GitLabMergeRequestObservation{
+			Status: domain.GitLabObservationConfirmed, ObservedAt: now,
+			Title: "API delivery evidence", State: domain.GitLabMergeRequestOpened,
+			SourceBranch: "feature/evidence", TargetBranch: "main", HeadSHA: "abc123def456",
+			ProviderUpdatedAt: now,
+		},
+	}, nil
+}
 
 func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 	t.Helper()
@@ -93,6 +150,32 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 	projectAccess := &application.ProjectAccessService{
 		Projects: projects, Tasks: tasks, Memberships: memberships,
 	}
+	gitLabCipher, err := identity.NewCredentialCipher(map[string][]byte{
+		"api-test-gitlab-key": []byte("0123456789abcdef0123456789abcdef"),
+	})
+	require.NoError(t, err)
+	gitLabProvider := &apiTestGitLabProvider{}
+	gitLabConnectionService := &application.GitLabConnectionService{
+		Connections: store.NewGitLabConnectionStore(db),
+		Provider:    gitLabProvider,
+		Cipher:      gitLabCipher, EncryptionKeyID: "api-test-gitlab-key",
+		Now: time.Now,
+	}
+	projectRepositoryService := &application.ProjectRepositoryService{
+		Repositories: store.NewProjectRepositoryStore(db),
+		Connections:  store.NewGitLabConnectionStore(db),
+		GitLab:       gitLabConnectionService,
+		Access:       projectAccess,
+		Now:          time.Now,
+	}
+	taskDeliveryService := &application.TaskDeliveryService{
+		MergeRequests: store.NewTaskMergeRequestStore(db),
+		Repositories:  store.NewProjectRepositoryStore(db),
+		Access:        projectAccess,
+		Provider:      gitLabProvider,
+		Cipher:        gitLabCipher,
+		Now:           time.Now,
+	}
 	agentRuns := store.NewAgentStore(db)
 	agentConversations := store.NewAgentConversationStore(db)
 	agentConversationService := &application.AgentConversationService{
@@ -122,15 +205,17 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 		Tasks: &application.TaskService{
 			Tasks: tasks, Comments: comments, Projects: projectService,
 		},
-		Workflow:           store.NewTaskWorkflowStore(db),
-		StageClaims:        store.NewTaskStageClaimStore(db),
-		Threads:            store.NewTaskThreadStore(db),
-		Labels:             &application.LabelService{Labels: labels},
-		Projects:           projectService,
-		Access:             projectAccess,
-		Attachments:        attachmentService,
-		AgentConversations: agentConversationService,
-		AgentRuns:          agentRuns,
+		Workflow:            store.NewTaskWorkflowStore(db),
+		StageClaims:         store.NewTaskStageClaimStore(db),
+		Threads:             store.NewTaskThreadStore(db),
+		Labels:              &application.LabelService{Labels: labels},
+		Projects:            projectService,
+		ProjectRepositories: projectRepositoryService,
+		Delivery:            taskDeliveryService,
+		Access:              projectAccess,
+		Attachments:         attachmentService,
+		AgentConversations:  agentConversationService,
+		AgentRuns:           agentRuns,
 	})
 	require.NoError(t, err)
 	h := api.NewRouter(legacyHandler, api.RouterOptions{
@@ -141,8 +226,9 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 			Idempotency: store.NewIdempotencyStore(db),
 			Development: devauth.New(users, identityService), AppBaseURL: baseURL,
 		},
-		V1:      v1Handler,
-		OpenAPI: apiv1.OpenAPIHandler(contract.OpenAPIDocument),
+		V1:                     v1Handler,
+		OpenAPI:                apiv1.OpenAPIHandler(contract.OpenAPIDocument),
+		AdminGitLabConnections: gitLabConnectionService,
 	})
 	return h, db
 }
@@ -379,6 +465,8 @@ func cleanupTaskRow(t *testing.T, db *store.DB, id uuid.UUID) {
 		require.NoError(t, err)
 		_, err = db.Pool.Exec(ctx, `DELETE FROM acceptance_criteria WHERE task_id=$1`, id)
 		require.NoError(t, err)
+		_, err = db.Pool.Exec(ctx, `DELETE FROM task_merge_requests WHERE task_id=$1`, id)
+		require.NoError(t, err)
 		_, err = db.Pool.Exec(ctx, `DELETE FROM tasks WHERE id = $1`, id)
 		require.NoError(t, err)
 	})
@@ -389,6 +477,8 @@ func cleanupProjectRows(t *testing.T, db *store.DB, projectID uuid.UUID) {
 	t.Cleanup(func() {
 		ctx := context.Background()
 		statements := []string{
+			`DELETE FROM task_merge_requests WHERE project_id=$1`,
+			`DELETE FROM project_repositories WHERE project_id=$1`,
 			`DELETE FROM acceptance_checks WHERE criterion_id IN (
 				SELECT id FROM acceptance_criteria
 				WHERE milestone_id IN (SELECT id FROM milestones WHERE project_id=$1)

@@ -29,6 +29,7 @@ const (
 	ActivityFieldParent         ActivityField = "parent"
 	ActivityFieldDependencies   ActivityField = "dependencies"
 	ActivityFieldArchived       ActivityField = "archived"
+	ActivityFieldMergeRequests  ActivityField = "merge_requests"
 )
 
 // Activity is one append-only record of a change made to a task: what

@@ -38,6 +38,20 @@ func encodeAddProjectMemberRequest(
 	return nil
 }
 
+func encodeBindProjectRepositoryRequest(
+	req *ProjectRepositoryBind,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
 func encodeCancelMilestoneRequest(
 	req OptLifecycleRequest,
 	r *http.Request,
@@ -266,6 +280,20 @@ func encodeDeleteCriterionRequest(
 	return nil
 }
 
+func encodeLinkTaskMergeRequestRequest(
+	req *TaskMergeRequestLink,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
 func encodeRecordTaskStageAcceptanceCheckRequest(
 	req *TaskStageAcceptanceCheckWrite,
 	r *http.Request,
@@ -352,6 +380,20 @@ func encodeRequestTaskResolutionRequest(
 
 func encodeResolveTaskIssueRequest(
 	req *TaskIssueResolve,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
+func encodeUnlinkTaskMergeRequestRequest(
+	req *TaskMergeRequestUnlink,
 	r *http.Request,
 ) error {
 	const contentType = "application/json"

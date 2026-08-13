@@ -20,17 +20,19 @@ import (
 
 type Handler struct {
 	generated.UnimplementedHandler
-	Users              *store.UserStore
-	Tasks              *application.TaskService
-	Workflow           *store.TaskWorkflowStore
-	StageClaims        *store.TaskStageClaimStore
-	Threads            *store.TaskThreadStore
-	Labels             *application.LabelService
-	Projects           *application.ProjectService
-	Access             *application.ProjectAccessService
-	Attachments        *application.AttachmentService
-	AgentConversations *application.AgentConversationService
-	AgentRuns          *store.AgentStore
+	Users               *store.UserStore
+	Tasks               *application.TaskService
+	Workflow            *store.TaskWorkflowStore
+	StageClaims         *store.TaskStageClaimStore
+	Threads             *store.TaskThreadStore
+	Labels              *application.LabelService
+	Projects            *application.ProjectService
+	ProjectRepositories *application.ProjectRepositoryService
+	Delivery            *application.TaskDeliveryService
+	Access              *application.ProjectAccessService
+	Attachments         *application.AttachmentService
+	AgentConversations  *application.AgentConversationService
+	AgentRuns           *store.AgentStore
 }
 
 func accessSubject(ctx context.Context) (domain.ProjectAccessSubject, error) {

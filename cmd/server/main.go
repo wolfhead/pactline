@@ -28,6 +28,7 @@ import (
 	"github.com/wolfhead/pactline/internal/identity"
 	"github.com/wolfhead/pactline/internal/integrations/deepseek"
 	"github.com/wolfhead/pactline/internal/integrations/devauth"
+	gitlabintegration "github.com/wolfhead/pactline/internal/integrations/gitlab"
 	"github.com/wolfhead/pactline/internal/integrations/lark"
 	legacyapi "github.com/wolfhead/pactline/internal/legacy/api"
 	legacystore "github.com/wolfhead/pactline/internal/legacy/store"
@@ -117,6 +118,29 @@ func main() {
 		slog.Error("configure application sessions", "error", err)
 		os.Exit(1)
 	}
+	var credentialCipher *identity.CredentialCipher
+	if len(cfg.TokenEncryptionKey) > 0 || cfg.TokenEncryptionKeyID != "" {
+		credentialCipher, err = identity.NewCredentialCipher(map[string][]byte{
+			cfg.TokenEncryptionKeyID: cfg.TokenEncryptionKey,
+		})
+		if err != nil {
+			slog.Error("configure credential encryption", "error", err)
+			os.Exit(1)
+		}
+	}
+	gitLabConnectionService := &application.GitLabConnectionService{
+		Connections: store.NewGitLabConnectionStore(db),
+		Provider:    gitlabintegration.NewClient(nil, 10*time.Second),
+		Cipher:      credentialCipher, EncryptionKeyID: cfg.TokenEncryptionKeyID,
+		Now: time.Now,
+	}
+	projectRepositoryService := &application.ProjectRepositoryService{
+		Repositories: store.NewProjectRepositoryStore(db),
+		Connections:  store.NewGitLabConnectionStore(db),
+		GitLab:       gitLabConnectionService,
+		Access:       projectAccess,
+		Now:          time.Now,
+	}
 	tokenService := access.NewService(
 		store.NewAccessStore(db), identity.SystemClock{}, access.CryptoSecretGenerator{},
 	)
@@ -128,6 +152,14 @@ func main() {
 		Conversations: agentConversations,
 		Projects:      projects,
 		Access:        projectAccess,
+		Now:           time.Now,
+	}
+	taskDeliveryService := &application.TaskDeliveryService{
+		MergeRequests: store.NewTaskMergeRequestStore(db),
+		Repositories:  store.NewProjectRepositoryStore(db),
+		Access:        projectAccess,
+		Provider:      gitlabintegration.NewClient(nil, 10*time.Second),
+		Cipher:        credentialCipher,
 		Now:           time.Now,
 	}
 	maintenanceContext, stopMaintenance := context.WithCancel(context.Background())
@@ -150,16 +182,9 @@ func main() {
 	go messaging.ConsumeNoopForever(maintenanceContext, cfg.RabbitMQURL, outboxStore)
 	var larkClient *lark.Client
 	if cfg.AuthProvider == AuthProviderLark {
-		cipher, cipherErr := identity.NewCredentialCipher(map[string][]byte{
-			cfg.TokenEncryptionKeyID: cfg.TokenEncryptionKey,
-		})
-		if cipherErr != nil {
-			slog.Error("configure credential encryption", "error", cipherErr)
-			os.Exit(1)
-		}
 		configuredLarkClient, clientErr := lark.NewClient(lark.Config{
 			AppID: cfg.LarkAppID, AppSecret: cfg.LarkAppSecret,
-			Cipher: cipher, EncryptionKeyID: cfg.TokenEncryptionKeyID,
+			Cipher: credentialCipher, EncryptionKeyID: cfg.TokenEncryptionKeyID,
 			RedirectURI: cfg.LarkRedirectURI.String(),
 			AuditWriter: accessAuditStore,
 		})
@@ -223,15 +248,17 @@ func main() {
 		Tasks: &application.TaskService{
 			Tasks: tasks, Comments: comments, Projects: projectService,
 		},
-		Workflow:           store.NewTaskWorkflowStore(db),
-		StageClaims:        store.NewTaskStageClaimStore(db),
-		Threads:            store.NewTaskThreadStore(db),
-		Labels:             &application.LabelService{Labels: labels},
-		Projects:           projectService,
-		Access:             projectAccess,
-		Attachments:        attachmentService,
-		AgentConversations: agentConversationService,
-		AgentRuns:          agentStore,
+		Workflow:            store.NewTaskWorkflowStore(db),
+		StageClaims:         store.NewTaskStageClaimStore(db),
+		Threads:             store.NewTaskThreadStore(db),
+		Labels:              &application.LabelService{Labels: labels},
+		Projects:            projectService,
+		ProjectRepositories: projectRepositoryService,
+		Delivery:            taskDeliveryService,
+		Access:              projectAccess,
+		Attachments:         attachmentService,
+		AgentConversations:  agentConversationService,
+		AgentRuns:           agentStore,
 	})
 	if err != nil {
 		slog.Error("configure OpenAPI v1 server", "error", err)
@@ -328,10 +355,11 @@ func main() {
 			LarkEnabled:   cfg.AuthProvider == AuthProviderLark,
 			SecureCookies: cfg.AppEnv != EnvironmentDevelopment && cfg.AppEnv != EnvironmentTest,
 		},
-		V1:          v1Handler,
-		OpenAPI:     apiv1.OpenAPIHandler(contract.OpenAPIDocument),
-		AgentStatus: agentConnection,
-		AdminTools:  notificationTestService,
+		V1:                     v1Handler,
+		OpenAPI:                apiv1.OpenAPIHandler(contract.OpenAPIDocument),
+		AgentStatus:            agentConnection,
+		AdminTools:             notificationTestService,
+		AdminGitLabConnections: gitLabConnectionService,
 	})
 	var agentWorker *agentruntime.Worker
 	if cfg.AgentEnabled {
