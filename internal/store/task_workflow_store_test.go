@@ -106,7 +106,7 @@ func TestTaskWorkflowSupportsHumanExecutionAndAgentAcceptance(t *testing.T) {
 	agentActor := domain.Actor{Type: domain.ActorTypeAgent, Ref: "codex/review-thread"}
 	reviewWorking, reviewClaim, err := workflow.Claim(
 		ctx, created.Task.Number, reviewAvailable.Version,
-		agentActor, agentOperation, "codex", "review-thread", now.Add(4*time.Minute),
+		agentActor, agentOperation, "codex", "review-thread", now.Add(5*time.Minute),
 	)
 	require.NoError(t, err)
 	require.Equal(t, domain.TaskClaimStageReview, reviewClaim.Stage)
