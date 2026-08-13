@@ -20,7 +20,7 @@ func TestParseGitLabRepositoryURL(t *testing.T) {
 func TestParseGitLabRepositoryURLRejectsSubpagesAndUnsafeURLParts(t *testing.T) {
 	for _, raw := range []string{
 		"http://gitlab.example.com/team/repo",
-		"https://token@gitlab.example.com/team/repo",
+		"https://token@example.com/team/repo",
 		"https://gitlab.example.com/team/repo?ref=main",
 		"https://gitlab.example.com/team/repo#readme",
 		"https://gitlab.example.com/team/repo/-/tree/main",
