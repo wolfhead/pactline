@@ -29,54 +29,75 @@ ALTER TABLE task_thread_items
         )
     );
 
-CREATE TEMP TABLE migration_execution_completions ON COMMIT DROP AS
+CREATE TEMP TABLE migration_execution_completion_candidates ON COMMIT DROP AS
 SELECT
     item.id AS item_id,
     claim.id AS claim_id,
     claim.task_id,
-    row_number() OVER (
-        PARTITION BY claim.task_id
-        ORDER BY claim.completed_at, claim.created_at, claim.id
-    )::bigint AS review_cycle
+    claim.completed_at,
+    claim.created_at AS claim_created_at
 FROM task_thread_items item
 JOIN task_threads thread ON thread.id = item.thread_id
-JOIN LATERAL (
-    SELECT candidate.*
-    FROM task_stage_claims candidate
-    LEFT JOIN task_claim_messages legacy_message
-        ON legacy_message.id = item.id
-       AND legacy_message.claim_id = candidate.id
-    WHERE candidate.task_id = thread.task_id
-      AND candidate.stage = 'execution'
-      AND candidate.status = 'completed'
-      AND candidate.outcome = 'work_submitted'
-      AND (
-          legacy_message.id IS NOT NULL
-          OR candidate.completed_at = item.created_at
+JOIN task_stage_claims claim
+  ON claim.task_id = thread.task_id
+ AND claim.stage = 'execution'
+ AND claim.status = 'completed'
+ AND claim.outcome = 'work_submitted'
+LEFT JOIN task_claim_messages legacy_message
+  ON legacy_message.id = item.id
+ AND legacy_message.claim_id = claim.id
+WHERE item.kind = 'work_submission'
+  AND (
+      legacy_message.id IS NOT NULL
+      OR (
+          NOT EXISTS (
+              SELECT 1
+              FROM task_claim_messages exact_legacy_message
+              WHERE exact_legacy_message.id = item.id
+          )
+          AND claim.completed_at = item.created_at
       )
-    ORDER BY
-        CASE WHEN legacy_message.id IS NOT NULL THEN 0 ELSE 1 END,
-        candidate.completed_at,
-        candidate.id
-    LIMIT 1
-) claim ON true
-WHERE item.kind = 'work_submission';
+  );
 
 DO $$
 BEGIN
     IF EXISTS (
-        SELECT 1
+        SELECT item.id
         FROM task_thread_items item
+        LEFT JOIN migration_execution_completion_candidates candidate
+          ON candidate.item_id = item.id
         WHERE item.kind = 'work_submission'
-          AND NOT EXISTS (
-              SELECT 1
-              FROM migration_execution_completions completion
-              WHERE completion.item_id = item.id
-          )
+        GROUP BY item.id
+        HAVING count(candidate.claim_id) <> 1
     ) THEN
-        RAISE EXCEPTION 'cannot deterministically link historical work submission to execution Claim';
+        RAISE EXCEPTION 'each historical work submission must match exactly one execution Claim';
+    END IF;
+
+    IF EXISTS (
+        SELECT claim.id
+        FROM task_stage_claims claim
+        LEFT JOIN migration_execution_completion_candidates candidate
+          ON candidate.claim_id = claim.id
+        WHERE claim.stage = 'execution'
+          AND claim.status = 'completed'
+          AND claim.outcome = 'work_submitted'
+        GROUP BY claim.id
+        HAVING count(candidate.item_id) <> 1
+    ) THEN
+        RAISE EXCEPTION 'each historical submitted execution Claim must match exactly one work submission';
     END IF;
 END $$;
+
+CREATE TEMP TABLE migration_execution_completions ON COMMIT DROP AS
+SELECT
+    candidate.item_id,
+    candidate.claim_id,
+    candidate.task_id,
+    row_number() OVER (
+        PARTITION BY candidate.task_id
+        ORDER BY candidate.completed_at, candidate.claim_created_at, candidate.claim_id
+    )::bigint AS review_cycle
+FROM migration_execution_completion_candidates candidate;
 
 UPDATE task_thread_items item
 SET

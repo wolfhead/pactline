@@ -28,6 +28,20 @@ func migrationsBeforeTaskLifecycle(t *testing.T) fstest.MapFS {
 	return out
 }
 
+func migrationsBeforeRepeatableWorkSubmissions(t *testing.T) fstest.MapFS {
+	t.Helper()
+	out := fstest.MapFS{}
+	for _, name := range embeddedMigrationNames(t) {
+		if name >= "0030_" {
+			continue
+		}
+		body, err := fs.ReadFile(pactline.MigrationFS, "migrations/"+name)
+		require.NoError(t, err)
+		out["migrations/"+name] = &fstest.MapFile{Data: body}
+	}
+	return out
+}
+
 func TestTaskLifecycleMigrationBackfillsHistoryAndInitializesNewTasks(t *testing.T) {
 	ctx := context.Background()
 	dsn := createThrowawayDatabase(t, testDSN(t))
@@ -286,4 +300,81 @@ func TestTaskLifecycleBackfillReconcilesObservedLegacyShape(t *testing.T) {
 	require.Equal(t, uuid.MustParse(claimID), completionClaimID)
 	require.Equal(t, int64(1), completionCycle)
 	require.Equal(t, completionCycle, payloadCycle)
+}
+
+func TestRepeatableWorkSubmissionMigrationRejectsAmbiguousClaimMatch(t *testing.T) {
+	ctx := context.Background()
+	dsn := createThrowawayDatabase(t, testDSN(t))
+	db, err := store.Connect(ctx, dsn)
+	require.NoError(t, err)
+	defer db.Close()
+
+	require.NoError(t, db.Migrate(ctx, migrationsBeforeRepeatableWorkSubmissions(t)))
+	projectID := uuid.New()
+	taskID := uuid.New()
+	claimOneID := uuid.New()
+	claimTwoID := uuid.New()
+	itemID := uuid.New()
+	const userID = "00000000-0000-0000-0000-000000000001"
+	fixtureSQL := `
+		INSERT INTO projects (id,name,description,creator_id)
+		VALUES ('$PROJECT_ID'::uuid,'Ambiguous migration fixture','','$USER_ID'::uuid);
+
+		INSERT INTO tasks (
+			id,title,context,expected_result,status,priority,execution_mode,
+			creator_id,project_id,phase,activity_state,review_cycle
+		) VALUES (
+			'$TASK_ID'::uuid,'Ambiguous submission','Context','Expected result',
+			'in_review','none','human_only','$USER_ID'::uuid,'$PROJECT_ID'::uuid,
+			'in_review','available',1
+		);
+
+		INSERT INTO task_stage_claims (
+			id,task_id,task_number,stage,claimed_by_type,claimed_by_user_id,
+			subject_user_id,auth_method,client_kind,client_session_id,
+			status,outcome,version,expires_at,created_at,updated_at,completed_at
+		) VALUES
+			('$CLAIM_ONE_ID'::uuid,'$TASK_ID'::uuid,1,'execution','user',
+			 '$USER_ID'::uuid,'$USER_ID'::uuid,'session','browser','first',
+			 'completed','work_submitted',2,
+			 '2026-08-14 00:00:00+00','2026-08-13 00:00:00+00',
+			 '2026-08-13 00:10:00+00','2026-08-13 00:10:00+00'),
+			('$CLAIM_TWO_ID'::uuid,'$TASK_ID'::uuid,1,'execution','user',
+			 '$USER_ID'::uuid,'$USER_ID'::uuid,'session','browser','second',
+			 'completed','work_submitted',2,
+			 '2026-08-14 00:01:00+00','2026-08-13 00:01:00+00',
+			 '2026-08-13 00:10:00+00','2026-08-13 00:10:00+00');
+
+		INSERT INTO task_thread_items (
+			id,thread_id,kind,author_type,author_user_id,body,request_id,
+			version,created_at,updated_at
+		) VALUES (
+			'$ITEM_ID'::uuid,
+			(SELECT id FROM task_threads WHERE task_id='$TASK_ID'::uuid AND role='main'),
+			'work_submission','user','$USER_ID'::uuid,
+			'Ambiguous submission','fixture:ambiguous',
+			1,'2026-08-13 00:10:00+00','2026-08-13 00:10:00+00'
+		)`
+	fixtureSQL = strings.NewReplacer(
+		"$PROJECT_ID", projectID.String(),
+		"$USER_ID", userID,
+		"$TASK_ID", taskID.String(),
+		"$CLAIM_ONE_ID", claimOneID.String(),
+		"$CLAIM_TWO_ID", claimTwoID.String(),
+		"$ITEM_ID", itemID.String(),
+	).Replace(fixtureSQL)
+	fixtureConn, err := db.Pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer fixtureConn.Release()
+	_, err = fixtureConn.Conn().PgConn().Exec(ctx, fixtureSQL).ReadAll()
+	require.NoError(t, err)
+
+	err = db.Migrate(ctx, pactline.MigrationFS)
+	require.ErrorContains(t, err, "each historical work submission must match exactly one execution Claim")
+
+	var applied int
+	require.NoError(t, db.Pool.QueryRow(ctx, `
+		SELECT count(*) FROM schema_migrations
+		WHERE name='0030_repeatable_work_submissions.sql'`).Scan(&applied))
+	require.Zero(t, applied)
 }
