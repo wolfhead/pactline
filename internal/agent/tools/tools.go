@@ -656,7 +656,8 @@ type CreatedTask struct {
 	MilestoneName      string              `json:"milestone_name,omitempty"`
 	AssigneeName       string              `json:"assignee_name,omitempty"`
 	DueDate            *string             `json:"due_date,omitempty"`
-	Status             string              `json:"status"`
+	Phase              string              `json:"phase"`
+	Activity           string              `json:"activity,omitempty"`
 	Priority           string              `json:"priority"`
 	IdempotentReplay   bool                `json:"idempotent_replay"`
 	AttachedArtifacts  []AttachedArtifact  `json:"attached_artifacts,omitempty"`
@@ -862,8 +863,11 @@ func createdTaskResult(response *generated.TaskCreatedHeaders) CreatedTask {
 		Title:         task.Title,
 		ProjectNumber: task.Project.Number,
 		ProjectName:   task.Project.Name,
-		Status:        string(task.Status),
+		Phase:         string(task.Phase),
 		Priority:      string(task.Priority),
+	}
+	if activity, ok := task.Activity.Get(); ok {
+		result.Activity = string(activity)
 	}
 	if milestone, ok := task.Milestone.Get(); ok {
 		result.MilestoneName = milestone.Name

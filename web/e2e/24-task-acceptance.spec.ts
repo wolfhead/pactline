@@ -2,39 +2,45 @@ import { test, expect } from './support/task-fixtures'
 import { switchIdentity } from './support/identity'
 import { USERS } from './support/config'
 
-test('task acceptance criteria block completion until evidence satisfies them', async ({
+test('review Claim cannot accept until current-cycle acceptance evidence passes', async ({
   page,
   uniqueTitle,
   tasksApi,
 }) => {
   const task = await tasksApi.createTask(USERS.engineerC.id, {
     title: uniqueTitle('Acceptance-gated task'),
-    status: 'in_review',
   })
+  await tasksApi.createTaskCriterion(
+    USERS.engineerC.id,
+    task.number,
+    'The task result is observable',
+    'Run the task workflow test',
+  )
+  await tasksApi.markTaskReady(USERS.engineerC.id, task.number)
+  const execution = await tasksApi.claimTaskStage(USERS.engineerC.id, task.number)
+  await tasksApi.submitTaskWork(USERS.engineerC.id, task.number, execution.claim)
 
   await page.goto(`/tasks/${task.number}`)
   await switchIdentity(page, USERS.engineerC.id)
 
+  const workflow = page.getByRole('region', { name: '任务工作流' })
+  await workflow.getByRole('button', { name: '领取验收' }).click()
+  await expect(workflow.getByText('验收中 · 正在处理', { exact: true })).toBeVisible()
+
+  await workflow.getByRole('button', { name: '接受并完成' }).click()
+  await workflow.getByLabel('接受并完成').fill('Acceptance attempted before evidence')
+  await workflow.getByRole('button', { name: '确认' }).click()
+  await expect(workflow.getByRole('alert')).toBeVisible()
+  await expect(workflow.getByText('验收中 · 正在处理', { exact: true })).toBeVisible()
+
   const checklist = page.getByRole('region', { name: '验收标准' })
-  const detail = page.getByRole('dialog', { name: '任务详情' })
-  const status = detail.getByRole('combobox', { name: '状态', exact: true })
-  await checklist.getByRole('button', { name: '添加验收项' }).click()
-  await checklist.getByPlaceholder('需要成立的可观察事实').fill('The task result is observable')
-  await checklist.getByPlaceholder('如何逐项验证').fill('Run the task workflow test')
-  await checklist.getByRole('button', { name: '保存' }).click()
-  await expect(checklist.getByText('The task result is observable')).toBeVisible()
-
-  await status.click()
-  await page.getByRole('option', { name: '已完成' }).click()
-  await expect(page.getByText(/The operation conflicts with current state/)).toBeVisible()
-  await expect(status).toHaveText('待评审')
-
   await checklist.getByRole('button', { name: '检查' }).click()
   await checklist.getByPlaceholder('检查证据或原因').fill('Verified by Playwright')
   await checklist.getByRole('button', { name: '记录' }).click()
   await expect(checklist.getByText(/通过：Verified by Playwright/)).toBeVisible()
 
-  await status.click()
-  await page.getByRole('option', { name: '已完成' }).click()
-  await expect(status).toHaveText('已完成')
+  await workflow.getByRole('button', { name: '接受并完成' }).click()
+  await workflow.getByLabel('接受并完成').fill('Acceptance evidence satisfies the current review cycle')
+  await workflow.getByRole('button', { name: '确认' }).click()
+  await expect(workflow.getByText('已完成', { exact: true })).toBeVisible()
 })

@@ -77,7 +77,6 @@ func main() {
 	memberships := store.NewProjectMembershipStore(db)
 	milestones := store.NewMilestoneStore(db)
 	acceptance := store.NewAcceptanceStore(db)
-	claims := store.NewTaskClaimStore(db)
 	attachments := store.NewAttachmentStore(db)
 	var attachmentObjects blob.Store
 	switch cfg.AttachmentStorageProvider {
@@ -133,7 +132,7 @@ func main() {
 	}
 	maintenanceContext, stopMaintenance := context.WithCancel(context.Background())
 	defer stopMaintenance()
-	go (application.Maintenance{Store: accessAuditStore, Claims: claims}).Run(maintenanceContext)
+	go (application.Maintenance{Store: accessAuditStore}).Run(maintenanceContext)
 	go (application.AttachmentCleanup{
 		Attachments: attachments, Objects: attachmentObjects,
 	}).Run(maintenanceContext)
@@ -224,7 +223,9 @@ func main() {
 		Tasks: &application.TaskService{
 			Tasks: tasks, Comments: comments, Projects: projectService,
 		},
-		Claims:             claims,
+		Workflow:           store.NewTaskWorkflowStore(db),
+		StageClaims:        store.NewTaskStageClaimStore(db),
+		Threads:            store.NewTaskThreadStore(db),
 		Labels:             &application.LabelService{Labels: labels},
 		Projects:           projectService,
 		Access:             projectAccess,

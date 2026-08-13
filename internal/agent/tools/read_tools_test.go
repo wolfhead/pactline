@@ -73,9 +73,9 @@ func TestSearchTasksUsesBoundedOpenAPIFiltersAndTenantDate(t *testing.T) {
 	due := time.Date(2026, 7, 30, 0, 0, 0, 0, time.UTC)
 	projectNumber := int64(7)
 	client := &readClientStub{tasks: []generated.Task{
-		taskFixture(1, "Overdue work", generated.TaskStatusInProgress, &due, nil, false),
-		taskFixture(2, "Current work", generated.TaskStatusTodo, nil, nil, false),
-		taskFixture(3, "Extra work", generated.TaskStatusDone, nil, nil, false),
+		taskFixture(1, "Overdue work", generated.TaskPhaseInProgress, &due, nil, false),
+		taskFixture(2, "Current work", generated.TaskPhaseReady, nil, nil, false),
+		taskFixture(3, "Extra work", generated.TaskPhaseDone, nil, nil, false),
 	}}
 
 	result, err := searchTasks(
@@ -85,7 +85,7 @@ func TestSearchTasksUsesBoundedOpenAPIFiltersAndTenantDate(t *testing.T) {
 		timezone,
 		TaskSearchInput{
 			Query: "work", ProjectNumber: &projectNumber,
-			Statuses: []string{"todo", "in_progress"}, Limit: 2,
+			Phases: []string{"ready", "in_progress"}, Limit: 2,
 		},
 	)
 
@@ -95,9 +95,9 @@ func TestSearchTasksUsesBoundedOpenAPIFiltersAndTenantDate(t *testing.T) {
 	require.True(t, result.Items[0].Overdue, "UTC+8 date is already 2026-07-31")
 	require.Equal(t, 3, client.listTaskParams.Limit.Value)
 	require.Equal(t, int64(7), client.listTaskParams.ProjectNumber.Value)
-	require.Equal(t, []generated.TaskStatus{
-		generated.TaskStatusTodo, generated.TaskStatusInProgress,
-	}, client.listTaskParams.Status)
+	require.Equal(t, []generated.TaskPhase{
+		generated.TaskPhaseReady, generated.TaskPhaseInProgress,
+	}, client.listTaskParams.Phase)
 }
 
 func TestProjectOverviewComputesStatusBacklogAndAttentionDeterministically(t *testing.T) {
@@ -113,10 +113,10 @@ func TestProjectOverviewComputesStatusBacklogAndAttentionDeterministically(t *te
 			ID: milestoneID, Name: "Beta", Status: generated.MilestoneStatusActive,
 		}},
 		Tasks: []generated.Task{
-			taskFixture(1, "Backlog", generated.TaskStatusTodo, nil, nil, false),
-			taskFixture(2, "Late", generated.TaskStatusInProgress, &overdue, &milestoneID, false),
-			taskFixture(3, "Blocked", generated.TaskStatusInReview, nil, &milestoneID, true),
-			taskFixture(4, "Done", generated.TaskStatusDone, &overdue, &milestoneID, false),
+			taskFixture(1, "Backlog", generated.TaskPhaseBacklog, nil, nil, false),
+			taskFixture(2, "Late", generated.TaskPhaseInProgress, &overdue, &milestoneID, false),
+			taskFixture(3, "Blocked", generated.TaskPhaseInReview, nil, &milestoneID, true),
+			taskFixture(4, "Done", generated.TaskPhaseDone, &overdue, &milestoneID, false),
 		},
 	}}
 
@@ -130,9 +130,9 @@ func TestProjectOverviewComputesStatusBacklogAndAttentionDeterministically(t *te
 	require.Equal(t, 1, result.BacklogCount)
 	require.Equal(t, 1, result.OverdueCount)
 	require.Equal(t, 1, result.BlockedCount)
-	require.Equal(t, TaskStatusCounts{
-		Todo: 1, InProgress: 1, InReview: 1, Done: 1,
-	}, result.StatusCounts)
+	require.Equal(t, TaskPhaseCounts{
+		Backlog: 1, InProgress: 1, InReview: 1, Done: 1,
+	}, result.PhaseCounts)
 	require.Len(t, result.Milestones, 1)
 	require.InDelta(t, 1.0/3.0, result.Milestones[0].CompletionRatio, 0.001)
 	require.Equal(t, []int64{2, 3}, []int64{
@@ -163,13 +163,13 @@ func TestMilestoneOverviewReturnsCandidatesInsteadOfGuessing(t *testing.T) {
 func taskFixture(
 	number int64,
 	title string,
-	status generated.TaskStatus,
+	phase generated.TaskPhase,
 	dueDate *time.Time,
 	milestoneID *uuid.UUID,
 	blocked bool,
 ) generated.Task {
 	task := generated.Task{
-		Number: number, Title: title, Status: status,
+		Number: number, Title: title, Phase: phase,
 		Priority: generated.TaskPriorityMedium,
 		Project:  generated.ProjectRef{Number: 7, Name: "Launch"},
 		Creator:  generated.UserRef{ID: uuid.New(), Name: "Ada"},

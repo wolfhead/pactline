@@ -22,7 +22,9 @@ type Handler struct {
 	generated.UnimplementedHandler
 	Users              *store.UserStore
 	Tasks              *application.TaskService
-	Claims             *store.TaskClaimStore
+	Workflow           *store.TaskWorkflowStore
+	StageClaims        *store.TaskStageClaimStore
+	Threads            *store.TaskThreadStore
 	Labels             *application.LabelService
 	Projects           *application.ProjectService
 	Access             *application.ProjectAccessService

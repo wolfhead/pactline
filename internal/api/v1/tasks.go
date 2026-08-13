@@ -38,14 +38,8 @@ func (h *Handler) CreateTask(
 		Description:    req.Description.Or(""),
 		CreatorID:      subjectID,
 	}
-	if value, ok := req.Status.Get(); ok {
-		task.Status = domain.TaskStatus(value)
-	}
 	if value, ok := req.Priority.Get(); ok {
 		task.Priority = domain.TaskPriority(value)
-	}
-	if value, ok := req.ExecutionMode.Get(); ok {
-		task.ExecutionMode = domain.TaskExecutionMode(value)
 	}
 	if value, ok := req.AssigneeID.Get(); ok {
 		task.AssigneeID = &value
@@ -128,14 +122,14 @@ func (h *Handler) ListTasks(
 	if value, ok := params.Q.Get(); ok {
 		filter.Search = value
 	}
-	for _, value := range params.Status {
-		filter.Statuses = append(filter.Statuses, domain.TaskStatus(value))
+	for _, value := range params.Phase {
+		filter.Phases = append(filter.Phases, domain.TaskPhase(value))
 	}
 	for _, value := range params.Priority {
 		filter.Priorities = append(filter.Priorities, domain.TaskPriority(value))
 	}
-	for _, value := range params.ExecutionMode {
-		filter.ExecutionModes = append(filter.ExecutionModes, domain.TaskExecutionMode(value))
+	for _, value := range params.Activity {
+		filter.Activities = append(filter.Activities, domain.TaskActivityState(value))
 	}
 	if value, ok := params.Assignee.Get(); ok {
 		if value == "none" {
@@ -228,17 +222,9 @@ func (h *Handler) UpdateTask(
 	if value, ok := req.Description.Get(); ok {
 		patch.Description = &value
 	}
-	if value, ok := req.Status.Get(); ok {
-		status := domain.TaskStatus(value)
-		patch.Status = &status
-	}
 	if value, ok := req.Priority.Get(); ok {
 		priority := domain.TaskPriority(value)
 		patch.Priority = &priority
-	}
-	if value, ok := req.ExecutionMode.Get(); ok {
-		executionMode := domain.TaskExecutionMode(value)
-		patch.ExecutionMode = &executionMode
 	}
 	if req.AssigneeID.IsSet() {
 		patch.AssigneeSet = true
@@ -263,16 +249,7 @@ func (h *Handler) UpdateTask(
 		patch.LabelIDs = req.LabelIds
 	}
 	association := application.TaskAssociationPatch{
-		ProjectNumberSet: req.ProjectNumber.IsSet(),
-		MilestoneSet:     req.MilestoneID.IsSet(),
-	}
-	if value, ok := req.ProjectNumber.Get(); ok {
-		association.ProjectNumber = &value
-		if _, err := h.Access.RequireProjectByNumber(
-			ctx, value, subject, application.ProjectPermissionWrite,
-		); err != nil {
-			return nil, err
-		}
+		MilestoneSet: req.MilestoneID.IsSet(),
 	}
 	if value, ok := req.MilestoneID.Get(); ok {
 		association.MilestoneID = &value
@@ -343,154 +320,6 @@ func (h *Handler) setTaskArchived(
 		return nil, err
 	}
 	return taskResponse(ctx, updated), nil
-}
-
-func (h *Handler) ListTaskComments(
-	ctx context.Context,
-	params generated.ListTaskCommentsParams,
-) (generated.ListTaskCommentsRes, error) {
-	subject, err := accessSubject(ctx)
-	if err != nil {
-		return nil, err
-	}
-	task, err := h.Access.RequireTaskByNumber(
-		ctx, params.Number, subject, application.ProjectPermissionRead,
-	)
-	if err != nil {
-		return nil, err
-	}
-	comments, err := h.Tasks.Comments.List(ctx, task.Task.ID)
-	if err != nil {
-		return nil, err
-	}
-	offset, end, next, err := pageBounds(len(comments), params.Cursor, params.Limit)
-	if err != nil {
-		return nil, err
-	}
-	items := make([]generated.Comment, end-offset)
-	for i, comment := range comments[offset:end] {
-		items[i] = commentFromDomain(comment)
-	}
-	response := generated.CommentList{Items: items}
-	if next != "" {
-		response.NextCursor = generated.NewOptString(next)
-	}
-	return &generated.CommentListHeaders{
-		XRequestID: generated.NewOptString(baseapi.RequestIDFromContext(ctx)),
-		Response:   response,
-	}, nil
-}
-
-func (h *Handler) CreateTaskComment(
-	ctx context.Context,
-	req *generated.CommentCreateWrite,
-	params generated.CreateTaskCommentParams,
-) (generated.CreateTaskCommentRes, error) {
-	expectedVersion, err := parseIfMatch(params.IfMatch)
-	if err != nil {
-		return nil, err
-	}
-	actor, subjectID, err := operationContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	subject, err := accessSubject(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := h.Access.RequireTaskByNumber(
-		ctx, params.Number, subject, application.ProjectPermissionWrite,
-	); err != nil {
-		return nil, err
-	}
-	var replyToCommentID *uuid.UUID
-	if value, ok := req.ReplyToCommentID.Get(); ok {
-		replyToCommentID = &value
-	}
-	created, err := h.Tasks.CreateComment(
-		ctx, params.Number, expectedVersion, subjectID, req.Body,
-		replyToCommentID, req.MentionedUserIds, actor,
-	)
-	if err != nil {
-		return nil, err
-	}
-	comment := commentFromDomain(created.Comment)
-	return &generated.CommentCreatedHeaders{
-		Etag: generated.NewOptString(formatETag(comment.Version)),
-		Location: generated.NewOptString(fmt.Sprintf(
-			"/api/v1/tasks/%d/comments/%s", params.Number, comment.ID,
-		)),
-		XRequestID: generated.NewOptString(baseapi.RequestIDFromContext(ctx)),
-		Response:   comment,
-	}, nil
-}
-
-func (h *Handler) UpdateTaskComment(
-	ctx context.Context,
-	req *generated.CommentUpdateWrite,
-	params generated.UpdateTaskCommentParams,
-) (generated.UpdateTaskCommentRes, error) {
-	expectedVersion, err := parseIfMatch(params.IfMatch)
-	if err != nil {
-		return nil, err
-	}
-	actor, _, err := operationContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	subject, err := accessSubject(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := h.Access.RequireTaskByNumber(
-		ctx, params.Number, subject, application.ProjectPermissionWrite,
-	); err != nil {
-		return nil, err
-	}
-	updated, err := h.Tasks.UpdateComment(
-		ctx, params.Number, params.ID, expectedVersion, req.Body,
-		req.MentionedUserIds, actor,
-	)
-	if err != nil {
-		return nil, err
-	}
-	comment := commentFromDomain(updated)
-	return &generated.CommentHeaders{
-		Etag:       generated.NewOptString(formatETag(comment.Version)),
-		XRequestID: generated.NewOptString(baseapi.RequestIDFromContext(ctx)),
-		Response:   comment,
-	}, nil
-}
-
-func (h *Handler) DeleteTaskComment(
-	ctx context.Context,
-	params generated.DeleteTaskCommentParams,
-) (generated.DeleteTaskCommentRes, error) {
-	expectedVersion, err := parseIfMatch(params.IfMatch)
-	if err != nil {
-		return nil, err
-	}
-	actor, _, err := operationContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	subject, err := accessSubject(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := h.Access.RequireTaskByNumber(
-		ctx, params.Number, subject, application.ProjectPermissionWrite,
-	); err != nil {
-		return nil, err
-	}
-	if err := h.Tasks.DeleteComment(
-		ctx, params.Number, params.ID, expectedVersion, actor,
-	); err != nil {
-		return nil, err
-	}
-	return &generated.NoContent{
-		XRequestID: generated.NewOptString(baseapi.RequestIDFromContext(ctx)),
-	}, nil
 }
 
 func (h *Handler) ListTaskActivity(
@@ -650,35 +479,31 @@ func taskFromDomain(task store.TaskWithRelations) generated.Task {
 		ID: task.Task.ID, Number: task.Task.Number, Version: task.Task.Version,
 		Title: task.Task.Title, Context: task.Task.Context,
 		ExpectedResult: task.Task.ExpectedResult, Description: task.Task.Description,
-		Status:        generated.TaskStatus(task.Task.Status),
-		Priority:      generated.TaskPriority(task.Task.Priority),
-		ExecutionMode: generated.TaskExecutionMode(task.Task.ExecutionMode),
-		Creator:       userRefFromDomain(task.Creator),
-		Labels:        make([]generated.Label, len(task.Labels)),
-		Children:      make([]generated.TaskRelationRef, len(task.Children)),
-		Dependencies:  make([]generated.TaskRelationRef, len(task.Dependencies)),
-		Dependents:    make([]generated.TaskRelationRef, len(task.Dependents)),
-		Blocked:       task.Blocked,
-		CreatedAt:     task.Task.CreatedAt, UpdatedAt: task.Task.UpdatedAt,
+		Phase:        generated.TaskPhase(task.Task.Phase),
+		ReviewCycle:  task.Task.ReviewCycle,
+		MainThreadID: task.Task.MainThreadID,
+		Priority:     generated.TaskPriority(task.Task.Priority),
+		Creator:      userRefFromDomain(task.Creator),
+		Labels:       make([]generated.Label, len(task.Labels)),
+		Children:     make([]generated.TaskRelationRef, len(task.Children)),
+		Dependencies: make([]generated.TaskRelationRef, len(task.Dependencies)),
+		Dependents:   make([]generated.TaskRelationRef, len(task.Dependents)),
+		Blocked:      task.Blocked,
+		CreatedAt:    task.Task.CreatedAt, UpdatedAt: task.Task.UpdatedAt,
+	}
+	if task.Task.Activity != "" {
+		out.Activity = generated.NewOptTaskActivityState(
+			generated.TaskActivityState(task.Task.Activity),
+		)
+	}
+	if task.Task.ActiveIssueThreadID != nil {
+		out.ActiveIssueThreadID = generated.NewOptUUID(*task.Task.ActiveIssueThreadID)
 	}
 	for i, label := range task.Labels {
 		out.Labels[i] = labelFromDomain(label)
 	}
 	if task.Assignee != nil {
 		out.Assignee = generated.NewOptUserRef(userRefFromDomain(*task.Assignee))
-	}
-	if task.AgentWork != nil {
-		agentWork := generated.TaskAgentWorkSummary{
-			ClaimID:    task.AgentWork.ClaimID,
-			Status:     generated.TaskClaimStatus(task.AgentWork.Status),
-			TokenName:  task.AgentWork.TokenName,
-			ClientKind: task.AgentWork.ClientKind,
-			UpdatedAt:  task.AgentWork.UpdatedAt,
-		}
-		if task.AgentWork.CompletedAt != nil {
-			agentWork.CompletedAt = generated.NewOptDateTime(*task.AgentWork.CompletedAt)
-		}
-		out.AgentWork = generated.NewOptTaskAgentWorkSummary(agentWork)
 	}
 	if task.Task.StartDate != nil {
 		out.StartDate = generated.NewOptDate(*task.Task.StartDate)
@@ -720,7 +545,7 @@ func taskRelationRefFromDomain(task store.TaskRelationRef) generated.TaskRelatio
 		ID:       task.ID,
 		Number:   task.Number,
 		Title:    task.Title,
-		Status:   generated.TaskStatus(task.Status),
+		Phase:    generated.TaskPhase(task.Phase),
 		Archived: task.Archived,
 	}
 	if task.Milestone != nil {
@@ -736,24 +561,6 @@ func userRefFromDomain(user domain.UserRef) generated.UserRef {
 	out := generated.UserRef{ID: user.ID, Name: user.Name}
 	if user.Email != nil {
 		out.Email = generated.NewOptString(*user.Email)
-	}
-	return out
-}
-
-func commentFromDomain(comment domain.Comment) generated.Comment {
-	mentionedUserIDs := comment.MentionedUserIDs
-	if mentionedUserIDs == nil {
-		mentionedUserIDs = []uuid.UUID{}
-	}
-	out := generated.Comment{
-		ID: comment.ID, TaskID: comment.TaskID, AuthorID: comment.AuthorID,
-		Body: comment.Body, ThreadRootID: comment.ThreadRootID,
-		MentionedUserIds: mentionedUserIDs, Deleted: comment.DeletedAt != nil,
-		Version:   comment.Version,
-		CreatedAt: comment.CreatedAt, UpdatedAt: comment.UpdatedAt,
-	}
-	if comment.ReplyToCommentID != nil {
-		out.ReplyToCommentID = generated.NewOptUUID(*comment.ReplyToCommentID)
 	}
 	return out
 }

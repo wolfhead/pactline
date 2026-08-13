@@ -42,10 +42,10 @@ function awaitProject() {
 }
 
 describe('ProjectControl', () => {
-  it('selects a project and then limits milestones to that project', async () => {
+  it('keeps the Project immutable and edits only its Milestone', async () => {
     const onProjectChange = vi.fn()
     const onMilestoneChange = vi.fn()
-    const { rerender } = render(
+    render(
       <ProjectControl
         project={{ id: 'p1', number: 12, name: 'Launch' }}
         milestone={null}
@@ -53,18 +53,9 @@ describe('ProjectControl', () => {
         onMilestoneChange={onMilestoneChange}
       />,
     )
-    await waitFor(() => expect(screen.getByRole('option', { name: '#12 Launch' })).toBeInTheDocument())
-    fireEvent.change(screen.getByLabelText('项目'), { target: { value: '12' } })
-    expect(onProjectChange).toHaveBeenCalledWith({ id: 'p1', number: 12, name: 'Launch' })
-
-    rerender(
-      <ProjectControl
-        project={{ id: 'p1', number: 12, name: 'Launch' }}
-        milestone={null}
-        onProjectChange={onProjectChange}
-        onMilestoneChange={onMilestoneChange}
-      />,
-    )
+    expect(screen.getByText('#12 Launch')).toHaveAttribute('title', '任务创建后不能移到其他项目')
+    expect(screen.queryByLabelText('项目')).not.toBeInTheDocument()
+    expect(onProjectChange).not.toHaveBeenCalled()
     await waitFor(() => expect(screen.getByRole('option', { name: 'API ready' })).toBeInTheDocument())
     fireEvent.change(screen.getByLabelText('里程碑'), { target: { value: 'm1' } })
     expect(onMilestoneChange).toHaveBeenCalledWith({ id: 'm1', name: 'API ready' })

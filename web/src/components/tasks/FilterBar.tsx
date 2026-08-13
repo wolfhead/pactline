@@ -1,12 +1,12 @@
 import { useIdentity } from '@/identity'
 import {
   PRIORITY_LABELS,
-  STATUS_LABELS,
+  PHASE_LABELS,
   TASK_PRIORITIES,
-  TASK_STATUSES,
+  TASK_PHASES,
   type Label,
   type TaskPriority,
-  type TaskStatus,
+  type TaskPhase,
 } from '@/task-types'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -16,7 +16,7 @@ import { CONTROL_TRIGGER_CLASS } from './controls/trigger'
 import LabelManager from './LabelManager'
 
 export interface TaskFilters {
-  statuses: TaskStatus[]
+  phases: TaskPhase[]
   priorities: TaskPriority[]
   assignee: string // '' = anyone, 'none' = unassigned, else a user id
   labelId: string // '' = any label
@@ -26,7 +26,7 @@ export interface TaskFilters {
 }
 
 export const DEFAULT_FILTERS: TaskFilters = {
-  statuses: [],
+  phases: [],
   priorities: [],
   assignee: '',
   labelId: '',
@@ -83,9 +83,9 @@ interface FilterBarProps {
 export default function FilterBar({ filters, onChange, labels, onLabelsChanged }: FilterBarProps) {
   const { users, isReadOnly } = useIdentity()
 
-  function toggleStatus(s: TaskStatus) {
-    const has = filters.statuses.includes(s)
-    onChange({ ...filters, statuses: has ? filters.statuses.filter((x) => x !== s) : [...filters.statuses, s] })
+  function togglePhase(phase: TaskPhase) {
+    const has = filters.phases.includes(phase)
+    onChange({ ...filters, phases: has ? filters.phases.filter((value) => value !== phase) : [...filters.phases, phase] })
   }
 
   function togglePriority(p: TaskPriority) {
@@ -97,7 +97,7 @@ export default function FilterBar({ filters, onChange, labels, onLabelsChanged }
     onChange({ ...filters, labelId: filters.labelId === id ? '' : id })
   }
 
-  const statusActive = filters.statuses.length > 0
+  const phaseActive = filters.phases.length > 0
   const priorityActive = filters.priorities.length > 0
   const assigneeActive = filters.assignee !== ''
   const labelActive = filters.labelId !== ''
@@ -114,25 +114,25 @@ export default function FilterBar({ filters, onChange, labels, onLabelsChanged }
       />
 
       <Popover>
-        <PopoverTrigger aria-pressed={statusActive} className={filterTriggerClass(statusActive)}>
-          状态{statusActive && ` · ${filters.statuses.length}`}
+        <PopoverTrigger aria-pressed={phaseActive} className={filterTriggerClass(phaseActive)}>
+          阶段{phaseActive && ` · ${filters.phases.length}`}
         </PopoverTrigger>
-        <PopoverContent className="w-48 p-2" role="group" aria-label="按状态筛选">
+        <PopoverContent className="w-48 p-2" role="group" aria-label="按阶段筛选">
           {/* list-none/pl-0 are stated rather than left to preflight: they
               are what a bare <ul> in a popover needs either way, and spelling
               them out keeps this list from silently regrowing the UA marker
               and 40px indent if the reset ever moves (caught by screenshot
               when the old stylesheet went). */}
           <ul className="flex list-none flex-col gap-1 pl-0">
-            {TASK_STATUSES.map((s) => (
-              <li key={s}>
+            {TASK_PHASES.map((phase) => (
+              <li key={phase}>
                 <label className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent-subtle">
                   <Checkbox
-                    aria-label={STATUS_LABELS[s]}
-                    checked={filters.statuses.includes(s)}
-                    onCheckedChange={() => toggleStatus(s)}
+                    aria-label={PHASE_LABELS[phase]}
+                    checked={filters.phases.includes(phase)}
+                    onCheckedChange={() => togglePhase(phase)}
                   />
-                  {STATUS_LABELS[s]}
+                  {PHASE_LABELS[phase]}
                 </label>
               </li>
             ))}

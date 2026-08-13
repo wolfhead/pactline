@@ -30,7 +30,7 @@ test('archiving offers an undo instead of a confirmation dialog, and undo restor
 
   expect(dialogSeen).toBe(false)
   await expect(page.getByText('此任务已归档。')).toBeVisible()
-  const toast = page.getByRole('status')
+  const toast = page.getByRole('status').filter({ hasText: '已归档任务。' })
   await expect(toast).toContainText('已归档任务。')
   await expect(page.getByRole('button', { name: '恢复', exact: true })).toBeVisible()
 

@@ -270,9 +270,6 @@ export function TaskComposerProvider({ children }: { children: ReactNode }) {
         milestone_id: milestoneID || null,
         assignee_id: assigneeID || null,
         priority: String(data.get('priority') ?? 'none') as TaskPriority,
-        execution_mode: data.get('execution_mode') === 'agent_allowed'
-          ? 'agent_allowed'
-          : 'human_only',
       })
       window.localStorage.setItem('task-create-project', String(projectNumber))
       setCreatedTask(created)
@@ -402,15 +399,6 @@ export function TaskComposerProvider({ children }: { children: ReactNode }) {
                 </select>
               </Field>
             </div>
-            <Field
-              label="执行方式"
-              hint="允许 Agent 执行后，只有分配给你的待办任务才能被你的 Codex session 领取。"
-            >
-              <select name="execution_mode" defaultValue="human_only" disabled={createdTask !== null} className={inputClass}>
-                <option value="human_only">仅人工执行</option>
-                <option value="agent_allowed">允许 Agent 执行</option>
-              </select>
-            </Field>
             {error && <p role="alert" className="text-sm text-danger">创建失败：{error}</p>}
           </form>
           <SheetFooter className="flex-row justify-end border-t border-border px-5 py-4">

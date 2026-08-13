@@ -10,7 +10,8 @@ function task(n: number, over: Partial<Task> = {}): Task {
   return {
     id: `id-${n}`, number: n, title: `任务 ${n}`,
     context: 'Test context', expected_result: 'Test result', description: '',
-    status: 'todo', priority: 'none', assignee: null,
+    phase: 'backlog', activity: null, review_cycle: 0, main_thread_id: `thread-${n}`,
+    priority: 'none', assignee: null,
     creator: USERS[0], due_date: null, labels: [],
     parent: null, children: [], dependencies: [], dependents: [], blocked: false,
     created_at: '', updated_at: '', completed_at: null, archived_at: null,
@@ -42,26 +43,26 @@ describe('TaskList', () => {
 
   it('groups by status and counts each group', () => {
     renderList([
-      task(1, { status: 'in_progress' }),
-      task(2, { status: 'in_progress' }),
-      task(3, { status: 'todo' }),
+      task(1, { phase: 'in_progress', activity: 'working' }),
+      task(2, { phase: 'in_progress', activity: 'available' }),
+      task(3, { phase: 'backlog', activity: null }),
     ])
     // The count must be the real per-group size. A decoy that prints the
     // total (3) everywhere fails here, and so does one that prints 1.
-    expect(screen.getByRole('heading', { name: /进行中/ })).toHaveTextContent('2')
-    expect(screen.getByRole('heading', { name: /待办/ })).toHaveTextContent('1')
+    expect(screen.getByRole('heading', { name: /执行中/ })).toHaveTextContent('2')
+    expect(screen.getByRole('heading', { name: /待规划/ })).toHaveTextContent('1')
   })
 
   it('puts each task under its own status heading, not merely on screen', () => {
-    renderList([task(1, { status: 'in_progress' }), task(2, { status: 'todo' })])
-    const inProgress = screen.getByRole('group', { name: /进行中/ })
+    renderList([task(1, { phase: 'in_progress' }), task(2, { phase: 'backlog' })])
+    const inProgress = screen.getByRole('group', { name: /执行中/ })
     expect(within(inProgress).getByText('任务 1')).toBeInTheDocument()
     expect(within(inProgress).queryByText('任务 2')).not.toBeInTheDocument()
   })
 
   it('drops the grouping entirely when a non-default sort is active', () => {
-    renderList([task(1, { status: 'in_progress' }), task(2, { status: 'todo' })], null, false)
-    expect(screen.queryByRole('heading', { name: /进行中/ })).not.toBeInTheDocument()
+    renderList([task(1, { phase: 'in_progress' }), task(2, { phase: 'backlog' })], null, false)
+    expect(screen.queryByRole('heading', { name: /执行中/ })).not.toBeInTheDocument()
     expect(screen.getByText('任务 1')).toBeInTheDocument()
     expect(screen.getByText('任务 2')).toBeInTheDocument()
   })
@@ -79,7 +80,7 @@ describe('TaskList', () => {
       id: 'id-4',
       number: 4,
       title: '任务 4',
-      status: 'todo' as const,
+      phase: 'backlog' as const,
       archived: false,
       milestone: null,
     }
@@ -89,7 +90,7 @@ describe('TaskList', () => {
           id: 'id-1',
           number: 1,
           title: '任务 1',
-          status: 'todo',
+          phase: 'backlog',
           archived: false,
           milestone: null,
         }],

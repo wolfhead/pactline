@@ -35,7 +35,7 @@ func TestGeneratedClientAgentWorkflow(t *testing.T) {
 
 	tokenResponse := do(t, handler, http.MethodPost, "/api/account/tokens", userA, map[string]any{
 		"name":   "generated-agent-" + uuid.NewString(),
-		"scopes": []string{"work:write"}, "expires_in_days": 30,
+		"scopes": []string{"work:write", "work:execute"}, "expires_in_days": 30,
 	})
 	require.Equal(t, http.StatusCreated, tokenResponse.Code, tokenResponse.Body.String())
 	var issued issuedTokenJSON
@@ -187,53 +187,149 @@ func TestGeneratedClientAgentWorkflow(t *testing.T) {
 	taskCriterionCreated, ok := taskCriterionResult.(*generated.CriterionCreatedHeaders)
 	require.True(t, ok, "unexpected task criterion response %T", taskCriterionResult)
 
-	for _, criterion := range []generated.AcceptanceCriterion{
-		milestoneCriterion, taskCriterionCreated.Response,
-	} {
-		checkResult, err := client.CreateAcceptanceCheck(
+	checkResult, err := client.CreateAcceptanceCheck(
+		ctx,
+		&generated.AcceptanceCheckCreate{
+			CriterionRevision: milestoneCriterion.Revision,
+			Outcome:           generated.AcceptanceOutcomePassed,
+			Evidence:          "The generated Agent client verified this Milestone criterion.",
+		},
+		generated.CreateAcceptanceCheckParams{
+			ID: milestoneCriterion.ID, IfMatch: `"1"`,
+			IdempotencyKey: generated.NewOptString("check-" + uuid.NewString()),
+		},
+	)
+	require.NoError(t, err)
+	createdCheck, ok := checkResult.(*generated.AcceptanceCheckCreatedHeaders)
+	require.True(t, ok, "unexpected acceptance check response %T: %#v", checkResult, checkResult)
+	require.Equal(t, generated.AcceptanceCheckCheckerTypeAgent, createdCheck.Response.CheckerType)
+	require.Equal(t, issued.Name, createdCheck.Response.CheckerRef.Or(""))
+
+	completeTask := func(number, initialVersion int64, criterion *generated.AcceptanceCriterion) generated.TaskWorkflow {
+		readyResult, readyErr := client.MarkTaskReady(ctx, generated.MarkTaskReadyParams{
+			Number: number, IfMatch: fmt.Sprintf(`"%d"`, initialVersion),
+			IdempotencyKey: generated.NewOptString("ready-" + uuid.NewString()),
+		})
+		require.NoError(t, readyErr)
+		ready, readyOK := readyResult.(*generated.TaskWorkflowHeaders)
+		require.True(t, readyOK, "unexpected ready response %T", readyResult)
+
+		executionSessionID := "execution-" + uuid.NewString()
+		claimResult, claimErr := client.CreateTaskStageClaim(
 			ctx,
-			&generated.AcceptanceCheckCreate{
-				CriterionRevision: criterion.Revision,
-				Outcome:           generated.AcceptanceOutcomePassed,
-				Evidence:          "The generated Agent client verified this criterion.",
+			&generated.TaskStageClaimCreate{
+				ClientKind:      generated.NewOptString("generated-client"),
+				ClientSessionID: generated.NewOptString(executionSessionID),
 			},
-			generated.CreateAcceptanceCheckParams{
-				ID: criterion.ID, IfMatch: `"1"`,
-				IdempotencyKey: generated.NewOptString("check-" + uuid.NewString()),
+			generated.CreateTaskStageClaimParams{
+				Number: number, IfMatch: fmt.Sprintf(`"%d"`, ready.Response.Version),
+				IdempotencyKey: generated.NewOptString("claim-execution-" + uuid.NewString()),
 			},
 		)
-		require.NoError(t, err)
-		created, ok := checkResult.(*generated.AcceptanceCheckCreatedHeaders)
-		require.True(t, ok, "unexpected acceptance check response %T", checkResult)
-		require.Equal(t, generated.AcceptanceCheckCheckerTypeAgent, created.Response.CheckerType)
-		require.Equal(t, issued.Name, created.Response.CheckerRef.Or(""))
+		require.NoError(t, claimErr)
+		execution, executionOK := claimResult.(*generated.TaskStageClaimCommandHeaders)
+		require.True(t, executionOK, "unexpected execution Claim response %T", claimResult)
+		currentResult, currentErr := client.GetCurrentTaskStageClaim(
+			ctx,
+			generated.GetCurrentTaskStageClaimParams{
+				ClientKind: "generated-client", ClientSessionID: executionSessionID,
+			},
+		)
+		require.NoError(t, currentErr)
+		current, currentOK := currentResult.(*generated.TaskStageClaimHeaders)
+		require.True(t, currentOK, "unexpected current Claim response %T", currentResult)
+		require.Equal(t, execution.Response.Claim.ID, current.Response.ID)
+
+		if criterion != nil {
+			verificationResult, verificationErr := client.RecordTaskStageAcceptanceCheck(
+				ctx,
+				&generated.TaskStageAcceptanceCheckWrite{
+					ClaimVersion:      execution.Response.Claim.Version,
+					CriterionRevision: criterion.Revision,
+					Outcome:           generated.AcceptanceOutcomePassed,
+					Evidence:          "Execution verification passed.",
+				},
+				generated.RecordTaskStageAcceptanceCheckParams{
+					Number: number, ID: execution.Response.Claim.ID, CriterionID: criterion.ID,
+					IfMatch:        fmt.Sprintf(`"%d"`, execution.Response.Task.Version),
+					IdempotencyKey: generated.NewOptString("verify-" + uuid.NewString()),
+				},
+			)
+			require.NoError(t, verificationErr)
+			verification, verificationOK := verificationResult.(*generated.AcceptanceCheckCreatedHeaders)
+			require.True(t, verificationOK, "unexpected verification response %T", verificationResult)
+			require.Equal(t, generated.AcceptanceCheckPurposeExecutionVerification, verification.Response.Purpose.Or(""))
+		}
+
+		submitResult, submitErr := client.SubmitTaskWork(
+			ctx,
+			&generated.TaskStageClaimFinish{ClaimVersion: execution.Response.Claim.Version, Body: "Work is ready for acceptance."},
+			generated.SubmitTaskWorkParams{
+				Number: number, ID: execution.Response.Claim.ID,
+				IfMatch:        fmt.Sprintf(`"%d"`, execution.Response.Task.Version),
+				IdempotencyKey: generated.NewOptString("submit-" + uuid.NewString()),
+			},
+		)
+		require.NoError(t, submitErr)
+		submitted, submittedOK := submitResult.(*generated.TaskStageClaimCommandHeaders)
+		require.True(t, submittedOK, "unexpected submit response %T", submitResult)
+
+		reviewClaimResult, reviewClaimErr := client.CreateTaskStageClaim(
+			ctx,
+			&generated.TaskStageClaimCreate{
+				ClientKind:      generated.NewOptString("generated-client"),
+				ClientSessionID: generated.NewOptString("review-" + uuid.NewString()),
+			},
+			generated.CreateTaskStageClaimParams{
+				Number: number, IfMatch: fmt.Sprintf(`"%d"`, submitted.Response.Task.Version),
+				IdempotencyKey: generated.NewOptString("claim-review-" + uuid.NewString()),
+			},
+		)
+		require.NoError(t, reviewClaimErr)
+		review, reviewOK := reviewClaimResult.(*generated.TaskStageClaimCommandHeaders)
+		require.True(t, reviewOK, "unexpected review Claim response %T", reviewClaimResult)
+
+		if criterion != nil {
+			acceptanceResult, acceptanceErr := client.RecordTaskStageAcceptanceCheck(
+				ctx,
+				&generated.TaskStageAcceptanceCheckWrite{
+					ClaimVersion:      review.Response.Claim.Version,
+					CriterionRevision: criterion.Revision,
+					Outcome:           generated.AcceptanceOutcomePassed,
+					Evidence:          "Acceptance review passed.",
+				},
+				generated.RecordTaskStageAcceptanceCheckParams{
+					Number: number, ID: review.Response.Claim.ID, CriterionID: criterion.ID,
+					IfMatch:        fmt.Sprintf(`"%d"`, review.Response.Task.Version),
+					IdempotencyKey: generated.NewOptString("acceptance-" + uuid.NewString()),
+				},
+			)
+			require.NoError(t, acceptanceErr)
+			acceptance, acceptanceOK := acceptanceResult.(*generated.AcceptanceCheckCreatedHeaders)
+			require.True(t, acceptanceOK, "unexpected acceptance response %T", acceptanceResult)
+			require.Equal(t, generated.AcceptanceCheckPurposeAcceptance, acceptance.Response.Purpose.Or(""))
+		}
+
+		acceptResult, acceptErr := client.AcceptTask(
+			ctx,
+			&generated.TaskStageClaimFinish{ClaimVersion: review.Response.Claim.Version, Body: "Accepted."},
+			generated.AcceptTaskParams{
+				Number: number, ID: review.Response.Claim.ID,
+				IfMatch:        fmt.Sprintf(`"%d"`, review.Response.Task.Version),
+				IdempotencyKey: generated.NewOptString("accept-" + uuid.NewString()),
+			},
+		)
+		require.NoError(t, acceptErr)
+		accepted, acceptedOK := acceptResult.(*generated.TaskStageClaimCommandHeaders)
+		require.True(t, acceptedOK, "unexpected accept response %T", acceptResult)
+		return accepted.Response.Task
 	}
 
-	completedPredecessorResult, err := client.UpdateTask(
-		ctx,
-		&generated.TaskPatch{Status: generated.NewOptTaskStatus(generated.TaskStatusDone)},
-		generated.UpdateTaskParams{
-			Number: predecessor.Number, IfMatch: `"1"`,
-			IdempotencyKey: generated.NewOptString("complete-predecessor-" + uuid.NewString()),
-		},
-	)
-	require.NoError(t, err)
-	completedPredecessor, ok := completedPredecessorResult.(*generated.TaskHeaders)
-	require.True(t, ok, "unexpected predecessor completion response %T", completedPredecessorResult)
-	require.Equal(t, generated.TaskStatusDone, completedPredecessor.Response.Status)
+	completedPredecessor := completeTask(predecessor.Number, predecessor.Version, nil)
+	require.Equal(t, generated.TaskPhaseDone, completedPredecessor.Phase)
 
-	completedTaskResult, err := client.UpdateTask(
-		ctx,
-		&generated.TaskPatch{Status: generated.NewOptTaskStatus(generated.TaskStatusDone)},
-		generated.UpdateTaskParams{
-			Number: task.Number, IfMatch: `"3"`,
-			IdempotencyKey: generated.NewOptString("complete-task-" + uuid.NewString()),
-		},
-	)
-	require.NoError(t, err)
-	completedTask, ok := completedTaskResult.(*generated.TaskHeaders)
-	require.True(t, ok, "unexpected complete task response %T", completedTaskResult)
-	require.Equal(t, generated.TaskStatusDone, completedTask.Response.Status)
+	completedTask := completeTask(task.Number, task.Version+1, &taskCriterionCreated.Response)
+	require.Equal(t, generated.TaskPhaseDone, completedTask.Phase)
 
 	completedMilestoneResult, err := client.CompleteMilestone(
 		ctx, generated.OptLifecycleRequest{},

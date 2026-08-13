@@ -25,7 +25,9 @@ type TaskStore struct{ db *DB }
 func NewTaskStore(db *DB) *TaskStore { return &TaskStore{db: db} }
 
 const taskColumns = `t.id, t.number, t.version, t.title, t.context, t.expected_result,
-	t.description, t.status, t.priority, t.execution_mode,
+	t.description, t.phase, t.activity_state, t.review_cycle, t.active_issue_thread_id,
+	main_thread.id,
+	t.status, t.priority, t.execution_mode,
 	t.assignee_id, t.creator_id, t.start_date, t.due_date, t.project_id, t.milestone_id,
 	t.parent_task_id,
 	t.created_at, t.updated_at, t.completed_at, t.archived_at`
@@ -49,6 +51,8 @@ const taskSelectColumns = taskColumns + `,
 const taskFromJoins = `FROM tasks t
 	JOIN users cu ON cu.id = t.creator_id
 	LEFT JOIN users au ON au.id = t.assignee_id
+	LEFT JOIN task_threads main_thread
+		ON main_thread.task_id=t.id AND main_thread.role='main'
 	JOIN projects p ON p.id = t.project_id
 	LEFT JOIN milestones m ON m.id = t.milestone_id
 	LEFT JOIN LATERAL (
@@ -63,7 +67,7 @@ const taskFromJoins = `FROM tasks t
 			'id', related.id,
 			'number', related.number,
 			'title', related.title,
-			'status', related.status,
+			'phase', related.phase,
 			'archived', related.archived_at IS NOT NULL,
 			'milestone', CASE
 				WHEN related_milestone.id IS NULL THEN NULL
@@ -82,7 +86,7 @@ const taskFromJoins = `FROM tasks t
 			'id', related.id,
 			'number', related.number,
 			'title', related.title,
-			'status', related.status,
+			'phase', related.phase,
 			'archived', related.archived_at IS NOT NULL,
 			'milestone', CASE
 				WHEN related_milestone.id IS NULL THEN NULL
@@ -101,7 +105,7 @@ const taskFromJoins = `FROM tasks t
 			'id', related.id,
 			'number', related.number,
 			'title', related.title,
-			'status', related.status,
+			'phase', related.phase,
 			'archived', related.archived_at IS NOT NULL,
 			'milestone', CASE
 				WHEN related_milestone.id IS NULL THEN NULL
@@ -121,7 +125,7 @@ const taskFromJoins = `FROM tasks t
 			'id', related.id,
 			'number', related.number,
 			'title', related.title,
-			'status', related.status,
+			'phase', related.phase,
 			'archived', related.archived_at IS NOT NULL,
 			'milestone', CASE
 				WHEN related_milestone.id IS NULL THEN NULL
@@ -202,12 +206,12 @@ type MilestoneRef struct {
 }
 
 type TaskRelationRef struct {
-	ID        uuid.UUID         `json:"id"`
-	Number    int64             `json:"number"`
-	Title     string            `json:"title"`
-	Status    domain.TaskStatus `json:"status"`
-	Archived  bool              `json:"archived"`
-	Milestone *MilestoneRef     `json:"milestone"`
+	ID        uuid.UUID        `json:"id"`
+	Number    int64            `json:"number"`
+	Title     string           `json:"title"`
+	Phase     domain.TaskPhase `json:"phase"`
+	Archived  bool             `json:"archived"`
+	Milestone *MilestoneRef    `json:"milestone"`
 }
 
 func scanTaskWithRelations(s scanner) (TaskWithRelations, error) {
@@ -224,11 +228,18 @@ func scanTaskWithRelations(s scanner) (TaskWithRelations, error) {
 		dependenciesJSON []byte
 		dependentsJSON   []byte
 		agentWorkJSON    []byte
+		phase            *string
+		activity         *string
+		reviewCycle      *int64
+		mainThreadID     *uuid.UUID
 	)
 	err := s.Scan(
 		&twr.Task.ID, &twr.Task.Number, &twr.Task.Version,
 		&twr.Task.Title, &twr.Task.Context, &twr.Task.ExpectedResult,
-		&twr.Task.Description, &twr.Task.Status, &twr.Task.Priority, &twr.Task.ExecutionMode,
+		&twr.Task.Description, &phase, &activity, &reviewCycle,
+		&twr.Task.ActiveIssueThreadID,
+		&mainThreadID,
+		&twr.Task.Status, &twr.Task.Priority, &twr.Task.ExecutionMode,
 		&twr.Task.AssigneeID, &twr.Task.CreatorID, &twr.Task.StartDate, &twr.Task.DueDate,
 		&twr.Task.ProjectID, &twr.Task.MilestoneID, &twr.Task.ParentTaskID,
 		&twr.Task.CreatedAt, &twr.Task.UpdatedAt,
@@ -244,9 +255,22 @@ func scanTaskWithRelations(s scanner) (TaskWithRelations, error) {
 	if err != nil {
 		return TaskWithRelations{}, fmt.Errorf("scan task: %w", err)
 	}
+	if phase == nil || reviewCycle == nil || mainThreadID == nil {
+		return TaskWithRelations{}, fmt.Errorf(
+			"%w: Task %d has not been classified into the target workflow",
+			domain.ErrMigrationRequired,
+			twr.Task.Number,
+		)
+	}
 	if assigneeID != nil {
 		twr.Assignee = &domain.UserRef{ID: *assigneeID, Name: derefStr(assigneeName), Email: assigneeEmail}
 	}
+	twr.Task.Phase = domain.TaskPhase(*phase)
+	if activity != nil {
+		twr.Task.Activity = domain.TaskActivityState(*activity)
+	}
+	twr.Task.ReviewCycle = *reviewCycle
+	twr.Task.MainThreadID = *mainThreadID
 	if milestoneID != nil {
 		twr.Milestone = &MilestoneRef{ID: *milestoneID, Name: derefStr(milestoneName)}
 	}
@@ -281,7 +305,7 @@ func scanTaskWithRelations(s scanner) (TaskWithRelations, error) {
 		twr.AgentWork = &agentWork
 	}
 	for _, dependency := range twr.Dependencies {
-		if dependency.Status != domain.TaskStatusDone && dependency.Status != domain.TaskStatusCancelled {
+		if dependency.Phase != domain.TaskPhaseDone && dependency.Phase != domain.TaskPhaseCancelled {
 			twr.Blocked = true
 			break
 		}
@@ -551,16 +575,17 @@ func (s *TaskStore) updateWithExpectedVersion(
 		oldParent                                               *uuid.UUID
 		oldCompletedAt                                          *time.Time
 		oldVersion                                              int64
+		oldPhase                                                *string
 	)
 	err = tx.QueryRow(ctx,
 		`SELECT id, version, title, context, expected_result, description,
 		        status, priority, execution_mode, assignee_id, start_date, due_date,
-		        project_id, milestone_id, parent_task_id, completed_at
+		        project_id, milestone_id, parent_task_id, completed_at, phase
 		 FROM tasks WHERE number = $1 FOR UPDATE`, number,
 	).Scan(&id, &oldVersion, &oldTitle, &oldContext, &oldExpectedResult,
 		&oldDescription, &oldStatus, &oldPriority, &oldExecutionMode, &oldAssignee,
 		&oldStartDate, &oldDueDate, &oldProject, &oldMilestone,
-		&oldParent, &oldCompletedAt)
+		&oldParent, &oldCompletedAt, &oldPhase)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return TaskWithRelations{}, domain.ErrNotFound
 	}
@@ -674,14 +699,7 @@ func (s *TaskStore) updateWithExpectedVersion(
 		}
 	}
 	if patch.ProjectSet {
-		if patch.ProjectID == nil || *patch.ProjectID == uuid.Nil {
-			return TaskWithRelations{}, fmt.Errorf("%w: task project cannot be cleared", domain.ErrInvalidInput)
-		}
-		projectChanged := oldProject != *patch.ProjectID
-		newProject = *patch.ProjectID
-		if projectChanged && !patch.MilestoneSet {
-			newMilestone = nil
-		}
+		return TaskWithRelations{}, fmt.Errorf("%w: Task Project is immutable", domain.ErrConflict)
 	}
 	if patch.MilestoneSet {
 		newMilestone = patch.MilestoneID
@@ -720,6 +738,18 @@ func (s *TaskStore) updateWithExpectedVersion(
 		); err != nil {
 			return TaskWithRelations{}, err
 		}
+		if oldPhase != nil && *oldPhase == string(domain.TaskPhaseReady) {
+			unfinished, err := countUnfinishedTasks(ctx, tx, patch.DependencyIDs)
+			if err != nil {
+				return TaskWithRelations{}, err
+			}
+			if unfinished > 0 {
+				return TaskWithRelations{}, fmt.Errorf(
+					"%w: withdraw readiness before adding an unfinished dependency",
+					domain.ErrInvalidTransition,
+				)
+			}
+		}
 		if err := replaceTaskDependencies(ctx, tx, id, patch.DependencyIDs); err != nil {
 			return TaskWithRelations{}, err
 		}
@@ -742,12 +772,12 @@ func (s *TaskStore) updateWithExpectedVersion(
 				(SELECT count(*)
 				 FROM tasks child
 				 WHERE child.parent_task_id=$1
-				   AND child.status NOT IN ('done', 'cancelled')),
+				   AND (child.phase IS NULL OR child.phase NOT IN ('done', 'cancelled'))),
 				(SELECT count(*)
 				 FROM task_dependencies dependency
 				 JOIN tasks predecessor ON predecessor.id=dependency.depends_on_task_id
 				 WHERE dependency.task_id=$1
-				   AND predecessor.status NOT IN ('done', 'cancelled'))
+				   AND (predecessor.phase IS NULL OR predecessor.phase NOT IN ('done', 'cancelled')))
 			FROM acceptance_criteria ac
 			LEFT JOIN LATERAL (
 				SELECT claim.completed_at
@@ -989,9 +1019,12 @@ func (s *TaskStore) setArchivedWithExpectedVersion(
 		id          uuid.UUID
 		wasArchived bool
 		oldVersion  int64
+		activity    *string
 	)
-	err = tx.QueryRow(ctx, `SELECT id, version, archived_at IS NOT NULL FROM tasks WHERE number = $1 FOR UPDATE`, number).
-		Scan(&id, &oldVersion, &wasArchived)
+	err = tx.QueryRow(ctx, `
+		SELECT id,version,archived_at IS NOT NULL,activity_state
+		FROM tasks WHERE number=$1 FOR UPDATE`, number).
+		Scan(&id, &oldVersion, &wasArchived, &activity)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return TaskWithRelations{}, domain.ErrNotFound
 	}
@@ -1000,6 +1033,14 @@ func (s *TaskStore) setArchivedWithExpectedVersion(
 	}
 	if expectedVersion != nil && oldVersion != *expectedVersion {
 		return TaskWithRelations{}, domain.VersionConflictError{CurrentVersion: oldVersion}
+	}
+	if archived && !wasArchived && activity != nil &&
+		(*activity == string(domain.TaskActivityWorking) ||
+			*activity == string(domain.TaskActivityNeedsResolution)) {
+		return TaskWithRelations{}, fmt.Errorf(
+			"%w: release, resolve, or cancel the active Task workflow before archiving",
+			domain.ErrConflict,
+		)
 	}
 
 	if wasArchived != archived {
@@ -1299,7 +1340,7 @@ func countUnfinishedTasks(
 		SELECT count(*)
 		FROM tasks
 		WHERE id=ANY($1::uuid[])
-		  AND status NOT IN ('done', 'cancelled')`,
+		  AND (phase IS NULL OR phase NOT IN ('done', 'cancelled'))`,
 		taskIDs,
 	).Scan(&count); err != nil {
 		return 0, fmt.Errorf("count unfinished tasks: %w", err)
@@ -1668,6 +1709,9 @@ func (s *TaskStore) ListActivity(ctx context.Context, taskID uuid.UUID) ([]domai
 // non-archived task, newest first, unpaginated (up to the default page
 // size).
 type TaskListFilter struct {
+	Phases     []domain.TaskPhase
+	Activities []domain.TaskActivityState
+	// Statuses and ExecutionModes are retained only for pre-migration internal callers.
 	Statuses       []domain.TaskStatus
 	Priorities     []domain.TaskPriority
 	ExecutionModes []domain.TaskExecutionMode
@@ -1817,6 +1861,12 @@ func (s *TaskStore) List(ctx context.Context, f TaskListFilter) (TaskListResult,
 	if len(f.Statuses) > 0 {
 		where = append(where, "t.status = ANY("+arg(statusStrings(f.Statuses))+"::text[])")
 	}
+	if len(f.Phases) > 0 {
+		where = append(where, "t.phase = ANY("+arg(phaseStrings(f.Phases))+"::text[])")
+	}
+	if len(f.Activities) > 0 {
+		where = append(where, "t.activity_state = ANY("+arg(activityStrings(f.Activities))+"::text[])")
+	}
 	if len(f.Priorities) > 0 {
 		where = append(where, "t.priority = ANY("+arg(priorityStrings(f.Priorities))+"::text[])")
 	}
@@ -1957,6 +2007,22 @@ func statusStrings(ss []domain.TaskStatus) []string {
 	out := make([]string, len(ss))
 	for i, s := range ss {
 		out[i] = string(s)
+	}
+	return out
+}
+
+func phaseStrings(values []domain.TaskPhase) []string {
+	out := make([]string, len(values))
+	for i, value := range values {
+		out[i] = string(value)
+	}
+	return out
+}
+
+func activityStrings(values []domain.TaskActivityState) []string {
+	out := make([]string, len(values))
+	for i, value := range values {
+		out[i] = string(value)
 	}
 	return out
 }

@@ -18,17 +18,23 @@ var ErrNotFound = errors.New("not found")
 // entity doesn't exist) and ErrForbidden (the actor isn't allowed to act).
 var ErrInvalidInput = errors.New("invalid input")
 
-// ErrForbidden means the caller is not allowed to perform this action on
-// this entity — currently only comment edit/delete, which spec restricts to
-// the comment's own author. This is ordinary ownership, not a workflow gate:
-// the task rules explicitly relaxed require no reviewer or acceptance gate.
+// ErrForbidden means the authenticated actor is not allowed to perform an
+// operation on the requested entity or does not own the referenced Claim or
+// editable Thread Item.
 var ErrForbidden = errors.New("forbidden")
 
-// ErrConflict means the request collides with an existing, unrelated
-// constraint — currently only a duplicate label name. This is ordinary REST
-// practice (a uniqueness violation), not a status-transition gate: the task
-// rules relax every transition gate, not every database constraint.
+// ErrConflict means the request conflicts with current durable state.
 var ErrConflict = errors.New("conflict")
+
+// Workflow conflict categories remain compatible with ErrConflict while
+// giving transports stable machine-readable rejection codes.
+var (
+	ErrInvalidTransition = fmt.Errorf("%w: invalid Task transition", ErrConflict)
+	ErrActiveClaim       = fmt.Errorf("%w: Task already has an active Claim", ErrConflict)
+	ErrActiveIssue       = fmt.Errorf("%w: Task already has an active Issue", ErrConflict)
+	ErrMigrationRequired = fmt.Errorf("%w: Task lifecycle migration is required", ErrConflict)
+	ErrWrongIssueType    = fmt.Errorf("%w: unsupported Issue type", ErrInvalidInput)
+)
 
 // ErrVersionConflict identifies an optimistic-concurrency failure.
 var ErrVersionConflict = errors.New("version conflict")

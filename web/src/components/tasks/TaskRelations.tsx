@@ -119,7 +119,7 @@ export default function TaskRelations({
                 <Link2 className="size-3.5 shrink-0 text-secondary" aria-hidden="true" />
                 <RelationLink relation={dependency} />
                 <span className="ml-auto text-xs text-fg-subtle">
-                  {['done', 'cancelled'].includes(dependency.status) ? '已解除阻塞' : '等待完成'}
+                  {['done', 'cancelled'].includes(dependency.phase) ? '已解除阻塞' : '等待完成'}
                 </span>
                 <button
                   type="button"

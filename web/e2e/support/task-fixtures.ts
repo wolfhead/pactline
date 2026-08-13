@@ -170,15 +170,22 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     }
   },
 
-  tasksApi: async ({ trackTask, trackLabel, taskDbPool }, use) => {
-    const defaultProject = (await taskDbPool.query<{ number: number }>(`
-      SELECT number
-      FROM projects
-      WHERE archived_at IS NULL
-      ORDER BY CASE WHEN name='待整理' THEN 0 ELSE 1 END, number
-      LIMIT 1
-    `)).rows[0]
-    if (!defaultProject) throw new Error('task e2e fixtures require an active Project')
+  tasksApi: async ({ trackTask, trackLabel, trackProject, taskDbPool, runTag }, use) => {
+    const defaultProject = (await taskDbPool.query<{ id: string; number: number }>(`
+      WITH created AS (
+        INSERT INTO projects (id, name, description, creator_id)
+        VALUES (gen_random_uuid(), $1, 'Isolated E2E fixture Project',
+          '00000000-0000-0000-0000-000000000001')
+        RETURNING id, number
+      ), membership AS (
+        INSERT INTO project_memberships (id, project_id, user_id, role)
+        SELECT gen_random_uuid(), id,
+          '00000000-0000-0000-0000-000000000001', 'admin'
+        FROM created
+      )
+      SELECT id, number FROM created
+    `, [`E2E Project ${runTag}`])).rows[0]
+    trackProject(defaultProject.id)
     await use({
       ...tasksApi,
       createTask: async (userId, input) => {

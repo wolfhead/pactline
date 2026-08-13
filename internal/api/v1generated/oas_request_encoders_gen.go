@@ -10,50 +10,22 @@ import (
 	ht "github.com/ogen-go/ogen/http"
 )
 
+func encodeAcceptTaskRequest(
+	req *TaskStageClaimFinish,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
 func encodeAddProjectMemberRequest(
 	req *ProjectMembershipCreate,
-	r *http.Request,
-) error {
-	const contentType = "application/json"
-	e := new(jx.Encoder)
-	{
-		req.Encode(e)
-	}
-	encoded := e.Bytes()
-	ht.SetBody(r, bytes.NewReader(encoded), contentType)
-	return nil
-}
-
-func encodeAddTaskClaimProgressRequest(
-	req *TaskClaimAgentMessage,
-	r *http.Request,
-) error {
-	const contentType = "application/json"
-	e := new(jx.Encoder)
-	{
-		req.Encode(e)
-	}
-	encoded := e.Bytes()
-	ht.SetBody(r, bytes.NewReader(encoded), contentType)
-	return nil
-}
-
-func encodeAnswerTaskClaimQuestionRequest(
-	req *TaskClaimHumanAnswer,
-	r *http.Request,
-) error {
-	const contentType = "application/json"
-	e := new(jx.Encoder)
-	{
-		req.Encode(e)
-	}
-	encoded := e.Bytes()
-	ht.SetBody(r, bytes.NewReader(encoded), contentType)
-	return nil
-}
-
-func encodeAskTaskClaimQuestionRequest(
-	req *TaskClaimAgentMessage,
 	r *http.Request,
 ) error {
 	const contentType = "application/json"
@@ -86,8 +58,8 @@ func encodeCancelMilestoneRequest(
 	return nil
 }
 
-func encodeClaimTaskRequest(
-	req *TaskClaimSession,
+func encodeCancelTaskRequest(
+	req *ReasonWrite,
 	r *http.Request,
 ) error {
 	const contentType = "application/json"
@@ -218,8 +190,8 @@ func encodeCreateTaskAttachmentUploadRequest(
 	return nil
 }
 
-func encodeCreateTaskCommentRequest(
-	req *CommentCreateWrite,
+func encodeCreateTaskCriterionRequest(
+	req *CriterionCreate,
 	r *http.Request,
 ) error {
 	const contentType = "application/json"
@@ -232,8 +204,22 @@ func encodeCreateTaskCommentRequest(
 	return nil
 }
 
-func encodeCreateTaskCriterionRequest(
-	req *CriterionCreate,
+func encodeCreateTaskStageClaimRequest(
+	req *TaskStageClaimCreate,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
+func encodeCreateTaskThreadMessageRequest(
+	req *TaskThreadMessageWrite,
 	r *http.Request,
 ) error {
 	const contentType = "application/json"
@@ -266,8 +252,8 @@ func encodeDeleteCriterionRequest(
 	return nil
 }
 
-func encodeExtendTaskClaimRequest(
-	req *TaskClaimSession,
+func encodeRecordTaskStageAcceptanceCheckRequest(
+	req *TaskStageAcceptanceCheckWrite,
 	r *http.Request,
 ) error {
 	const contentType = "application/json"
@@ -280,22 +266,8 @@ func encodeExtendTaskClaimRequest(
 	return nil
 }
 
-func encodeRecordTaskClaimAcceptanceCheckRequest(
-	req *TaskClaimAcceptanceCheckCreate,
-	r *http.Request,
-) error {
-	const contentType = "application/json"
-	e := new(jx.Encoder)
-	{
-		req.Encode(e)
-	}
-	encoded := e.Bytes()
-	ht.SetBody(r, bytes.NewReader(encoded), contentType)
-	return nil
-}
-
-func encodeReleaseTaskClaimRequest(
-	req *TaskClaimRelease,
+func encodeReleaseTaskStageClaimRequest(
+	req *TaskStageClaimFinish,
 	r *http.Request,
 ) error {
 	const contentType = "application/json"
@@ -322,8 +294,50 @@ func encodeReopenMilestoneRequest(
 	return nil
 }
 
-func encodeSubmitTaskClaimRequest(
-	req *TaskClaimAgentMessage,
+func encodeRequestTaskChangesRequest(
+	req *TaskStageClaimFinish,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
+func encodeRequestTaskResolutionRequest(
+	req *TaskResolutionRequest,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
+func encodeResolveTaskIssueRequest(
+	req *TaskIssueResolve,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
+func encodeSubmitTaskWorkRequest(
+	req *TaskStageClaimFinish,
 	r *http.Request,
 ) error {
 	const contentType = "application/json"
@@ -448,8 +462,8 @@ func encodeUpdateTaskRequest(
 	return nil
 }
 
-func encodeUpdateTaskCommentRequest(
-	req *CommentUpdateWrite,
+func encodeUpdateTaskThreadMessageRequest(
+	req *TaskThreadMessageUpdate,
 	r *http.Request,
 ) error {
 	const contentType = "application/json"
@@ -469,5 +483,19 @@ func encodeUploadTaskAttachmentContentRequest(
 	const contentType = "application/octet-stream"
 	body := req
 	ht.SetBody(r, body, contentType)
+	return nil
+}
+
+func encodeWithdrawTaskReadinessRequest(
+	req *ReasonWrite,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
 	return nil
 }

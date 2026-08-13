@@ -59,19 +59,23 @@ func (Security) HandleSessionCookie(
 
 func requiredScope(operation generated.OperationName) access.Scope {
 	switch operation {
-	case generated.AddTaskClaimProgressOperation,
-		generated.AnswerTaskClaimQuestionOperation,
-		generated.AskTaskClaimQuestionOperation,
-		generated.ClaimTaskOperation,
-		generated.ExtendTaskClaimOperation,
-		generated.GetCurrentTaskClaimOperation,
-		generated.GetTaskClaimOperation,
-		generated.ListTaskClaimMessagesOperation,
-		generated.RecordTaskClaimAcceptanceCheckOperation,
-		generated.ReleaseTaskClaimOperation,
-		generated.SubmitTaskClaimOperation:
+	case generated.AcceptTaskOperation,
+		generated.CancelTaskOperation,
+		generated.CreateTaskStageClaimOperation,
+		generated.CreateTaskThreadMessageOperation,
+		generated.DeleteTaskThreadMessageOperation,
+		generated.MarkTaskReadyOperation,
+		generated.RecordTaskStageAcceptanceCheckOperation,
+		generated.ReleaseTaskStageClaimOperation,
+		generated.RequestTaskChangesOperation,
+		generated.RequestTaskResolutionOperation,
+		generated.ResolveTaskIssueOperation,
+		generated.SubmitTaskWorkOperation,
+		generated.UpdateTaskThreadMessageOperation,
+		generated.WithdrawTaskReadinessOperation:
 		return access.ScopeWorkExecute
 	case generated.GetCurrentPrincipalOperation,
+		generated.GetCurrentTaskStageClaimOperation,
 		generated.GetAgentConversationOperation,
 		generated.GetCurrentAgentConversationConfigurationOperation,
 		generated.GetProjectOperation,
@@ -81,12 +85,13 @@ func requiredScope(operation generated.OperationName) access.Scope {
 		generated.ListMilestoneCriteriaOperation,
 		generated.ListProjectMembersOperation,
 		generated.ListProjectsOperation,
-		generated.ListTaskAgentConversationsOperation,
 		generated.ListTaskActivityOperation,
 		generated.ListTaskAttachmentsOperation,
 		generated.GetTaskAttachmentContentOperation,
-		generated.ListTaskCommentsOperation,
 		generated.ListTaskCriteriaOperation,
+		generated.ListTaskStageClaimsOperation,
+		generated.ListTaskThreadItemsOperation,
+		generated.ListTaskThreadsOperation,
 		generated.ListTasksOperation,
 		generated.ListUsersOperation:
 		return access.ScopeWorkRead

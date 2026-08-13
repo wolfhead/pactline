@@ -3,18 +3,18 @@ import { Link2, XIcon } from 'lucide-react'
 import AcceptanceChecklist from '@/components/projects/AcceptanceChecklist'
 import ActivityLog from './ActivityLog'
 import AttachmentSection from './AttachmentSection'
-import CommentSection from './CommentSection'
 import InlineEditable from './InlineEditable'
 import AssigneeControl from './controls/AssigneeControl'
 import DueDateControl from './controls/DueDateControl'
 import LabelControl from './controls/LabelControl'
 import PriorityControl from './controls/PriorityControl'
-import StatusControl from './controls/StatusControl'
 import ProjectControl from './controls/ProjectControl'
 import TaskRelations from './TaskRelations'
+import TaskThreads from './TaskThreads'
+import TaskWorkflowPanel from './TaskWorkflowPanel'
 import { archiveTask, getTask, listLabels, restoreTask, updateTask } from '@/api/tasks'
 import {
-  checkCriterion,
+  checkTaskCriterionThroughClaim,
   createTaskCriterion,
   listTaskCriteria,
   removeCriterion,
@@ -22,6 +22,7 @@ import {
   type AcceptanceCriterion,
   type AcceptanceOutcome,
 } from '@/api/acceptance'
+import { listTaskStageClaims } from '@/api/task-workflow'
 import { ProblemError } from '@/api/v1/client'
 import { useIdentity } from '@/identity'
 import type { Label, Task, TaskPatchBody, UserRef } from '@/task-types'
@@ -291,9 +292,10 @@ export default function TaskDetail({
     evidence: string,
   ) {
     const forNumber = number
-    await checkCriterion(
-      criterion.id, criterion.version, criterion.revision, outcome, evidence,
-    )
+    const claims = await listTaskStageClaims(forNumber)
+    const claim = claims.find((candidate) => candidate.status === 'active')
+    if (!claim) throw new Error('请先领取当前阶段，再记录验证或验收结果。')
+    await checkTaskCriterionThroughClaim(forNumber, task!.version, claim, criterion, outcome, evidence)
     await reloadTaskAndAcceptance(forNumber)
   }
 
@@ -314,22 +316,6 @@ export default function TaskDetail({
     const forNumber = number
     await removeCriterion(criterion.id, criterion.version)
     await reloadTaskAndAcceptance(forNumber)
-  }
-
-  async function finishAgentReview() {
-    if (!task) return
-    const forNumber = task.number
-    const updated = await updateTask(forNumber, task.version, { status: 'done' })
-    if (!isStale(forNumber)) setTask(updated)
-    onPatched(updated)
-  }
-
-  async function returnAgentSubmissionForChanges() {
-    if (!task) return
-    const forNumber = task.number
-    const updated = await updateTask(forNumber, task.version, { status: 'todo' })
-    if (!isStale(forNumber)) setTask(updated)
-    onPatched(updated)
   }
 
   if (error) {
@@ -423,7 +409,7 @@ export default function TaskDetail({
           <Link2 className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <span>
             等待 {task.dependencies.filter((dependency) => (
-              !['done', 'cancelled'].includes(dependency.status)
+              !['done', 'cancelled'].includes(dependency.phase)
             )).length} 个前置任务完成，当前不能标记为完成。
           </span>
         </div>
@@ -435,14 +421,6 @@ export default function TaskDetail({
         data-task-properties
         className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 [&_[data-property-control]]:text-sm [&_[data-slot=select-trigger]]:justify-start"
       >
-        <div className="contents">
-          <span className="text-sm text-fg-muted">状态</span>
-          <StatusControl
-            value={task.status}
-            onChange={(status) => patchOptimistic({ status }, { status })}
-            ariaLabel="状态"
-          />
-        </div>
         <div className="contents">
           <span className="text-sm text-fg-muted">优先级</span>
           <PriorityControl
@@ -462,22 +440,6 @@ export default function TaskDetail({
             }}
             ariaLabel="负责人"
           />
-        </div>
-        <div className="contents">
-          <span className="text-sm text-fg-muted">执行方式</span>
-          <select
-            data-property-control
-            aria-label="执行方式"
-            value={task.execution_mode ?? 'human_only'}
-            onChange={(event) => {
-              const executionMode = event.target.value as 'human_only' | 'agent_allowed'
-              patchOptimistic({ execution_mode: executionMode }, { execution_mode: executionMode })
-            }}
-            className="h-8 rounded-md border border-transparent bg-transparent px-2 text-sm text-fg hover:bg-surface-subtle focus:border-accent focus:outline-none"
-          >
-            <option value="human_only">仅人工执行</option>
-            <option value="agent_allowed">允许 Agent 执行</option>
-          </select>
         </div>
         <div className="contents">
           <span className="text-sm text-fg-muted">开始日期</span>
@@ -504,17 +466,16 @@ export default function TaskDetail({
         <ProjectControl
           project={task.project}
           milestone={task.milestone ?? null}
-          onProjectChange={(project) => {
-            patchOptimistic(
-              { project_number: project.number },
-              { project, milestone: null },
-            )
-          }}
           onMilestoneChange={(milestone) => {
             patchOptimistic({ milestone_id: milestone?.id ?? null }, { milestone })
           }}
         />
       </div>
+
+      <TaskWorkflowPanel
+        task={task}
+        onChanged={() => reloadTaskAndAcceptance(task.number)}
+      />
 
       <TaskRelations
         task={{
@@ -582,16 +543,10 @@ export default function TaskDetail({
         onTaskChanged={() => reloadTaskAndAcceptance(task.number)}
       />
 
-      <CommentSection
+      <TaskThreads
         taskNumber={task.number}
         projectNumber={task.project.number}
         taskVersion={task.version}
-        taskStatus={task.status}
-        acceptanceCriteria={acceptanceCriteria}
-        onReviewCheck={recordAcceptanceCheck}
-        onCompleteReview={finishAgentReview}
-        onReturnForChanges={returnAgentSubmissionForChanges}
-        onTaskChanged={() => reloadTaskAndAcceptance(task.number)}
       />
       <ActivityLog task={task} />
     </div>

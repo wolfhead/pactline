@@ -60,7 +60,7 @@ func (*responseRepositoryStub) AttachTask(
 func TestRespondRequiresCompatibleEvidenceAndStoresStructuredSelection(t *testing.T) {
 	runID := uuid.New()
 	result, err := json.Marshal(TaskDetail{
-		TaskSummary: TaskSummary{Number: 42, Title: "Inspect status", Status: "in_progress"},
+		TaskSummary: TaskSummary{Number: 42, Title: "Inspect status", Phase: "in_progress"},
 	})
 	require.NoError(t, err)
 	repository := &responseRepositoryStub{

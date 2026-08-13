@@ -33,8 +33,26 @@ interface ProjectDetail {
 }
 
 interface TaskResource extends VersionedResource {
-  status: string
+  phase: string
   title: string
+}
+
+interface TaskWorkflow {
+  task_id: string
+  task_number: number
+  phase: string
+  review_cycle: number
+}
+
+interface TaskStageClaim {
+  id: string
+  version: number
+  stage: 'execution' | 'review'
+}
+
+interface TaskStageClaimCommand {
+  task: TaskWorkflow
+  claim: TaskStageClaim
 }
 
 interface Problem {
@@ -200,7 +218,6 @@ test('a human can provision, inspect, and revoke an Agent that completes version
         ifMatch: `"${milestoneBeforeActivation!.version}"`,
         projectIfMatch: projectETag,
         idempotencyKey: `activate-milestone-${runTag}`,
-        data: {},
       },
     )
     expect(activateMilestone.status()).toBe(200)
@@ -239,22 +256,57 @@ test('a human can provision, inspect, and revoke an Agent that completes version
     expect(taskCriterionCreate.status()).toBe(201)
     const taskCriterion = await taskCriterionCreate.json() as Criterion
 
-    const taskCheck = await agentRequest(
+    const taskBeforeReady = await getTask(request, writeToken.token, task.number)
+    const markReady = await agentRequest(
       request,
       'POST',
-      `/api/v1/criteria/${taskCriterion.id}/checks`,
+      `/api/v1/tasks/${task.number}/commands/mark-ready`,
       writeToken.token,
       {
-        ifMatch: `"${taskCriterion.version}"`,
-        idempotencyKey: `task-check-${runTag}`,
+        ifMatch: taskBeforeReady.etag,
+        idempotencyKey: `task-ready-${runTag}`,
+        data: {},
+      },
+    )
+    expect(markReady.status()).toBe(200)
+    expect((await markReady.json() as TaskWorkflow).phase).toBe('ready')
+
+    const readyTask = await getTask(request, writeToken.token, task.number)
+    const executionClaimResponse = await agentRequest(
+      request,
+      'POST',
+      `/api/v1/tasks/${task.number}/claims`,
+      writeToken.token,
+      {
+        ifMatch: readyTask.etag,
+        idempotencyKey: `execution-claim-${runTag}`,
         data: {
-          criterion_revision: taskCriterion.revision,
-          outcome: 'passed',
-          evidence: 'The Agent observed and recovered from VERSION_CONFLICT.',
+          client_kind: 'playwright',
+          client_session_id: `playwright/${runTag}/execution`,
         },
       },
     )
-    expect(taskCheck.status()).toBe(201)
+    expect(executionClaimResponse.status()).toBe(201)
+    const executionClaim = await executionClaimResponse.json() as TaskStageClaimCommand
+    expect(executionClaim.claim.stage).toBe('execution')
+
+    const executionCheck = await agentRequest(
+      request,
+      'POST',
+      `/api/v1/tasks/${task.number}/claims/${executionClaim.claim.id}/criteria/${taskCriterion.id}/checks`,
+      writeToken.token,
+      {
+        ifMatch: `"${executionClaim.task.version}"`,
+        idempotencyKey: `execution-check-${runTag}`,
+        data: {
+          claim_version: executionClaim.claim.version,
+          criterion_revision: taskCriterion.revision,
+          outcome: 'passed',
+          evidence: 'The Agent completed self-verification before review.',
+        },
+      },
+    )
+    expect(executionCheck.status()).toBe(201)
 
     const taskBeforeHuman = await getTask(request, writeToken.token, task.number)
     task = taskBeforeHuman.value
@@ -268,37 +320,97 @@ test('a human can provision, inspect, and revoke an Agent that completes version
     )
     expect(humanUpdate.status()).toBe(200)
 
-    const staleAgentUpdate = await agentRequest(
+    const staleAgentSubmit = await agentRequest(
       request,
-      'PATCH',
-      `/api/v1/tasks/${task.number}`,
+      'POST',
+      `/api/v1/tasks/${task.number}/claims/${executionClaim.claim.id}/submit`,
       writeToken.token,
       {
         ifMatch: taskETag,
-        idempotencyKey: `stale-agent-${runTag}`,
-        data: { status: 'done' },
+        idempotencyKey: `stale-submit-${runTag}`,
+        data: {
+          claim_version: executionClaim.claim.version,
+          body: 'Submit verified work for acceptance.',
+        },
       },
     )
-    expect(staleAgentUpdate.status()).toBe(412)
-    const staleProblem = await staleAgentUpdate.json() as Problem
+    expect(staleAgentSubmit.status()).toBe(412)
+    const staleProblem = await staleAgentSubmit.json() as Problem
     expect(staleProblem.code).toBe('VERSION_CONFLICT')
 
     const latestTask = await getTask(request, writeToken.token, task.number)
     expect(staleProblem.current_version).toBe(latestTask.value.version)
-    const recoveredTask = await agentRequest(
+    const recoveredSubmit = await agentRequest(
       request,
-      'PATCH',
-      `/api/v1/tasks/${task.number}`,
+      'POST',
+      `/api/v1/tasks/${task.number}/claims/${executionClaim.claim.id}/submit`,
       writeToken.token,
       {
         ifMatch: latestTask.etag,
-        idempotencyKey: `recover-agent-${runTag}`,
+        idempotencyKey: `recover-submit-${runTag}`,
         requestID: auditRequestID,
-        data: { status: 'done' },
+        data: {
+          claim_version: executionClaim.claim.version,
+          body: 'Recovered from VERSION_CONFLICT and submitted verified work.',
+        },
       },
     )
-    expect(recoveredTask.status()).toBe(200)
-    expect((await recoveredTask.json() as TaskResource).status).toBe('done')
+    expect(recoveredSubmit.status()).toBe(200)
+    expect((await recoveredSubmit.json() as TaskStageClaimCommand).task.phase).toBe('in_review')
+
+    const reviewTask = await getTask(request, writeToken.token, task.number)
+    const reviewClaimResponse = await agentRequest(
+      request,
+      'POST',
+      `/api/v1/tasks/${task.number}/claims`,
+      writeToken.token,
+      {
+        ifMatch: reviewTask.etag,
+        idempotencyKey: `review-claim-${runTag}`,
+        data: {
+          client_kind: 'playwright',
+          client_session_id: `playwright/${runTag}/review`,
+        },
+      },
+    )
+    expect(reviewClaimResponse.status()).toBe(201)
+    const reviewClaim = await reviewClaimResponse.json() as TaskStageClaimCommand
+    expect(reviewClaim.claim.stage).toBe('review')
+
+    const acceptanceCheck = await agentRequest(
+      request,
+      'POST',
+      `/api/v1/tasks/${task.number}/claims/${reviewClaim.claim.id}/criteria/${taskCriterion.id}/checks`,
+      writeToken.token,
+      {
+        ifMatch: `"${reviewClaim.task.version}"`,
+        idempotencyKey: `acceptance-check-${runTag}`,
+        data: {
+          claim_version: reviewClaim.claim.version,
+          criterion_revision: taskCriterion.revision,
+          outcome: 'passed',
+          evidence: 'The Agent observed and recovered from VERSION_CONFLICT.',
+        },
+      },
+    )
+    expect(acceptanceCheck.status()).toBe(201)
+
+    const acceptedTask = await agentRequest(
+      request,
+      'POST',
+      `/api/v1/tasks/${task.number}/claims/${reviewClaim.claim.id}/accept`,
+      writeToken.token,
+      {
+        ifMatch: `"${reviewClaim.task.version}"`,
+        idempotencyKey: `accept-task-${runTag}`,
+        data: {
+          claim_version: reviewClaim.claim.version,
+          body: 'Current-cycle acceptance evidence passed.',
+        },
+      },
+    )
+    expect(acceptedTask.status()).toBe(200)
+    expect((await acceptedTask.json() as TaskStageClaimCommand).task.phase).toBe('done')
 
     projectDetail = await getProject(request, writeToken.token, project.number)
     projectETag = projectDetail.etag
@@ -336,13 +448,13 @@ test('a human can provision, inspect, and revoke an Agent that completes version
       await expect(page.getByRole('heading', { name: 'API 审计' })).toBeVisible()
       await page.getByLabel('用户').selectOption(adminID)
       await page.getByLabel('Token').selectOption({ label: `${adminName} · ${writeTokenName}` })
-      await page.getByLabel('方法').selectOption('PATCH')
-      await page.getByLabel('路由').fill('/api/v1/tasks/{number}')
+      await page.getByLabel('方法').selectOption('POST')
+      await page.getByLabel('路由').fill('/api/v1/tasks/{number}/claims/{id}/submit')
       await page.getByLabel('状态码').fill('200')
       await page.getByLabel('Request ID').fill(auditRequestID)
       await page.getByRole('button', { name: '筛选' }).click()
       await expect(page.getByText(auditRequestID, { exact: true })).toBeVisible()
-      await expect(page.getByText('PATCH /api/v1/tasks/{number}', { exact: true })).toBeVisible()
+      await expect(page.getByText('POST /api/v1/tasks/{number}/claims/{id}/submit', { exact: true })).toBeVisible()
     })
 
     await revokeToken(page, writeTokenName)

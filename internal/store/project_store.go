@@ -32,8 +32,8 @@ type ProjectPatch struct {
 const projectSelectColumns = `p.id, p.number, p.version, p.name, p.description,
 	p.creator_id, p.archived_at, p.created_at, p.updated_at,
 	cu.id, cu.name, cu.email,
-	(SELECT count(*) FROM tasks t WHERE t.project_id = p.id AND t.archived_at IS NULL AND t.status = 'done'),
-	(SELECT count(*) FROM tasks t WHERE t.project_id = p.id AND t.archived_at IS NULL AND t.status <> 'cancelled')`
+	(SELECT count(*) FROM tasks t WHERE t.project_id = p.id AND t.archived_at IS NULL AND t.phase = 'done'),
+	(SELECT count(*) FROM tasks t WHERE t.project_id = p.id AND t.archived_at IS NULL AND t.phase <> 'cancelled')`
 
 const projectFromJoins = `FROM projects p
 	JOIN users cu ON cu.id = p.creator_id`
@@ -477,7 +477,7 @@ func projectArchiveReadiness(
 			(SELECT count(*) FROM milestones m
 			 WHERE m.project_id=$1 AND m.status IN ('planned','active')),
 			(SELECT count(*) FROM tasks t
-			 WHERE t.project_id=$1 AND t.status NOT IN ('done','cancelled'))`,
+			 WHERE t.project_id=$1 AND (t.phase IS NULL OR t.phase NOT IN ('done','cancelled')))`,
 		projectID,
 	).Scan(&readiness.OpenMilestones, &readiness.UnfinishedTasks)
 	if err != nil {

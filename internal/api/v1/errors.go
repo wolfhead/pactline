@@ -48,6 +48,26 @@ func ErrorHandler(_ context.Context, w http.ResponseWriter, r *http.Request, err
 	case errors.Is(err, domain.ErrForbidden):
 		problem.Status, problem.Title = http.StatusForbidden, "Forbidden"
 		problem.Detail, problem.Code = "The operation is not permitted.", "FORBIDDEN"
+	case errors.Is(err, domain.ErrInvalidTransition):
+		problem.Status, problem.Title = http.StatusConflict, "Invalid Task transition"
+		problem.Detail = "The Task cannot perform that command from its current lifecycle state."
+		problem.Code = "INVALID_TRANSITION"
+	case errors.Is(err, domain.ErrActiveClaim):
+		problem.Status, problem.Title = http.StatusConflict, "Active Claim exists"
+		problem.Detail = "The Task already has an active Claim."
+		problem.Code = "ACTIVE_CLAIM"
+	case errors.Is(err, domain.ErrActiveIssue):
+		problem.Status, problem.Title = http.StatusConflict, "Active Issue exists"
+		problem.Detail = "The Task already has an open Issue Thread."
+		problem.Code = "ACTIVE_ISSUE"
+	case errors.Is(err, domain.ErrMigrationRequired):
+		problem.Status, problem.Title = http.StatusConflict, "Task migration required"
+		problem.Detail = "The Task has not been classified into the current lifecycle model."
+		problem.Code = "MIGRATION_REQUIRED"
+	case errors.Is(err, domain.ErrWrongIssueType):
+		problem.Status, problem.Title = http.StatusBadRequest, "Unsupported Issue type"
+		problem.Detail = "The Issue type is not supported by the current workflow."
+		problem.Code = "WRONG_ISSUE_TYPE"
 	case errors.Is(err, domain.ErrConflict):
 		problem.Status, problem.Title = http.StatusConflict, "Conflict"
 		problem.Detail, problem.Code = "The operation conflicts with current state.", "CONFLICT"
@@ -67,6 +87,13 @@ func ErrorHandler(_ context.Context, w http.ResponseWriter, r *http.Request, err
 		slog.Error("v1 request failed",
 			"request_id", baseapi.RequestIDFromContext(r.Context()),
 			"method", r.Method, "path", r.URL.Path, "error", err)
+	} else if problem.Code == "INVALID_TRANSITION" ||
+		problem.Code == "ACTIVE_CLAIM" || problem.Code == "ACTIVE_ISSUE" ||
+		problem.Code == "MIGRATION_REQUIRED" || problem.Code == "WRONG_ISSUE_TYPE" {
+		slog.Warn("v1 workflow request rejected",
+			"request_id", baseapi.RequestIDFromContext(r.Context()),
+			"method", r.Method, "path", r.URL.Path,
+			"status", problem.Status, "code", problem.Code)
 	}
 	baseapi.WriteProblem(w, r, problem)
 }

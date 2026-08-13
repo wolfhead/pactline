@@ -6,9 +6,8 @@ import type { Task, TaskPatchBody, UserRef } from '@/task-types'
 import AssigneeControl from './controls/AssigneeControl'
 import DueDateControl from './controls/DueDateControl'
 import PriorityControl from './controls/PriorityControl'
-import StatusControl from './controls/StatusControl'
 import RowActionsMenu from './RowActionsMenu'
-import AgentWorkIndicator from './AgentWorkIndicator'
+import PhaseBadge from './PhaseBadge'
 
 interface TaskRowProps {
   task: Task
@@ -48,16 +47,12 @@ export default function TaskRow({
   onRestore,
 }: TaskRowProps) {
   const isPhone = tier === 'phone'
-  const dimmed = task.status === 'done' || task.status === 'cancelled'
+  const dimmed = task.phase === 'done' || task.phase === 'cancelled'
   // fg-subtle must never sit on the selected row's accent-subtle background
   // (insufficient contrast — see index.css's tier comments); fg-muted is the
   // weakened-text tier that stays legible there, so a selected done/cancelled
   // row's title falls back to it instead.
   const dimmedTextClass = dimmed ? (selected ? 'text-fg-muted' : 'text-fg-subtle') : undefined
-
-  function handleChangeStatus(status: Task['status']) {
-    onPatch(task, { status }, { status })
-  }
 
   function handleChangePriority(priority: Task['priority']) {
     onPatch(task, { priority }, { priority })
@@ -81,15 +76,7 @@ export default function TaskRow({
     })
   }
 
-  const statusControl = (
-    <StatusControl
-      value={task.status}
-      onChange={handleChangeStatus}
-      ariaLabel={`任务 #${task.number} 状态`}
-      compact
-    />
-  )
-  const agentWorkIndicator = <AgentWorkIndicator task={task} />
+  const phaseBadge = <PhaseBadge phase={task.phase} activity={task.activity} compact />
   const priorityControl = (
     <PriorityControl value={task.priority} onChange={handleChangePriority} ariaLabel={`任务 #${task.number} 优先级`} />
   )
@@ -158,8 +145,7 @@ export default function TaskRow({
             {task.title}
           </Link>
           <div className="flex shrink-0 items-center gap-1.5">
-            {agentWorkIndicator}
-            {statusControl}
+            {phaseBadge}
             {actionsMenu}
           </div>
         </div>
@@ -219,8 +205,7 @@ export default function TaskRow({
         </span>
       )}
       {labelChips}
-      {agentWorkIndicator}
-      <div className="w-8 shrink-0">{statusControl}</div>
+      <div className="w-8 shrink-0">{phaseBadge}</div>
       <div className="w-24 shrink-0">{priorityControl}</div>
       <div className="w-28 shrink-0">{assigneeControl}</div>
       {/* Width-wrapped exactly like the three controls above. It used to be

@@ -23,7 +23,10 @@ const CREATED_TASK: Task = {
   context: 'The request has no durable context.',
   expected_result: 'The task is understandable without chat history.',
   description: '',
-  status: 'todo',
+  phase: 'backlog',
+  activity: null,
+  review_cycle: 0,
+  main_thread_id: 'thread-main-1',
   priority: 'none',
   assignee: null,
   creator: { id: 'u1', name: 'Alex', email: 'a@example.com' },
@@ -185,7 +188,6 @@ describe('TaskComposer', () => {
       milestone_id: 'milestone-1',
       assignee_id: null,
       priority: 'none',
-      execution_mode: 'human_only',
     }))
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith(CREATED_TASK))
   })

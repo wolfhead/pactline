@@ -222,12 +222,19 @@ func (s *Server) Handler(r *http.Request) (http.Handler, string) {
 
 func operationRequiresIfMatch(operationID string) bool {
 	switch operationID {
-	case "answerTaskClaimQuestion",
-		"askTaskClaimQuestion",
-		"extendTaskClaim",
-		"recordTaskClaimAcceptanceCheck",
-		"releaseTaskClaim",
-		"submitTaskClaim",
+	case "acceptTask",
+		"cancelTask",
+		"createTaskStageClaim",
+		"deleteTaskThreadMessage",
+		"markTaskReady",
+		"recordTaskStageAcceptanceCheck",
+		"releaseTaskStageClaim",
+		"requestTaskChanges",
+		"requestTaskResolution",
+		"resolveTaskIssue",
+		"submitTaskWork",
+		"updateTaskThreadMessage",
+		"withdrawTaskReadiness",
 		"activateMilestone",
 		"archiveProject",
 		"archiveTask",
@@ -236,13 +243,11 @@ func operationRequiresIfMatch(operationID string) bool {
 		"createAcceptanceCheck",
 		"createMilestone",
 		"createMilestoneCriterion",
-		"createTaskComment",
 		"completeTaskAttachmentUpload",
 		"deleteTaskAttachment",
 		"createTaskCriterion",
 		"deleteCriterion",
 		"deleteLabel",
-		"deleteTaskComment",
 		"reopenMilestone",
 		"restoreProject",
 		"restoreTask",
@@ -252,8 +257,7 @@ func operationRequiresIfMatch(operationID string) bool {
 		"updateAgentConversation",
 		"updateCurrentAgentConversationConfiguration",
 		"updateProject",
-		"updateTask",
-		"updateTaskComment":
+		"updateTask":
 		return true
 	default:
 		return false

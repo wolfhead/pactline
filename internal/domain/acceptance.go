@@ -96,6 +96,18 @@ func (o AcceptanceOutcome) Satisfies() bool {
 	return o == AcceptanceOutcomePassed || o == AcceptanceOutcomeWaived
 }
 
+type AcceptanceCheckPurpose string
+
+const (
+	AcceptanceCheckPurposeExecutionVerification AcceptanceCheckPurpose = "execution_verification"
+	AcceptanceCheckPurposeAcceptance            AcceptanceCheckPurpose = "acceptance"
+)
+
+func (p AcceptanceCheckPurpose) Valid() bool {
+	return p == AcceptanceCheckPurposeExecutionVerification ||
+		p == AcceptanceCheckPurposeAcceptance
+}
+
 type AcceptanceCheck struct {
 	ID                uuid.UUID
 	CriterionID       uuid.UUID
@@ -103,18 +115,53 @@ type AcceptanceCheck struct {
 	Outcome           AcceptanceOutcome
 	Evidence          string
 	Checker           Actor
+	Purpose           AcceptanceCheckPurpose
+	TaskClaimID       *uuid.UUID
+	TaskReviewCycle   *int64
 	CheckedAt         time.Time
 }
 
+// ValidateForTaskClaim validates a new Task check against the Claim stage and
+// current review cycle. The purpose is explicit, while actor type remains
+// provenance and cannot turn execution self-verification into acceptance.
+func (c AcceptanceCheck) ValidateForTaskClaim(
+	criterion AcceptanceCriterion,
+	claimID uuid.UUID,
+	stage TaskClaimStage,
+	reviewCycle int64,
+) error {
+	if err := c.validateBase(criterion); err != nil {
+		return err
+	}
+	if claimID == uuid.Nil || c.TaskClaimID == nil || *c.TaskClaimID != claimID ||
+		c.TaskReviewCycle == nil || *c.TaskReviewCycle != reviewCycle || reviewCycle < 0 {
+		return fmt.Errorf("%w: Task check Claim and review cycle do not match", ErrConflict)
+	}
+	if !c.Purpose.Valid() ||
+		(stage == TaskClaimStageExecution && c.Purpose != AcceptanceCheckPurposeExecutionVerification) ||
+		(stage == TaskClaimStageReview && c.Purpose != AcceptanceCheckPurposeAcceptance) ||
+		!stage.Valid() {
+		return fmt.Errorf("%w: check purpose does not match Claim stage", ErrConflict)
+	}
+	return nil
+}
+
+func (c AcceptanceCheck) SatisfiesTaskReview(reviewCycle int64) bool {
+	return c.Purpose == AcceptanceCheckPurposeAcceptance &&
+		c.TaskReviewCycle != nil && *c.TaskReviewCycle == reviewCycle &&
+		c.Outcome.Satisfies()
+}
+
 func (c AcceptanceCheck) ValidateAgainst(criterion AcceptanceCriterion) error {
+	return c.validateBase(criterion)
+}
+
+func (c AcceptanceCheck) validateBase(criterion AcceptanceCriterion) error {
 	if c.CriterionID != criterion.ID || c.CriterionRevision != criterion.Revision {
 		return fmt.Errorf("%w: acceptance criterion revision changed", ErrConflict)
 	}
 	if !c.Outcome.Valid() || strings.TrimSpace(c.Evidence) == "" {
 		return fmt.Errorf("%w: valid outcome and evidence are required", ErrInvalidInput)
-	}
-	if c.Outcome == AcceptanceOutcomeWaived && !c.Checker.IsHuman() {
-		return fmt.Errorf("%w: only a human user may waive acceptance", ErrForbidden)
 	}
 	switch c.Checker.Type {
 	case ActorTypeUser:
