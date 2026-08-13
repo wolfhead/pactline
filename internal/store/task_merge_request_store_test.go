@@ -232,7 +232,12 @@ func TestCompleteExecutionFreezesExactMergeRequestSetForReview(t *testing.T) {
 	frozen, err := mergeRequests.GetReviewSnapshot(ctx, task.Task.ID, review.Lifecycle.ReviewCycle)
 	require.NoError(t, err)
 	require.NotNil(t, frozen)
-	require.Equal(t, snapshots, frozen.MergeRequests, "provider refresh must not mutate the frozen review snapshot")
+	expectedSnapshots := append([]domain.MergeRequestSnapshot(nil), snapshots...)
+	for index := range expectedSnapshots {
+		expectedSnapshots[index].ObservedAt = expectedSnapshots[index].ObservedAt.UTC()
+	}
+	require.Equal(t, expectedSnapshots, frozen.MergeRequests,
+		"provider refresh must not mutate the frozen review snapshot")
 
 	reviewWorking, reviewClaim, err := workflow.Claim(
 		ctx, task.Task.Number, review.Version, actor,
