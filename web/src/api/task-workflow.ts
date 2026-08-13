@@ -44,7 +44,7 @@ function finishClaim(
   number: number,
   taskVersion: number,
   claim: TaskStageClaim,
-  command: 'release' | 'submit' | 'request-changes' | 'accept',
+  command: 'release' | 'request-changes' | 'accept' | 'complete-execution',
   body: string,
 ): Promise<ClaimCommandResult> {
   return v1Post<ClaimCommandResult>(
@@ -57,8 +57,28 @@ export function releaseTaskStage(number: number, taskVersion: number, claim: Tas
   return finishClaim(number, taskVersion, claim, 'release', body)
 }
 
-export function submitTaskWork(number: number, taskVersion: number, claim: TaskStageClaim, body: string) {
-  return finishClaim(number, taskVersion, claim, 'submit', body)
+export function recordTaskWorkSubmission(
+  number: number,
+  taskVersion: number,
+  claim: TaskStageClaim,
+  body: string,
+): Promise<ClaimCommandResult & { submission: TaskThreadItem }> {
+  return v1Post<ClaimCommandResult & { submission: TaskThreadItem }>(
+    `/api/v1/tasks/${number}/claims/${claim.id}/submissions`,
+    { ifMatch: etagForVersion(taskVersion), body: { claim_version: claim.version, body } },
+  ).then(({ value }) => value)
+}
+
+export function completeTaskExecution(
+  number: number,
+  taskVersion: number,
+  claim: TaskStageClaim,
+  body: string,
+): Promise<ClaimCommandResult & { completion: TaskThreadItem }> {
+  return v1Post<ClaimCommandResult & { completion: TaskThreadItem }>(
+    `/api/v1/tasks/${number}/claims/${claim.id}/complete-execution`,
+    { ifMatch: etagForVersion(taskVersion), body: { claim_version: claim.version, body } },
+  ).then(({ value }) => value)
 }
 
 export function requestTaskChanges(number: number, taskVersion: number, claim: TaskStageClaim, body: string) {

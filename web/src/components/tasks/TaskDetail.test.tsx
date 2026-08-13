@@ -109,6 +109,49 @@ describe('TaskDetail', () => {
     await waitFor(() => expect(onPatched).toHaveBeenCalledWith(readyTask))
   })
 
+  it('separates repeatable work records from completing execution', async () => {
+	const workingTask: Task = {
+		...TASK, version: 3, phase: 'in_progress', activity: 'working', review_cycle: 0,
+	}
+	const executionClaim = {
+		id: '33333333-3333-4333-8333-333333333333', task_id: TASK.id,
+		task_number: TASK.number, stage: 'execution' as const,
+		claimed_by: { type: 'user' as const, user_id: 'u1' }, subject_user_id: 'u1',
+		authentication_method: 'session' as const, client_kind: 'web', status: 'active' as const,
+		version: 1, expires_at: '', created_at: '', updated_at: '',
+	}
+	vi.mocked(tasksApi.getTask).mockResolvedValue(workingTask)
+	vi.mocked(workflowApi.listTaskStageClaims).mockResolvedValue([executionClaim])
+	vi.mocked(workflowApi.recordTaskWorkSubmission).mockResolvedValue({
+		task: {
+			task_id: TASK.id, task_number: TASK.number, version: 3,
+			phase: 'in_progress', activity: 'working', review_cycle: 0,
+			main_thread_id: TASK.main_thread_id,
+		},
+		claim: executionClaim,
+		submission: {
+			id: '44444444-4444-4444-8444-444444444444', thread_id: TASK.main_thread_id,
+			kind: 'work_submission', author: executionClaim.claimed_by,
+			body: '实现与测试完成。', mentioned_user_ids: [], version: 1,
+			created_at: '', updated_at: '',
+		},
+	})
+
+	renderDetail()
+	await screen.findByText(TASK.title)
+	expect(screen.getByRole('button', { name: '记录工作' })).toBeVisible()
+	expect(screen.getByRole('button', { name: '完成执行，进入验收' })).toBeVisible()
+
+	fireEvent.click(screen.getByRole('button', { name: '记录工作' }))
+	fireEvent.change(screen.getByLabelText('记录工作'), { target: { value: '实现与测试完成。' } })
+	fireEvent.click(screen.getByRole('button', { name: '确认' }))
+
+	await waitFor(() => expect(workflowApi.recordTaskWorkSubmission).toHaveBeenCalledWith(
+		142, 3, executionClaim, '实现与测试完成。',
+	))
+	expect(workflowApi.completeTaskExecution).not.toHaveBeenCalled()
+  })
+
   it('renders Main Thread and posts a human message through the unified API', async () => {
     vi.mocked(workflowApi.createThreadMessage).mockResolvedValue({
       id: '22222222-2222-4222-8222-222222222222',

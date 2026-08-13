@@ -261,18 +261,33 @@ func TestGeneratedClientAgentWorkflow(t *testing.T) {
 			require.Equal(t, generated.AcceptanceCheckPurposeExecutionVerification, verification.Response.Purpose.Or(""))
 		}
 
-		submitResult, submitErr := client.SubmitTaskWork(
+		submitResult, submitErr := client.RecordTaskWorkSubmission(
 			ctx,
 			&generated.TaskStageClaimFinish{ClaimVersion: execution.Response.Claim.Version, Body: "Work is ready for acceptance."},
-			generated.SubmitTaskWorkParams{
+			generated.RecordTaskWorkSubmissionParams{
 				Number: number, ID: execution.Response.Claim.ID,
 				IfMatch:        fmt.Sprintf(`"%d"`, execution.Response.Task.Version),
 				IdempotencyKey: generated.NewOptString("submit-" + uuid.NewString()),
 			},
 		)
 		require.NoError(t, submitErr)
-		submitted, submittedOK := submitResult.(*generated.TaskStageClaimCommandHeaders)
+		submitted, submittedOK := submitResult.(*generated.TaskWorkSubmissionCommandHeaders)
 		require.True(t, submittedOK, "unexpected submit response %T", submitResult)
+		require.Equal(t, generated.TaskPhaseInProgress, submitted.Response.Task.Phase)
+		require.Equal(t, generated.TaskStageClaimStatusActive, submitted.Response.Claim.Status)
+
+		completionResult, completionErr := client.CompleteTaskExecution(
+			ctx,
+			&generated.TaskStageClaimFinish{ClaimVersion: execution.Response.Claim.Version, Body: "Execution is complete."},
+			generated.CompleteTaskExecutionParams{
+				Number: number, ID: execution.Response.Claim.ID,
+				IfMatch:        fmt.Sprintf(`"%d"`, execution.Response.Task.Version),
+				IdempotencyKey: generated.NewOptString("complete-" + uuid.NewString()),
+			},
+		)
+		require.NoError(t, completionErr)
+		completed, completedOK := completionResult.(*generated.TaskExecutionCompletionCommandHeaders)
+		require.True(t, completedOK, "unexpected completion response %T", completionResult)
 
 		reviewClaimResult, reviewClaimErr := client.CreateTaskStageClaim(
 			ctx,
@@ -281,7 +296,7 @@ func TestGeneratedClientAgentWorkflow(t *testing.T) {
 				ClientSessionID: generated.NewOptString("review-" + uuid.NewString()),
 			},
 			generated.CreateTaskStageClaimParams{
-				Number: number, IfMatch: fmt.Sprintf(`"%d"`, submitted.Response.Task.Version),
+				Number: number, IfMatch: fmt.Sprintf(`"%d"`, completed.Response.Task.Version),
 				IdempotencyKey: generated.NewOptString("claim-review-" + uuid.NewString()),
 			},
 		)

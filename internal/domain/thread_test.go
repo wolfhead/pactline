@@ -110,3 +110,27 @@ func TestIssueResolutionSummaryRequiresRequestAndConclusion(t *testing.T) {
 	item.IssueResolution.Resolution = ""
 	require.ErrorIs(t, item.Validate(), domain.ErrInvalidInput)
 }
+
+func TestDeliveryThreadItemsRequireClaimAndReviewCycleContext(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 13, 6, 0, 0, 0, time.UTC)
+	claimID := uuid.New()
+	cycle := int64(2)
+	item := domain.ThreadItem{
+		ID: uuid.New(), ThreadID: uuid.New(), Kind: domain.ThreadItemKindWorkSubmission,
+		Author: domain.Actor{Type: domain.ActorTypeAgent, Ref: "codex/session-a"},
+		Body:   "Implemented and tested the requested change.", TaskStageClaimID: &claimID,
+		TaskReviewCycle: &cycle, Version: 1, CreatedAt: now, UpdatedAt: now,
+	}
+	require.NoError(t, item.Validate())
+
+	item.Kind = domain.ThreadItemKindExecutionCompleted
+	item.ExecutionCompleted = &domain.ExecutionCompletedPayload{
+		ReviewCycle: cycle, SubmissionItemIDs: []uuid.UUID{item.ID},
+		CriterionRevisions: []domain.CriterionRevisionSnapshot{{CriterionID: uuid.New(), Revision: 1}},
+	}
+	require.NoError(t, item.Validate())
+
+	item.ExecutionCompleted.ReviewCycle++
+	require.ErrorIs(t, item.Validate(), domain.ErrInvalidInput)
+}

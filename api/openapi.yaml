@@ -282,13 +282,34 @@ paths:
           $ref: "#/components/responses/TaskStageClaimCommand"
         default:
           $ref: "#/components/responses/Problem"
-  /api/v1/tasks/{number}/claims/{id}/submit:
+  /api/v1/tasks/{number}/claims/{id}/submissions:
     parameters:
       - $ref: "#/components/parameters/TaskNumber"
       - $ref: "#/components/parameters/ResourceID"
     post:
-      operationId: submitTaskWork
-      summary: Submit execution work for Task acceptance review
+      operationId: recordTaskWorkSubmission
+      summary: Record an immutable work submission without ending execution
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskStageClaimFinish"
+      responses:
+        "201":
+          $ref: "#/components/responses/TaskWorkSubmissionCommand"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/claims/{id}/complete-execution:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+      - $ref: "#/components/parameters/ResourceID"
+    post:
+      operationId: completeTaskExecution
+      summary: End execution and make the frozen delivery available for review
       parameters:
         - $ref: "#/components/parameters/IfMatch"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -300,7 +321,7 @@ paths:
               $ref: "#/components/schemas/TaskStageClaimFinish"
       responses:
         "200":
-          $ref: "#/components/responses/TaskStageClaimCommand"
+          $ref: "#/components/responses/TaskExecutionCompletionCommand"
         default:
           $ref: "#/components/responses/Problem"
   /api/v1/tasks/{number}/claims/{id}/request-resolution:
@@ -1419,6 +1440,32 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/TaskStageClaimCommand"
+    TaskWorkSubmissionCommand:
+      description: Work submission recorded while execution remains active
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TaskWorkSubmissionCommand"
+    TaskExecutionCompletionCommand:
+      description: Execution completed and delivery frozen for review
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TaskExecutionCompletionCommand"
     TaskStageClaim:
       description: Active Claim owned by the authenticated client session
       headers:
@@ -2302,7 +2349,7 @@ components:
     TaskStageClaimOutcome:
       type: string
       enum:
-        - work_submitted
+        - execution_completed
         - task_accepted
         - changes_requested
         - needs_resolution
@@ -2389,6 +2436,28 @@ components:
           $ref: "#/components/schemas/TaskWorkflow"
         claim:
           $ref: "#/components/schemas/TaskStageClaim"
+    TaskWorkSubmissionCommand:
+      type: object
+      additionalProperties: false
+      required: [task, claim, submission]
+      properties:
+        task:
+          $ref: "#/components/schemas/TaskWorkflow"
+        claim:
+          $ref: "#/components/schemas/TaskStageClaim"
+        submission:
+          $ref: "#/components/schemas/TaskThreadItem"
+    TaskExecutionCompletionCommand:
+      type: object
+      additionalProperties: false
+      required: [task, claim, completion]
+      properties:
+        task:
+          $ref: "#/components/schemas/TaskWorkflow"
+        claim:
+          $ref: "#/components/schemas/TaskStageClaim"
+        completion:
+          $ref: "#/components/schemas/TaskThreadItem"
     TaskStageClaimCreate:
       type: object
       additionalProperties: false
@@ -2554,6 +2623,7 @@ components:
         - progress
         - handoff
         - work_submission
+        - execution_completed
         - review_outcome
         - resolution_request
         - resolution
@@ -2591,6 +2661,41 @@ components:
         resolved_at:
           type: string
           format: date-time
+    CriterionRevisionSnapshot:
+      type: object
+      additionalProperties: false
+      required: [criterion_id, revision]
+      properties:
+        criterion_id:
+          type: string
+          format: uuid
+        revision:
+          type: integer
+          format: int64
+          minimum: 1
+    ExecutionCompletedPayload:
+      type: object
+      additionalProperties: false
+      required: [review_cycle, submission_item_ids, execution_check_ids, criterion_revisions]
+      properties:
+        review_cycle:
+          type: integer
+          format: int64
+          minimum: 1
+        submission_item_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        execution_check_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        criterion_revisions:
+          type: array
+          items:
+            $ref: "#/components/schemas/CriterionRevisionSnapshot"
     TaskThreadItem:
       type: object
       additionalProperties: false
@@ -2610,6 +2715,15 @@ components:
           type: string
         issue_resolution:
           $ref: "#/components/schemas/IssueResolutionPayload"
+        execution_completed:
+          $ref: "#/components/schemas/ExecutionCompletedPayload"
+        task_stage_claim_id:
+          type: string
+          format: uuid
+        task_review_cycle:
+          type: integer
+          format: int64
+          minimum: 1
         reply_to_item_id:
           type: string
           format: uuid

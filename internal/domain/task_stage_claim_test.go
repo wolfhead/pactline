@@ -52,12 +52,12 @@ func TestTaskStageClaimOutcomeMustMatchStage(t *testing.T) {
 
 	execution := newClaim(domain.TaskClaimStageExecution)
 	require.ErrorIs(t, execution.Complete(domain.TaskClaimOutcomeTaskAccepted, now), domain.ErrConflict)
-	require.NoError(t, execution.Complete(domain.TaskClaimOutcomeWorkSubmitted, now))
+	require.NoError(t, execution.Complete(domain.TaskClaimOutcomeExecutionCompleted, now))
 	require.Equal(t, domain.StageClaimStatusCompleted, execution.Status)
-	require.ErrorIs(t, execution.Complete(domain.TaskClaimOutcomeWorkSubmitted, now), domain.ErrConflict)
+	require.ErrorIs(t, execution.Complete(domain.TaskClaimOutcomeExecutionCompleted, now), domain.ErrConflict)
 
 	review := newClaim(domain.TaskClaimStageReview)
-	require.ErrorIs(t, review.Complete(domain.TaskClaimOutcomeWorkSubmitted, now), domain.ErrConflict)
+	require.ErrorIs(t, review.Complete(domain.TaskClaimOutcomeExecutionCompleted, now), domain.ErrConflict)
 	require.NoError(t, review.Complete(domain.TaskClaimOutcomeChangesRequested, now))
 	require.Equal(t, domain.StageClaimStatusCompleted, review.Status)
 

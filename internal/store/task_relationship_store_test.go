@@ -125,7 +125,7 @@ func completeTaskWorkflow(
 		domain.SessionOperation(userA, "complete-execution-claim"), "browser", "", now.Add(time.Minute),
 	)
 	require.NoError(t, err)
-	review, _, err := workflow.SubmitWork(
+	review, _, _, err := workflow.CompleteExecution(
 		ctx, taskNumber, execution.ID, working.Version, execution.Version,
 		"Execution complete.", actor,
 		domain.SessionOperation(userA, "complete-submit"), now.Add(2*time.Minute),

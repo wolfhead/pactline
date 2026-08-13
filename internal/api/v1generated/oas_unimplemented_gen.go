@@ -94,6 +94,15 @@ func (UnimplementedHandler) CompleteTaskAttachmentUpload(ctx context.Context, pa
 	return r, ht.ErrNotImplemented
 }
 
+// CompleteTaskExecution implements completeTaskExecution operation.
+//
+// End execution and make the frozen delivery available for review.
+//
+// POST /api/v1/tasks/{number}/claims/{id}/complete-execution
+func (UnimplementedHandler) CompleteTaskExecution(ctx context.Context, req *TaskStageClaimFinish, params CompleteTaskExecutionParams) (r CompleteTaskExecutionRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // CreateAcceptanceCheck implements createAcceptanceCheck operation.
 //
 // Record an immutable acceptance check.
@@ -418,6 +427,15 @@ func (UnimplementedHandler) RecordTaskStageAcceptanceCheck(ctx context.Context, 
 	return r, ht.ErrNotImplemented
 }
 
+// RecordTaskWorkSubmission implements recordTaskWorkSubmission operation.
+//
+// Record an immutable work submission without ending execution.
+//
+// POST /api/v1/tasks/{number}/claims/{id}/submissions
+func (UnimplementedHandler) RecordTaskWorkSubmission(ctx context.Context, req *TaskStageClaimFinish, params RecordTaskWorkSubmissionParams) (r RecordTaskWorkSubmissionRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // ReleaseTaskStageClaim implements releaseTaskStageClaim operation.
 //
 // Release the active Claim with a durable handoff.
@@ -487,15 +505,6 @@ func (UnimplementedHandler) RestoreProject(ctx context.Context, params RestorePr
 //
 // POST /api/v1/tasks/{number}/restore
 func (UnimplementedHandler) RestoreTask(ctx context.Context, params RestoreTaskParams) (r RestoreTaskRes, _ error) {
-	return r, ht.ErrNotImplemented
-}
-
-// SubmitTaskWork implements submitTaskWork operation.
-//
-// Submit execution work for Task acceptance review.
-//
-// POST /api/v1/tasks/{number}/claims/{id}/submit
-func (UnimplementedHandler) SubmitTaskWork(ctx context.Context, req *TaskStageClaimFinish, params SubmitTaskWorkParams) (r SubmitTaskWorkRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

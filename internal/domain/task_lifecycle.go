@@ -181,8 +181,8 @@ func (s *TaskLifecycle) ResolveIssue() error {
 	return nil
 }
 
-func (s *TaskLifecycle) SubmitWork() error {
-	if err := s.requireWorkingStage("submit work", TaskClaimStageExecution); err != nil {
+func (s *TaskLifecycle) CompleteExecution() error {
+	if err := s.requireWorkingStage("complete execution", TaskClaimStageExecution); err != nil {
 		return err
 	}
 	s.ReviewCycle++

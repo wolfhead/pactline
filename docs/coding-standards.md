@@ -115,6 +115,9 @@ the change.
   checks but must not create parallel human-only and Agent-only lifecycles.
 - Task checks are Claim-owned. Derive acceptance-check purpose from Claim stage;
   never trust a caller-supplied purpose or review cycle.
+- Treat work submission and execution completion as separate commands. A work
+  submission does not mutate Task or Claim lifecycle versions; completion
+  derives and freezes the next review-cycle snapshot while both are locked.
 - Return enough related data for a screen or use case without creating
   client-side N+1 requests.
 - Log rejected and failed requests with the operation, route, status, useful

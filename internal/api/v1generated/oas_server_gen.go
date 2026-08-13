@@ -62,6 +62,12 @@ type Handler interface {
 	//
 	// POST /api/v1/tasks/{number}/attachments/uploads/{id}/complete
 	CompleteTaskAttachmentUpload(ctx context.Context, params CompleteTaskAttachmentUploadParams) (CompleteTaskAttachmentUploadRes, error)
+	// CompleteTaskExecution implements completeTaskExecution operation.
+	//
+	// End execution and make the frozen delivery available for review.
+	//
+	// POST /api/v1/tasks/{number}/claims/{id}/complete-execution
+	CompleteTaskExecution(ctx context.Context, req *TaskStageClaimFinish, params CompleteTaskExecutionParams) (CompleteTaskExecutionRes, error)
 	// CreateAcceptanceCheck implements createAcceptanceCheck operation.
 	//
 	// Record an immutable acceptance check.
@@ -278,6 +284,12 @@ type Handler interface {
 	//
 	// POST /api/v1/tasks/{number}/claims/{id}/criteria/{criterion_id}/checks
 	RecordTaskStageAcceptanceCheck(ctx context.Context, req *TaskStageAcceptanceCheckWrite, params RecordTaskStageAcceptanceCheckParams) (RecordTaskStageAcceptanceCheckRes, error)
+	// RecordTaskWorkSubmission implements recordTaskWorkSubmission operation.
+	//
+	// Record an immutable work submission without ending execution.
+	//
+	// POST /api/v1/tasks/{number}/claims/{id}/submissions
+	RecordTaskWorkSubmission(ctx context.Context, req *TaskStageClaimFinish, params RecordTaskWorkSubmissionParams) (RecordTaskWorkSubmissionRes, error)
 	// ReleaseTaskStageClaim implements releaseTaskStageClaim operation.
 	//
 	// Release the active Claim with a durable handoff.
@@ -326,12 +338,6 @@ type Handler interface {
 	//
 	// POST /api/v1/tasks/{number}/restore
 	RestoreTask(ctx context.Context, params RestoreTaskParams) (RestoreTaskRes, error)
-	// SubmitTaskWork implements submitTaskWork operation.
-	//
-	// Submit execution work for Task acceptance review.
-	//
-	// POST /api/v1/tasks/{number}/claims/{id}/submit
-	SubmitTaskWork(ctx context.Context, req *TaskStageClaimFinish, params SubmitTaskWorkParams) (SubmitTaskWorkRes, error)
 	// UpdateAgentConversation implements updateAgentConversation operation.
 	//
 	// Update an Agent conversation configuration.

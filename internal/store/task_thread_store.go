@@ -165,7 +165,8 @@ func (s *TaskThreadStore) ListItems(
 	rows, err := s.db.Pool.Query(ctx, `
 		SELECT item.id,item.thread_id,item.kind,
 			item.author_type,item.author_user_id,item.author_ref,
-			item.body,item.typed_payload,item.reply_to_item_id,
+			item.body,item.typed_payload,item.task_stage_claim_id,item.task_review_cycle,
+			item.reply_to_item_id,
 			COALESCE(ARRAY(
 				SELECT mention.user_id
 				FROM task_thread_item_mentions mention
@@ -206,7 +207,8 @@ func scanTaskThreadItem(row scanner) (domain.ThreadItem, error) {
 	if err := row.Scan(
 		&item.ID, &item.ThreadID, &item.Kind,
 		&authorType, &authorUserID, &authorRef,
-		&body, &typedPayload, &item.ReplyToItemID, &item.MentionedUserIDs,
+		&body, &typedPayload, &item.TaskStageClaimID, &item.TaskReviewCycle,
+		&item.ReplyToItemID, &item.MentionedUserIDs,
 		&item.Version, &item.CreatedAt, &item.UpdatedAt, &item.DeletedAt,
 	); err != nil {
 		return domain.ThreadItem{}, err
@@ -215,12 +217,19 @@ func scanTaskThreadItem(row scanner) (domain.ThreadItem, error) {
 	if body != nil {
 		item.Body = *body
 	}
-	if len(typedPayload) > 0 {
+	if len(typedPayload) > 0 && item.Kind == domain.ThreadItemKindIssueResolution {
 		var payload domain.IssueResolutionPayload
 		if err := json.Unmarshal(typedPayload, &payload); err != nil {
 			return domain.ThreadItem{}, fmt.Errorf("decode Issue resolution payload: %w", err)
 		}
 		item.IssueResolution = &payload
+	}
+	if len(typedPayload) > 0 && item.Kind == domain.ThreadItemKindExecutionCompleted {
+		var payload domain.ExecutionCompletedPayload
+		if err := json.Unmarshal(typedPayload, &payload); err != nil {
+			return domain.ThreadItem{}, fmt.Errorf("decode execution completion payload: %w", err)
+		}
+		item.ExecutionCompleted = &payload
 	}
 	return item, nil
 }
@@ -449,7 +458,8 @@ func lockTaskThreadItem(
 	row := tx.QueryRow(ctx, `
 		SELECT item.id,item.thread_id,item.kind,
 			item.author_type,item.author_user_id,item.author_ref,
-			item.body,item.typed_payload,item.reply_to_item_id,
+			item.body,item.typed_payload,item.task_stage_claim_id,item.task_review_cycle,
+			item.reply_to_item_id,
 			COALESCE(ARRAY(
 				SELECT mention.user_id
 				FROM task_thread_item_mentions mention
@@ -517,14 +527,23 @@ func insertTaskThreadItem(
 		}
 		payload = encoded
 	}
+	if item.ExecutionCompleted != nil {
+		encoded, err := json.Marshal(item.ExecutionCompleted)
+		if err != nil {
+			return fmt.Errorf("encode execution completion payload: %w", err)
+		}
+		payload = encoded
+	}
 	_, err := tx.Exec(ctx, `
 		INSERT INTO task_thread_items (
 			id,thread_id,kind,author_type,author_user_id,author_ref,
-			body,typed_payload,reply_to_item_id,request_id,version,
+			body,typed_payload,task_stage_claim_id,task_review_cycle,
+			reply_to_item_id,request_id,version,
 			created_at,updated_at,deleted_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
 		item.ID, item.ThreadID, item.Kind, item.Author.Type, authorUserID, authorRef,
-		nullIfEmpty(item.Body), payload, item.ReplyToItemID, requestID, item.Version,
+		nullIfEmpty(item.Body), payload, item.TaskStageClaimID, item.TaskReviewCycle,
+		item.ReplyToItemID, requestID, item.Version,
 		item.CreatedAt, item.UpdatedAt, item.DeletedAt,
 	)
 	if err != nil {

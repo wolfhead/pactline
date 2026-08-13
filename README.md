@@ -26,8 +26,9 @@ acceptance criteria.
   Pactline's built-in Lark Agent uses a short-lived initiating-user delegation.
   Both operate through the same contract-first `/api/v1` API.
 - Tasks explicitly opt into external execution. A real Codex session claims
-  one assigned eligible Task, records a separate Agent conversation and
-  acceptance evidence, then submits it for human review.
+  one assigned eligible Task, records a separate Agent conversation,
+  repeatable delivery updates, and acceptance evidence, then explicitly
+  completes execution to make the Task available for review.
 - Tasks support private attachments and threaded comments with structured
   Project-member mentions. Reliable notification intents flow through a
   PostgreSQL outbox and RabbitMQ without coupling comments to one IM provider.

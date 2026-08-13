@@ -132,15 +132,16 @@ func (t *Thread) Resolve(resolvedBy Actor, now time.Time) error {
 type ThreadItemKind string
 
 const (
-	ThreadItemKindMessage           ThreadItemKind = "message"
-	ThreadItemKindProgress          ThreadItemKind = "progress"
-	ThreadItemKindHandoff           ThreadItemKind = "handoff"
-	ThreadItemKindWorkSubmission    ThreadItemKind = "work_submission"
-	ThreadItemKindReviewOutcome     ThreadItemKind = "review_outcome"
-	ThreadItemKindResolutionRequest ThreadItemKind = "resolution_request"
-	ThreadItemKindResolution        ThreadItemKind = "resolution"
-	ThreadItemKindIssueResolution   ThreadItemKind = "issue_resolution"
-	ThreadItemKindSystemEvent       ThreadItemKind = "system_event"
+	ThreadItemKindMessage            ThreadItemKind = "message"
+	ThreadItemKindProgress           ThreadItemKind = "progress"
+	ThreadItemKindHandoff            ThreadItemKind = "handoff"
+	ThreadItemKindWorkSubmission     ThreadItemKind = "work_submission"
+	ThreadItemKindExecutionCompleted ThreadItemKind = "execution_completed"
+	ThreadItemKindReviewOutcome      ThreadItemKind = "review_outcome"
+	ThreadItemKindResolutionRequest  ThreadItemKind = "resolution_request"
+	ThreadItemKindResolution         ThreadItemKind = "resolution"
+	ThreadItemKindIssueResolution    ThreadItemKind = "issue_resolution"
+	ThreadItemKindSystemEvent        ThreadItemKind = "system_event"
 )
 
 func (k ThreadItemKind) Valid() bool {
@@ -149,6 +150,7 @@ func (k ThreadItemKind) Valid() bool {
 		ThreadItemKindProgress,
 		ThreadItemKindHandoff,
 		ThreadItemKindWorkSubmission,
+		ThreadItemKindExecutionCompleted,
 		ThreadItemKindReviewOutcome,
 		ThreadItemKindResolutionRequest,
 		ThreadItemKindResolution,
@@ -175,6 +177,35 @@ type IssueResolutionPayload struct {
 	ResolvedAt    time.Time
 }
 
+type CriterionRevisionSnapshot struct {
+	CriterionID uuid.UUID `json:"criterion_id"`
+	Revision    int64     `json:"revision"`
+}
+
+type ExecutionCompletedPayload struct {
+	ReviewCycle        int64                       `json:"review_cycle"`
+	SubmissionItemIDs  []uuid.UUID                 `json:"submission_item_ids"`
+	ExecutionCheckIDs  []uuid.UUID                 `json:"execution_check_ids"`
+	CriterionRevisions []CriterionRevisionSnapshot `json:"criterion_revisions"`
+}
+
+func (p ExecutionCompletedPayload) Validate() error {
+	if p.ReviewCycle < 1 {
+		return fmt.Errorf("%w: execution completion review cycle is required", ErrInvalidInput)
+	}
+	for _, id := range append(append([]uuid.UUID(nil), p.SubmissionItemIDs...), p.ExecutionCheckIDs...) {
+		if id == uuid.Nil {
+			return fmt.Errorf("%w: execution completion references are invalid", ErrInvalidInput)
+		}
+	}
+	for _, revision := range p.CriterionRevisions {
+		if revision.CriterionID == uuid.Nil || revision.Revision < 1 {
+			return fmt.Errorf("%w: execution completion criterion snapshot is invalid", ErrInvalidInput)
+		}
+	}
+	return nil
+}
+
 func (p IssueResolutionPayload) Validate() error {
 	if p.IssueThreadID == uuid.Nil || !p.IssueType.Valid() ||
 		strings.TrimSpace(p.Request) == "" || strings.TrimSpace(p.Resolution) == "" ||
@@ -186,18 +217,21 @@ func (p IssueResolutionPayload) Validate() error {
 }
 
 type ThreadItem struct {
-	ID               uuid.UUID
-	ThreadID         uuid.UUID
-	Kind             ThreadItemKind
-	Author           Actor
-	Body             string
-	IssueResolution  *IssueResolutionPayload
-	ReplyToItemID    *uuid.UUID
-	MentionedUserIDs []uuid.UUID
-	Version          int64
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-	DeletedAt        *time.Time
+	ID                 uuid.UUID
+	ThreadID           uuid.UUID
+	Kind               ThreadItemKind
+	Author             Actor
+	Body               string
+	IssueResolution    *IssueResolutionPayload
+	ExecutionCompleted *ExecutionCompletedPayload
+	TaskStageClaimID   *uuid.UUID
+	TaskReviewCycle    *int64
+	ReplyToItemID      *uuid.UUID
+	MentionedUserIDs   []uuid.UUID
+	Version            int64
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	DeletedAt          *time.Time
 }
 
 func (i ThreadItem) Validate() error {
@@ -215,6 +249,27 @@ func (i ThreadItem) Validate() error {
 		}
 	} else if i.IssueResolution != nil {
 		return fmt.Errorf("%w: only issue_resolution Item accepts that payload", ErrInvalidInput)
+	}
+	if i.Kind == ThreadItemKindExecutionCompleted {
+		if i.ExecutionCompleted == nil {
+			return fmt.Errorf("%w: execution_completed Item requires a typed payload", ErrInvalidInput)
+		}
+		if err := i.ExecutionCompleted.Validate(); err != nil {
+			return err
+		}
+	} else if i.ExecutionCompleted != nil {
+		return fmt.Errorf("%w: only execution_completed Item accepts that payload", ErrInvalidInput)
+	}
+	if i.Kind == ThreadItemKindWorkSubmission || i.Kind == ThreadItemKindExecutionCompleted {
+		if i.TaskStageClaimID == nil || *i.TaskStageClaimID == uuid.Nil ||
+			i.TaskReviewCycle == nil || *i.TaskReviewCycle < 1 {
+			return fmt.Errorf("%w: delivery Item requires Claim and review-cycle context", ErrInvalidInput)
+		}
+		if i.ExecutionCompleted != nil && i.ExecutionCompleted.ReviewCycle != *i.TaskReviewCycle {
+			return fmt.Errorf("%w: execution completion review cycle does not match Item context", ErrInvalidInput)
+		}
+	} else if i.TaskStageClaimID != nil || i.TaskReviewCycle != nil {
+		return fmt.Errorf("%w: only delivery Items accept Claim and review-cycle context", ErrInvalidInput)
 	}
 	if i.DeletedAt != nil {
 		if i.Kind != ThreadItemKindMessage {

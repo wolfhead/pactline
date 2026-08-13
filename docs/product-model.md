@@ -76,8 +76,9 @@ Its phase records delivery progress:
 
 - `backlog`: defined but not ready to start;
 - `ready`: immediately claimable for execution;
-- `in_progress`: execution, including implementation and code review;
-- `in_review`: review of whether the Task outcome satisfies acceptance;
+- `in_progress`: execution of the work;
+- `in_review`: delivery review, including code review, technical verification,
+  required confirmation, merge, and final Task acceptance;
 - `done`: accepted and complete; and
 - `cancelled`: intentionally stopped.
 
@@ -125,7 +126,9 @@ Agent or person can identify exactly what was checked.
 
 Task checks are always recorded through an active Claim. An execution Claim
 creates `execution_verification` evidence. A review Claim creates `acceptance`
-evidence for the Task's current review cycle. Completing the Task requires each
+evidence for the Task's current review cycle. Completing execution freezes the
+current delivery, execution checks, and active criterion revisions into an
+immutable completion record. Completing the Task requires each
 active criterion's current revision to have a passing current-cycle acceptance
 check. A changed criterion or a new submission cannot silently reuse stale
 acceptance. Milestone checks remain acceptance checks without a Task Claim or
@@ -209,8 +212,11 @@ never transferred or implicitly resumed.
   `in_review.working`.
 - Releasing or lazily expiring a Claim keeps the phase and returns it to
   `available`.
-- Submitting execution ends the Claim, increments the review cycle, and
-  produces `in_review.available`.
+- Recording a work submission appends an immutable delivery record and keeps
+  the execution Claim and `in_progress.working` state unchanged. It is
+  repeatable and targets the next review cycle.
+- Completing execution ends the Claim, freezes the delivery snapshot,
+  increments the review cycle, and produces `in_review.available`.
 - Requesting changes ends a review Claim and produces
   `in_progress.available`.
 - Accepting through a review Claim ends it and produces `done`.
@@ -219,8 +225,9 @@ Claims expire after seven days. Expiry is evaluated while the workflow is
 accessed; there is no periodic Claim poll, heartbeat, or extension command.
 
 Every Task owns one durable Main Thread across its entire lifetime. Messages,
-progress, handoffs, submissions, review outcomes, lifecycle events, and merged
-Issue conclusions are Thread Items shared by people and Agents. Editable user
+progress, handoffs, work submissions, execution completions, review outcomes,
+lifecycle events, and merged Issue conclusions are Thread Items shared by
+people and Agents. Editable user
 or Agent messages retain structured replies and mentions; immutable workflow
 Items preserve state-changing context.
 

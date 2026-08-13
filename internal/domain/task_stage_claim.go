@@ -38,7 +38,7 @@ func (s StageClaimStatus) Terminal() bool {
 type TaskClaimOutcome string
 
 const (
-	TaskClaimOutcomeWorkSubmitted       TaskClaimOutcome = "work_submitted"
+	TaskClaimOutcomeExecutionCompleted  TaskClaimOutcome = "execution_completed"
 	TaskClaimOutcomeTaskAccepted        TaskClaimOutcome = "task_accepted"
 	TaskClaimOutcomeChangesRequested    TaskClaimOutcome = "changes_requested"
 	TaskClaimOutcomeNeedsResolution     TaskClaimOutcome = "needs_resolution"
@@ -49,7 +49,7 @@ const (
 
 func (o TaskClaimOutcome) Valid() bool {
 	switch o {
-	case TaskClaimOutcomeWorkSubmitted,
+	case TaskClaimOutcomeExecutionCompleted,
 		TaskClaimOutcomeTaskAccepted,
 		TaskClaimOutcomeChangesRequested,
 		TaskClaimOutcomeNeedsResolution,
@@ -152,7 +152,7 @@ func (c *TaskStageClaim) Complete(outcome TaskClaimOutcome, now time.Time) error
 	}
 	status := StageClaimStatusCompleted
 	switch outcome {
-	case TaskClaimOutcomeWorkSubmitted,
+	case TaskClaimOutcomeExecutionCompleted,
 		TaskClaimOutcomeTaskAccepted,
 		TaskClaimOutcomeChangesRequested:
 	case TaskClaimOutcomeNeedsResolution, TaskClaimOutcomeVoluntarilyReleased:
@@ -215,7 +215,7 @@ func stageAcceptsOutcome(stage TaskClaimStage, outcome TaskClaimOutcome) bool {
 		return true
 	}
 	if stage == TaskClaimStageExecution {
-		return outcome == TaskClaimOutcomeWorkSubmitted
+		return outcome == TaskClaimOutcomeExecutionCompleted
 	}
 	return stage == TaskClaimStageReview &&
 		(outcome == TaskClaimOutcomeTaskAccepted || outcome == TaskClaimOutcomeChangesRequested)
@@ -224,7 +224,7 @@ func stageAcceptsOutcome(stage TaskClaimStage, outcome TaskClaimOutcome) bool {
 func claimStatusAcceptsOutcome(status StageClaimStatus, outcome TaskClaimOutcome) bool {
 	switch status {
 	case StageClaimStatusCompleted:
-		return outcome == TaskClaimOutcomeWorkSubmitted ||
+		return outcome == TaskClaimOutcomeExecutionCompleted ||
 			outcome == TaskClaimOutcomeTaskAccepted ||
 			outcome == TaskClaimOutcomeChangesRequested
 	case StageClaimStatusReleased:

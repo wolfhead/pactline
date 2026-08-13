@@ -61,7 +61,7 @@ func TestTaskLifecycleHappyPathAndReviewCycle(t *testing.T) {
 		Phase: domain.TaskPhaseInProgress, Activity: domain.TaskActivityWorking,
 	}, state)
 
-	require.NoError(t, state.SubmitWork())
+	require.NoError(t, state.CompleteExecution())
 	require.Equal(t, int64(1), state.ReviewCycle)
 	require.Equal(t, domain.TaskActivityAvailable, state.Activity)
 
@@ -74,7 +74,7 @@ func TestTaskLifecycleHappyPathAndReviewCycle(t *testing.T) {
 	stage, err = state.Claim(false)
 	require.NoError(t, err)
 	require.Equal(t, domain.TaskClaimStageExecution, stage)
-	require.NoError(t, state.SubmitWork())
+	require.NoError(t, state.CompleteExecution())
 	require.Equal(t, int64(2), state.ReviewCycle)
 
 	stage, err = state.Claim(false)
@@ -117,7 +117,7 @@ func TestTaskLifecycleRejectsInvalidTransitions(t *testing.T) {
 	state := domain.NewTaskLifecycle()
 	require.ErrorIs(t, state.MarkReady(true, false), domain.ErrConflict)
 	require.ErrorIs(t, state.MarkReady(false, true), domain.ErrConflict)
-	require.ErrorIs(t, state.SubmitWork(), domain.ErrConflict)
+	require.ErrorIs(t, state.CompleteExecution(), domain.ErrConflict)
 	require.ErrorIs(t, state.ResolveIssue(), domain.ErrConflict)
 
 	require.NoError(t, state.MarkReady(false, false))

@@ -255,16 +255,35 @@ func TestV1TaskWorkflowUsesCommandsForAgentAndHumanActors(t *testing.T) {
 
 	submitted := doBearerMutation(
 		t, handler, http.MethodPost,
-		fmt.Sprintf("/api/v1/tasks/%d/claims/%s/submit", task.Number, execution.Claim.ID),
+		fmt.Sprintf("/api/v1/tasks/%d/claims/%s/submissions", task.Number, execution.Claim.ID),
 		issued.Token, http.Header{"If-Match": {`"7"`}},
 		map[string]any{
 			"claim_version": execution.Claim.Version,
 			"body":          "Execution is complete and verified.",
 		},
 	)
-	require.Equal(t, http.StatusOK, submitted.Code, submitted.Body.String())
+	require.Equal(t, http.StatusCreated, submitted.Code, submitted.Body.String())
+	var workSubmission struct {
+		Task  workflowJSON   `json:"task"`
+		Claim stageClaimJSON `json:"claim"`
+	}
+	decodeJSON(t, submitted, &workSubmission)
+	require.Equal(t, "in_progress", workSubmission.Task.Phase)
+	require.Equal(t, "working", workSubmission.Task.Activity)
+	require.Equal(t, "active", workSubmission.Claim.Status)
+
+	completed := doBearerMutation(
+		t, handler, http.MethodPost,
+		fmt.Sprintf("/api/v1/tasks/%d/claims/%s/complete-execution", task.Number, execution.Claim.ID),
+		issued.Token, http.Header{"If-Match": {`"7"`}},
+		map[string]any{
+			"claim_version": execution.Claim.Version,
+			"body":          "Execution is complete and verified.",
+		},
+	)
+	require.Equal(t, http.StatusOK, completed.Code, completed.Body.String())
 	var submission stageClaimCommandJSON
-	decodeJSON(t, submitted, &submission)
+	decodeJSON(t, completed, &submission)
 	require.Equal(t, "in_review", submission.Task.Phase)
 	require.Equal(t, "available", submission.Task.Activity)
 	require.Equal(t, int64(1), submission.Task.ReviewCycle)

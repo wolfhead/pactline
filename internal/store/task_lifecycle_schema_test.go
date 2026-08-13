@@ -249,8 +249,8 @@ func TestTaskLifecycleBackfillReconcilesObservedLegacyShape(t *testing.T) {
 	}
 	require.NoError(t, rows.Err())
 	require.Equal(t, map[string]int{
-		"execution/completed/work_submitted": 1,
-		"review/completed/task_accepted":     1,
+		"execution/completed/execution_completed": 1,
+		"review/completed/task_accepted":          1,
 	}, claimShapes)
 
 	var executionChecks, acceptanceChecks int
@@ -262,14 +262,28 @@ func TestTaskLifecycleBackfillReconcilesObservedLegacyShape(t *testing.T) {
 	require.Equal(t, 1, executionChecks)
 	require.Equal(t, 1, acceptanceChecks)
 
-	var progressItems, submissionItems, messageItems int
+	var progressItems, completionItems, messageItems int
 	require.NoError(t, db.Pool.QueryRow(ctx, `
 		SELECT
 			count(*) FILTER (WHERE kind='progress'),
-			count(*) FILTER (WHERE kind='work_submission'),
+			count(*) FILTER (WHERE kind='execution_completed'),
 			count(*) FILTER (WHERE kind='message')
-		FROM task_thread_items`).Scan(&progressItems, &submissionItems, &messageItems))
+		FROM task_thread_items`).Scan(&progressItems, &completionItems, &messageItems))
 	require.Equal(t, 2, progressItems)
-	require.Equal(t, 1, submissionItems)
+	require.Equal(t, 1, completionItems)
 	require.Equal(t, 1, messageItems)
+
+	var completionClaimID uuid.UUID
+	var completionCycle int64
+	var payloadCycle int64
+	require.NoError(t, db.Pool.QueryRow(ctx, `
+		SELECT task_stage_claim_id,task_review_cycle,
+		       (typed_payload->>'review_cycle')::bigint
+		FROM task_thread_items
+		WHERE kind='execution_completed'`).Scan(
+		&completionClaimID, &completionCycle, &payloadCycle,
+	))
+	require.Equal(t, uuid.MustParse(claimID), completionClaimID)
+	require.Equal(t, int64(1), completionCycle)
+	require.Equal(t, completionCycle, payloadCycle)
 }

@@ -379,7 +379,7 @@ func (s *TaskWorkflowStore) ReleaseClaim(
 		})
 }
 
-func (s *TaskWorkflowStore) SubmitWork(
+func (s *TaskWorkflowStore) RecordWorkSubmission(
 	ctx context.Context,
 	taskNumber int64,
 	claimID uuid.UUID,
@@ -388,15 +388,105 @@ func (s *TaskWorkflowStore) SubmitWork(
 	actor domain.Actor,
 	operation domain.OperationActor,
 	now time.Time,
-) (TaskWorkflowSnapshot, domain.TaskStageClaim, error) {
+) (TaskWorkflowSnapshot, domain.TaskStageClaim, domain.ThreadItem, error) {
 	if strings.TrimSpace(summary) == "" {
-		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, fmt.Errorf("%w: submission summary is required", domain.ErrInvalidInput)
+		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, domain.ThreadItem{}, fmt.Errorf("%w: submission summary is required", domain.ErrInvalidInput)
 	}
-	return s.finishClaim(ctx, taskNumber, claimID, expectedTaskVersion, expectedClaimVersion,
-		domain.TaskClaimOutcomeWorkSubmitted, domain.ThreadItemKindWorkSubmission,
-		summary, actor, operation, now, func(task *workflowTask, _ domain.TaskStageClaim) error {
-			return task.Lifecycle.SubmitWork()
-		})
+	if err := validateThreadOperationActor(actor, operation); err != nil {
+		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, domain.ThreadItem{}, err
+	}
+	tx, err := s.db.Pool.Begin(ctx)
+	if err != nil {
+		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, domain.ThreadItem{}, fmt.Errorf("begin record work submission: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	task, claim, err := lockOwnedWorkflowClaim(
+		ctx, tx, taskNumber, claimID, expectedTaskVersion, expectedClaimVersion, actor, operation,
+	)
+	if err != nil {
+		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, domain.ThreadItem{}, err
+	}
+	if task.Lifecycle.Phase != domain.TaskPhaseInProgress ||
+		task.Lifecycle.Activity != domain.TaskActivityWorking ||
+		claim.Stage != domain.TaskClaimStageExecution {
+		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, domain.ThreadItem{},
+			fmt.Errorf("%w: work can only be submitted from an active execution Claim", domain.ErrConflict)
+	}
+	cycle := task.Lifecycle.ReviewCycle + 1
+	item, err := insertDeliveryWorkflowItem(
+		ctx, tx, task.MainThreadID, domain.ThreadItemKindWorkSubmission, actor, summary,
+		claim.ID, cycle, nil, operation.RequestID, now,
+	)
+	if err != nil {
+		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, domain.ThreadItem{}, err
+	}
+	if err := insertWorkflowAudit(ctx, tx, task, operation, "work_submission_recorded", now); err != nil {
+		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, domain.ThreadItem{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, domain.ThreadItem{}, fmt.Errorf("commit work submission: %w", err)
+	}
+	return task.TaskWorkflowSnapshot, claim, item, nil
+}
+
+func (s *TaskWorkflowStore) CompleteExecution(
+	ctx context.Context,
+	taskNumber int64,
+	claimID uuid.UUID,
+	expectedTaskVersion, expectedClaimVersion int64,
+	summary string,
+	actor domain.Actor,
+	operation domain.OperationActor,
+	now time.Time,
+) (TaskWorkflowSnapshot, domain.TaskStageClaim, domain.ThreadItem, error) {
+	if strings.TrimSpace(summary) == "" {
+		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, domain.ThreadItem{}, fmt.Errorf("%w: completion summary is required", domain.ErrInvalidInput)
+	}
+	if err := validateThreadOperationActor(actor, operation); err != nil {
+		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, domain.ThreadItem{}, err
+	}
+	tx, err := s.db.Pool.Begin(ctx)
+	if err != nil {
+		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, domain.ThreadItem{}, fmt.Errorf("begin complete execution: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	task, claim, err := lockOwnedWorkflowClaim(
+		ctx, tx, taskNumber, claimID, expectedTaskVersion, expectedClaimVersion, actor, operation,
+	)
+	if err != nil {
+		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, domain.ThreadItem{}, err
+	}
+	if err := task.Lifecycle.CompleteExecution(); err != nil {
+		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, domain.ThreadItem{}, err
+	}
+	payload, err := executionCompletionPayload(ctx, tx, task, task.Lifecycle.ReviewCycle)
+	if err != nil {
+		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, domain.ThreadItem{}, err
+	}
+	previousClaimVersion := claim.Version
+	if err := claim.Complete(domain.TaskClaimOutcomeExecutionCompleted, now); err != nil {
+		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, domain.ThreadItem{}, err
+	}
+	if err := updateTaskStageClaim(ctx, tx, claim, previousClaimVersion); err != nil {
+		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, domain.ThreadItem{}, err
+	}
+	if err := persistWorkflowTask(ctx, tx, &task, expectedTaskVersion, now); err != nil {
+		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, domain.ThreadItem{}, err
+	}
+	item, err := insertDeliveryWorkflowItem(
+		ctx, tx, task.MainThreadID, domain.ThreadItemKindExecutionCompleted, actor, summary,
+		claim.ID, task.Lifecycle.ReviewCycle, &payload, operation.RequestID, now,
+	)
+	if err != nil {
+		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, domain.ThreadItem{}, err
+	}
+	if err := insertWorkflowAudit(ctx, tx, task, operation, "execution_completed", now); err != nil {
+		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, domain.ThreadItem{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, domain.ThreadItem{}, fmt.Errorf("commit complete execution: %w", err)
+	}
+	return task.TaskWorkflowSnapshot, claim, item, nil
 }
 
 func (s *TaskWorkflowStore) RequestChanges(
@@ -503,6 +593,123 @@ func validateClaimActor(
 		return fmt.Errorf("%w: caller does not own this Task Claim", domain.ErrForbidden)
 	}
 	return nil
+}
+
+func lockOwnedWorkflowClaim(
+	ctx context.Context,
+	tx pgx.Tx,
+	taskNumber int64,
+	claimID uuid.UUID,
+	expectedTaskVersion, expectedClaimVersion int64,
+	actor domain.Actor,
+	operation domain.OperationActor,
+) (workflowTask, domain.TaskStageClaim, error) {
+	task, err := lockWorkflowTask(ctx, tx, taskNumber)
+	if err != nil {
+		return workflowTask{}, domain.TaskStageClaim{}, err
+	}
+	if task.Version != expectedTaskVersion {
+		return workflowTask{}, domain.TaskStageClaim{}, domain.VersionConflictError{CurrentVersion: task.Version}
+	}
+	claim, err := lockActiveTaskStageClaim(ctx, tx, task.TaskID)
+	if err != nil {
+		return workflowTask{}, domain.TaskStageClaim{}, err
+	}
+	if claim.ID != claimID || claim.Version != expectedClaimVersion {
+		return workflowTask{}, domain.TaskStageClaim{}, fmt.Errorf("%w: Task Claim version changed", domain.ErrConflict)
+	}
+	if err := validateClaimActor(claim, actor, operation); err != nil {
+		return workflowTask{}, domain.TaskStageClaim{}, err
+	}
+	return task, claim, nil
+}
+
+func executionCompletionPayload(
+	ctx context.Context,
+	tx pgx.Tx,
+	task workflowTask,
+	reviewCycle int64,
+) (domain.ExecutionCompletedPayload, error) {
+	payload := domain.ExecutionCompletedPayload{ReviewCycle: reviewCycle}
+	rows, err := tx.Query(ctx, `
+		SELECT item.id
+		FROM task_thread_items item
+		WHERE item.thread_id=$1
+		  AND item.kind='work_submission'
+		  AND item.task_review_cycle=$2
+		ORDER BY item.created_at,item.id`, task.MainThreadID, reviewCycle)
+	if err != nil {
+		return payload, fmt.Errorf("list pending work submissions: %w", err)
+	}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return payload, fmt.Errorf("scan pending work submission: %w", err)
+		}
+		payload.SubmissionItemIDs = append(payload.SubmissionItemIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return payload, fmt.Errorf("iterate pending work submissions: %w", err)
+	}
+	rows.Close()
+
+	rows, err = tx.Query(ctx, `
+		SELECT check_result.id
+		FROM acceptance_checks check_result
+		JOIN acceptance_criteria criterion ON criterion.id=check_result.criterion_id
+		WHERE criterion.task_id=$1
+		  AND check_result.purpose='execution_verification'
+		  AND check_result.task_review_cycle=$2
+		ORDER BY check_result.checked_at,check_result.id`, task.TaskID, reviewCycle-1)
+	if err != nil {
+		return payload, fmt.Errorf("list execution checks: %w", err)
+	}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return payload, fmt.Errorf("scan execution check: %w", err)
+		}
+		payload.ExecutionCheckIDs = append(payload.ExecutionCheckIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return payload, fmt.Errorf("iterate execution checks: %w", err)
+	}
+	rows.Close()
+
+	rows, err = tx.Query(ctx, `
+		SELECT criterion.id,criterion.revision
+		FROM acceptance_criteria criterion
+		WHERE criterion.task_id=$1 AND criterion.archived_at IS NULL
+		ORDER BY criterion.position,criterion.id
+		FOR SHARE`, task.TaskID)
+	if err != nil {
+		return payload, fmt.Errorf("snapshot acceptance criteria: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var revision domain.CriterionRevisionSnapshot
+		if err := rows.Scan(&revision.CriterionID, &revision.Revision); err != nil {
+			return payload, fmt.Errorf("scan acceptance criterion snapshot: %w", err)
+		}
+		payload.CriterionRevisions = append(payload.CriterionRevisions, revision)
+	}
+	if err := rows.Err(); err != nil {
+		return payload, fmt.Errorf("iterate acceptance criterion snapshot: %w", err)
+	}
+	if payload.SubmissionItemIDs == nil {
+		payload.SubmissionItemIDs = []uuid.UUID{}
+	}
+	if payload.ExecutionCheckIDs == nil {
+		payload.ExecutionCheckIDs = []uuid.UUID{}
+	}
+	if payload.CriterionRevisions == nil {
+		payload.CriterionRevisions = []domain.CriterionRevisionSnapshot{}
+	}
+	return payload, payload.Validate()
 }
 
 func sameOptionalUUID(a, b *uuid.UUID) bool {
@@ -1009,6 +1216,31 @@ func insertWorkflowItem(
 	return item, nil
 }
 
+func insertDeliveryWorkflowItem(
+	ctx context.Context,
+	tx pgx.Tx,
+	threadID uuid.UUID,
+	kind domain.ThreadItemKind,
+	author domain.Actor,
+	body string,
+	claimID uuid.UUID,
+	reviewCycle int64,
+	payload *domain.ExecutionCompletedPayload,
+	requestID string,
+	now time.Time,
+) (domain.ThreadItem, error) {
+	item := domain.ThreadItem{
+		ID: uuid.New(), ThreadID: threadID, Kind: kind, Author: author,
+		Body: body, ExecutionCompleted: payload, TaskStageClaimID: &claimID,
+		TaskReviewCycle: &reviewCycle, Version: 1,
+		CreatedAt: now.UTC(), UpdatedAt: now.UTC(),
+	}
+	if err := insertTaskThreadItem(ctx, tx, item, requestID); err != nil {
+		return domain.ThreadItem{}, err
+	}
+	return item, nil
+}
+
 func insertIssueThread(ctx context.Context, tx pgx.Tx, issue domain.Thread) error {
 	if err := issue.Validate(); err != nil {
 		return err
@@ -1054,7 +1286,8 @@ func getIssueRequest(
 	item, err := scanTaskThreadItem(tx.QueryRow(ctx, `
 		SELECT item.id,item.thread_id,item.kind,
 			item.author_type,item.author_user_id,item.author_ref,
-			item.body,item.typed_payload,item.reply_to_item_id,
+			item.body,item.typed_payload,item.task_stage_claim_id,item.task_review_cycle,
+			item.reply_to_item_id,
 			ARRAY[]::uuid[],item.version,item.created_at,item.updated_at,item.deleted_at
 		FROM task_thread_items item
 		WHERE item.thread_id=$1 AND item.kind='resolution_request'`, threadID))

@@ -1949,6 +1949,119 @@ func (s *CriterionPatch) UnmarshalJSON(data []byte) error {
 }
 
 // Encode implements json.Marshaler.
+func (s *CriterionRevisionSnapshot) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *CriterionRevisionSnapshot) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("criterion_id")
+		json.EncodeUUID(e, s.CriterionID)
+	}
+	{
+		e.FieldStart("revision")
+		e.Int64(s.Revision)
+	}
+}
+
+var jsonFieldsNameOfCriterionRevisionSnapshot = [2]string{
+	0: "criterion_id",
+	1: "revision",
+}
+
+// Decode decodes CriterionRevisionSnapshot from json.
+func (s *CriterionRevisionSnapshot) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode CriterionRevisionSnapshot to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "criterion_id":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				v, err := json.DecodeUUID(d)
+				s.CriterionID = v
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"criterion_id\"")
+			}
+		case "revision":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				v, err := d.Int64()
+				s.Revision = int64(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"revision\"")
+			}
+		default:
+			return errors.Errorf("unexpected field %q", k)
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode CriterionRevisionSnapshot")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00000011,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfCriterionRevisionSnapshot) {
+					name = jsonFieldsNameOfCriterionRevisionSnapshot[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *CriterionRevisionSnapshot) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *CriterionRevisionSnapshot) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
 func (s *CurrentPrincipal) Encode(e *jx.Encoder) {
 	e.ObjStart()
 	s.encodeFields(e)
@@ -2196,6 +2309,187 @@ func (s CurrentPrincipalScopesItem) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *CurrentPrincipalScopesItem) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *ExecutionCompletedPayload) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *ExecutionCompletedPayload) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("review_cycle")
+		e.Int64(s.ReviewCycle)
+	}
+	{
+		e.FieldStart("submission_item_ids")
+		e.ArrStart()
+		for _, elem := range s.SubmissionItemIds {
+			json.EncodeUUID(e, elem)
+		}
+		e.ArrEnd()
+	}
+	{
+		e.FieldStart("execution_check_ids")
+		e.ArrStart()
+		for _, elem := range s.ExecutionCheckIds {
+			json.EncodeUUID(e, elem)
+		}
+		e.ArrEnd()
+	}
+	{
+		e.FieldStart("criterion_revisions")
+		e.ArrStart()
+		for _, elem := range s.CriterionRevisions {
+			elem.Encode(e)
+		}
+		e.ArrEnd()
+	}
+}
+
+var jsonFieldsNameOfExecutionCompletedPayload = [4]string{
+	0: "review_cycle",
+	1: "submission_item_ids",
+	2: "execution_check_ids",
+	3: "criterion_revisions",
+}
+
+// Decode decodes ExecutionCompletedPayload from json.
+func (s *ExecutionCompletedPayload) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode ExecutionCompletedPayload to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "review_cycle":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				v, err := d.Int64()
+				s.ReviewCycle = int64(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"review_cycle\"")
+			}
+		case "submission_item_ids":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				s.SubmissionItemIds = make([]uuid.UUID, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem uuid.UUID
+					v, err := json.DecodeUUID(d)
+					elem = v
+					if err != nil {
+						return err
+					}
+					s.SubmissionItemIds = append(s.SubmissionItemIds, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"submission_item_ids\"")
+			}
+		case "execution_check_ids":
+			requiredBitSet[0] |= 1 << 2
+			if err := func() error {
+				s.ExecutionCheckIds = make([]uuid.UUID, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem uuid.UUID
+					v, err := json.DecodeUUID(d)
+					elem = v
+					if err != nil {
+						return err
+					}
+					s.ExecutionCheckIds = append(s.ExecutionCheckIds, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"execution_check_ids\"")
+			}
+		case "criterion_revisions":
+			requiredBitSet[0] |= 1 << 3
+			if err := func() error {
+				s.CriterionRevisions = make([]CriterionRevisionSnapshot, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem CriterionRevisionSnapshot
+					if err := elem.Decode(d); err != nil {
+						return err
+					}
+					s.CriterionRevisions = append(s.CriterionRevisions, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"criterion_revisions\"")
+			}
+		default:
+			return errors.Errorf("unexpected field %q", k)
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode ExecutionCompletedPayload")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00001111,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfExecutionCompletedPayload) {
+					name = jsonFieldsNameOfExecutionCompletedPayload[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *ExecutionCompletedPayload) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *ExecutionCompletedPayload) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -3961,6 +4255,39 @@ func (s OptDateTime) MarshalJSON() ([]byte, error) {
 func (s *OptDateTime) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d, json.DecodeDateTime)
+}
+
+// Encode encodes ExecutionCompletedPayload as json.
+func (o OptExecutionCompletedPayload) Encode(e *jx.Encoder) {
+	if !o.Set {
+		return
+	}
+	o.Value.Encode(e)
+}
+
+// Decode decodes ExecutionCompletedPayload from json.
+func (o *OptExecutionCompletedPayload) Decode(d *jx.Decoder) error {
+	if o == nil {
+		return errors.New("invalid: unable to decode OptExecutionCompletedPayload to nil")
+	}
+	o.Set = true
+	if err := o.Value.Decode(d); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s OptExecutionCompletedPayload) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *OptExecutionCompletedPayload) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
 }
 
 // Encode encodes int as json.
@@ -9624,6 +9951,130 @@ func (s *TaskCreate) UnmarshalJSON(data []byte) error {
 }
 
 // Encode implements json.Marshaler.
+func (s *TaskExecutionCompletionCommand) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *TaskExecutionCompletionCommand) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("task")
+		s.Task.Encode(e)
+	}
+	{
+		e.FieldStart("claim")
+		s.Claim.Encode(e)
+	}
+	{
+		e.FieldStart("completion")
+		s.Completion.Encode(e)
+	}
+}
+
+var jsonFieldsNameOfTaskExecutionCompletionCommand = [3]string{
+	0: "task",
+	1: "claim",
+	2: "completion",
+}
+
+// Decode decodes TaskExecutionCompletionCommand from json.
+func (s *TaskExecutionCompletionCommand) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode TaskExecutionCompletionCommand to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "task":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				if err := s.Task.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"task\"")
+			}
+		case "claim":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				if err := s.Claim.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"claim\"")
+			}
+		case "completion":
+			requiredBitSet[0] |= 1 << 2
+			if err := func() error {
+				if err := s.Completion.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"completion\"")
+			}
+		default:
+			return errors.Errorf("unexpected field %q", k)
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode TaskExecutionCompletionCommand")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00000111,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfTaskExecutionCompletionCommand) {
+					name = jsonFieldsNameOfTaskExecutionCompletionCommand[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *TaskExecutionCompletionCommand) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *TaskExecutionCompletionCommand) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
 func (s *TaskIssueResolve) Encode(e *jx.Encoder) {
 	e.ObjStart()
 	s.encodeFields(e)
@@ -11752,8 +12203,8 @@ func (s *TaskStageClaimOutcome) Decode(d *jx.Decoder) error {
 	}
 	// Try to use constant string.
 	switch TaskStageClaimOutcome(v) {
-	case TaskStageClaimOutcomeWorkSubmitted:
-		*s = TaskStageClaimOutcomeWorkSubmitted
+	case TaskStageClaimOutcomeExecutionCompleted:
+		*s = TaskStageClaimOutcomeExecutionCompleted
 	case TaskStageClaimOutcomeTaskAccepted:
 		*s = TaskStageClaimOutcomeTaskAccepted
 	case TaskStageClaimOutcomeChangesRequested:
@@ -12152,6 +12603,24 @@ func (s *TaskThreadItem) encodeFields(e *jx.Encoder) {
 		}
 	}
 	{
+		if s.ExecutionCompleted.Set {
+			e.FieldStart("execution_completed")
+			s.ExecutionCompleted.Encode(e)
+		}
+	}
+	{
+		if s.TaskStageClaimID.Set {
+			e.FieldStart("task_stage_claim_id")
+			s.TaskStageClaimID.Encode(e)
+		}
+	}
+	{
+		if s.TaskReviewCycle.Set {
+			e.FieldStart("task_review_cycle")
+			s.TaskReviewCycle.Encode(e)
+		}
+	}
+	{
 		if s.ReplyToItemID.Set {
 			e.FieldStart("reply_to_item_id")
 			s.ReplyToItemID.Encode(e)
@@ -12185,19 +12654,22 @@ func (s *TaskThreadItem) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfTaskThreadItem = [12]string{
+var jsonFieldsNameOfTaskThreadItem = [15]string{
 	0:  "id",
 	1:  "thread_id",
 	2:  "kind",
 	3:  "author",
 	4:  "body",
 	5:  "issue_resolution",
-	6:  "reply_to_item_id",
-	7:  "mentioned_user_ids",
-	8:  "version",
-	9:  "created_at",
-	10: "updated_at",
-	11: "deleted_at",
+	6:  "execution_completed",
+	7:  "task_stage_claim_id",
+	8:  "task_review_cycle",
+	9:  "reply_to_item_id",
+	10: "mentioned_user_ids",
+	11: "version",
+	12: "created_at",
+	13: "updated_at",
+	14: "deleted_at",
 }
 
 // Decode decodes TaskThreadItem from json.
@@ -12273,6 +12745,36 @@ func (s *TaskThreadItem) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"issue_resolution\"")
 			}
+		case "execution_completed":
+			if err := func() error {
+				s.ExecutionCompleted.Reset()
+				if err := s.ExecutionCompleted.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"execution_completed\"")
+			}
+		case "task_stage_claim_id":
+			if err := func() error {
+				s.TaskStageClaimID.Reset()
+				if err := s.TaskStageClaimID.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"task_stage_claim_id\"")
+			}
+		case "task_review_cycle":
+			if err := func() error {
+				s.TaskReviewCycle.Reset()
+				if err := s.TaskReviewCycle.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"task_review_cycle\"")
+			}
 		case "reply_to_item_id":
 			if err := func() error {
 				s.ReplyToItemID.Reset()
@@ -12284,7 +12786,7 @@ func (s *TaskThreadItem) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"reply_to_item_id\"")
 			}
 		case "mentioned_user_ids":
-			requiredBitSet[0] |= 1 << 7
+			requiredBitSet[1] |= 1 << 2
 			if err := func() error {
 				s.MentionedUserIds = make([]uuid.UUID, 0)
 				if err := d.Arr(func(d *jx.Decoder) error {
@@ -12304,7 +12806,7 @@ func (s *TaskThreadItem) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"mentioned_user_ids\"")
 			}
 		case "version":
-			requiredBitSet[1] |= 1 << 0
+			requiredBitSet[1] |= 1 << 3
 			if err := func() error {
 				v, err := d.Int64()
 				s.Version = int64(v)
@@ -12316,7 +12818,7 @@ func (s *TaskThreadItem) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"version\"")
 			}
 		case "created_at":
-			requiredBitSet[1] |= 1 << 1
+			requiredBitSet[1] |= 1 << 4
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.CreatedAt = v
@@ -12328,7 +12830,7 @@ func (s *TaskThreadItem) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"created_at\"")
 			}
 		case "updated_at":
-			requiredBitSet[1] |= 1 << 2
+			requiredBitSet[1] |= 1 << 5
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.UpdatedAt = v
@@ -12359,8 +12861,8 @@ func (s *TaskThreadItem) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [2]uint8{
-		0b10001111,
-		0b00000111,
+		0b00001111,
+		0b00111100,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -12430,6 +12932,8 @@ func (s *TaskThreadItemKind) Decode(d *jx.Decoder) error {
 		*s = TaskThreadItemKindHandoff
 	case TaskThreadItemKindWorkSubmission:
 		*s = TaskThreadItemKindWorkSubmission
+	case TaskThreadItemKindExecutionCompleted:
+		*s = TaskThreadItemKindExecutionCompleted
 	case TaskThreadItemKindReviewOutcome:
 		*s = TaskThreadItemKindReviewOutcome
 	case TaskThreadItemKindResolutionRequest:
@@ -13049,6 +13553,130 @@ func (s TaskThreadRole) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *TaskThreadRole) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *TaskWorkSubmissionCommand) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *TaskWorkSubmissionCommand) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("task")
+		s.Task.Encode(e)
+	}
+	{
+		e.FieldStart("claim")
+		s.Claim.Encode(e)
+	}
+	{
+		e.FieldStart("submission")
+		s.Submission.Encode(e)
+	}
+}
+
+var jsonFieldsNameOfTaskWorkSubmissionCommand = [3]string{
+	0: "task",
+	1: "claim",
+	2: "submission",
+}
+
+// Decode decodes TaskWorkSubmissionCommand from json.
+func (s *TaskWorkSubmissionCommand) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode TaskWorkSubmissionCommand to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "task":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				if err := s.Task.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"task\"")
+			}
+		case "claim":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				if err := s.Claim.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"claim\"")
+			}
+		case "submission":
+			requiredBitSet[0] |= 1 << 2
+			if err := func() error {
+				if err := s.Submission.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"submission\"")
+			}
+		default:
+			return errors.Errorf("unexpected field %q", k)
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode TaskWorkSubmissionCommand")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00000111,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfTaskWorkSubmissionCommand) {
+					name = jsonFieldsNameOfTaskWorkSubmissionCommand[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *TaskWorkSubmissionCommand) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *TaskWorkSubmissionCommand) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }

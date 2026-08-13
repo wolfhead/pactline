@@ -1337,6 +1337,32 @@ func (s *CriterionPatch) SetPosition(val OptInt) {
 	s.Position = val
 }
 
+// Ref: #/components/schemas/CriterionRevisionSnapshot
+type CriterionRevisionSnapshot struct {
+	CriterionID uuid.UUID `json:"criterion_id"`
+	Revision    int64     `json:"revision"`
+}
+
+// GetCriterionID returns the value of CriterionID.
+func (s *CriterionRevisionSnapshot) GetCriterionID() uuid.UUID {
+	return s.CriterionID
+}
+
+// GetRevision returns the value of Revision.
+func (s *CriterionRevisionSnapshot) GetRevision() int64 {
+	return s.Revision
+}
+
+// SetCriterionID sets the value of CriterionID.
+func (s *CriterionRevisionSnapshot) SetCriterionID(val uuid.UUID) {
+	s.CriterionID = val
+}
+
+// SetRevision sets the value of Revision.
+func (s *CriterionRevisionSnapshot) SetRevision(val int64) {
+	s.Revision = val
+}
+
 // Ref: #/components/schemas/CurrentPrincipal
 type CurrentPrincipal struct {
 	Actor                User                                 `json:"actor"`
@@ -1551,6 +1577,54 @@ func (s *CurrentPrincipalScopesItem) UnmarshalText(data []byte) error {
 	default:
 		return errors.Errorf("invalid value: %q", data)
 	}
+}
+
+// Ref: #/components/schemas/ExecutionCompletedPayload
+type ExecutionCompletedPayload struct {
+	ReviewCycle        int64                       `json:"review_cycle"`
+	SubmissionItemIds  []uuid.UUID                 `json:"submission_item_ids"`
+	ExecutionCheckIds  []uuid.UUID                 `json:"execution_check_ids"`
+	CriterionRevisions []CriterionRevisionSnapshot `json:"criterion_revisions"`
+}
+
+// GetReviewCycle returns the value of ReviewCycle.
+func (s *ExecutionCompletedPayload) GetReviewCycle() int64 {
+	return s.ReviewCycle
+}
+
+// GetSubmissionItemIds returns the value of SubmissionItemIds.
+func (s *ExecutionCompletedPayload) GetSubmissionItemIds() []uuid.UUID {
+	return s.SubmissionItemIds
+}
+
+// GetExecutionCheckIds returns the value of ExecutionCheckIds.
+func (s *ExecutionCompletedPayload) GetExecutionCheckIds() []uuid.UUID {
+	return s.ExecutionCheckIds
+}
+
+// GetCriterionRevisions returns the value of CriterionRevisions.
+func (s *ExecutionCompletedPayload) GetCriterionRevisions() []CriterionRevisionSnapshot {
+	return s.CriterionRevisions
+}
+
+// SetReviewCycle sets the value of ReviewCycle.
+func (s *ExecutionCompletedPayload) SetReviewCycle(val int64) {
+	s.ReviewCycle = val
+}
+
+// SetSubmissionItemIds sets the value of SubmissionItemIds.
+func (s *ExecutionCompletedPayload) SetSubmissionItemIds(val []uuid.UUID) {
+	s.SubmissionItemIds = val
+}
+
+// SetExecutionCheckIds sets the value of ExecutionCheckIds.
+func (s *ExecutionCompletedPayload) SetExecutionCheckIds(val []uuid.UUID) {
+	s.ExecutionCheckIds = val
+}
+
+// SetCriterionRevisions sets the value of CriterionRevisions.
+func (s *ExecutionCompletedPayload) SetCriterionRevisions(val []CriterionRevisionSnapshot) {
+	s.CriterionRevisions = val
 }
 
 type GetTaskAttachmentContentDisposition string
@@ -3253,6 +3327,52 @@ func (o OptDateTime) Get() (v time.Time, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptDateTime) Or(d time.Time) time.Time {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptExecutionCompletedPayload returns new OptExecutionCompletedPayload with value set to v.
+func NewOptExecutionCompletedPayload(v ExecutionCompletedPayload) OptExecutionCompletedPayload {
+	return OptExecutionCompletedPayload{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptExecutionCompletedPayload is optional ExecutionCompletedPayload.
+type OptExecutionCompletedPayload struct {
+	Value ExecutionCompletedPayload
+	Set   bool
+}
+
+// IsSet returns true if OptExecutionCompletedPayload was set.
+func (o OptExecutionCompletedPayload) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptExecutionCompletedPayload) Reset() {
+	var v ExecutionCompletedPayload
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptExecutionCompletedPayload) SetTo(v ExecutionCompletedPayload) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptExecutionCompletedPayload) Get() (v ExecutionCompletedPayload, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptExecutionCompletedPayload) Or(d ExecutionCompletedPayload) ExecutionCompletedPayload {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -5048,6 +5168,7 @@ func (*ProblemStatusCodeWithHeaders) cancelMilestoneRes()                       
 func (*ProblemStatusCodeWithHeaders) cancelTaskRes()                                  {}
 func (*ProblemStatusCodeWithHeaders) completeMilestoneRes()                           {}
 func (*ProblemStatusCodeWithHeaders) completeTaskAttachmentUploadRes()                {}
+func (*ProblemStatusCodeWithHeaders) completeTaskExecutionRes()                       {}
 func (*ProblemStatusCodeWithHeaders) createAcceptanceCheckRes()                       {}
 func (*ProblemStatusCodeWithHeaders) createLabelRes()                                 {}
 func (*ProblemStatusCodeWithHeaders) createMilestoneCriterionRes()                    {}
@@ -5084,6 +5205,7 @@ func (*ProblemStatusCodeWithHeaders) listTasksRes()                             
 func (*ProblemStatusCodeWithHeaders) listUsersRes()                                   {}
 func (*ProblemStatusCodeWithHeaders) markTaskReadyRes()                               {}
 func (*ProblemStatusCodeWithHeaders) recordTaskStageAcceptanceCheckRes()              {}
+func (*ProblemStatusCodeWithHeaders) recordTaskWorkSubmissionRes()                    {}
 func (*ProblemStatusCodeWithHeaders) releaseTaskStageClaimRes()                       {}
 func (*ProblemStatusCodeWithHeaders) removeProjectMemberRes()                         {}
 func (*ProblemStatusCodeWithHeaders) reopenMilestoneRes()                             {}
@@ -5092,7 +5214,6 @@ func (*ProblemStatusCodeWithHeaders) requestTaskResolutionRes()                 
 func (*ProblemStatusCodeWithHeaders) resolveTaskIssueRes()                            {}
 func (*ProblemStatusCodeWithHeaders) restoreProjectRes()                              {}
 func (*ProblemStatusCodeWithHeaders) restoreTaskRes()                                 {}
-func (*ProblemStatusCodeWithHeaders) submitTaskWorkRes()                              {}
 func (*ProblemStatusCodeWithHeaders) updateAgentConversationRes()                     {}
 func (*ProblemStatusCodeWithHeaders) updateCriterionRes()                             {}
 func (*ProblemStatusCodeWithHeaders) updateCurrentAgentConversationConfigurationRes() {}
@@ -7806,6 +7927,93 @@ func (s *TaskCreatedHeaders) SetResponse(val Task) {
 
 func (*TaskCreatedHeaders) createTaskRes() {}
 
+// Ref: #/components/schemas/TaskExecutionCompletionCommand
+type TaskExecutionCompletionCommand struct {
+	Task       TaskWorkflow   `json:"task"`
+	Claim      TaskStageClaim `json:"claim"`
+	Completion TaskThreadItem `json:"completion"`
+}
+
+// GetTask returns the value of Task.
+func (s *TaskExecutionCompletionCommand) GetTask() TaskWorkflow {
+	return s.Task
+}
+
+// GetClaim returns the value of Claim.
+func (s *TaskExecutionCompletionCommand) GetClaim() TaskStageClaim {
+	return s.Claim
+}
+
+// GetCompletion returns the value of Completion.
+func (s *TaskExecutionCompletionCommand) GetCompletion() TaskThreadItem {
+	return s.Completion
+}
+
+// SetTask sets the value of Task.
+func (s *TaskExecutionCompletionCommand) SetTask(val TaskWorkflow) {
+	s.Task = val
+}
+
+// SetClaim sets the value of Claim.
+func (s *TaskExecutionCompletionCommand) SetClaim(val TaskStageClaim) {
+	s.Claim = val
+}
+
+// SetCompletion sets the value of Completion.
+func (s *TaskExecutionCompletionCommand) SetCompletion(val TaskThreadItem) {
+	s.Completion = val
+}
+
+// TaskExecutionCompletionCommandHeaders wraps TaskExecutionCompletionCommand with response headers.
+type TaskExecutionCompletionCommandHeaders struct {
+	Etag                OptString
+	IdempotencyReplayed OptBool
+	XRequestID          OptString
+	Response            TaskExecutionCompletionCommand
+}
+
+// GetEtag returns the value of Etag.
+func (s *TaskExecutionCompletionCommandHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *TaskExecutionCompletionCommandHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskExecutionCompletionCommandHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskExecutionCompletionCommandHeaders) GetResponse() TaskExecutionCompletionCommand {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *TaskExecutionCompletionCommandHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *TaskExecutionCompletionCommandHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskExecutionCompletionCommandHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskExecutionCompletionCommandHeaders) SetResponse(val TaskExecutionCompletionCommand) {
+	s.Response = val
+}
+
+func (*TaskExecutionCompletionCommandHeaders) completeTaskExecutionRes() {}
+
 // TaskHeaders wraps Task with response headers.
 type TaskHeaders struct {
 	Etag                OptString
@@ -8895,7 +9103,6 @@ func (*TaskStageClaimCommandHeaders) acceptTaskRes()            {}
 func (*TaskStageClaimCommandHeaders) createTaskStageClaimRes()  {}
 func (*TaskStageClaimCommandHeaders) releaseTaskStageClaimRes() {}
 func (*TaskStageClaimCommandHeaders) requestTaskChangesRes()    {}
-func (*TaskStageClaimCommandHeaders) submitTaskWorkRes()        {}
 
 // Ref: #/components/schemas/TaskStageClaimCreate
 type TaskStageClaimCreate struct {
@@ -9035,7 +9242,7 @@ func (*TaskStageClaimListHeaders) listTaskStageClaimsRes() {}
 type TaskStageClaimOutcome string
 
 const (
-	TaskStageClaimOutcomeWorkSubmitted       TaskStageClaimOutcome = "work_submitted"
+	TaskStageClaimOutcomeExecutionCompleted  TaskStageClaimOutcome = "execution_completed"
 	TaskStageClaimOutcomeTaskAccepted        TaskStageClaimOutcome = "task_accepted"
 	TaskStageClaimOutcomeChangesRequested    TaskStageClaimOutcome = "changes_requested"
 	TaskStageClaimOutcomeNeedsResolution     TaskStageClaimOutcome = "needs_resolution"
@@ -9047,7 +9254,7 @@ const (
 // AllValues returns all TaskStageClaimOutcome values.
 func (TaskStageClaimOutcome) AllValues() []TaskStageClaimOutcome {
 	return []TaskStageClaimOutcome{
-		TaskStageClaimOutcomeWorkSubmitted,
+		TaskStageClaimOutcomeExecutionCompleted,
 		TaskStageClaimOutcomeTaskAccepted,
 		TaskStageClaimOutcomeChangesRequested,
 		TaskStageClaimOutcomeNeedsResolution,
@@ -9060,7 +9267,7 @@ func (TaskStageClaimOutcome) AllValues() []TaskStageClaimOutcome {
 // MarshalText implements encoding.TextMarshaler.
 func (s TaskStageClaimOutcome) MarshalText() ([]byte, error) {
 	switch s {
-	case TaskStageClaimOutcomeWorkSubmitted:
+	case TaskStageClaimOutcomeExecutionCompleted:
 		return []byte(s), nil
 	case TaskStageClaimOutcomeTaskAccepted:
 		return []byte(s), nil
@@ -9082,8 +9289,8 @@ func (s TaskStageClaimOutcome) MarshalText() ([]byte, error) {
 // UnmarshalText implements encoding.TextUnmarshaler.
 func (s *TaskStageClaimOutcome) UnmarshalText(data []byte) error {
 	switch TaskStageClaimOutcome(data) {
-	case TaskStageClaimOutcomeWorkSubmitted:
-		*s = TaskStageClaimOutcomeWorkSubmitted
+	case TaskStageClaimOutcomeExecutionCompleted:
+		*s = TaskStageClaimOutcomeExecutionCompleted
 		return nil
 	case TaskStageClaimOutcomeTaskAccepted:
 		*s = TaskStageClaimOutcomeTaskAccepted
@@ -9309,18 +9516,21 @@ func (s *TaskThread) SetResolvedAt(val OptDateTime) {
 
 // Ref: #/components/schemas/TaskThreadItem
 type TaskThreadItem struct {
-	ID               uuid.UUID                 `json:"id"`
-	ThreadID         uuid.UUID                 `json:"thread_id"`
-	Kind             TaskThreadItemKind        `json:"kind"`
-	Author           Actor                     `json:"author"`
-	Body             OptString                 `json:"body"`
-	IssueResolution  OptIssueResolutionPayload `json:"issue_resolution"`
-	ReplyToItemID    OptUUID                   `json:"reply_to_item_id"`
-	MentionedUserIds []uuid.UUID               `json:"mentioned_user_ids"`
-	Version          int64                     `json:"version"`
-	CreatedAt        time.Time                 `json:"created_at"`
-	UpdatedAt        time.Time                 `json:"updated_at"`
-	DeletedAt        OptDateTime               `json:"deleted_at"`
+	ID                 uuid.UUID                    `json:"id"`
+	ThreadID           uuid.UUID                    `json:"thread_id"`
+	Kind               TaskThreadItemKind           `json:"kind"`
+	Author             Actor                        `json:"author"`
+	Body               OptString                    `json:"body"`
+	IssueResolution    OptIssueResolutionPayload    `json:"issue_resolution"`
+	ExecutionCompleted OptExecutionCompletedPayload `json:"execution_completed"`
+	TaskStageClaimID   OptUUID                      `json:"task_stage_claim_id"`
+	TaskReviewCycle    OptInt64                     `json:"task_review_cycle"`
+	ReplyToItemID      OptUUID                      `json:"reply_to_item_id"`
+	MentionedUserIds   []uuid.UUID                  `json:"mentioned_user_ids"`
+	Version            int64                        `json:"version"`
+	CreatedAt          time.Time                    `json:"created_at"`
+	UpdatedAt          time.Time                    `json:"updated_at"`
+	DeletedAt          OptDateTime                  `json:"deleted_at"`
 }
 
 // GetID returns the value of ID.
@@ -9351,6 +9561,21 @@ func (s *TaskThreadItem) GetBody() OptString {
 // GetIssueResolution returns the value of IssueResolution.
 func (s *TaskThreadItem) GetIssueResolution() OptIssueResolutionPayload {
 	return s.IssueResolution
+}
+
+// GetExecutionCompleted returns the value of ExecutionCompleted.
+func (s *TaskThreadItem) GetExecutionCompleted() OptExecutionCompletedPayload {
+	return s.ExecutionCompleted
+}
+
+// GetTaskStageClaimID returns the value of TaskStageClaimID.
+func (s *TaskThreadItem) GetTaskStageClaimID() OptUUID {
+	return s.TaskStageClaimID
+}
+
+// GetTaskReviewCycle returns the value of TaskReviewCycle.
+func (s *TaskThreadItem) GetTaskReviewCycle() OptInt64 {
+	return s.TaskReviewCycle
 }
 
 // GetReplyToItemID returns the value of ReplyToItemID.
@@ -9411,6 +9636,21 @@ func (s *TaskThreadItem) SetBody(val OptString) {
 // SetIssueResolution sets the value of IssueResolution.
 func (s *TaskThreadItem) SetIssueResolution(val OptIssueResolutionPayload) {
 	s.IssueResolution = val
+}
+
+// SetExecutionCompleted sets the value of ExecutionCompleted.
+func (s *TaskThreadItem) SetExecutionCompleted(val OptExecutionCompletedPayload) {
+	s.ExecutionCompleted = val
+}
+
+// SetTaskStageClaimID sets the value of TaskStageClaimID.
+func (s *TaskThreadItem) SetTaskStageClaimID(val OptUUID) {
+	s.TaskStageClaimID = val
+}
+
+// SetTaskReviewCycle sets the value of TaskReviewCycle.
+func (s *TaskThreadItem) SetTaskReviewCycle(val OptInt64) {
+	s.TaskReviewCycle = val
 }
 
 // SetReplyToItemID sets the value of ReplyToItemID.
@@ -9488,15 +9728,16 @@ func (*TaskThreadItemHeaders) updateTaskThreadMessageRes() {}
 type TaskThreadItemKind string
 
 const (
-	TaskThreadItemKindMessage           TaskThreadItemKind = "message"
-	TaskThreadItemKindProgress          TaskThreadItemKind = "progress"
-	TaskThreadItemKindHandoff           TaskThreadItemKind = "handoff"
-	TaskThreadItemKindWorkSubmission    TaskThreadItemKind = "work_submission"
-	TaskThreadItemKindReviewOutcome     TaskThreadItemKind = "review_outcome"
-	TaskThreadItemKindResolutionRequest TaskThreadItemKind = "resolution_request"
-	TaskThreadItemKindResolution        TaskThreadItemKind = "resolution"
-	TaskThreadItemKindIssueResolution   TaskThreadItemKind = "issue_resolution"
-	TaskThreadItemKindSystemEvent       TaskThreadItemKind = "system_event"
+	TaskThreadItemKindMessage            TaskThreadItemKind = "message"
+	TaskThreadItemKindProgress           TaskThreadItemKind = "progress"
+	TaskThreadItemKindHandoff            TaskThreadItemKind = "handoff"
+	TaskThreadItemKindWorkSubmission     TaskThreadItemKind = "work_submission"
+	TaskThreadItemKindExecutionCompleted TaskThreadItemKind = "execution_completed"
+	TaskThreadItemKindReviewOutcome      TaskThreadItemKind = "review_outcome"
+	TaskThreadItemKindResolutionRequest  TaskThreadItemKind = "resolution_request"
+	TaskThreadItemKindResolution         TaskThreadItemKind = "resolution"
+	TaskThreadItemKindIssueResolution    TaskThreadItemKind = "issue_resolution"
+	TaskThreadItemKindSystemEvent        TaskThreadItemKind = "system_event"
 )
 
 // AllValues returns all TaskThreadItemKind values.
@@ -9506,6 +9747,7 @@ func (TaskThreadItemKind) AllValues() []TaskThreadItemKind {
 		TaskThreadItemKindProgress,
 		TaskThreadItemKindHandoff,
 		TaskThreadItemKindWorkSubmission,
+		TaskThreadItemKindExecutionCompleted,
 		TaskThreadItemKindReviewOutcome,
 		TaskThreadItemKindResolutionRequest,
 		TaskThreadItemKindResolution,
@@ -9524,6 +9766,8 @@ func (s TaskThreadItemKind) MarshalText() ([]byte, error) {
 	case TaskThreadItemKindHandoff:
 		return []byte(s), nil
 	case TaskThreadItemKindWorkSubmission:
+		return []byte(s), nil
+	case TaskThreadItemKindExecutionCompleted:
 		return []byte(s), nil
 	case TaskThreadItemKindReviewOutcome:
 		return []byte(s), nil
@@ -9554,6 +9798,9 @@ func (s *TaskThreadItemKind) UnmarshalText(data []byte) error {
 		return nil
 	case TaskThreadItemKindWorkSubmission:
 		*s = TaskThreadItemKindWorkSubmission
+		return nil
+	case TaskThreadItemKindExecutionCompleted:
+		*s = TaskThreadItemKindExecutionCompleted
 		return nil
 	case TaskThreadItemKindReviewOutcome:
 		*s = TaskThreadItemKindReviewOutcome
@@ -9828,6 +10075,93 @@ func (s *TaskThreadRole) UnmarshalText(data []byte) error {
 		return errors.Errorf("invalid value: %q", data)
 	}
 }
+
+// Ref: #/components/schemas/TaskWorkSubmissionCommand
+type TaskWorkSubmissionCommand struct {
+	Task       TaskWorkflow   `json:"task"`
+	Claim      TaskStageClaim `json:"claim"`
+	Submission TaskThreadItem `json:"submission"`
+}
+
+// GetTask returns the value of Task.
+func (s *TaskWorkSubmissionCommand) GetTask() TaskWorkflow {
+	return s.Task
+}
+
+// GetClaim returns the value of Claim.
+func (s *TaskWorkSubmissionCommand) GetClaim() TaskStageClaim {
+	return s.Claim
+}
+
+// GetSubmission returns the value of Submission.
+func (s *TaskWorkSubmissionCommand) GetSubmission() TaskThreadItem {
+	return s.Submission
+}
+
+// SetTask sets the value of Task.
+func (s *TaskWorkSubmissionCommand) SetTask(val TaskWorkflow) {
+	s.Task = val
+}
+
+// SetClaim sets the value of Claim.
+func (s *TaskWorkSubmissionCommand) SetClaim(val TaskStageClaim) {
+	s.Claim = val
+}
+
+// SetSubmission sets the value of Submission.
+func (s *TaskWorkSubmissionCommand) SetSubmission(val TaskThreadItem) {
+	s.Submission = val
+}
+
+// TaskWorkSubmissionCommandHeaders wraps TaskWorkSubmissionCommand with response headers.
+type TaskWorkSubmissionCommandHeaders struct {
+	Etag                OptString
+	IdempotencyReplayed OptBool
+	XRequestID          OptString
+	Response            TaskWorkSubmissionCommand
+}
+
+// GetEtag returns the value of Etag.
+func (s *TaskWorkSubmissionCommandHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *TaskWorkSubmissionCommandHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskWorkSubmissionCommandHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskWorkSubmissionCommandHeaders) GetResponse() TaskWorkSubmissionCommand {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *TaskWorkSubmissionCommandHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *TaskWorkSubmissionCommandHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskWorkSubmissionCommandHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskWorkSubmissionCommandHeaders) SetResponse(val TaskWorkSubmissionCommand) {
+	s.Response = val
+}
+
+func (*TaskWorkSubmissionCommandHeaders) recordTaskWorkSubmissionRes() {}
 
 // Ref: #/components/schemas/TaskWorkflow
 type TaskWorkflow struct {

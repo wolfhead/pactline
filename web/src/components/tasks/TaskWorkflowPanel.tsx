@@ -4,14 +4,15 @@ import {
   acceptTask,
   cancelTask,
   claimTaskStage,
+  completeTaskExecution,
   listTaskStageClaims,
   listTaskThreads,
   markTaskReady,
   releaseTaskStage,
+  recordTaskWorkSubmission,
   requestTaskChanges,
   requestTaskResolution,
   resolveTaskIssue,
-  submitTaskWork,
   withdrawTaskReadiness,
 } from '@/api/task-workflow'
 import { useIdentity } from '@/identity'
@@ -21,7 +22,8 @@ import PhaseBadge from './PhaseBadge'
 type PendingAction =
   | 'withdraw'
   | 'release'
-  | 'submit'
+  | 'record_work'
+  | 'complete_execution'
   | 'request_changes'
   | 'request_resolution'
   | 'resolve_issue'
@@ -31,7 +33,8 @@ type PendingAction =
 const ACTION_LABELS: Record<PendingAction, string> = {
   withdraw: '退回待规划',
   release: '释放领取',
-  submit: '提交验收',
+  record_work: '记录工作',
+  complete_execution: '完成执行',
   request_changes: '退回修改',
   request_resolution: '请求解决',
   resolve_issue: '解决 Issue',
@@ -124,7 +127,8 @@ export default function TaskWorkflowPanel({
         await resolveTaskIssue(task.number, task.version, activeIssue, body.trim())
       } else if (activeClaim && ownsClaim) {
         if (pendingAction === 'release') await releaseTaskStage(task.number, task.version, activeClaim, body.trim())
-        if (pendingAction === 'submit') await submitTaskWork(task.number, task.version, activeClaim, body.trim())
+        if (pendingAction === 'record_work') await recordTaskWorkSubmission(task.number, task.version, activeClaim, body.trim())
+        if (pendingAction === 'complete_execution') await completeTaskExecution(task.number, task.version, activeClaim, body.trim())
         if (pendingAction === 'request_changes') await requestTaskChanges(task.number, task.version, activeClaim, body.trim())
         if (pendingAction === 'accept') await acceptTask(task.number, task.version, activeClaim, body.trim())
         if (pendingAction === 'request_resolution') {
@@ -163,7 +167,7 @@ export default function TaskWorkflowPanel({
         <div>
           <h3 className="text-sm font-medium text-fg">任务阶段</h3>
           <p className="mt-0.5 text-xs text-fg-muted">
-            阶段由领取、提交和验收动作推进；人类与 Agent 使用同一套规则。
+            可以多次记录工作；只有完成执行才会结束当前领取并进入验收。
           </p>
         </div>
         <PhaseBadge phase={task.phase} activity={task.activity} />
@@ -211,7 +215,8 @@ export default function TaskWorkflowPanel({
         {task.activity === 'needs_resolution' && activeIssue && actionButton('resolve_issue', '解决 Issue')}
         {activeClaim && ownsClaim && (
           <>
-            {activeClaim.stage === 'execution' && actionButton('submit', '提交验收')}
+            {activeClaim.stage === 'execution' && actionButton('record_work', '记录工作')}
+            {activeClaim.stage === 'execution' && actionButton('complete_execution', '完成执行，进入验收')}
             {activeClaim.stage === 'review' && actionButton('accept', '接受并完成')}
             {activeClaim.stage === 'review' && actionButton('request_changes', '退回修改')}
             {actionButton('request_resolution', '请求解决')}
@@ -243,13 +248,19 @@ export default function TaskWorkflowPanel({
             autoFocus
             value={body}
             onChange={(event) => setBody(event.target.value)}
-            placeholder={pendingAction === 'resolve_issue' ? '写明最终结论或依赖解决结果' : '写明原因、交接内容或结果摘要'}
+            placeholder={pendingAction === 'resolve_issue'
+              ? '写明最终结论或依赖解决结果'
+              : pendingAction === 'record_work'
+                ? '写明这次完成了什么、如何验证，或留下交付引用'
+                : pendingAction === 'complete_execution'
+                  ? '概括本轮完整交付；确认后将进入验收'
+                  : '写明原因、交接内容或结果摘要'}
             className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none"
           />
           <div className="flex justify-end gap-2">
             <button type="button" onClick={() => setPendingAction(null)} className="px-3 py-1.5 text-xs font-medium text-fg-muted">取消</button>
             <button type="button" disabled={!body.trim() || busy} onClick={() => void runPending()} className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50">
-              {pendingAction === 'submit' ? <Send className="size-3.5" aria-hidden="true" />
+              {pendingAction === 'record_work' ? <Send className="size-3.5" aria-hidden="true" />
                 : pendingAction === 'request_changes' ? <RotateCcw className="size-3.5" aria-hidden="true" />
                   : pendingAction === 'cancel' ? <XCircle className="size-3.5" aria-hidden="true" />
                     : <Check className="size-3.5" aria-hidden="true" />}

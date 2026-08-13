@@ -37,6 +37,10 @@ type CompleteTaskAttachmentUploadRes interface {
 	completeTaskAttachmentUploadRes()
 }
 
+type CompleteTaskExecutionRes interface {
+	completeTaskExecutionRes()
+}
+
 type CreateAcceptanceCheckRes interface {
 	createAcceptanceCheckRes()
 }
@@ -181,6 +185,10 @@ type RecordTaskStageAcceptanceCheckRes interface {
 	recordTaskStageAcceptanceCheckRes()
 }
 
+type RecordTaskWorkSubmissionRes interface {
+	recordTaskWorkSubmissionRes()
+}
+
 type ReleaseTaskStageClaimRes interface {
 	releaseTaskStageClaimRes()
 }
@@ -211,10 +219,6 @@ type RestoreProjectRes interface {
 
 type RestoreTaskRes interface {
 	restoreTaskRes()
-}
-
-type SubmitTaskWorkRes interface {
-	submitTaskWorkRes()
 }
 
 type UpdateAgentConversationRes interface {

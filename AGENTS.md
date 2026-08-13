@@ -118,7 +118,10 @@ production `X-User-Id` fallback.
   Claim and exactly one open typed Issue Thread. Requesting resolution ends the
   Claim atomically; resolving merges request plus conclusion to Main and makes
   the same phase available without reviving the old Claim.
-- Submitting execution moves to `in_review.available` and increments
+- Work submission is repeatable: it appends an immutable Main Thread Item and
+  preserves the active execution Claim, Task version, Claim version, and
+  review cycle. Explicitly completing execution freezes the delivery snapshot,
+  ends the Claim, moves to `in_review.available`, and increments
   `review_cycle`. A review Claim may request changes to
   `in_progress.available` or accept the Task as `done`.
 - Task acceptance checks are Claim-owned: execution Claims produce

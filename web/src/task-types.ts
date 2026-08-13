@@ -133,7 +133,7 @@ export interface TaskWorkflow {
 export type TaskClaimStage = 'execution' | 'review'
 export type TaskStageClaimStatus = 'active' | 'completed' | 'released' | 'expired' | 'cancelled'
 export type TaskStageClaimOutcome =
-  | 'work_submitted'
+  | 'execution_completed'
   | 'task_accepted'
   | 'changes_requested'
   | 'needs_resolution'
@@ -167,6 +167,7 @@ export type TaskThreadItemKind =
   | 'progress'
   | 'handoff'
   | 'work_submission'
+  | 'execution_completed'
   | 'review_outcome'
   | 'resolution_request'
   | 'resolution'
@@ -199,6 +200,13 @@ export interface IssueResolutionPayload {
   resolved_at: string
 }
 
+export interface ExecutionCompletedPayload {
+  review_cycle: number
+  submission_item_ids: string[]
+  execution_check_ids: string[]
+  criterion_revisions: Array<{ criterion_id: string; revision: number }>
+}
+
 export interface TaskThreadItem {
   id: string
   thread_id: string
@@ -206,6 +214,9 @@ export interface TaskThreadItem {
   author: Actor
   body?: string
   issue_resolution?: IssueResolutionPayload
+  execution_completed?: ExecutionCompletedPayload
+  task_stage_claim_id?: string
+  task_review_cycle?: number
   reply_to_item_id?: string
   mentioned_user_ids: string[]
   version: number

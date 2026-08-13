@@ -323,7 +323,7 @@ test('a human can provision, inspect, and revoke an Agent that completes version
     const staleAgentSubmit = await agentRequest(
       request,
       'POST',
-      `/api/v1/tasks/${task.number}/claims/${executionClaim.claim.id}/submit`,
+      `/api/v1/tasks/${task.number}/claims/${executionClaim.claim.id}/complete-execution`,
       writeToken.token,
       {
         ifMatch: taskETag,
@@ -343,7 +343,7 @@ test('a human can provision, inspect, and revoke an Agent that completes version
     const recoveredSubmit = await agentRequest(
       request,
       'POST',
-      `/api/v1/tasks/${task.number}/claims/${executionClaim.claim.id}/submit`,
+      `/api/v1/tasks/${task.number}/claims/${executionClaim.claim.id}/complete-execution`,
       writeToken.token,
       {
         ifMatch: latestTask.etag,
@@ -449,12 +449,12 @@ test('a human can provision, inspect, and revoke an Agent that completes version
       await page.getByLabel('用户').selectOption(adminID)
       await page.getByLabel('Token').selectOption({ label: `${adminName} · ${writeTokenName}` })
       await page.getByLabel('方法').selectOption('POST')
-      await page.getByLabel('路由').fill('/api/v1/tasks/{number}/claims/{id}/submit')
+      await page.getByLabel('路由').fill('/api/v1/tasks/{number}/claims/{id}/complete-execution')
       await page.getByLabel('状态码').fill('200')
       await page.getByLabel('Request ID').fill(auditRequestID)
       await page.getByRole('button', { name: '筛选' }).click()
       await expect(page.getByText(auditRequestID, { exact: true })).toBeVisible()
-      await expect(page.getByText('POST /api/v1/tasks/{number}/claims/{id}/submit', { exact: true })).toBeVisible()
+      await expect(page.getByText('POST /api/v1/tasks/{number}/claims/{id}/complete-execution', { exact: true })).toBeVisible()
     })
 
     await revokeToken(page, writeTokenName)

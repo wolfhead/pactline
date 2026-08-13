@@ -152,23 +152,56 @@ func (h *Handler) ReleaseTaskStageClaim(
 	return taskStageClaimCommandResponse(ctx, task, claim), nil
 }
 
-func (h *Handler) SubmitTaskWork(
+func (h *Handler) RecordTaskWorkSubmission(
 	ctx context.Context,
 	req *generated.TaskStageClaimFinish,
-	params generated.SubmitTaskWorkParams,
-) (generated.SubmitTaskWorkRes, error) {
+	params generated.RecordTaskWorkSubmissionParams,
+) (generated.RecordTaskWorkSubmissionRes, error) {
 	expectedVersion, operation, actor, err := h.workflowTaskCommandContext(ctx, params.Number, params.IfMatch)
 	if err != nil {
 		return nil, err
 	}
-	task, claim, err := h.Workflow.SubmitWork(
+	task, claim, submission, err := h.Workflow.RecordWorkSubmission(
 		ctx, params.Number, params.ID, expectedVersion, req.ClaimVersion,
 		req.Body, actor, operation, time.Now().UTC(),
 	)
 	if err != nil {
 		return nil, err
 	}
-	return taskStageClaimCommandResponse(ctx, task, claim), nil
+	return &generated.TaskWorkSubmissionCommandHeaders{
+		Etag:       generated.NewOptString(formatETag(task.Version)),
+		XRequestID: generated.NewOptString(baseapi.RequestIDFromContext(ctx)),
+		Response: generated.TaskWorkSubmissionCommand{
+			Task: taskWorkflowFromDomain(task), Claim: taskStageClaimFromDomain(claim),
+			Submission: taskThreadItemFromDomain(submission),
+		},
+	}, nil
+}
+
+func (h *Handler) CompleteTaskExecution(
+	ctx context.Context,
+	req *generated.TaskStageClaimFinish,
+	params generated.CompleteTaskExecutionParams,
+) (generated.CompleteTaskExecutionRes, error) {
+	expectedVersion, operation, actor, err := h.workflowTaskCommandContext(ctx, params.Number, params.IfMatch)
+	if err != nil {
+		return nil, err
+	}
+	task, claim, completion, err := h.Workflow.CompleteExecution(
+		ctx, params.Number, params.ID, expectedVersion, req.ClaimVersion,
+		req.Body, actor, operation, time.Now().UTC(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &generated.TaskExecutionCompletionCommandHeaders{
+		Etag:       generated.NewOptString(formatETag(task.Version)),
+		XRequestID: generated.NewOptString(baseapi.RequestIDFromContext(ctx)),
+		Response: generated.TaskExecutionCompletionCommand{
+			Task: taskWorkflowFromDomain(task), Claim: taskStageClaimFromDomain(claim),
+			Completion: taskThreadItemFromDomain(completion),
+		},
+	}, nil
 }
 
 func (h *Handler) RequestTaskChanges(
@@ -694,6 +727,29 @@ func taskThreadItemFromDomain(item domain.ThreadItem) generated.TaskThreadItem {
 			OpenedAt:      payload.OpenedAt,
 			ResolvedAt:    payload.ResolvedAt,
 		})
+	}
+	if item.ExecutionCompleted != nil {
+		payload := item.ExecutionCompleted
+		submissionItemIDs := append([]uuid.UUID{}, payload.SubmissionItemIDs...)
+		executionCheckIDs := append([]uuid.UUID{}, payload.ExecutionCheckIDs...)
+		criterionRevisions := make([]generated.CriterionRevisionSnapshot, len(payload.CriterionRevisions))
+		for index, revision := range payload.CriterionRevisions {
+			criterionRevisions[index] = generated.CriterionRevisionSnapshot{
+				CriterionID: revision.CriterionID, Revision: revision.Revision,
+			}
+		}
+		out.ExecutionCompleted = generated.NewOptExecutionCompletedPayload(generated.ExecutionCompletedPayload{
+			ReviewCycle:        payload.ReviewCycle,
+			SubmissionItemIds:  submissionItemIDs,
+			ExecutionCheckIds:  executionCheckIDs,
+			CriterionRevisions: criterionRevisions,
+		})
+	}
+	if item.TaskStageClaimID != nil {
+		out.TaskStageClaimID = generated.NewOptUUID(*item.TaskStageClaimID)
+	}
+	if item.TaskReviewCycle != nil {
+		out.TaskReviewCycle = generated.NewOptInt64(*item.TaskReviewCycle)
 	}
 	return out
 }

@@ -264,7 +264,7 @@ async function finishTaskStage(
   userId: string,
   number: number,
   claim: TaskStageClaim,
-  command: 'submit' | 'accept',
+  command: 'complete-execution' | 'accept',
   body: string,
 ): Promise<TaskStageClaimCommand> {
   const current = await getTask(userId, number)
@@ -277,13 +277,13 @@ async function finishTaskStage(
   )
 }
 
-export function submitTaskWork(
+export function completeTaskExecution(
   userId: string,
   number: number,
   claim: TaskStageClaim,
   body = 'Submitted by Playwright',
 ): Promise<TaskStageClaimCommand> {
-  return finishTaskStage(userId, number, claim, 'submit', body)
+  return finishTaskStage(userId, number, claim, 'complete-execution', body)
 }
 
 export function acceptTask(
@@ -320,7 +320,7 @@ export async function recordTaskStageCheck(
 export async function completeTask(userId: string, number: number): Promise<TaskWorkflow> {
   await markTaskReady(userId, number)
   const execution = await claimTaskStage(userId, number)
-  await submitTaskWork(userId, number, execution.claim)
+  await completeTaskExecution(userId, number, execution.claim)
   const review = await claimTaskStage(userId, number)
   return (await acceptTask(userId, number, review.claim)).task
 }

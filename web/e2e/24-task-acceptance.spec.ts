@@ -18,7 +18,7 @@ test('review Claim cannot accept until current-cycle acceptance evidence passes'
   )
   await tasksApi.markTaskReady(USERS.engineerC.id, task.number)
   const execution = await tasksApi.claimTaskStage(USERS.engineerC.id, task.number)
-  await tasksApi.submitTaskWork(USERS.engineerC.id, task.number, execution.claim)
+  await tasksApi.completeTaskExecution(USERS.engineerC.id, task.number, execution.claim)
 
   await page.goto(`/tasks/${task.number}`)
   await switchIdentity(page, USERS.engineerC.id)

@@ -66,11 +66,12 @@ func requiredScope(operation generated.OperationName) access.Scope {
 		generated.DeleteTaskThreadMessageOperation,
 		generated.MarkTaskReadyOperation,
 		generated.RecordTaskStageAcceptanceCheckOperation,
+		generated.RecordTaskWorkSubmissionOperation,
 		generated.ReleaseTaskStageClaimOperation,
 		generated.RequestTaskChangesOperation,
 		generated.RequestTaskResolutionOperation,
 		generated.ResolveTaskIssueOperation,
-		generated.SubmitTaskWorkOperation,
+		generated.CompleteTaskExecutionOperation,
 		generated.UpdateTaskThreadMessageOperation,
 		generated.WithdrawTaskReadinessOperation:
 		return access.ScopeWorkExecute

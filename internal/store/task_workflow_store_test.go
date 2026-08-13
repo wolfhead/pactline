@@ -67,17 +67,40 @@ func TestTaskWorkflowSupportsHumanExecutionAndAgentAcceptance(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	reviewAvailable, submittedClaim, err := workflow.SubmitWork(
+	stillWorking, activeClaim, submission, err := workflow.RecordWorkSubmission(
 		ctx, created.Task.Number, executionClaim.ID,
 		working.Version, executionClaim.Version,
 		"Implementation and focused test are ready for acceptance.",
 		humanActor, domain.SessionOperation(userA, "human-submit"), now.Add(3*time.Minute),
 	)
 	require.NoError(t, err)
+	require.Equal(t, domain.TaskPhaseInProgress, stillWorking.Lifecycle.Phase)
+	require.Equal(t, domain.TaskActivityWorking, stillWorking.Lifecycle.Activity)
+	require.Zero(t, stillWorking.Lifecycle.ReviewCycle)
+	require.Equal(t, domain.StageClaimStatusActive, activeClaim.Status)
+	require.Equal(t, int64(1), *submission.TaskReviewCycle)
+	_, activeClaim, secondSubmission, err := workflow.RecordWorkSubmission(
+		ctx, created.Task.Number, executionClaim.ID,
+		working.Version, executionClaim.Version,
+		"Added the final verification notes.",
+		humanActor, domain.SessionOperation(userA, "human-submit-second"), now.Add(3*time.Minute+time.Second),
+	)
+	require.NoError(t, err)
+	require.Equal(t, executionClaim.Version, activeClaim.Version)
+	require.NotEqual(t, submission.ID, secondSubmission.ID)
+
+	reviewAvailable, submittedClaim, completion, err := workflow.CompleteExecution(
+		ctx, created.Task.Number, executionClaim.ID,
+		working.Version, executionClaim.Version,
+		"The current delivery is ready for review.",
+		humanActor, domain.SessionOperation(userA, "human-complete"), now.Add(4*time.Minute),
+	)
+	require.NoError(t, err)
 	require.Equal(t, domain.TaskPhaseInReview, reviewAvailable.Lifecycle.Phase)
 	require.Equal(t, domain.TaskActivityAvailable, reviewAvailable.Lifecycle.Activity)
 	require.Equal(t, int64(1), reviewAvailable.Lifecycle.ReviewCycle)
-	require.Equal(t, domain.TaskClaimOutcomeWorkSubmitted, submittedClaim.Outcome)
+	require.Equal(t, domain.TaskClaimOutcomeExecutionCompleted, submittedClaim.Outcome)
+	require.Equal(t, []uuid.UUID{submission.ID, secondSubmission.ID}, completion.ExecutionCompleted.SubmissionItemIDs)
 
 	agentOperation := taskClaimActor(userA, token, "agent-review-claim")
 	agentActor := domain.Actor{Type: domain.ActorTypeAgent, Ref: "codex/review-thread"}
@@ -148,6 +171,8 @@ func TestTaskWorkflowSupportsHumanExecutionAndAgentAcceptance(t *testing.T) {
 		domain.ThreadItemKindSystemEvent,
 		domain.ThreadItemKindSystemEvent,
 		domain.ThreadItemKindWorkSubmission,
+		domain.ThreadItemKindWorkSubmission,
+		domain.ThreadItemKindExecutionCompleted,
 		domain.ThreadItemKindSystemEvent,
 		domain.ThreadItemKindReviewOutcome,
 	}, threadItemKinds(items))
@@ -179,7 +204,7 @@ func TestTaskWorkflowAcceptanceRequiresCurrentReviewCycleEvidence(t *testing.T) 
 		domain.SessionOperation(userA, "cycle-execution-1"), "browser", "", now,
 	)
 	require.NoError(t, err)
-	review1, _, err := workflow.SubmitWork(
+	review1, _, _, err := workflow.CompleteExecution(
 		ctx, created.Task.Number, claim1.ID, execution1.Version, claim1.Version,
 		"First submission.", actor,
 		domain.SessionOperation(userA, "cycle-submit-1"), now,
@@ -213,7 +238,7 @@ func TestTaskWorkflowAcceptanceRequiresCurrentReviewCycleEvidence(t *testing.T) 
 		domain.SessionOperation(userA, "cycle-execution-2"), "browser", "", now,
 	)
 	require.NoError(t, err)
-	review2, _, err := workflow.SubmitWork(
+	review2, _, _, err := workflow.CompleteExecution(
 		ctx, created.Task.Number, claim2.ID, execution2.Version, claim2.Version,
 		"Second submission.", actor,
 		domain.SessionOperation(userA, "cycle-submit-2"), now,
@@ -643,7 +668,7 @@ func TestTaskWorkflowReleaseRacingSubmitHasOneTerminalOutcome(t *testing.T) {
 	go func() {
 		defer wait.Done()
 		<-start
-		_, _, submitErr := workflow.SubmitWork(
+		_, _, _, submitErr := workflow.CompleteExecution(
 			ctx, created.Task.Number, claim.ID, working.Version, claim.Version,
 			"Submit one coherent result.", actor,
 			domain.SessionOperation(userA, "finish-submit"), now,
@@ -671,7 +696,7 @@ func TestTaskWorkflowReleaseRacingSubmitHasOneTerminalOutcome(t *testing.T) {
 	storedClaim, err := store.NewTaskStageClaimStore(db).Get(ctx, claim.ID)
 	require.NoError(t, err)
 	require.True(t,
-		storedClaim.Outcome == domain.TaskClaimOutcomeWorkSubmitted ||
+		storedClaim.Outcome == domain.TaskClaimOutcomeExecutionCompleted ||
 			storedClaim.Outcome == domain.TaskClaimOutcomeVoluntarilyReleased,
 	)
 	var terminalItems int
@@ -679,7 +704,7 @@ func TestTaskWorkflowReleaseRacingSubmitHasOneTerminalOutcome(t *testing.T) {
 		SELECT count(*)
 		FROM task_thread_items item
 		JOIN task_threads thread ON thread.id=item.thread_id
-		WHERE thread.task_id=$1 AND item.kind IN ('handoff','work_submission')`,
+		WHERE thread.task_id=$1 AND item.kind IN ('handoff','execution_completed')`,
 		created.Task.ID,
 	).Scan(&terminalItems))
 	require.Equal(t, 1, terminalItems)

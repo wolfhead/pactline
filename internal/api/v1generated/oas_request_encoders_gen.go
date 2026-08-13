@@ -92,6 +92,20 @@ func encodeCompleteMilestoneRequest(
 	return nil
 }
 
+func encodeCompleteTaskExecutionRequest(
+	req *TaskStageClaimFinish,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
 func encodeCreateAcceptanceCheckRequest(
 	req *AcceptanceCheckCreate,
 	r *http.Request,
@@ -266,6 +280,20 @@ func encodeRecordTaskStageAcceptanceCheckRequest(
 	return nil
 }
 
+func encodeRecordTaskWorkSubmissionRequest(
+	req *TaskStageClaimFinish,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
 func encodeReleaseTaskStageClaimRequest(
 	req *TaskStageClaimFinish,
 	r *http.Request,
@@ -324,20 +352,6 @@ func encodeRequestTaskResolutionRequest(
 
 func encodeResolveTaskIssueRequest(
 	req *TaskIssueResolve,
-	r *http.Request,
-) error {
-	const contentType = "application/json"
-	e := new(jx.Encoder)
-	{
-		req.Encode(e)
-	}
-	encoded := e.Bytes()
-	ht.SetBody(r, bytes.NewReader(encoded), contentType)
-	return nil
-}
-
-func encodeSubmitTaskWorkRequest(
-	req *TaskStageClaimFinish,
 	r *http.Request,
 ) error {
 	const contentType = "application/json"
