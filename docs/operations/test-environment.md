@@ -113,6 +113,34 @@ Follow the host preparation and secret generation sections in
 The test override changes `APP_ENV` only. Authentication remains Lark because
 the production base Compose file sets `AUTH_PROVIDER=lark`.
 
+## Repository provider fixtures
+
+The test override enables deterministic repository-provider fixtures with
+`REPOSITORY_PROVIDER_FIXTURES_ENABLED=true`. The API refuses to start with
+fixtures enabled when `APP_ENV=production`.
+
+Fixtures retain the real `github` and `gitlab` provider identities and enter
+the normal Connection, encrypted credential, Project binding, Claim, delivery
+snapshot, review, and acceptance paths. Only these exact reserved origins are
+handled locally:
+
+| Provider | Repository URL | Code-change URL |
+|---|---|---|
+| GitHub | `https://github.example.test/pactline/acceptance` | `https://github.example.test/pactline/acceptance/pull/42` |
+| GitLab | `https://gitlab.example.test/pactline/acceptance` | `https://gitlab.example.test/pactline/acceptance/-/merge_requests/43` |
+
+Create either test Connection with the synthetic credential
+`pactline-fixture-read-token`. This value is public test data, not a secret.
+Unknown fixture repositories, change numbers, and credentials fail through the
+same provider error mapping as ordinary Connections. All non-fixture origins
+continue to use the real GitHub or GitLab client.
+
+Fixture-backed acceptance proves Pactline's internal repository-delivery and
+Task lifecycle integration without external accounts. It does not prove live
+GitHub or GitLab API, network, permission, rate-limit, or compatibility
+behavior. Run separate live-provider checks when those integration boundaries
+change.
+
 ## Acceptance checklist
 
 After every deployment, verify:

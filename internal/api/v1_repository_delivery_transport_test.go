@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/wolfhead/pactline/internal/integrations/repositoryfixture"
 	"github.com/wolfhead/pactline/internal/store"
 
 	"github.com/google/uuid"
@@ -286,6 +287,140 @@ func TestV1RepositoryDeliveryConnectsProjectAgentExecutionAndReviewSnapshot(t *t
 	}
 	decodeJSON(t, reviewLink, &reviewProblem)
 	require.Equal(t, "INVALID_TRANSITION", reviewProblem.Code)
+}
+
+func TestV1RepositoryFixturesCompleteMixedProviderDelivery(t *testing.T) {
+	handler, db := newTaskTestServer(t)
+	connectionIDs := make([]uuid.UUID, 0, 2)
+	for _, input := range []map[string]any{
+		{
+			"label": "GitHub fixture", "provider": "github",
+			"repository_url": repositoryfixture.GitHubOrigin + "/" + repositoryfixture.RepositoryPath,
+			"credential":     repositoryfixture.SyntheticCredential,
+		},
+		{
+			"label": "GitLab fixture", "provider": "gitlab",
+			"repository_url": repositoryfixture.GitLabOrigin + "/" + repositoryfixture.RepositoryPath,
+			"credential":     repositoryfixture.SyntheticCredential,
+		},
+	} {
+		response := do(t, handler, http.MethodPost, "/api/admin/repository-connections", userA, input)
+		require.Equal(t, http.StatusCreated, response.Code, response.Body.String())
+		var connection struct {
+			ID uuid.UUID `json:"id"`
+		}
+		decodeJSON(t, response, &connection)
+		connectionIDs = append(connectionIDs, connection.ID)
+		cleanupAPIRepositoryConnection(t, db, connection.ID)
+	}
+
+	createdProject := do(t, handler, http.MethodPost, "/api/v1/projects", userA, map[string]any{
+		"name": "Repository fixture acceptance",
+	})
+	require.Equal(t, http.StatusCreated, createdProject.Code, createdProject.Body.String())
+	var project v1ProjectJSON
+	decodeJSON(t, createdProject, &project)
+	cleanupProjectRows(t, db, project.ID)
+	projectPath := fmt.Sprintf("/api/v1/projects/%d", project.Number)
+	for index, repositoryURL := range []string{
+		repositoryfixture.GitHubOrigin + "/" + repositoryfixture.RepositoryPath,
+		repositoryfixture.GitLabOrigin + "/" + repositoryfixture.RepositoryPath,
+	} {
+		bound := doWithHeaders(
+			t, handler, http.MethodPost, projectPath+"/repositories", userA,
+			http.Header{"If-Match": {fmt.Sprintf(`"%d"`, index+1)}},
+			map[string]any{"repository_url": repositoryURL},
+		)
+		require.Equal(t, http.StatusCreated, bound.Code, bound.Body.String())
+	}
+
+	createdTask := do(t, handler, http.MethodPost, "/api/v1/tasks", userA, map[string]any{
+		"title":           "Complete fixture-backed delivery",
+		"context":         "Exercise both repository providers without external services.",
+		"expected_result": "Review receives one frozen PR and one frozen MR.",
+		"project_number":  project.Number,
+	})
+	require.Equal(t, http.StatusCreated, createdTask.Code, createdTask.Body.String())
+	var task struct {
+		Number int64 `json:"number"`
+	}
+	decodeJSON(t, createdTask, &task)
+	taskPath := fmt.Sprintf("/api/v1/tasks/%d", task.Number)
+
+	ready := doWithHeaders(
+		t, handler, http.MethodPost, taskPath+"/commands/mark-ready", userA,
+		http.Header{"If-Match": {`"1"`}}, nil,
+	)
+	require.Equal(t, http.StatusOK, ready.Code, ready.Body.String())
+	claimed := doWithHeaders(
+		t, handler, http.MethodPost, taskPath+"/claims", userA,
+		http.Header{"If-Match": {`"2"`}}, map[string]any{},
+	)
+	require.Equal(t, http.StatusCreated, claimed.Code, claimed.Body.String())
+	var execution stageClaimCommandJSON
+	decodeJSON(t, claimed, &execution)
+
+	for index, codeChangeURL := range []string{
+		repositoryfixture.GitHubOrigin + "/" + repositoryfixture.RepositoryPath + "/pull/42",
+		repositoryfixture.GitLabOrigin + "/" + repositoryfixture.RepositoryPath + "/-/merge_requests/43",
+	} {
+		linked := doWithHeaders(
+			t, handler, http.MethodPost,
+			fmt.Sprintf("/api/v1/claims/%s/code-changes", execution.Claim.ID),
+			userA, http.Header{"If-Match": {fmt.Sprintf(`"%d"`, index+3)}},
+			map[string]any{"code_change_url": codeChangeURL},
+		)
+		require.Equal(t, http.StatusCreated, linked.Code, linked.Body.String())
+	}
+
+	completed := doWithHeaders(
+		t, handler, http.MethodPost,
+		fmt.Sprintf("/api/v1/claims/%s/complete-execution", execution.Claim.ID),
+		userA, http.Header{"If-Match": {`"5"`}},
+		map[string]any{"body": "Both fixture code changes are ready for review."},
+	)
+	require.Equal(t, http.StatusOK, completed.Code, completed.Body.String())
+	var completion struct {
+		Task       workflowJSON `json:"task"`
+		Completion struct {
+			ExecutionCompleted struct {
+				CodeChanges []struct {
+					Provider string `json:"provider"`
+					HeadSHA  string `json:"head_sha"`
+				} `json:"code_changes"`
+			} `json:"execution_completed"`
+		} `json:"completion"`
+	}
+	decodeJSON(t, completed, &completion)
+	require.Equal(t, "in_review", completion.Task.Phase)
+	require.Equal(t, []string{"github", "gitlab"}, []string{
+		completion.Completion.ExecutionCompleted.CodeChanges[0].Provider,
+		completion.Completion.ExecutionCompleted.CodeChanges[1].Provider,
+	})
+	require.Equal(t, "1111111111111111111111111111111111111111", completion.Completion.ExecutionCompleted.CodeChanges[0].HeadSHA)
+	require.Equal(t, "2222222222222222222222222222222222222222", completion.Completion.ExecutionCompleted.CodeChanges[1].HeadSHA)
+
+	reviewClaimed := doWithHeaders(
+		t, handler, http.MethodPost, taskPath+"/claims", userA,
+		http.Header{"If-Match": {`"6"`}}, map[string]any{},
+	)
+	require.Equal(t, http.StatusCreated, reviewClaimed.Code, reviewClaimed.Body.String())
+	var review stageClaimCommandJSON
+	decodeJSON(t, reviewClaimed, &review)
+	require.Equal(t, "review", review.Claim.Stage)
+	accepted := doWithHeaders(
+		t, handler, http.MethodPost,
+		fmt.Sprintf("/api/v1/claims/%s/accept", review.Claim.ID),
+		userA, http.Header{"If-Match": {`"7"`}},
+		map[string]any{"body": "Fixture delivery snapshot is accepted."},
+	)
+	require.Equal(t, http.StatusOK, accepted.Code, accepted.Body.String())
+	var acceptance struct {
+		Task workflowJSON `json:"task"`
+	}
+	decodeJSON(t, accepted, &acceptance)
+	require.Equal(t, "done", acceptance.Task.Phase)
+	require.Len(t, connectionIDs, 2)
 }
 
 func cleanupAPIRepositoryConnection(t *testing.T, db *store.DB, id uuid.UUID) {

@@ -2,3 +2,4 @@ services:
   api:
     environment:
       APP_ENV: development
+      REPOSITORY_PROVIDER_FIXTURES_ENABLED: "true"

@@ -25,12 +25,14 @@ import (
 	apiv1 "github.com/wolfhead/pactline/internal/api/v1"
 	"github.com/wolfhead/pactline/internal/application"
 	"github.com/wolfhead/pactline/internal/blob"
+	"github.com/wolfhead/pactline/internal/domain"
 	"github.com/wolfhead/pactline/internal/identity"
 	"github.com/wolfhead/pactline/internal/integrations/deepseek"
 	"github.com/wolfhead/pactline/internal/integrations/devauth"
 	githubintegration "github.com/wolfhead/pactline/internal/integrations/github"
 	gitlabintegration "github.com/wolfhead/pactline/internal/integrations/gitlab"
 	"github.com/wolfhead/pactline/internal/integrations/lark"
+	"github.com/wolfhead/pactline/internal/integrations/repositoryfixture"
 	legacyapi "github.com/wolfhead/pactline/internal/legacy/api"
 	legacystore "github.com/wolfhead/pactline/internal/legacy/store"
 	"github.com/wolfhead/pactline/internal/logging"
@@ -129,8 +131,23 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	gitLabProvider := gitlabintegration.NewClient(nil, 10*time.Second)
-	gitHubProvider := githubintegration.NewClient(nil, 10*time.Second)
+	var gitLabProvider application.RepositoryProviderClient = gitlabintegration.NewClient(nil, 10*time.Second)
+	var gitHubProvider application.RepositoryProviderClient = githubintegration.NewClient(nil, 10*time.Second)
+	if cfg.RepositoryProviderFixtures {
+		gitLabProvider, err = repositoryfixture.New(domain.RepositoryProviderGitLab, gitLabProvider)
+		if err != nil {
+			slog.Error("configure GitLab repository fixtures", "error", err)
+			os.Exit(1)
+		}
+		gitHubProvider, err = repositoryfixture.New(domain.RepositoryProviderGitHub, gitHubProvider)
+		if err != nil {
+			slog.Error("configure GitHub repository fixtures", "error", err)
+			os.Exit(1)
+		}
+		slog.Info("repository provider fixtures enabled",
+			"github_origin", repositoryfixture.GitHubOrigin,
+			"gitlab_origin", repositoryfixture.GitLabOrigin)
+	}
 	repositoryProviders, err := application.NewRepositoryProviderRegistry(gitLabProvider, gitHubProvider)
 	if err != nil {
 		slog.Error("configure repository providers", "error", err)
