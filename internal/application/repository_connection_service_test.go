@@ -48,7 +48,7 @@ func (s *gitLabProviderStub) ResolveRepository(
 }
 
 func (*gitLabProviderStub) GetCodeChange(
-	context.Context, string, string, domain.CodeChangeKind, int64, []byte, string,
+	context.Context, domain.RepositoryReference, string, domain.CodeChangeKind, int64, []byte, string,
 ) (domain.CodeChange, error) {
 	return domain.CodeChange{}, errors.New("not implemented")
 }

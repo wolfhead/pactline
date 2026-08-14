@@ -29,6 +29,21 @@ func TestV1RepositoryDeliveryConnectsProjectAgentExecutionAndReviewSnapshot(t *t
 	}
 	decodeJSON(t, connectionResponse, &connection)
 	cleanupAPIRepositoryConnection(t, db, connection.ID)
+	githubRepositoryPath := "team/github-delivery-" + uuid.NewString()
+	githubRepositoryURL := "https://github.example/" + githubRepositoryPath
+	githubConnectionResponse := do(
+		t, handler, http.MethodPost, "/api/admin/repository-connections", userA,
+		map[string]any{
+			"label": "GitHub API delivery repository", "provider": "github",
+			"repository_url": githubRepositoryURL, "credential": "synthetic-github-read-token",
+		},
+	)
+	require.Equal(t, http.StatusCreated, githubConnectionResponse.Code, githubConnectionResponse.Body.String())
+	var githubConnection struct {
+		ID uuid.UUID `json:"id"`
+	}
+	decodeJSON(t, githubConnectionResponse, &githubConnection)
+	cleanupAPIRepositoryConnection(t, db, githubConnection.ID)
 	var issuedTokenID uuid.UUID
 	t.Cleanup(func() {
 		if issuedTokenID == uuid.Nil {
@@ -69,16 +84,32 @@ func TestV1RepositoryDeliveryConnectsProjectAgentExecutionAndReviewSnapshot(t *t
 	require.Equal(t, "gitlab", binding.Repository.Provider)
 	require.Equal(t, "42001", binding.Repository.ProviderRepositoryID)
 	require.Equal(t, repositoryPath, binding.Repository.PathWithNamespace)
+	githubBound := doWithHeaders(
+		t, handler, http.MethodPost, projectPath+"/repositories", userA,
+		http.Header{"If-Match": {`"2"`}}, map[string]any{"repository_url": githubRepositoryURL},
+	)
+	require.Equal(t, http.StatusCreated, githubBound.Code, githubBound.Body.String())
+	var githubBinding struct {
+		ProjectVersion int64 `json:"project_version"`
+		Repository     struct {
+			Provider             string `json:"provider"`
+			ProviderRepositoryID string `json:"provider_repository_id"`
+		} `json:"repository"`
+	}
+	decodeJSON(t, githubBound, &githubBinding)
+	require.Equal(t, int64(3), githubBinding.ProjectVersion)
+	require.Equal(t, "github", githubBinding.Repository.Provider)
+	require.Equal(t, "52001", githubBinding.Repository.ProviderRepositoryID)
 
 	memberAdded := doWithHeaders(
 		t, handler, http.MethodPost, projectPath+"/members", userA,
-		http.Header{"If-Match": {`"2"`}}, map[string]any{"user_id": userB, "role": "member"},
+		http.Header{"If-Match": {`"3"`}}, map[string]any{"user_id": userB, "role": "member"},
 	)
 	require.Equal(t, http.StatusCreated, memberAdded.Code, memberAdded.Body.String())
 	memberUnbind := doWithHeaders(
 		t, handler, http.MethodDelete,
 		fmt.Sprintf("%s/repositories/%s", projectPath, binding.Repository.ID), userB,
-		http.Header{"If-Match": {`"3"`}}, nil,
+		http.Header{"If-Match": {`"4"`}}, nil,
 	)
 	require.Equal(t, http.StatusForbidden, memberUnbind.Code, memberUnbind.Body.String())
 
@@ -140,11 +171,30 @@ func TestV1RepositoryDeliveryConnectsProjectAgentExecutionAndReviewSnapshot(t *t
 	require.Equal(t, execution.Claim.Version, int64(1))
 	require.Equal(t, "merge_request", linkMutation.CodeChange.Kind)
 	require.Equal(t, codeChangeURL, linkMutation.CodeChange.WebURL)
+	githubCodeChangeURL := githubRepositoryURL + "/pull/17"
+	githubLinked := doBearerMutation(
+		t, handler, http.MethodPost,
+		fmt.Sprintf("/api/v1/claims/%s/code-changes", execution.Claim.ID),
+		issued.Token, http.Header{"If-Match": {`"4"`}},
+		map[string]any{"code_change_url": githubCodeChangeURL},
+	)
+	require.Equal(t, http.StatusCreated, githubLinked.Code, githubLinked.Body.String())
+	var githubLinkMutation struct {
+		CodeChange struct {
+			Kind         string `json:"kind"`
+			ChangeNumber int64  `json:"change_number"`
+			WebURL       string `json:"web_url"`
+		} `json:"code_change"`
+	}
+	decodeJSON(t, githubLinked, &githubLinkMutation)
+	require.Equal(t, "pull_request", githubLinkMutation.CodeChange.Kind)
+	require.Equal(t, int64(17), githubLinkMutation.CodeChange.ChangeNumber)
+	require.Equal(t, githubCodeChangeURL, githubLinkMutation.CodeChange.WebURL)
 	outageCodeChangeURL := repositoryURL + "/-/merge_requests/503"
 	linkedDuringOutage := doBearerMutation(
 		t, handler, http.MethodPost,
 		fmt.Sprintf("/api/v1/claims/%s/code-changes", execution.Claim.ID),
-		issued.Token, http.Header{"If-Match": {`"4"`}},
+		issued.Token, http.Header{"If-Match": {`"5"`}},
 		map[string]any{"code_change_url": outageCodeChangeURL},
 	)
 	require.Equal(t, http.StatusCreated, linkedDuringOutage.Code, linkedDuringOutage.Body.String())
@@ -159,12 +209,12 @@ func TestV1RepositoryDeliveryConnectsProjectAgentExecutionAndReviewSnapshot(t *t
 		} `json:"active_links"`
 	}
 	decodeJSON(t, delivery, &beforeReview)
-	require.Len(t, beforeReview.ActiveLinks, 2)
+	require.Len(t, beforeReview.ActiveLinks, 3)
 
 	completed := doBearerMutation(
 		t, handler, http.MethodPost,
 		fmt.Sprintf("/api/v1/claims/%s/complete-execution", execution.Claim.ID),
-		issued.Token, http.Header{"If-Match": {`"5"`}},
+		issued.Token, http.Header{"If-Match": {`"6"`}},
 		map[string]any{"body": "Code-change delivery is ready for review."},
 	)
 	require.Equal(t, http.StatusOK, completed.Code, completed.Body.String())
@@ -185,15 +235,17 @@ func TestV1RepositoryDeliveryConnectsProjectAgentExecutionAndReviewSnapshot(t *t
 	decodeJSON(t, completed, &completion)
 	require.Equal(t, "in_review", completion.Task.Phase)
 	require.Equal(t, int64(1), completion.Completion.ExecutionCompleted.ReviewCycle)
-	require.Len(t, completion.Completion.ExecutionCompleted.CodeChanges, 2)
+	require.Len(t, completion.Completion.ExecutionCompleted.CodeChanges, 3)
 	require.Equal(
 		t, linkMutation.CodeChange.ID,
-		completion.Completion.ExecutionCompleted.CodeChanges[0].TaskCodeChangeID,
+		completion.Completion.ExecutionCompleted.CodeChanges[1].TaskCodeChangeID,
 	)
-	require.Equal(t, "abc123def456", completion.Completion.ExecutionCompleted.CodeChanges[0].HeadSHA)
-	require.Equal(t, int64(503), completion.Completion.ExecutionCompleted.CodeChanges[1].ChangeNumber)
-	require.Equal(t, "unreachable", completion.Completion.ExecutionCompleted.CodeChanges[1].ObservationStatus)
+	require.Equal(t, int64(17), completion.Completion.ExecutionCompleted.CodeChanges[0].ChangeNumber)
+	require.Equal(t, "fedcba654321", completion.Completion.ExecutionCompleted.CodeChanges[0].HeadSHA)
 	require.Equal(t, "abc123def456", completion.Completion.ExecutionCompleted.CodeChanges[1].HeadSHA)
+	require.Equal(t, int64(503), completion.Completion.ExecutionCompleted.CodeChanges[2].ChangeNumber)
+	require.Equal(t, "unreachable", completion.Completion.ExecutionCompleted.CodeChanges[2].ObservationStatus)
+	require.Equal(t, "abc123def456", completion.Completion.ExecutionCompleted.CodeChanges[2].HeadSHA)
 
 	reviewDelivery := doBearerRequest(
 		t, handler, http.MethodGet, taskPath+"/code-changes", issued.Token, nil, nil,
@@ -209,13 +261,14 @@ func TestV1RepositoryDeliveryConnectsProjectAgentExecutionAndReviewSnapshot(t *t
 	}
 	decodeJSON(t, reviewDelivery, &reviewState)
 	require.Equal(t, int64(1), reviewState.Review.ReviewCycle)
-	require.Len(t, reviewState.Review.CodeChanges, 2)
+	require.Len(t, reviewState.Review.CodeChanges, 3)
 	require.Equal(t, "unchanged", reviewState.Review.CodeChanges[0].Comparison)
-	require.Equal(t, "unreachable", reviewState.Review.CodeChanges[1].Comparison)
+	require.Equal(t, "unchanged", reviewState.Review.CodeChanges[1].Comparison)
+	require.Equal(t, "unreachable", reviewState.Review.CodeChanges[2].Comparison)
 
 	reviewClaimed := doWithHeaders(
 		t, handler, http.MethodPost, taskPath+"/claims", userA,
-		http.Header{"If-Match": {`"6"`}}, map[string]any{},
+		http.Header{"If-Match": {`"7"`}}, map[string]any{},
 	)
 	require.Equal(t, http.StatusCreated, reviewClaimed.Code, reviewClaimed.Body.String())
 	var reviewClaim stageClaimCommandJSON
@@ -224,7 +277,7 @@ func TestV1RepositoryDeliveryConnectsProjectAgentExecutionAndReviewSnapshot(t *t
 	reviewLink := doWithHeaders(
 		t, handler, http.MethodPost,
 		fmt.Sprintf("/api/v1/claims/%s/code-changes", reviewClaim.Claim.ID),
-		userA, http.Header{"If-Match": {`"7"`}},
+		userA, http.Header{"If-Match": {`"8"`}},
 		map[string]any{"code_change_url": codeChangeURL},
 	)
 	require.Equal(t, http.StatusConflict, reviewLink.Code, reviewLink.Body.String())

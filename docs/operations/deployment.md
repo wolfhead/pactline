@@ -25,6 +25,25 @@ without first reviewing the other applications on that host.
 Pactline does not currently need Kubernetes, multiple API replicas, a service
 mesh, or an automated deployment agent.
 
+## Repository provider credentials
+
+Repository Connections are created after deployment from the System
+Administrator UI; provider tokens are not deployment environment variables.
+Each Connection covers exactly one repository and is encrypted with the
+configured token-encryption key.
+
+For GitHub.com or GitHub Enterprise Server, create a fine-grained personal
+access token restricted to the selected repository. Grant read-only repository
+metadata and Pull Request access. GitLab Connections likewise use a read-only
+token scoped to one repository. Paste the repository root URL and token into
+the Connection form, verify the immediate live-authentication result, and then
+let a Project Administrator bind the same repository URL to a Project.
+
+Pactline records optional credential expiry metadata but does not rotate,
+poll, or refresh credentials in the background. Rotate credentials explicitly
+from the Administrator UI before expiry. Provider access remains read-only:
+Pactline never writes, reviews, merges, or queries CI state.
+
 Task attachment objects are private. The default deployment stores them in the
 API container's `attachment_data` volume. `ATTACHMENT_STORAGE_PROVIDER=oss` or
 `cos` switches to a private cloud bucket; never enable anonymous bucket access.

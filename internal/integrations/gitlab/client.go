@@ -189,13 +189,16 @@ func (c *Client) ResolveRepository(
 
 func (c *Client) GetCodeChange(
 	ctx context.Context,
-	origin string,
+	reference domain.RepositoryReference,
 	providerRepositoryID string,
 	kind domain.CodeChangeKind,
 	changeNumber int64,
 	credential []byte,
 	requestID string,
 ) (domain.CodeChange, error) {
+	if reference.Provider != domain.RepositoryProviderGitLab {
+		return domain.CodeChange{}, &ProviderError{Category: ErrorInvalidReference, Err: errors.New("repository provider is not GitLab")}
+	}
 	if kind != domain.CodeChangeKindMergeRequest {
 		return domain.CodeChange{}, &ProviderError{Category: ErrorInvalidReference, Err: errors.New("GitLab code change kind must be merge_request")}
 	}
@@ -203,7 +206,7 @@ func (c *Client) GetCodeChange(
 	if err != nil || projectID < 1 {
 		return domain.CodeChange{}, &ProviderError{Category: ErrorInvalidReference, Err: errors.New("GitLab repository ID is invalid")}
 	}
-	endpoint, err := mergeRequestEndpoint(origin, projectID, changeNumber)
+	endpoint, err := mergeRequestEndpoint(reference.Origin, projectID, changeNumber)
 	if err != nil {
 		return domain.CodeChange{}, err
 	}

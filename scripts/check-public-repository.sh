@@ -92,6 +92,8 @@ author_findings=$(
 				$3 ~ /^Merge [0-9a-f]+ into [0-9a-f]+$/ { next }
 			$2 == github_committer_email &&
 				$3 ~ /^Merge pull request #[0-9]+ from [A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]+$/ { next }
+			$2 == github_committer_email &&
+				$3 ~ / \(#[0-9]+\)$/ { next }
 			{ print "non-public-author-email" }
 		' |
 		sort -u

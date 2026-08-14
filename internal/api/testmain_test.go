@@ -25,6 +25,7 @@ import (
 	"github.com/wolfhead/pactline/internal/domain"
 	"github.com/wolfhead/pactline/internal/identity"
 	"github.com/wolfhead/pactline/internal/integrations/devauth"
+	githubintegration "github.com/wolfhead/pactline/internal/integrations/github"
 	gitlabintegration "github.com/wolfhead/pactline/internal/integrations/gitlab"
 	legacyapi "github.com/wolfhead/pactline/internal/legacy/api"
 	legacystore "github.com/wolfhead/pactline/internal/legacy/store"
@@ -50,6 +51,66 @@ type apiTestGitLabProvider struct {
 	mu                sync.Mutex
 	pathWithNamespace string
 	mergeRequestCalls map[int64]int
+}
+
+type apiTestGitHubProvider struct {
+	mu                sync.Mutex
+	pathWithNamespace string
+}
+
+func (*apiTestGitHubProvider) Provider() domain.RepositoryProvider {
+	return domain.RepositoryProviderGitHub
+}
+
+func (*apiTestGitHubProvider) ParseRepositoryURL(raw string) (domain.RepositoryReference, error) {
+	return githubintegration.NewClient(nil, time.Second).ParseRepositoryURL(raw)
+}
+
+func (*apiTestGitHubProvider) ParseCodeChangeURL(raw string) (domain.CodeChangeReference, error) {
+	return githubintegration.NewClient(nil, time.Second).ParseCodeChangeURL(raw)
+}
+
+func (p *apiTestGitHubProvider) ResolveRepository(
+	_ context.Context,
+	reference domain.RepositoryReference,
+	_ []byte,
+	_ string,
+) (domain.RepositoryIdentity, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.pathWithNamespace = reference.PathWithNamespace
+	return domain.RepositoryIdentity{
+		ProviderRepositoryID: "52001", PathWithNamespace: reference.PathWithNamespace,
+		WebURL: reference.Origin + "/" + reference.PathWithNamespace, DefaultBranch: "main",
+	}, nil
+}
+
+func (p *apiTestGitHubProvider) GetCodeChange(
+	_ context.Context,
+	reference domain.RepositoryReference,
+	_ string,
+	kind domain.CodeChangeKind,
+	changeNumber int64,
+	_ []byte,
+	_ string,
+) (domain.CodeChange, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if kind != domain.CodeChangeKindPullRequest {
+		return domain.CodeChange{}, domain.ErrInvalidInput
+	}
+	now := time.Date(2026, 8, 14, 8, 0, 0, 0, time.UTC)
+	return domain.CodeChange{
+		Provider: domain.RepositoryProviderGitHub, Kind: domain.CodeChangeKindPullRequest,
+		ProviderChangeID: fmt.Sprintf("%d", 92000+changeNumber), ChangeNumber: changeNumber,
+		WebURL: fmt.Sprintf("%s/%s/pull/%d", reference.Origin, reference.PathWithNamespace, changeNumber),
+		Observation: domain.CodeChangeObservation{
+			Status: domain.CodeChangeObservationConfirmed, ObservedAt: now,
+			Title: "GitHub API delivery evidence", State: domain.CodeChangeStateOpened,
+			SourceBranch: "feature/github-evidence", TargetBranch: "main", HeadSHA: "fedcba654321",
+			ProviderUpdatedAt: now,
+		},
+	}, nil
 }
 
 func (*apiTestGitLabProvider) Provider() domain.RepositoryProvider {
@@ -81,13 +142,14 @@ func (p *apiTestGitLabProvider) ResolveRepository(
 
 func (p *apiTestGitLabProvider) GetCodeChange(
 	_ context.Context,
-	origin string,
+	reference domain.RepositoryReference,
 	_ string,
 	kind domain.CodeChangeKind,
 	changeNumber int64,
 	_ []byte,
 	_ string,
 ) (domain.CodeChange, error) {
+	origin := reference.Origin
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if kind != domain.CodeChangeKindMergeRequest {
@@ -171,7 +233,8 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 	})
 	require.NoError(t, err)
 	gitLabProvider := &apiTestGitLabProvider{}
-	repositoryProviders, err := application.NewRepositoryProviderRegistry(gitLabProvider)
+	gitHubProvider := &apiTestGitHubProvider{}
+	repositoryProviders, err := application.NewRepositoryProviderRegistry(gitLabProvider, gitHubProvider)
 	require.NoError(t, err)
 	repositoryConnectionService := &application.RepositoryConnectionService{
 		Connections: store.NewRepositoryConnectionStore(db),

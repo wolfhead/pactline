@@ -306,6 +306,7 @@ func TestCompactClaimShowUsesOneBoundedEndpoint(t *testing.T) {
 
 func TestClaimCodeChangeLinkUsesExplicitClaimAndVersion(t *testing.T) {
 	const claimID = "4e8c59cf-0af4-4af4-a55d-f2d2f930771c"
+	const pullRequestURL = "https://github.com/team/repo/pull/42"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodPost, r.Method)
 		require.Equal(t, "/api/v1/claims/"+claimID+"/code-changes", r.URL.Path)
@@ -313,7 +314,7 @@ func TestClaimCodeChangeLinkUsesExplicitClaimAndVersion(t *testing.T) {
 		require.NotEmpty(t, r.Header.Get("Idempotency-Key"))
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
-		require.Equal(t, "https://gitlab.example/team/repo/-/merge_requests/42", body["code_change_url"])
+		require.Equal(t, pullRequestURL, body["code_change_url"])
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{}`)
 	}))
@@ -325,7 +326,7 @@ func TestClaimCodeChangeLinkUsesExplicitClaimAndVersion(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := ExecuteArgs(context.Background(), []string{
 		"claim", "change", "link", claimID,
-		"--url", "https://gitlab.example/team/repo/-/merge_requests/42", "--task-version", "9",
+		"--url", pullRequestURL, "--task-version", "9",
 	}, strings.NewReader(""), &stdout, &stderr)
 	require.Zero(t, code, stderr.String())
 	require.Contains(t, stdout.String(), "Code change linked")

@@ -135,6 +135,13 @@ Claim opens a blocking Issue, the same CLI can inspect and discuss its Thread,
 resolve it with explicit Task and Thread versions, and reclaim the available
 phase without inferring or reviving the ended Claim.
 
+System Administrators can create encrypted, repository-scoped, read-only
+Connections for GitLab or GitHub, including GitHub Enterprise Server. Project
+Administrators authorize one by pasting its repository URL. GitHub uses a
+fine-grained personal access token limited to the selected repository with
+repository metadata and Pull Request read access. Pactline performs no provider
+writes, polling, CI queries, reviews, or merges.
+
 Create an executor-scoped personal Token in the account UI, install the CLI or
 the `pactline-work` Codex skill, and keep developer-specific Project/repository
 mapping outside this repository.

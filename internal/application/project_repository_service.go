@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -53,13 +54,31 @@ func (s *ProjectRepositoryService) Bind(
 			"%w: archived Projects are read-only", domain.ErrConflict,
 		)
 	}
-	reference, err := s.Providers.MatchRepositoryURL(repositoryURL)
+	candidates, err := s.Providers.RepositoryURLCandidates(repositoryURL)
 	if err != nil {
 		return store.ProjectRepositoryMutation{}, err
 	}
-	connection, err := s.Connections.FindActiveByRepository(ctx, reference)
-	if err != nil {
-		return store.ProjectRepositoryMutation{}, err
+	var reference domain.RepositoryReference
+	var connection domain.RepositoryConnection
+	matchCount := 0
+	for _, candidate := range candidates {
+		matched, findErr := s.Connections.FindActiveByRepository(ctx, candidate)
+		if errors.Is(findErr, domain.ErrNotFound) {
+			continue
+		}
+		if findErr != nil {
+			return store.ProjectRepositoryMutation{}, findErr
+		}
+		reference, connection = candidate, matched
+		matchCount++
+	}
+	if matchCount == 0 {
+		return store.ProjectRepositoryMutation{}, domain.ErrNotFound
+	}
+	if matchCount > 1 {
+		return store.ProjectRepositoryMutation{}, fmt.Errorf(
+			"%w: repository URL matches more than one active Repository Connection", domain.ErrConflict,
+		)
 	}
 	validation, err := s.ConnectionService.validateExisting(ctx, connection, operation.RequestID)
 	if err != nil {

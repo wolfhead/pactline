@@ -187,7 +187,7 @@ func (s *TaskDeliveryService) refreshObservation(
 	}
 	defer clear(credential)
 	codeChange, err := provider.GetCodeChange(
-		ctx, item.Connection.Origin, item.Connection.ProviderRepositoryID,
+		ctx, repositoryReference(item.Connection), item.Connection.ProviderRepositoryID,
 		item.CodeChange.Kind, item.CodeChange.ChangeNumber, credential, requestID,
 	)
 	if err != nil {
@@ -255,13 +255,31 @@ func (s *TaskDeliveryService) LinkCodeChange(
 	if err != nil {
 		return store.TaskCodeChangeMutation{}, err
 	}
-	reference, err := s.Providers.MatchCodeChangeURL(codeChangeURL)
+	candidates, err := s.Providers.CodeChangeURLCandidates(codeChangeURL)
 	if err != nil {
 		return store.TaskCodeChangeMutation{}, err
 	}
-	repository, err := s.Repositories.FindActiveByReference(ctx, task.Task.ProjectID, reference.Repository)
-	if err != nil {
-		return store.TaskCodeChangeMutation{}, err
+	var reference domain.CodeChangeReference
+	var repository store.ProjectRepositoryWithConnection
+	matchCount := 0
+	for _, candidate := range candidates {
+		matched, findErr := s.Repositories.FindActiveByReference(ctx, task.Task.ProjectID, candidate.Repository)
+		if errors.Is(findErr, domain.ErrNotFound) {
+			continue
+		}
+		if findErr != nil {
+			return store.TaskCodeChangeMutation{}, findErr
+		}
+		reference, repository = candidate, matched
+		matchCount++
+	}
+	if matchCount == 0 {
+		return store.TaskCodeChangeMutation{}, domain.ErrNotFound
+	}
+	if matchCount > 1 {
+		return store.TaskCodeChangeMutation{}, fmt.Errorf(
+			"%w: code change URL matches more than one repository bound to the Project", domain.ErrConflict,
+		)
 	}
 	provider, err := s.Providers.Provider(repository.Connection.Provider)
 	if err != nil {
@@ -275,7 +293,7 @@ func (s *TaskDeliveryService) LinkCodeChange(
 	}
 	defer clear(credential)
 	codeChange, err := provider.GetCodeChange(
-		ctx, repository.Connection.Origin, repository.Connection.ProviderRepositoryID,
+		ctx, repositoryReference(repository.Connection), repository.Connection.ProviderRepositoryID,
 		reference.Kind, reference.ChangeNumber, credential, operation.RequestID,
 	)
 	if err != nil {

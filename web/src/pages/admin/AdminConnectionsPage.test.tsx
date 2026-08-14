@@ -74,4 +74,28 @@ describe("AdminConnectionsPage", () => {
     expect(screen.queryByText("尚未配置 Repository Connection。")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "重试加载" })).toBeInTheDocument();
   });
+
+  it("creates a GitHub Connection with an explicit provider", async () => {
+    const githubConnection = {
+      ...CONNECTION,
+      provider: "github" as const,
+      origin: "https://github.com",
+      canonical_web_url: "https://github.com/team/app",
+    };
+    vi.mocked(createRepositoryConnection).mockResolvedValue(githubConnection);
+    render(<AdminConnectionsPage />);
+    await screen.findByText("尚未配置 Repository Connection。");
+    fireEvent.change(screen.getByLabelText("Provider"), { target: { value: "github" } });
+    fireEvent.change(screen.getByLabelText("显示名称"), { target: { value: "GitHub App" } });
+    fireEvent.change(screen.getByLabelText("仓库地址"), { target: { value: githubConnection.canonical_web_url } });
+    fireEvent.change(screen.getByLabelText(/只读 Access Token/), { target: { value: "github-token" } });
+    fireEvent.click(screen.getByRole("button", { name: "创建并鉴权" }));
+    await waitFor(() => expect(createRepositoryConnection).toHaveBeenCalledWith({
+      label: "GitHub App",
+      provider: "github",
+      repository_url: githubConnection.canonical_web_url,
+      credential: "github-token",
+      credential_expires_at: null,
+    }));
+  });
 });

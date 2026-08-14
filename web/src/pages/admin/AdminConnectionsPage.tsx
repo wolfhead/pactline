@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { CheckCircle2, GitBranch, KeyRound, PlugZap, ShieldOff } from "lucide-react";
-import { createRepositoryConnection, disableRepositoryConnection, listRepositoryConnections, rotateRepositoryCredential, validateRepositoryConnection, type RepositoryConnection } from "@/api/admin-repository-connections";
+import { createRepositoryConnection, disableRepositoryConnection, listRepositoryConnections, rotateRepositoryCredential, validateRepositoryConnection, type RepositoryConnection, type RepositoryProvider } from "@/api/admin-repository-connections";
 
 export default function AdminConnectionsPage() {
   const [connections, setConnections] = useState<RepositoryConnection[]>([]);
+  const [provider, setProvider] = useState<RepositoryProvider>("gitlab");
   const [label, setLabel] = useState("");
   const [repositoryURL, setRepositoryURL] = useState("");
   const [credential, setCredential] = useState("");
@@ -43,7 +44,7 @@ export default function AdminConnectionsPage() {
     try {
       const created = await createRepositoryConnection({
         label: label.trim(),
-        provider: "gitlab",
+        provider,
         repository_url: repositoryURL.trim(),
         credential: submittedCredential,
         credential_expires_at: credentialExpiresAt ? new Date(credentialExpiresAt).toISOString() : null,
@@ -101,8 +102,9 @@ export default function AdminConnectionsPage() {
         <form onSubmit={(event) => void create(event)} className="mt-4 grid gap-3 md:grid-cols-2">
           <label className="grid gap-1.5 text-sm font-medium">
             Provider
-            <select value="gitlab" disabled className="h-10 rounded-md border border-border-strong bg-surface-subtle px-3 text-sm text-fg">
+            <select value={provider} onChange={(event) => setProvider(event.target.value as RepositoryProvider)} className="h-10 rounded-md border border-border-strong bg-surface px-3 text-sm text-fg">
               <option value="gitlab">GitLab</option>
+              <option value="github">GitHub</option>
             </select>
           </label>
           <label className="grid gap-1.5 text-sm font-medium">
@@ -111,12 +113,12 @@ export default function AdminConnectionsPage() {
           </label>
           <label className="grid gap-1.5 text-sm font-medium">
             仓库地址
-            <input required type="url" value={repositoryURL} onChange={(event) => setRepositoryURL(event.target.value)} placeholder="https://gitlab.example/group/repository" className="h-10 rounded-md border border-border-strong bg-surface px-3 text-sm outline-none focus:border-accent focus:ring-3 focus:ring-accent/20" />
+            <input required type="url" value={repositoryURL} onChange={(event) => setRepositoryURL(event.target.value)} placeholder={provider === "github" ? "https://github.com/owner/repository" : "https://gitlab.example/group/repository"} className="h-10 rounded-md border border-border-strong bg-surface px-3 text-sm outline-none focus:border-accent focus:ring-3 focus:ring-accent/20" />
           </label>
           <label className="grid gap-1.5 text-sm font-medium">
             只读 Access Token
             <input required type="password" autoComplete="new-password" value={credential} onChange={(event) => setCredential(event.target.value)} className="h-10 rounded-md border border-border-strong bg-surface px-3 text-sm outline-none focus:border-accent focus:ring-3 focus:ring-accent/20" />
-            <span className="text-xs font-normal text-fg-muted">提交后字段立即清空。请使用仅具备读取仓库与代码变更权限的 Token。</span>
+            <span className="text-xs font-normal text-fg-muted">提交后字段立即清空。GitHub 请使用仅授权该仓库 metadata 与 Pull requests 读取权限的 fine-grained PAT；GitLab 请使用只读 Token。</span>
           </label>
           <label className="grid gap-1.5 text-sm font-medium">
             凭证到期时间（可选）
@@ -168,13 +170,14 @@ export default function AdminConnectionsPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="font-medium">{connection.label}</h3>
+                      <span className="rounded-full bg-accent-subtle px-2 py-0.5 text-xs text-accent">{connection.provider === "github" ? "GitHub" : "GitLab"}</span>
                       <span className={`rounded-full px-2 py-0.5 text-xs ${connection.status === "active" ? "bg-secondary-subtle text-secondary" : "bg-surface-subtle text-fg-muted"}`}>{connection.status === "active" ? "已启用" : "已停用"}</span>
                     </div>
                     <a href={connection.canonical_web_url} target="_blank" rel="noreferrer" className="mt-1 block truncate text-sm text-accent hover:underline">
                       {connection.path_with_namespace}
                     </a>
                     <p className="mt-1 text-xs text-fg-muted">
-                      {connection.provider === "github" ? "GitHub" : "GitLab"} repository ID {connection.provider_repository_id} · 默认分支 {connection.default_branch || "未设置"} · 上次鉴权 {new Date(connection.last_validated_at).toLocaleString()} · 凭证到期 {connection.credential_expires_at ? new Date(connection.credential_expires_at).toLocaleString() : "未记录"}
+                      repository ID {connection.provider_repository_id} · 默认分支 {connection.default_branch || "未设置"} · 上次鉴权 {new Date(connection.last_validated_at).toLocaleString()} · 凭证到期 {connection.credential_expires_at ? new Date(connection.credential_expires_at).toLocaleString() : "未记录"}
                     </p>
                   </div>
                   {connection.status === "active" && (
