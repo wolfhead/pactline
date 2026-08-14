@@ -47,7 +47,7 @@ Quick start:
 
 Use "pactline help workflow" for the full execution loop.`,
 		PersistentPreRunE: func(command *cobra.Command, _ []string) error {
-			if command.Name() == "version" || command.CommandPath() == "pactline help" ||
+			if command.Name() == "version" || command.Name() == "capabilities" || command.CommandPath() == "pactline help" ||
 				(command.Parent() != nil && (command.Parent().Name() == "config" || command.Parent().Name() == "help")) {
 				return nil
 			}
@@ -64,7 +64,7 @@ Use "pactline help workflow" for the full execution loop.`,
 	root.PersistentFlags().BoolVarP(&app.verbose, "verbose", "v", false, "write redacted HTTP diagnostics to stderr")
 	root.PersistentFlags().StringVar(&app.idempotencyKey, "idempotency-key", "", "reuse this key for one mutation after an uncertain outcome")
 	root.CompletionOptions.DisableDefaultCmd = true
-	root.AddCommand(app.versionCommand(), app.configCommand(), app.doctorCommand(), app.taskCommand(), app.claimCommand())
+	root.AddCommand(app.versionCommand(), app.capabilitiesCommand(), app.configCommand(), app.doctorCommand(), app.taskCommand(), app.claimCommand())
 	root.SetHelpCommand(app.helpCommand(root))
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return &APIError{Code: "USAGE", Message: err.Error()} })
 	return root
@@ -152,10 +152,42 @@ func (a *App) debugf(format string, values ...any) {
 
 func (a *App) output(data any, human func(io.Writer)) error {
 	if a.jsonOutput {
-		return json.NewEncoder(a.stdout).Encode(map[string]any{"ok": true, "data": data})
+		envelope := map[string]any{"ok": true, "data": data}
+		if a.client != nil && !a.client.lastMeta.empty() {
+			envelope["meta"] = a.client.lastMeta
+		}
+		return json.NewEncoder(a.stdout).Encode(envelope)
 	}
 	human(a.stdout)
 	return nil
+}
+
+func (a *App) capabilitiesCommand() *cobra.Command {
+	features := []string{
+		"bounded_work_packets",
+		"claim_progress",
+		"claim_release",
+		"execution_claims",
+		"execution_completion",
+		"execution_verification",
+		"gitlab_merge_request_links",
+		"repeatable_submission",
+		"resolution_request",
+		"success_metadata",
+	}
+	return &cobra.Command{
+		Use: "capabilities", Short: "Print the offline machine-integration contract",
+		Long: "Reports features implemented by this CLI binary. It never reads configuration or contacts the server.",
+		Args: cobra.NoArgs, RunE: func(*cobra.Command, []string) error {
+			data := map[string]any{"protocol": 1, "cli_version": Version, "features": features}
+			return a.output(data, func(w io.Writer) {
+				fmt.Fprintf(w, "Protocol: 1\nCLI version: %s\nFeatures:\n", Version)
+				for _, feature := range features {
+					fmt.Fprintf(w, "  - %s\n", feature)
+				}
+			})
+		},
+	}
 }
 
 func (a *App) versionCommand() *cobra.Command {

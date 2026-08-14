@@ -131,6 +131,9 @@ func (h *Handler) ListTasks(
 	for _, value := range params.Activity {
 		filter.Activities = append(filter.Activities, domain.TaskActivityState(value))
 	}
+	if value, ok := params.ClaimableStage.Get(); ok {
+		filter.ClaimableStage = domain.TaskClaimStage(value)
+	}
 	if value, ok := params.Assignee.Get(); ok {
 		if value == "none" {
 			filter.Unassigned = true

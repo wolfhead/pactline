@@ -129,14 +129,27 @@ func (s *AcceptanceStore) Get(ctx context.Context, criterionID uuid.UUID) (domai
 }
 
 func (s *AcceptanceStore) ListForMilestone(ctx context.Context, milestoneID uuid.UUID) ([]CriterionWithCurrentCheck, error) {
-	return s.list(ctx, `ac.milestone_id=$1`, milestoneID)
+	return s.list(ctx, `ac.milestone_id=$1`, milestoneID, nil)
 }
 
 func (s *AcceptanceStore) ListForTask(ctx context.Context, taskID uuid.UUID) ([]CriterionWithCurrentCheck, error) {
-	return s.list(ctx, `ac.task_id=$1`, taskID)
+	return s.list(ctx, `ac.task_id=$1`, taskID, nil)
 }
 
-func (s *AcceptanceStore) list(ctx context.Context, predicate string, ownerID uuid.UUID) ([]CriterionWithCurrentCheck, error) {
+func (s *AcceptanceStore) ListForTaskClaim(
+	ctx context.Context,
+	taskID uuid.UUID,
+	claimID uuid.UUID,
+) ([]CriterionWithCurrentCheck, error) {
+	return s.list(ctx, `ac.task_id=$1`, taskID, &claimID)
+}
+
+func (s *AcceptanceStore) list(
+	ctx context.Context,
+	predicate string,
+	ownerID uuid.UUID,
+	claimID *uuid.UUID,
+) ([]CriterionWithCurrentCheck, error) {
 	rows, err := s.db.Pool.Query(ctx, `
 		SELECT `+criterionColumns+`,
 			ch.id, ch.criterion_revision, ch.outcome, ch.evidence,
@@ -147,11 +160,12 @@ func (s *AcceptanceStore) list(ctx context.Context, predicate string, ownerID uu
 			SELECT *
 			FROM acceptance_checks candidate
 			WHERE candidate.criterion_id=ac.id AND candidate.criterion_revision=ac.revision
+				AND ($2::uuid IS NULL OR candidate.task_stage_claim_id=$2)
 			ORDER BY candidate.checked_at DESC, candidate.id DESC
 			LIMIT 1
 		) ch ON true
 		WHERE `+predicate+` AND ac.archived_at IS NULL
-		ORDER BY ac.position, ac.created_at, ac.id`, ownerID)
+		ORDER BY ac.position, ac.created_at, ac.id`, ownerID, claimID)
 	if err != nil {
 		return nil, fmt.Errorf("list acceptance criteria: %w", err)
 	}

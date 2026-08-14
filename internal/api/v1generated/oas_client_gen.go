@@ -184,6 +184,12 @@ type Invoker interface {
 	//
 	// GET /api/v1/agent-conversations/{id}
 	GetAgentConversation(ctx context.Context, params GetAgentConversationParams) (GetAgentConversationRes, error)
+	// GetClaimWorkPacket invokes getClaimWorkPacket operation.
+	//
+	// Get bounded authoritative context for one explicit Claim.
+	//
+	// GET /api/v1/claims/{claim_id}/work-packet
+	GetClaimWorkPacket(ctx context.Context, params GetClaimWorkPacketParams) (GetClaimWorkPacketRes, error)
 	// GetCurrentAgentConversationConfiguration invokes getCurrentAgentConversationConfiguration operation.
 	//
 	// Get the conversation configuration bound to the authenticated Agent Run.
@@ -226,6 +232,12 @@ type Invoker interface {
 	//
 	// GET /api/v1/claims/{claim_id}
 	GetTaskStageClaim(ctx context.Context, params GetTaskStageClaimParams) (GetTaskStageClaimRes, error)
+	// GetTaskWorkPacket invokes getTaskWorkPacket operation.
+	//
+	// Get bounded authoritative context for a Task before claiming it.
+	//
+	// GET /api/v1/tasks/{number}/work-packet
+	GetTaskWorkPacket(ctx context.Context, params GetTaskWorkPacketParams) (GetTaskWorkPacketRes, error)
 	// LinkTaskMergeRequest invokes linkTaskMergeRequest operation.
 	//
 	// Link a GitLab merge request during claimed execution.
@@ -5132,6 +5144,165 @@ func (c *Client) sendGetAgentConversation(ctx context.Context, params GetAgentCo
 	return result, nil
 }
 
+// GetClaimWorkPacket invokes getClaimWorkPacket operation.
+//
+// Get bounded authoritative context for one explicit Claim.
+//
+// GET /api/v1/claims/{claim_id}/work-packet
+func (c *Client) GetClaimWorkPacket(ctx context.Context, params GetClaimWorkPacketParams) (GetClaimWorkPacketRes, error) {
+	res, err := c.sendGetClaimWorkPacket(ctx, params)
+	return res, err
+}
+
+func (c *Client) sendGetClaimWorkPacket(ctx context.Context, params GetClaimWorkPacketParams) (res GetClaimWorkPacketRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("getClaimWorkPacket"),
+		semconv.HTTPRequestMethodKey.String("GET"),
+		semconv.URLTemplateKey.String("/api/v1/claims/{claim_id}/work-packet"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, GetClaimWorkPacketOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [3]string
+	pathParts[0] = "/api/v1/claims/"
+	{
+		// Encode "claim_id" parameter.
+		e := uri.NewPathEncoder(uri.PathEncoderConfig{
+			Param:   "claim_id",
+			Style:   uri.PathStyleSimple,
+			Explode: false,
+		})
+		if err := func() error {
+			return e.EncodeValue(conv.UUIDToString(params.ClaimID))
+		}(); err != nil {
+			return res, errors.Wrap(err, "encode path")
+		}
+		encoded, err := e.Result()
+		if err != nil {
+			return res, errors.Wrap(err, "encode path")
+		}
+		pathParts[1] = encoded
+	}
+	pathParts[2] = "/work-packet"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeQueryParams"
+	q := uri.NewQueryEncoder()
+	{
+		// Encode "thread_items_limit" parameter.
+		cfg := uri.QueryParameterEncodingConfig{
+			Name:    "thread_items_limit",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.ThreadItemsLimit.Get(); ok {
+				return e.EncodeValue(conv.IntToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode query")
+		}
+	}
+	u.RawQuery = q.Values().Encode()
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "GET", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+
+	{
+		type bitset = [1]uint8
+		var satisfied bitset
+		{
+			stage = "Security:BearerAuth"
+			switch err := c.securityBearerAuth(ctx, GetClaimWorkPacketOperation, r); {
+			case err == nil: // if NO error
+				satisfied[0] |= 1 << 0
+			case errors.Is(err, ogenerrors.ErrSkipClientSecurity):
+				// Skip this security.
+			default:
+				return res, errors.Wrap(err, "security \"BearerAuth\"")
+			}
+		}
+		{
+			stage = "Security:SessionCookie"
+			switch err := c.securitySessionCookie(ctx, GetClaimWorkPacketOperation, r); {
+			case err == nil: // if NO error
+				satisfied[0] |= 1 << 1
+			case errors.Is(err, ogenerrors.ErrSkipClientSecurity):
+				// Skip this security.
+			default:
+				return res, errors.Wrap(err, "security \"SessionCookie\"")
+			}
+		}
+
+		if ok := func() bool {
+		nextRequirement:
+			for _, requirement := range []bitset{
+				{0b00000001},
+				{0b00000010},
+			} {
+				for i, mask := range requirement {
+					if satisfied[i]&mask != mask {
+						continue nextRequirement
+					}
+				}
+				return true
+			}
+			return false
+		}(); !ok {
+			return res, ogenerrors.ErrSecurityRequirementIsNotSatisfied
+		}
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer body.Close()
+
+	stage = "DecodeResponse"
+	result, err := decodeGetClaimWorkPacketResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
 // GetCurrentAgentConversationConfiguration invokes getCurrentAgentConversationConfiguration operation.
 //
 // Get the conversation configuration bound to the authenticated Agent Run.
@@ -6078,6 +6249,165 @@ func (c *Client) sendGetTaskStageClaim(ctx context.Context, params GetTaskStageC
 
 	stage = "DecodeResponse"
 	result, err := decodeGetTaskStageClaimResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
+// GetTaskWorkPacket invokes getTaskWorkPacket operation.
+//
+// Get bounded authoritative context for a Task before claiming it.
+//
+// GET /api/v1/tasks/{number}/work-packet
+func (c *Client) GetTaskWorkPacket(ctx context.Context, params GetTaskWorkPacketParams) (GetTaskWorkPacketRes, error) {
+	res, err := c.sendGetTaskWorkPacket(ctx, params)
+	return res, err
+}
+
+func (c *Client) sendGetTaskWorkPacket(ctx context.Context, params GetTaskWorkPacketParams) (res GetTaskWorkPacketRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("getTaskWorkPacket"),
+		semconv.HTTPRequestMethodKey.String("GET"),
+		semconv.URLTemplateKey.String("/api/v1/tasks/{number}/work-packet"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, GetTaskWorkPacketOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [3]string
+	pathParts[0] = "/api/v1/tasks/"
+	{
+		// Encode "number" parameter.
+		e := uri.NewPathEncoder(uri.PathEncoderConfig{
+			Param:   "number",
+			Style:   uri.PathStyleSimple,
+			Explode: false,
+		})
+		if err := func() error {
+			return e.EncodeValue(conv.Int64ToString(params.Number))
+		}(); err != nil {
+			return res, errors.Wrap(err, "encode path")
+		}
+		encoded, err := e.Result()
+		if err != nil {
+			return res, errors.Wrap(err, "encode path")
+		}
+		pathParts[1] = encoded
+	}
+	pathParts[2] = "/work-packet"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeQueryParams"
+	q := uri.NewQueryEncoder()
+	{
+		// Encode "thread_items_limit" parameter.
+		cfg := uri.QueryParameterEncodingConfig{
+			Name:    "thread_items_limit",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.ThreadItemsLimit.Get(); ok {
+				return e.EncodeValue(conv.IntToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode query")
+		}
+	}
+	u.RawQuery = q.Values().Encode()
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "GET", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+
+	{
+		type bitset = [1]uint8
+		var satisfied bitset
+		{
+			stage = "Security:BearerAuth"
+			switch err := c.securityBearerAuth(ctx, GetTaskWorkPacketOperation, r); {
+			case err == nil: // if NO error
+				satisfied[0] |= 1 << 0
+			case errors.Is(err, ogenerrors.ErrSkipClientSecurity):
+				// Skip this security.
+			default:
+				return res, errors.Wrap(err, "security \"BearerAuth\"")
+			}
+		}
+		{
+			stage = "Security:SessionCookie"
+			switch err := c.securitySessionCookie(ctx, GetTaskWorkPacketOperation, r); {
+			case err == nil: // if NO error
+				satisfied[0] |= 1 << 1
+			case errors.Is(err, ogenerrors.ErrSkipClientSecurity):
+				// Skip this security.
+			default:
+				return res, errors.Wrap(err, "security \"SessionCookie\"")
+			}
+		}
+
+		if ok := func() bool {
+		nextRequirement:
+			for _, requirement := range []bitset{
+				{0b00000001},
+				{0b00000010},
+			} {
+				for i, mask := range requirement {
+					if satisfied[i]&mask != mask {
+						continue nextRequirement
+					}
+				}
+				return true
+			}
+			return false
+		}(); !ok {
+			return res, ogenerrors.ErrSecurityRequirementIsNotSatisfied
+		}
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer body.Close()
+
+	stage = "DecodeResponse"
+	result, err := decodeGetTaskWorkPacketResponse(resp)
 	if err != nil {
 		return res, errors.Wrap(err, "decode response")
 	}
@@ -8486,6 +8816,23 @@ func (c *Client) sendListTasks(ctx context.Context, params ListTasksParams) (res
 					}
 					return nil
 				})
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode query")
+		}
+	}
+	{
+		// Encode "claimable_stage" parameter.
+		cfg := uri.QueryParameterEncodingConfig{
+			Name:    "claimable_stage",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.ClaimableStage.Get(); ok {
+				return e.EncodeValue(conv.StringToString(string(val)))
 			}
 			return nil
 		}); err != nil {

@@ -169,3 +169,185 @@ func TestContentRequiresOneExplicitSource(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "from stdin", value)
 }
+
+func TestCapabilitiesIsOfflineAndStable(t *testing.T) {
+	t.Setenv("PACTLINE_CONFIG", filepath.Join(t.TempDir(), "missing.json"))
+	var stdout, stderr bytes.Buffer
+	code := ExecuteArgs(context.Background(), []string{"--json", "capabilities"}, strings.NewReader(""), &stdout, &stderr)
+	require.Zero(t, code, stderr.String())
+	var envelope struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Protocol   int      `json:"protocol"`
+			CLIVersion string   `json:"cli_version"`
+			Features   []string `json:"features"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &envelope))
+	require.True(t, envelope.OK)
+	require.Equal(t, 1, envelope.Data.Protocol)
+	require.Equal(t, Version, envelope.Data.CLIVersion)
+	require.Equal(t, []string{
+		"bounded_work_packets", "claim_progress", "claim_release", "execution_claims",
+		"execution_completion", "execution_verification", "gitlab_merge_request_links",
+		"repeatable_submission", "resolution_request", "success_metadata",
+	}, envelope.Data.Features)
+}
+
+func TestJSONSuccessIncludesAvailableResponseMetadata(t *testing.T) {
+	const claimID = "4e8c59cf-0af4-4af4-a55d-f2d2f930771c"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "fixed-key", r.Header.Get("Idempotency-Key"))
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Request-ID", "req-success")
+		w.Header().Set("ETag", `"7"`)
+		_, _ = io.WriteString(w, `{}`)
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv("PACTLINE_CONFIG", filepath.Join(t.TempDir(), "missing.json"))
+	t.Setenv("PACTLINE_SERVER", server.URL)
+	t.Setenv("PACTLINE_TOKEN", "token-a")
+	t.Setenv("PACTLINE_SESSION_ID", "session-a")
+	var stdout, stderr bytes.Buffer
+	code := ExecuteArgs(context.Background(), []string{
+		"--json", "--idempotency-key", "fixed-key", "claim", "progress", claimID, "--message", "working",
+	}, strings.NewReader(""), &stdout, &stderr)
+	require.Zero(t, code, stderr.String())
+	var envelope struct {
+		Meta responseMeta `json:"meta"`
+	}
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &envelope))
+	require.Equal(t, responseMeta{RequestID: "req-success", ETag: `"7"`, IdempotencyKey: "fixed-key"}, envelope.Meta)
+}
+
+func TestTaskListUsesServerClaimableStageFilters(t *testing.T) {
+	var requests []*http.Request
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.Clone(r.Context()))
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/api/v1/me" {
+			_, _ = io.WriteString(w, `{"subject":{"id":"6a214c32-788d-423b-81cf-dac976e9c686"}}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"items":[]}`)
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv("PACTLINE_CONFIG", filepath.Join(t.TempDir(), "missing.json"))
+	t.Setenv("PACTLINE_SERVER", server.URL)
+	t.Setenv("PACTLINE_TOKEN", "token-a")
+
+	var stdout, stderr bytes.Buffer
+	code := ExecuteArgs(context.Background(), []string{"task", "list", "--project", "12", "--limit", "7"}, strings.NewReader(""), &stdout, &stderr)
+	require.Zero(t, code, stderr.String())
+	require.Len(t, requests, 2)
+	execution := requests[1].URL.Query()
+	require.Equal(t, "execution", execution.Get("claimable_stage"))
+	require.Equal(t, "6a214c32-788d-423b-81cf-dac976e9c686", execution.Get("assignee"))
+	require.Equal(t, "12", execution.Get("project_number"))
+	require.Equal(t, "7", execution.Get("limit"))
+	require.Equal(t, "number", execution.Get("sort"))
+	require.Equal(t, "asc", execution.Get("order"))
+
+	requests = nil
+	stdout.Reset()
+	stderr.Reset()
+	code = ExecuteArgs(context.Background(), []string{"task", "list", "--stage", "review"}, strings.NewReader(""), &stdout, &stderr)
+	require.Zero(t, code, stderr.String())
+	require.Len(t, requests, 1)
+	review := requests[0].URL.Query()
+	require.Equal(t, "review", review.Get("claimable_stage"))
+	require.Empty(t, review.Get("assignee"))
+}
+
+func TestCompactClaimShowUsesOneBoundedEndpoint(t *testing.T) {
+	const claimID = "4e8c59cf-0af4-4af4-a55d-f2d2f930771c"
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		require.Equal(t, "/api/v1/claims/"+claimID+"/work-packet", r.URL.Path)
+		require.Equal(t, "3", r.URL.Query().Get("thread_items_limit"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"task":{"number":142,"title":"Compact","version":4,"phase":"in_progress","context":"ctx","expected_result":"done"},"claim":{"id":"`+claimID+`","stage":"execution","status":"active"},"criteria":[],"delivery":{"active_links":[]},"main_thread":{"thread":{},"items":[],"total_count":0,"returned_count":0,"truncated":false},"resolved_issue_thread_count":0}`)
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv("PACTLINE_CONFIG", filepath.Join(t.TempDir(), "missing.json"))
+	t.Setenv("PACTLINE_SERVER", server.URL)
+	t.Setenv("PACTLINE_TOKEN", "token-a")
+	var stdout, stderr bytes.Buffer
+	code := ExecuteArgs(context.Background(), []string{"claim", "show", claimID, "--compact", "--thread-items-limit", "3"}, strings.NewReader(""), &stdout, &stderr)
+	require.Zero(t, code, stderr.String())
+	require.Equal(t, 1, requests)
+	require.Contains(t, stdout.String(), "Main Thread: 0/0 items")
+}
+
+func TestClaimMergeRequestLinkUsesExplicitClaimAndVersion(t *testing.T) {
+	const claimID = "4e8c59cf-0af4-4af4-a55d-f2d2f930771c"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodPost, r.Method)
+		require.Equal(t, "/api/v1/claims/"+claimID+"/merge-requests", r.URL.Path)
+		require.Equal(t, `"9"`, r.Header.Get("If-Match"))
+		require.NotEmpty(t, r.Header.Get("Idempotency-Key"))
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		require.Equal(t, "https://gitlab.example/team/repo/-/merge_requests/42", body["merge_request_url"])
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{}`)
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv("PACTLINE_CONFIG", filepath.Join(t.TempDir(), "missing.json"))
+	t.Setenv("PACTLINE_SERVER", server.URL)
+	t.Setenv("PACTLINE_TOKEN", "token-a")
+	t.Setenv("PACTLINE_SESSION_ID", "session-a")
+	var stdout, stderr bytes.Buffer
+	code := ExecuteArgs(context.Background(), []string{
+		"claim", "mr", "link", claimID,
+		"--url", "https://gitlab.example/team/repo/-/merge_requests/42", "--task-version", "9",
+	}, strings.NewReader(""), &stdout, &stderr)
+	require.Zero(t, code, stderr.String())
+	require.Contains(t, stdout.String(), "Merge Request linked")
+}
+
+func TestClaimMergeRequestListAndUnlinkUseClaimAssociation(t *testing.T) {
+	const claimID = "4e8c59cf-0af4-4af4-a55d-f2d2f930771c"
+	const linkID = "f2e497d1-c860-482b-918f-c7de8006c788"
+	var paths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.Method+" "+r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/claims/"+claimID:
+			_, _ = io.WriteString(w, `{"id":"`+claimID+`","task_number":142,"stage":"execution","status":"active","version":1}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/tasks/142/merge-requests":
+			_, _ = io.WriteString(w, `{"active_links":[{"id":"`+linkID+`","web_url":"https://gitlab.example/team/repo/-/merge_requests/42","latest_observation":{"state":"opened"}}]}`)
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/v1/claims/"+claimID+"/merge-requests/"+linkID:
+			require.Equal(t, `"9"`, r.Header.Get("If-Match"))
+			require.NotEmpty(t, r.Header.Get("Idempotency-Key"))
+			_, _ = io.WriteString(w, `{}`)
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv("PACTLINE_CONFIG", filepath.Join(t.TempDir(), "missing.json"))
+	t.Setenv("PACTLINE_SERVER", server.URL)
+	t.Setenv("PACTLINE_TOKEN", "token-a")
+	t.Setenv("PACTLINE_SESSION_ID", "session-a")
+
+	var stdout, stderr bytes.Buffer
+	code := ExecuteArgs(context.Background(), []string{"claim", "mr", "list", claimID}, strings.NewReader(""), &stdout, &stderr)
+	require.Zero(t, code, stderr.String())
+	require.Contains(t, stdout.String(), linkID)
+	require.Equal(t, []string{
+		"GET /api/v1/claims/" + claimID,
+		"GET /api/v1/tasks/142/merge-requests",
+	}, paths)
+
+	paths = nil
+	stdout.Reset()
+	stderr.Reset()
+	code = ExecuteArgs(context.Background(), []string{
+		"claim", "mr", "unlink", claimID, linkID, "--task-version", "9",
+	}, strings.NewReader(""), &stdout, &stderr)
+	require.Zero(t, code, stderr.String())
+	require.Equal(t, []string{"DELETE /api/v1/claims/" + claimID + "/merge-requests/" + linkID}, paths)
+}

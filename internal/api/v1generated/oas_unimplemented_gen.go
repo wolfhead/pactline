@@ -247,6 +247,15 @@ func (UnimplementedHandler) GetAgentConversation(ctx context.Context, params Get
 	return r, ht.ErrNotImplemented
 }
 
+// GetClaimWorkPacket implements getClaimWorkPacket operation.
+//
+// Get bounded authoritative context for one explicit Claim.
+//
+// GET /api/v1/claims/{claim_id}/work-packet
+func (UnimplementedHandler) GetClaimWorkPacket(ctx context.Context, params GetClaimWorkPacketParams) (r GetClaimWorkPacketRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetCurrentAgentConversationConfiguration implements getCurrentAgentConversationConfiguration operation.
 //
 // Get the conversation configuration bound to the authenticated Agent Run.
@@ -307,6 +316,15 @@ func (UnimplementedHandler) GetTaskDelivery(ctx context.Context, params GetTaskD
 //
 // GET /api/v1/claims/{claim_id}
 func (UnimplementedHandler) GetTaskStageClaim(ctx context.Context, params GetTaskStageClaimParams) (r GetTaskStageClaimRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetTaskWorkPacket implements getTaskWorkPacket operation.
+//
+// Get bounded authoritative context for a Task before claiming it.
+//
+// GET /api/v1/tasks/{number}/work-packet
+func (UnimplementedHandler) GetTaskWorkPacket(ctx context.Context, params GetTaskWorkPacketParams) (r GetTaskWorkPacketRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

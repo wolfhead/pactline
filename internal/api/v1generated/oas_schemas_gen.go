@@ -1011,6 +1011,185 @@ func (s *BodyWrite) SetBody(val string) {
 	s.Body = val
 }
 
+// Ref: #/components/schemas/ClaimWorkPacket
+type ClaimWorkPacket struct {
+	Task                     Task                  `json:"task"`
+	Claim                    TaskStageClaim        `json:"claim"`
+	Criteria                 []AcceptanceCriterion `json:"criteria"`
+	Delivery                 TaskDelivery          `json:"delivery"`
+	MainThread               CompactThread         `json:"main_thread"`
+	ActiveIssueThread        OptCompactThread      `json:"active_issue_thread"`
+	ResolvedIssueThreadCount int                   `json:"resolved_issue_thread_count"`
+}
+
+// GetTask returns the value of Task.
+func (s *ClaimWorkPacket) GetTask() Task {
+	return s.Task
+}
+
+// GetClaim returns the value of Claim.
+func (s *ClaimWorkPacket) GetClaim() TaskStageClaim {
+	return s.Claim
+}
+
+// GetCriteria returns the value of Criteria.
+func (s *ClaimWorkPacket) GetCriteria() []AcceptanceCriterion {
+	return s.Criteria
+}
+
+// GetDelivery returns the value of Delivery.
+func (s *ClaimWorkPacket) GetDelivery() TaskDelivery {
+	return s.Delivery
+}
+
+// GetMainThread returns the value of MainThread.
+func (s *ClaimWorkPacket) GetMainThread() CompactThread {
+	return s.MainThread
+}
+
+// GetActiveIssueThread returns the value of ActiveIssueThread.
+func (s *ClaimWorkPacket) GetActiveIssueThread() OptCompactThread {
+	return s.ActiveIssueThread
+}
+
+// GetResolvedIssueThreadCount returns the value of ResolvedIssueThreadCount.
+func (s *ClaimWorkPacket) GetResolvedIssueThreadCount() int {
+	return s.ResolvedIssueThreadCount
+}
+
+// SetTask sets the value of Task.
+func (s *ClaimWorkPacket) SetTask(val Task) {
+	s.Task = val
+}
+
+// SetClaim sets the value of Claim.
+func (s *ClaimWorkPacket) SetClaim(val TaskStageClaim) {
+	s.Claim = val
+}
+
+// SetCriteria sets the value of Criteria.
+func (s *ClaimWorkPacket) SetCriteria(val []AcceptanceCriterion) {
+	s.Criteria = val
+}
+
+// SetDelivery sets the value of Delivery.
+func (s *ClaimWorkPacket) SetDelivery(val TaskDelivery) {
+	s.Delivery = val
+}
+
+// SetMainThread sets the value of MainThread.
+func (s *ClaimWorkPacket) SetMainThread(val CompactThread) {
+	s.MainThread = val
+}
+
+// SetActiveIssueThread sets the value of ActiveIssueThread.
+func (s *ClaimWorkPacket) SetActiveIssueThread(val OptCompactThread) {
+	s.ActiveIssueThread = val
+}
+
+// SetResolvedIssueThreadCount sets the value of ResolvedIssueThreadCount.
+func (s *ClaimWorkPacket) SetResolvedIssueThreadCount(val int) {
+	s.ResolvedIssueThreadCount = val
+}
+
+// ClaimWorkPacketHeaders wraps ClaimWorkPacket with response headers.
+type ClaimWorkPacketHeaders struct {
+	Etag       OptString
+	XRequestID OptString
+	Response   ClaimWorkPacket
+}
+
+// GetEtag returns the value of Etag.
+func (s *ClaimWorkPacketHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *ClaimWorkPacketHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *ClaimWorkPacketHeaders) GetResponse() ClaimWorkPacket {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *ClaimWorkPacketHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *ClaimWorkPacketHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *ClaimWorkPacketHeaders) SetResponse(val ClaimWorkPacket) {
+	s.Response = val
+}
+
+func (*ClaimWorkPacketHeaders) getClaimWorkPacketRes() {}
+
+// Ref: #/components/schemas/CompactThread
+type CompactThread struct {
+	Thread        TaskThread       `json:"thread"`
+	Items         []TaskThreadItem `json:"items"`
+	TotalCount    int              `json:"total_count"`
+	ReturnedCount int              `json:"returned_count"`
+	Truncated     bool             `json:"truncated"`
+}
+
+// GetThread returns the value of Thread.
+func (s *CompactThread) GetThread() TaskThread {
+	return s.Thread
+}
+
+// GetItems returns the value of Items.
+func (s *CompactThread) GetItems() []TaskThreadItem {
+	return s.Items
+}
+
+// GetTotalCount returns the value of TotalCount.
+func (s *CompactThread) GetTotalCount() int {
+	return s.TotalCount
+}
+
+// GetReturnedCount returns the value of ReturnedCount.
+func (s *CompactThread) GetReturnedCount() int {
+	return s.ReturnedCount
+}
+
+// GetTruncated returns the value of Truncated.
+func (s *CompactThread) GetTruncated() bool {
+	return s.Truncated
+}
+
+// SetThread sets the value of Thread.
+func (s *CompactThread) SetThread(val TaskThread) {
+	s.Thread = val
+}
+
+// SetItems sets the value of Items.
+func (s *CompactThread) SetItems(val []TaskThreadItem) {
+	s.Items = val
+}
+
+// SetTotalCount sets the value of TotalCount.
+func (s *CompactThread) SetTotalCount(val int) {
+	s.TotalCount = val
+}
+
+// SetReturnedCount sets the value of ReturnedCount.
+func (s *CompactThread) SetReturnedCount(val int) {
+	s.ReturnedCount = val
+}
+
+// SetTruncated sets the value of Truncated.
+func (s *CompactThread) SetTruncated(val bool) {
+	s.Truncated = val
+}
+
 // Ref: #/components/schemas/CriterionCreate
 type CriterionCreate struct {
 	Criterion                string `json:"criterion"`
@@ -3691,6 +3870,52 @@ func (o OptBool) Or(d bool) bool {
 	return d
 }
 
+// NewOptCompactThread returns new OptCompactThread with value set to v.
+func NewOptCompactThread(v CompactThread) OptCompactThread {
+	return OptCompactThread{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptCompactThread is optional CompactThread.
+type OptCompactThread struct {
+	Value CompactThread
+	Set   bool
+}
+
+// IsSet returns true if OptCompactThread was set.
+func (o OptCompactThread) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptCompactThread) Reset() {
+	var v CompactThread
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptCompactThread) SetTo(v CompactThread) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptCompactThread) Get() (v CompactThread, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptCompactThread) Or(d CompactThread) CompactThread {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptDate returns new OptDate with value set to v.
 func NewOptDate(v time.Time) OptDate {
 	return OptDate{
@@ -5847,6 +6072,7 @@ func (*ProblemStatusCodeWithHeaders) deleteLabelRes()                           
 func (*ProblemStatusCodeWithHeaders) deleteTaskAttachmentRes()                        {}
 func (*ProblemStatusCodeWithHeaders) deleteTaskThreadMessageRes()                     {}
 func (*ProblemStatusCodeWithHeaders) getAgentConversationRes()                        {}
+func (*ProblemStatusCodeWithHeaders) getClaimWorkPacketRes()                          {}
 func (*ProblemStatusCodeWithHeaders) getCurrentAgentConversationConfigurationRes()    {}
 func (*ProblemStatusCodeWithHeaders) getCurrentPrincipalRes()                         {}
 func (*ProblemStatusCodeWithHeaders) getProjectRes()                                  {}
@@ -5854,6 +6080,7 @@ func (*ProblemStatusCodeWithHeaders) getTaskAttachmentContentRes()              
 func (*ProblemStatusCodeWithHeaders) getTaskDeliveryRes()                             {}
 func (*ProblemStatusCodeWithHeaders) getTaskRes()                                     {}
 func (*ProblemStatusCodeWithHeaders) getTaskStageClaimRes()                           {}
+func (*ProblemStatusCodeWithHeaders) getTaskWorkPacketRes()                           {}
 func (*ProblemStatusCodeWithHeaders) linkTaskMergeRequestRes()                        {}
 func (*ProblemStatusCodeWithHeaders) listAgentConversationsRes()                      {}
 func (*ProblemStatusCodeWithHeaders) listLabelsRes()                                  {}
@@ -11400,6 +11627,115 @@ func (s *TaskThreadRole) UnmarshalText(data []byte) error {
 		return errors.Errorf("invalid value: %q", data)
 	}
 }
+
+// Ref: #/components/schemas/TaskWorkPacket
+type TaskWorkPacket struct {
+	Task                     Task                  `json:"task"`
+	Criteria                 []AcceptanceCriterion `json:"criteria"`
+	Delivery                 TaskDelivery          `json:"delivery"`
+	MainThread               CompactThread         `json:"main_thread"`
+	ActiveIssueThread        OptCompactThread      `json:"active_issue_thread"`
+	ResolvedIssueThreadCount int                   `json:"resolved_issue_thread_count"`
+}
+
+// GetTask returns the value of Task.
+func (s *TaskWorkPacket) GetTask() Task {
+	return s.Task
+}
+
+// GetCriteria returns the value of Criteria.
+func (s *TaskWorkPacket) GetCriteria() []AcceptanceCriterion {
+	return s.Criteria
+}
+
+// GetDelivery returns the value of Delivery.
+func (s *TaskWorkPacket) GetDelivery() TaskDelivery {
+	return s.Delivery
+}
+
+// GetMainThread returns the value of MainThread.
+func (s *TaskWorkPacket) GetMainThread() CompactThread {
+	return s.MainThread
+}
+
+// GetActiveIssueThread returns the value of ActiveIssueThread.
+func (s *TaskWorkPacket) GetActiveIssueThread() OptCompactThread {
+	return s.ActiveIssueThread
+}
+
+// GetResolvedIssueThreadCount returns the value of ResolvedIssueThreadCount.
+func (s *TaskWorkPacket) GetResolvedIssueThreadCount() int {
+	return s.ResolvedIssueThreadCount
+}
+
+// SetTask sets the value of Task.
+func (s *TaskWorkPacket) SetTask(val Task) {
+	s.Task = val
+}
+
+// SetCriteria sets the value of Criteria.
+func (s *TaskWorkPacket) SetCriteria(val []AcceptanceCriterion) {
+	s.Criteria = val
+}
+
+// SetDelivery sets the value of Delivery.
+func (s *TaskWorkPacket) SetDelivery(val TaskDelivery) {
+	s.Delivery = val
+}
+
+// SetMainThread sets the value of MainThread.
+func (s *TaskWorkPacket) SetMainThread(val CompactThread) {
+	s.MainThread = val
+}
+
+// SetActiveIssueThread sets the value of ActiveIssueThread.
+func (s *TaskWorkPacket) SetActiveIssueThread(val OptCompactThread) {
+	s.ActiveIssueThread = val
+}
+
+// SetResolvedIssueThreadCount sets the value of ResolvedIssueThreadCount.
+func (s *TaskWorkPacket) SetResolvedIssueThreadCount(val int) {
+	s.ResolvedIssueThreadCount = val
+}
+
+// TaskWorkPacketHeaders wraps TaskWorkPacket with response headers.
+type TaskWorkPacketHeaders struct {
+	Etag       OptString
+	XRequestID OptString
+	Response   TaskWorkPacket
+}
+
+// GetEtag returns the value of Etag.
+func (s *TaskWorkPacketHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskWorkPacketHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskWorkPacketHeaders) GetResponse() TaskWorkPacket {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *TaskWorkPacketHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskWorkPacketHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskWorkPacketHeaders) SetResponse(val TaskWorkPacket) {
+	s.Response = val
+}
+
+func (*TaskWorkPacketHeaders) getTaskWorkPacketRes() {}
 
 // Ref: #/components/schemas/TaskWorkSubmissionCommand
 type TaskWorkSubmissionCommand struct {

@@ -164,6 +164,12 @@ type Handler interface {
 	//
 	// GET /api/v1/agent-conversations/{id}
 	GetAgentConversation(ctx context.Context, params GetAgentConversationParams) (GetAgentConversationRes, error)
+	// GetClaimWorkPacket implements getClaimWorkPacket operation.
+	//
+	// Get bounded authoritative context for one explicit Claim.
+	//
+	// GET /api/v1/claims/{claim_id}/work-packet
+	GetClaimWorkPacket(ctx context.Context, params GetClaimWorkPacketParams) (GetClaimWorkPacketRes, error)
 	// GetCurrentAgentConversationConfiguration implements getCurrentAgentConversationConfiguration operation.
 	//
 	// Get the conversation configuration bound to the authenticated Agent Run.
@@ -206,6 +212,12 @@ type Handler interface {
 	//
 	// GET /api/v1/claims/{claim_id}
 	GetTaskStageClaim(ctx context.Context, params GetTaskStageClaimParams) (GetTaskStageClaimRes, error)
+	// GetTaskWorkPacket implements getTaskWorkPacket operation.
+	//
+	// Get bounded authoritative context for a Task before claiming it.
+	//
+	// GET /api/v1/tasks/{number}/work-packet
+	GetTaskWorkPacket(ctx context.Context, params GetTaskWorkPacketParams) (GetTaskWorkPacketRes, error)
 	// LinkTaskMergeRequest implements linkTaskMergeRequest operation.
 	//
 	// Link a GitLab merge request during claimed execution.

@@ -162,6 +162,11 @@ func main() {
 		Cipher:        credentialCipher,
 		Now:           time.Now,
 	}
+	taskThreadStore := store.NewTaskThreadStore(db)
+	taskWorkPacketService := &application.TaskWorkPacketService{
+		Access: projectAccess, Acceptance: acceptance, Threads: taskThreadStore,
+		Delivery: taskDeliveryService,
+	}
 	maintenanceContext, stopMaintenance := context.WithCancel(context.Background())
 	defer stopMaintenance()
 	go (application.Maintenance{Store: accessAuditStore}).Run(maintenanceContext)
@@ -250,11 +255,12 @@ func main() {
 		},
 		Workflow:            store.NewTaskWorkflowStore(db),
 		StageClaims:         store.NewTaskStageClaimStore(db),
-		Threads:             store.NewTaskThreadStore(db),
+		Threads:             taskThreadStore,
 		Labels:              &application.LabelService{Labels: labels},
 		Projects:            projectService,
 		ProjectRepositories: projectRepositoryService,
 		Delivery:            taskDeliveryService,
+		WorkPackets:         taskWorkPacketService,
 		Access:              projectAccess,
 		Attachments:         attachmentService,
 		AgentConversations:  agentConversationService,

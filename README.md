@@ -124,6 +124,11 @@ Pactline ships a standalone CGO-free CLI for the execution flow from Task
 discovery through `in_review`. Its independent installation and command guide
 is [`cmd/pactline/README.md`](cmd/pactline/README.md).
 
+External Harnesses can inspect `pactline capabilities --json`, discover
+stage-aware bounded queues, and read one server-aggregated compact work packet
+for a Task or explicit Claim. GitLab Merge Request delivery is linked through
+Claim-centric CLI commands; repository workers do not need the Pactline Token.
+
 Create an executor-scoped personal Token in the account UI, install the CLI or
 the `pactline-work` Codex skill, and keep developer-specific Project/repository
 mapping outside this repository.

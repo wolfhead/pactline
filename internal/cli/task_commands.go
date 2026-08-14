@@ -29,80 +29,119 @@ type taskPage struct {
 }
 
 func (a *App) taskCommand() *cobra.Command {
-	command := &cobra.Command{Use: "task", Short: "Discover and claim execution Tasks"}
+	command := &cobra.Command{Use: "task", Short: "Discover claimable Tasks and start execution"}
 	command.AddCommand(a.taskListCommand(), a.taskShowCommand(), a.taskClaimCommand())
 	return command
 }
 
 func (a *App) taskListCommand() *cobra.Command {
-	return &cobra.Command{
-		Use: "list", Short: "List execution Tasks assigned to you and ready to claim",
-		Long: "Lists assigned Tasks in ready or in_progress.available. Review work is intentionally omitted from CLI v0.1.",
+	var stage string
+	var projectNumber int64
+	var limit int
+	command := &cobra.Command{
+		Use: "list", Short: "List Tasks currently available for a Claim",
+		Long: "Execution discovery is assigned to you. Review discovery is Project-visible because Task assignee is not reviewer assignment. Discovery never claims work.",
 		Args: cobra.NoArgs, RunE: func(command *cobra.Command, _ []string) error {
-			principalBody, _, err := a.client.request(command.Context(), http.MethodGet, "/api/v1/me", nil, 0, "", false)
-			if err != nil {
-				return err
+			if stage != "execution" && stage != "review" {
+				return &APIError{Code: "USAGE", Message: "--stage must be execution or review"}
 			}
-			var principal struct {
-				Subject struct {
-					ID string `json:"id"`
-				} `json:"subject"`
+			if limit < 1 || limit > 200 {
+				return &APIError{Code: "USAGE", Message: "--limit must be between 1 and 200"}
 			}
-			if err := json.Unmarshal(principalBody, &principal); err != nil {
-				return err
+			if command.Flags().Changed("project") && projectNumber < 1 {
+				return &APIError{Code: "USAGE", Message: "--project must be a positive integer"}
 			}
-			query := url.Values{"limit": {"200"}, "assignee": {principal.Subject.ID}, "archived": {"exclude"}}
-			allTasks := []taskSummary{}
-			for {
-				body, _, err := a.client.request(command.Context(), http.MethodGet, "/api/v1/tasks?"+query.Encode(), nil, 0, "", false)
+			query := url.Values{
+				"limit": {fmt.Sprint(limit)}, "archived": {"exclude"},
+				"claimable_stage": {stage}, "sort": {"number"}, "order": {"asc"},
+			}
+			if projectNumber > 0 {
+				query.Set("project_number", fmt.Sprint(projectNumber))
+			}
+			if stage == "execution" {
+				principalBody, _, err := a.client.request(command.Context(), http.MethodGet, "/api/v1/me", nil, 0, "", false)
 				if err != nil {
 					return err
 				}
-				var page taskPage
-				if err := json.Unmarshal(body, &page); err != nil {
+				var principal struct {
+					Subject struct {
+						ID string `json:"id"`
+					} `json:"subject"`
+				}
+				if err := json.Unmarshal(principalBody, &principal); err != nil {
 					return err
 				}
-				allTasks = append(allTasks, page.Items...)
-				if page.NextCursor == "" {
-					break
-				}
-				query.Set("cursor", page.NextCursor)
+				query.Set("assignee", principal.Subject.ID)
 			}
-			filtered := make([]taskSummary, 0, len(allTasks))
-			for _, task := range allTasks {
-				if task.Phase == "ready" || (task.Phase == "in_progress" && task.Activity == "available") {
-					filtered = append(filtered, task)
-				}
+			body, _, err := a.client.request(command.Context(), http.MethodGet, "/api/v1/tasks?"+query.Encode(), nil, 0, "", false)
+			if err != nil {
+				return err
 			}
-			return a.output(map[string]any{"items": filtered}, func(w io.Writer) {
-				if len(filtered) == 0 {
-					fmt.Fprintln(w, "No claimable execution Tasks assigned to you.")
+			var page taskPage
+			if err := json.Unmarshal(body, &page); err != nil {
+				return err
+			}
+			return a.output(map[string]any{"items": page.Items}, func(w io.Writer) {
+				if len(page.Items) == 0 {
+					fmt.Fprintf(w, "No claimable %s Tasks.\n", stage)
 					return
 				}
-				for _, task := range filtered {
+				for _, task := range page.Items {
 					fmt.Fprintf(w, "#%d  v%d  %-11s  %s\n", task.Number, task.Version, lifecycle(task.Phase, task.Activity), task.Title)
 				}
 			})
 		},
 	}
+	command.Flags().StringVar(&stage, "stage", "execution", "Claim stage to discover: execution or review")
+	command.Flags().Int64Var(&projectNumber, "project", 0, "limit discovery to one Project number")
+	command.Flags().IntVar(&limit, "limit", 50, "maximum Tasks to return (1-200)")
+	return command
 }
 
 func (a *App) taskShowCommand() *cobra.Command {
-	return &cobra.Command{
+	var compact bool
+	var threadItemsLimit int
+	command := &cobra.Command{
 		Use: "show <task-number>", Short: "Show a Task with criteria, Threads, and delivery",
-		Long: "Reads a complete work packet without claiming, reserving, or mutating the Task.",
+		Long: "Reads a work packet without claiming, reserving, or mutating the Task. --compact asks the server for bounded recent Thread context.",
 		Args: cobra.ExactArgs(1), RunE: func(command *cobra.Command, args []string) error {
+			if !compact && command.Flags().Changed("thread-items-limit") {
+				return &APIError{Code: "USAGE", Message: "--thread-items-limit requires --compact"}
+			}
+			if threadItemsLimit < 1 || threadItemsLimit > 100 {
+				return &APIError{Code: "USAGE", Message: "--thread-items-limit must be between 1 and 100"}
+			}
 			number, err := parsePositive(args[0], "task-number")
 			if err != nil {
 				return err
 			}
-			data, err := a.taskPacket(command, number)
+			var data map[string]any
+			if compact {
+				data, err = a.compactPacket(command, fmt.Sprintf("/api/v1/tasks/%d/work-packet?thread_items_limit=%d", number, threadItemsLimit))
+			} else {
+				data, err = a.taskPacket(command, number)
+			}
 			if err != nil {
 				return err
 			}
 			return a.output(data, func(w io.Writer) { printTaskPacket(w, data) })
 		},
 	}
+	command.Flags().BoolVar(&compact, "compact", false, "read a bounded server-aggregated work packet")
+	command.Flags().IntVar(&threadItemsLimit, "thread-items-limit", 20, "recent Items per included Thread (1-100; requires --compact)")
+	return command
+}
+
+func (a *App) compactPacket(command *cobra.Command, path string) (map[string]any, error) {
+	body, _, err := a.client.request(command.Context(), http.MethodGet, path, nil, 0, "", false)
+	if err != nil {
+		return nil, err
+	}
+	var packet map[string]any
+	if err := json.Unmarshal(body, &packet); err != nil {
+		return nil, err
+	}
+	return packet, nil
 }
 
 func (a *App) taskClaimCommand() *cobra.Command {
@@ -232,6 +271,10 @@ func (a *App) pagedObject(command *cobra.Command, path string) (map[string]any, 
 }
 
 func printTaskPacket(w io.Writer, data map[string]any) {
+	if _, compact := data["main_thread"]; compact {
+		printCompactTaskPacket(w, data)
+		return
+	}
 	task, _ := data["task"].(map[string]any)
 	fmt.Fprintf(w, "Task: #%v\nTitle: %v\nVersion: %v\nState: %s\n", task["number"], task["title"], task["version"], lifecycle(stringValue(task["phase"]), stringValue(task["activity"])))
 	fmt.Fprintf(w, "Context: %v\nExpected result: %v\n", task["context"], task["expected_result"])
@@ -268,6 +311,54 @@ func printTaskPacket(w io.Writer, data map[string]any) {
 			fmt.Fprintf(w, "    [%v] %v\n", item["kind"], item["body"])
 		}
 	}
+	delivery, _ := data["delivery"].(map[string]any)
+	links, _ := delivery["active_links"].([]any)
+	fmt.Fprintf(w, "Delivery: %d active Merge Requests\n", len(links))
+	for _, raw := range links {
+		link, _ := raw.(map[string]any)
+		fmt.Fprintf(w, "  - %v — %v\n", link["web_url"], link["title"])
+	}
+	if review, ok := delivery["review"].(map[string]any); ok {
+		fmt.Fprintf(w, "Review snapshot: cycle %v\n", review["review_cycle"])
+	}
+}
+
+func printCompactTaskPacket(w io.Writer, data map[string]any) {
+	task, _ := data["task"].(map[string]any)
+	fmt.Fprintf(w, "Task: #%v\nTitle: %v\nVersion: %v\nState: %s\n", task["number"], task["title"], task["version"], lifecycle(stringValue(task["phase"]), stringValue(task["activity"])))
+	fmt.Fprintf(w, "Context: %v\nExpected result: %v\n", task["context"], task["expected_result"])
+	if description := stringValue(task["description"]); description != "" {
+		fmt.Fprintf(w, "Description: %s\n", description)
+	}
+	criteria, _ := data["criteria"].([]any)
+	fmt.Fprintf(w, "Acceptance criteria: %d\n", len(criteria))
+	for _, raw := range criteria {
+		item, _ := raw.(map[string]any)
+		fmt.Fprintf(w, "  - %v (id=%v revision=%v)\n", item["criterion"], item["id"], item["revision"])
+		fmt.Fprintf(w, "    Verify: %v\n", item["verification_instructions"])
+		if check, ok := item["current_check"].(map[string]any); ok {
+			fmt.Fprintf(w, "    Current check: %v — %v\n", check["outcome"], check["evidence"])
+		}
+	}
+	printCompactThread := func(label string, value any) {
+		thread, ok := value.(map[string]any)
+		if !ok {
+			return
+		}
+		items, _ := thread["items"].([]any)
+		fmt.Fprintf(w, "%s: %v/%v items", label, thread["returned_count"], thread["total_count"])
+		if truncated, _ := thread["truncated"].(bool); truncated {
+			fmt.Fprint(w, " (truncated)")
+		}
+		fmt.Fprintln(w)
+		for _, rawItem := range items {
+			item, _ := rawItem.(map[string]any)
+			fmt.Fprintf(w, "  [%v] %v\n", item["kind"], item["body"])
+		}
+	}
+	printCompactThread("Main Thread", data["main_thread"])
+	printCompactThread("Active Issue Thread", data["active_issue_thread"])
+	fmt.Fprintf(w, "Resolved Issue Threads omitted: %v\n", data["resolved_issue_thread_count"])
 	delivery, _ := data["delivery"].(map[string]any)
 	links, _ := delivery["active_links"].([]any)
 	fmt.Fprintf(w, "Delivery: %d active Merge Requests\n", len(links))

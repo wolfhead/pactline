@@ -28,13 +28,26 @@ func (h *Handler) GetTaskDelivery(
 	if err != nil {
 		return nil, err
 	}
+	response, err := taskDeliveryFromApplication(delivery)
+	if err != nil {
+		return nil, err
+	}
+	return &generated.TaskDeliveryHeaders{
+		XRequestID: generated.NewOptString(baseapi.RequestIDFromContext(ctx)),
+		Response:   response,
+	}, nil
+}
+
+func taskDeliveryFromApplication(
+	delivery application.TaskDelivery,
+) (generated.TaskDelivery, error) {
 	activeLinks := make([]generated.TaskMergeRequest, len(delivery.ActiveLinks))
 	currentByID := make(map[uuid.UUID]generated.TaskMergeRequest, len(delivery.ActiveLinks))
 	currentDomainByID := make(map[uuid.UUID]domain.TaskMergeRequest, len(delivery.ActiveLinks))
 	for index, item := range delivery.ActiveLinks {
 		converted, err := taskMergeRequestFromDomain(item)
 		if err != nil {
-			return nil, err
+			return generated.TaskDelivery{}, err
 		}
 		activeLinks[index] = converted
 		currentByID[item.MergeRequest.ID] = converted
@@ -61,10 +74,7 @@ func (h *Handler) GetTaskDelivery(
 			MergeRequests: comparisons,
 		})
 	}
-	return &generated.TaskDeliveryHeaders{
-		XRequestID: generated.NewOptString(baseapi.RequestIDFromContext(ctx)),
-		Response:   response,
-	}, nil
+	return response, nil
 }
 
 func currentMergeRequest(

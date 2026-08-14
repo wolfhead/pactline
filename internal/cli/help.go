@@ -25,12 +25,15 @@ func (a *App) helpCommand(root *cobra.Command) *cobra.Command {
 	topics := map[string]string{
 		"workflow": `Execution workflow
 
-1. task list finds assigned execution work.
-2. task show provides the current Task version and acceptance criteria.
-3. task claim creates an execution Claim and returns its explicit Claim ID.
-4. claim progress and claim submit may be repeated without ending the Claim.
-5. claim verify records criterion evidence against an explicit revision.
-6. claim complete ends execution and moves the Task to in_review.available.
+1. capabilities --json verifies the installed offline integration contract.
+2. task list finds assigned execution work; --stage review finds review work.
+3. task show --compact provides bounded context, Task version, and criteria.
+4. task claim creates an execution Claim and returns its explicit Claim ID.
+5. claim show --compact returns bounded Claim-specific context and checks.
+6. claim progress and claim submit may be repeated without ending the Claim.
+7. claim verify records criterion evidence against an explicit revision.
+8. claim mr link records each GitLab Merge Request as delivery evidence.
+9. claim complete ends execution and moves the Task to in_review.available.
 
 Code review and Task acceptance remain review work in the Web UI for v0.1.
 Neither MR status nor work submission implicitly releases a Claim.`,
@@ -43,7 +46,8 @@ a different Session ID; a different Token cannot.`,
 		"output": `Output and recovery
 
 Human-readable text is the default. --json writes exactly one JSON document to
-stdout. --verbose writes redacted request diagnostics only to stderr and never
+stdout. Successful JSON may include request_id, ETag, and the exact mutation
+idempotency key under meta. --verbose writes redacted request diagnostics only to stderr and never
 prints the Token, request body, evidence, or raw headers.
 
 Exit codes: 0 success, 2 usage/config, 3 authentication/authorization,
