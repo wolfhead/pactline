@@ -45,7 +45,7 @@ Quick start:
   5. pactline task claim 142 --task-version 4
   6. pactline claim show <claim-id>
 
-Use "pactline help workflow" for the full execution loop.`,
+Use "pactline help workflow" for the complete execution and review loops.`,
 		PersistentPreRunE: func(command *cobra.Command, _ []string) error {
 			if command.Name() == "version" || command.Name() == "capabilities" || command.CommandPath() == "pactline help" ||
 				(command.Parent() != nil && (command.Parent().Name() == "config" || command.Parent().Name() == "help")) {
@@ -173,7 +173,11 @@ func (a *App) capabilitiesCommand() *cobra.Command {
 		"gitlab_merge_request_links",
 		"repeatable_submission",
 		"resolution_request",
+		"review_acceptance",
+		"review_claims",
+		"review_request_changes",
 		"success_metadata",
+		"task_acceptance",
 	}
 	return &cobra.Command{
 		Use: "capabilities", Short: "Print the offline machine-integration contract",
@@ -292,7 +296,7 @@ func classifyError(err error) *APIError {
 }
 
 func exitCode(err *APIError) int {
-	if err.Code == "USAGE" || err.Code == "CONFIG_ERROR" || err.Code == "REVIEW_NOT_SUPPORTED" {
+	if err.Code == "USAGE" || err.Code == "CONFIG_ERROR" {
 		return 2
 	}
 	if err.Status == 401 || err.Status == 403 {

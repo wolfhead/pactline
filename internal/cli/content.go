@@ -8,8 +8,12 @@ import (
 )
 
 func content(message, path string, stdin io.Reader, label string) (string, error) {
+	return contentWithFlags(message, path, stdin, label, label, label+"-file")
+}
+
+func contentWithFlags(message, path string, stdin io.Reader, label, valueFlag, fileFlag string) (string, error) {
 	if (message == "") == (path == "") {
-		return "", &APIError{Code: "USAGE", Message: fmt.Sprintf("provide exactly one --%s or --%s-file", label, label)}
+		return "", &APIError{Code: "USAGE", Message: fmt.Sprintf("provide exactly one --%s or --%s", valueFlag, fileFlag)}
 	}
 	if path == "" {
 		if strings.TrimSpace(message) == "" {

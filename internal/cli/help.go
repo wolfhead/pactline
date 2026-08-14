@@ -26,17 +26,27 @@ func (a *App) helpCommand(root *cobra.Command) *cobra.Command {
 		"workflow": `Execution workflow
 
 1. capabilities --json verifies the installed offline integration contract.
-2. task list finds assigned execution work; --stage review finds review work.
+2. task list --stage execution finds assigned execution work.
 3. task show --compact provides bounded context, Task version, and criteria.
-4. task claim creates an execution Claim and returns its explicit Claim ID.
+4. task claim --stage execution creates a Claim and returns its explicit ID.
 5. claim show --compact returns bounded Claim-specific context and checks.
 6. claim progress and claim submit may be repeated without ending the Claim.
-7. claim verify records criterion evidence against an explicit revision.
+7. claim verify records execution verification against an explicit revision.
 8. claim mr link records each GitLab Merge Request as delivery evidence.
 9. claim complete ends execution and moves the Task to in_review.available.
 
-Code review and Task acceptance remain review work in the Web UI for v0.1.
-Neither MR status nor work submission implicitly releases a Claim.`,
+Review workflow
+
+1. task list --stage review finds visible in_review.available work.
+2. task show --compact provides the frozen delivery and acceptance contract.
+3. task claim --stage review makes the Review assertion explicit.
+4. claim show --compact returns current-cycle Claim-specific context.
+5. The reviewer performs Code Review and verification through repository tools.
+6. claim verify records acceptance evidence; the server derives its purpose.
+7. claim request-changes returns the Task to in_progress.available, or
+   claim accept completes it as done.
+
+Neither MR state, work submission, nor Claim release implicitly accepts a Task.`,
 		"identity": `Identity and continuation
 
 A Claim belongs to the authenticated logical principal: exact API Token,

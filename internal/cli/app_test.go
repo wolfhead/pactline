@@ -34,6 +34,19 @@ func TestHelpIsSelfExplainingAndHasNoUnplannedCommands(t *testing.T) {
 	require.Zero(t, code)
 	require.Contains(t, stdout.String(), "in_review.available")
 	require.Contains(t, stdout.String(), "--task-version")
+
+	stdout.Reset()
+	code = ExecuteArgs(context.Background(), []string{"claim", "accept", "--help"}, strings.NewReader(""), &stdout, &stderr)
+	require.Zero(t, code)
+	require.Contains(t, stdout.String(), "moves the Task to done")
+	require.Contains(t, stdout.String(), "--task-version")
+
+	stdout.Reset()
+	code = ExecuteArgs(context.Background(), []string{"help", "workflow"}, strings.NewReader(""), &stdout, &stderr)
+	require.Zero(t, code)
+	require.Contains(t, stdout.String(), "Review workflow")
+	require.Contains(t, stdout.String(), "claim request-changes")
+	require.Contains(t, stdout.String(), "claim accept")
 }
 
 func TestJSONFailureIsOneDocumentAndVerboseStaysOnStderr(t *testing.T) {
@@ -118,7 +131,7 @@ func TestDifferentSessionCanContinueExplicitClaim(t *testing.T) {
 	require.Equal(t, []string{"session-a", "session-b"}, sessions)
 }
 
-func TestTaskClaimRejectsReviewBeforeCreatingClaim(t *testing.T) {
+func TestTaskClaimDefaultsToExecutionAndRejectsReviewBeforeCreatingClaim(t *testing.T) {
 	postCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -137,7 +150,7 @@ func TestTaskClaimRejectsReviewBeforeCreatingClaim(t *testing.T) {
 	code := ExecuteArgs(context.Background(), []string{"task", "claim", "142", "--task-version", "4"}, strings.NewReader(""), &stdout, &stderr)
 	require.Equal(t, 2, code)
 	require.Zero(t, postCount)
-	require.Contains(t, stderr.String(), "does not claim Task review work")
+	require.Contains(t, stderr.String(), "--stage execution does not match")
 }
 
 func TestAPIProblemRetainsMachineCodeAndRequestID(t *testing.T) {
@@ -190,7 +203,8 @@ func TestCapabilitiesIsOfflineAndStable(t *testing.T) {
 	require.Equal(t, []string{
 		"bounded_work_packets", "claim_progress", "claim_release", "execution_claims",
 		"execution_completion", "execution_verification", "gitlab_merge_request_links",
-		"repeatable_submission", "resolution_request", "success_metadata",
+		"repeatable_submission", "resolution_request", "review_acceptance",
+		"review_claims", "review_request_changes", "success_metadata", "task_acceptance",
 	}, envelope.Data.Features)
 }
 

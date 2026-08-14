@@ -118,16 +118,19 @@ make openapi-check
 
 Do not edit `internal/api/v1generated` manually.
 
-### External Codex worker
+### External Agent worker
 
-Pactline ships a standalone CGO-free CLI for the execution flow from Task
-discovery through `in_review`. Its independent installation and command guide
-is [`cmd/pactline/README.md`](cmd/pactline/README.md).
+Pactline ships a standalone CGO-free CLI for the complete execution and review
+Claim flow, from Task discovery through change requests or final acceptance.
+Its independent installation and command guide is
+[`cmd/pactline/README.md`](cmd/pactline/README.md).
 
 External Harnesses can inspect `pactline capabilities --json`, discover
 stage-aware bounded queues, and read one server-aggregated compact work packet
 for a Task or explicit Claim. GitLab Merge Request delivery is linked through
 Claim-centric CLI commands; repository workers do not need the Pactline Token.
+Reviewers claim `in_review.available` work explicitly, record server-derived
+acceptance evidence, and either request changes or accept the Task.
 
 Create an executor-scoped personal Token in the account UI, install the CLI or
 the `pactline-work` Codex skill, and keep developer-specific Project/repository
