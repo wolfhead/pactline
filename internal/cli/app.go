@@ -64,7 +64,10 @@ Use "pactline help workflow" for the complete execution and review loops.`,
 	root.PersistentFlags().BoolVarP(&app.verbose, "verbose", "v", false, "write redacted HTTP diagnostics to stderr")
 	root.PersistentFlags().StringVar(&app.idempotencyKey, "idempotency-key", "", "reuse this key for one mutation after an uncertain outcome")
 	root.CompletionOptions.DisableDefaultCmd = true
-	root.AddCommand(app.versionCommand(), app.capabilitiesCommand(), app.configCommand(), app.doctorCommand(), app.taskCommand(), app.claimCommand())
+	root.AddCommand(
+		app.versionCommand(), app.capabilitiesCommand(), app.configCommand(), app.doctorCommand(),
+		app.taskCommand(), app.claimCommand(), app.threadCommand(), app.issueCommand(),
+	)
 	root.SetHelpCommand(app.helpCommand(root))
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return &APIError{Code: "USAGE", Message: err.Error()} })
 	return root
@@ -139,7 +142,7 @@ func (a *App) initialize(context.Context) error {
 
 func (a *App) requireMutationProvenance() error {
 	if a.sessionID == "" {
-		return &APIError{Code: "CONFIG_ERROR", Message: "Session ID is required for Claim mutations", Hint: "Set PACTLINE_SESSION_ID or CODEX_THREAD_ID."}
+		return &APIError{Code: "CONFIG_ERROR", Message: "Session ID is required for Agent mutations", Hint: "Set PACTLINE_SESSION_ID or CODEX_THREAD_ID."}
 	}
 	return nil
 }
@@ -171,6 +174,7 @@ func (a *App) capabilitiesCommand() *cobra.Command {
 		"execution_completion",
 		"execution_verification",
 		"gitlab_merge_request_links",
+		"issue_resolution",
 		"repeatable_submission",
 		"resolution_request",
 		"review_acceptance",
@@ -178,6 +182,7 @@ func (a *App) capabilitiesCommand() *cobra.Command {
 		"review_request_changes",
 		"success_metadata",
 		"task_acceptance",
+		"thread_collaboration",
 	}
 	return &cobra.Command{
 		Use: "capabilities", Short: "Print the offline machine-integration contract",

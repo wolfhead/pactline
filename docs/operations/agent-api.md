@@ -255,6 +255,26 @@ release` returns the Task to `in_review.available`. `claim request-resolution`
 ends the Claim and creates a typed Issue Thread; resolving the Issue returns the
 same review phase to `available` without reviving the old Claim.
 
+## External blocking-Issue workflow
+
+An execution or review Claim may end itself and open a typed blocker with
+`pactline claim request-resolution`. From that point the Claim ID is historical;
+discussion and resolution use explicit Task, Thread, and Item identities:
+
+1. inspect the active blocker through `task show --compact`;
+2. list all durable Thread identities with `task threads <task-number>`;
+3. read bounded discussion with `thread items <thread-id>`;
+4. participate with `thread post`, using explicit reply and mentioned-user UUIDs
+   when needed;
+5. resolve with `issue resolve <task-number> <thread-id>`, the inspected Task
+   version, and the inspected Issue Thread version; and
+6. discover or explicitly claim the now-available Task phase again.
+
+`issue resolve` never takes a Claim ID, creates a Claim, or chooses the next
+worker. Ordinary Thread messages do not change Task lifecycle. Message edit and
+delete retain author ownership plus Item-version preconditions and preserve a
+tombstone rather than removing durable history.
+
 ## Error handling
 
 `/api/v1` errors use RFC 9457 Problem Details:
