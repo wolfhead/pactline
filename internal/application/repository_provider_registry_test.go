@@ -40,3 +40,35 @@ func TestRepositoryProviderRegistryRejectsURLsWithoutCandidate(t *testing.T) {
 	_, err = registry.CodeChangeURLCandidates("https://code.example/owner/repo/issues/42")
 	require.ErrorIs(t, err, domain.ErrInvalidInput)
 }
+
+func TestRepositoryProviderRegistryInfersPublicProjectRepositoryProvider(t *testing.T) {
+	registry, err := NewRepositoryProviderRegistry(
+		gitlabintegration.NewClient(nil, time.Second),
+		githubintegration.NewClient(nil, time.Second),
+	)
+	require.NoError(t, err)
+
+	reference, err := registry.ParseProjectRepositoryURL("https://github.com/owner/repo", nil)
+	require.NoError(t, err)
+	require.Equal(t, domain.RepositoryProviderGitHub, reference.Provider)
+
+	reference, err = registry.ParseProjectRepositoryURL("https://gitlab.com/group/repo", nil)
+	require.NoError(t, err)
+	require.Equal(t, domain.RepositoryProviderGitLab, reference.Provider)
+}
+
+func TestRepositoryProviderRegistryRequiresProviderForSelfHostedProjectRepository(t *testing.T) {
+	registry, err := NewRepositoryProviderRegistry(
+		gitlabintegration.NewClient(nil, time.Second),
+		githubintegration.NewClient(nil, time.Second),
+	)
+	require.NoError(t, err)
+
+	_, err = registry.ParseProjectRepositoryURL("https://code.example/owner/repo", nil)
+	require.ErrorIs(t, err, domain.ErrInvalidInput)
+
+	provider := domain.RepositoryProviderGitLab
+	reference, err := registry.ParseProjectRepositoryURL("https://code.example/owner/repo", &provider)
+	require.NoError(t, err)
+	require.Equal(t, provider, reference.Provider)
+}

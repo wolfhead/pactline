@@ -1450,6 +1450,15 @@ func (c *Client) BindProjectRepository(ctx context.Context, request *ProjectRepo
 }
 
 func (c *Client) sendBindProjectRepository(ctx context.Context, request *ProjectRepositoryBind, params BindProjectRepositoryParams) (res BindProjectRepositoryRes, err error) {
+	// Validate request before sending.
+	if err := func() error {
+		if err := request.Validate(); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return res, errors.Wrap(err, "validate")
+	}
 	otelAttrs := []attribute.KeyValue{
 		otelogen.OperationID("bindProjectRepository"),
 		semconv.HTTPRequestMethodKey.String("POST"),

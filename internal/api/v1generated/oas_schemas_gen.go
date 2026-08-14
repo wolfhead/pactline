@@ -1173,215 +1173,162 @@ func (s *CodeChangeKind) UnmarshalText(data []byte) error {
 	}
 }
 
-// Ref: #/components/schemas/CodeChangeObservation
-type CodeChangeObservation struct {
-	Status            CodeChangeObservationStatus `json:"status"`
-	ObservedAt        time.Time                   `json:"observed_at"`
-	Title             string                      `json:"title"`
-	State             CodeChangeState             `json:"state"`
-	Draft             bool                        `json:"draft"`
-	SourceBranch      string                      `json:"source_branch"`
-	TargetBranch      string                      `json:"target_branch"`
-	HeadSha           string                      `json:"head_sha"`
-	MergeCommitSha    OptString                   `json:"merge_commit_sha"`
-	MergedAt          OptDateTime                 `json:"merged_at"`
-	ProviderUpdatedAt time.Time                   `json:"provider_updated_at"`
+// Ref: #/components/schemas/CodeChangeProviderEvidence
+type CodeChangeProviderEvidence struct {
+	ConnectionID         uuid.UUID       `json:"connection_id"`
+	ProviderRepositoryID string          `json:"provider_repository_id"`
+	ProviderChangeID     string          `json:"provider_change_id"`
+	Title                string          `json:"title"`
+	State                CodeChangeState `json:"state"`
+	Draft                bool            `json:"draft"`
+	SourceBranch         string          `json:"source_branch"`
+	TargetBranch         string          `json:"target_branch"`
+	HeadSha              string          `json:"head_sha"`
+	MergeCommitSha       OptString       `json:"merge_commit_sha"`
+	MergedAt             OptDateTime     `json:"merged_at"`
+	ProviderUpdatedAt    time.Time       `json:"provider_updated_at"`
+	ObservedAt           time.Time       `json:"observed_at"`
 }
 
-// GetStatus returns the value of Status.
-func (s *CodeChangeObservation) GetStatus() CodeChangeObservationStatus {
-	return s.Status
+// GetConnectionID returns the value of ConnectionID.
+func (s *CodeChangeProviderEvidence) GetConnectionID() uuid.UUID {
+	return s.ConnectionID
 }
 
-// GetObservedAt returns the value of ObservedAt.
-func (s *CodeChangeObservation) GetObservedAt() time.Time {
-	return s.ObservedAt
+// GetProviderRepositoryID returns the value of ProviderRepositoryID.
+func (s *CodeChangeProviderEvidence) GetProviderRepositoryID() string {
+	return s.ProviderRepositoryID
+}
+
+// GetProviderChangeID returns the value of ProviderChangeID.
+func (s *CodeChangeProviderEvidence) GetProviderChangeID() string {
+	return s.ProviderChangeID
 }
 
 // GetTitle returns the value of Title.
-func (s *CodeChangeObservation) GetTitle() string {
+func (s *CodeChangeProviderEvidence) GetTitle() string {
 	return s.Title
 }
 
 // GetState returns the value of State.
-func (s *CodeChangeObservation) GetState() CodeChangeState {
+func (s *CodeChangeProviderEvidence) GetState() CodeChangeState {
 	return s.State
 }
 
 // GetDraft returns the value of Draft.
-func (s *CodeChangeObservation) GetDraft() bool {
+func (s *CodeChangeProviderEvidence) GetDraft() bool {
 	return s.Draft
 }
 
 // GetSourceBranch returns the value of SourceBranch.
-func (s *CodeChangeObservation) GetSourceBranch() string {
+func (s *CodeChangeProviderEvidence) GetSourceBranch() string {
 	return s.SourceBranch
 }
 
 // GetTargetBranch returns the value of TargetBranch.
-func (s *CodeChangeObservation) GetTargetBranch() string {
+func (s *CodeChangeProviderEvidence) GetTargetBranch() string {
 	return s.TargetBranch
 }
 
 // GetHeadSha returns the value of HeadSha.
-func (s *CodeChangeObservation) GetHeadSha() string {
+func (s *CodeChangeProviderEvidence) GetHeadSha() string {
 	return s.HeadSha
 }
 
 // GetMergeCommitSha returns the value of MergeCommitSha.
-func (s *CodeChangeObservation) GetMergeCommitSha() OptString {
+func (s *CodeChangeProviderEvidence) GetMergeCommitSha() OptString {
 	return s.MergeCommitSha
 }
 
 // GetMergedAt returns the value of MergedAt.
-func (s *CodeChangeObservation) GetMergedAt() OptDateTime {
+func (s *CodeChangeProviderEvidence) GetMergedAt() OptDateTime {
 	return s.MergedAt
 }
 
 // GetProviderUpdatedAt returns the value of ProviderUpdatedAt.
-func (s *CodeChangeObservation) GetProviderUpdatedAt() time.Time {
+func (s *CodeChangeProviderEvidence) GetProviderUpdatedAt() time.Time {
 	return s.ProviderUpdatedAt
 }
 
-// SetStatus sets the value of Status.
-func (s *CodeChangeObservation) SetStatus(val CodeChangeObservationStatus) {
-	s.Status = val
+// GetObservedAt returns the value of ObservedAt.
+func (s *CodeChangeProviderEvidence) GetObservedAt() time.Time {
+	return s.ObservedAt
 }
 
-// SetObservedAt sets the value of ObservedAt.
-func (s *CodeChangeObservation) SetObservedAt(val time.Time) {
-	s.ObservedAt = val
+// SetConnectionID sets the value of ConnectionID.
+func (s *CodeChangeProviderEvidence) SetConnectionID(val uuid.UUID) {
+	s.ConnectionID = val
+}
+
+// SetProviderRepositoryID sets the value of ProviderRepositoryID.
+func (s *CodeChangeProviderEvidence) SetProviderRepositoryID(val string) {
+	s.ProviderRepositoryID = val
+}
+
+// SetProviderChangeID sets the value of ProviderChangeID.
+func (s *CodeChangeProviderEvidence) SetProviderChangeID(val string) {
+	s.ProviderChangeID = val
 }
 
 // SetTitle sets the value of Title.
-func (s *CodeChangeObservation) SetTitle(val string) {
+func (s *CodeChangeProviderEvidence) SetTitle(val string) {
 	s.Title = val
 }
 
 // SetState sets the value of State.
-func (s *CodeChangeObservation) SetState(val CodeChangeState) {
+func (s *CodeChangeProviderEvidence) SetState(val CodeChangeState) {
 	s.State = val
 }
 
 // SetDraft sets the value of Draft.
-func (s *CodeChangeObservation) SetDraft(val bool) {
+func (s *CodeChangeProviderEvidence) SetDraft(val bool) {
 	s.Draft = val
 }
 
 // SetSourceBranch sets the value of SourceBranch.
-func (s *CodeChangeObservation) SetSourceBranch(val string) {
+func (s *CodeChangeProviderEvidence) SetSourceBranch(val string) {
 	s.SourceBranch = val
 }
 
 // SetTargetBranch sets the value of TargetBranch.
-func (s *CodeChangeObservation) SetTargetBranch(val string) {
+func (s *CodeChangeProviderEvidence) SetTargetBranch(val string) {
 	s.TargetBranch = val
 }
 
 // SetHeadSha sets the value of HeadSha.
-func (s *CodeChangeObservation) SetHeadSha(val string) {
+func (s *CodeChangeProviderEvidence) SetHeadSha(val string) {
 	s.HeadSha = val
 }
 
 // SetMergeCommitSha sets the value of MergeCommitSha.
-func (s *CodeChangeObservation) SetMergeCommitSha(val OptString) {
+func (s *CodeChangeProviderEvidence) SetMergeCommitSha(val OptString) {
 	s.MergeCommitSha = val
 }
 
 // SetMergedAt sets the value of MergedAt.
-func (s *CodeChangeObservation) SetMergedAt(val OptDateTime) {
+func (s *CodeChangeProviderEvidence) SetMergedAt(val OptDateTime) {
 	s.MergedAt = val
 }
 
 // SetProviderUpdatedAt sets the value of ProviderUpdatedAt.
-func (s *CodeChangeObservation) SetProviderUpdatedAt(val time.Time) {
+func (s *CodeChangeProviderEvidence) SetProviderUpdatedAt(val time.Time) {
 	s.ProviderUpdatedAt = val
 }
 
-// Ref: #/components/schemas/CodeChangeObservationStatus
-type CodeChangeObservationStatus string
-
-const (
-	CodeChangeObservationStatusConfirmed    CodeChangeObservationStatus = "confirmed"
-	CodeChangeObservationStatusMissing      CodeChangeObservationStatus = "missing"
-	CodeChangeObservationStatusUnauthorized CodeChangeObservationStatus = "unauthorized"
-	CodeChangeObservationStatusUnreachable  CodeChangeObservationStatus = "unreachable"
-	CodeChangeObservationStatusDisconnected CodeChangeObservationStatus = "disconnected"
-)
-
-// AllValues returns all CodeChangeObservationStatus values.
-func (CodeChangeObservationStatus) AllValues() []CodeChangeObservationStatus {
-	return []CodeChangeObservationStatus{
-		CodeChangeObservationStatusConfirmed,
-		CodeChangeObservationStatusMissing,
-		CodeChangeObservationStatusUnauthorized,
-		CodeChangeObservationStatusUnreachable,
-		CodeChangeObservationStatusDisconnected,
-	}
-}
-
-// MarshalText implements encoding.TextMarshaler.
-func (s CodeChangeObservationStatus) MarshalText() ([]byte, error) {
-	switch s {
-	case CodeChangeObservationStatusConfirmed:
-		return []byte(s), nil
-	case CodeChangeObservationStatusMissing:
-		return []byte(s), nil
-	case CodeChangeObservationStatusUnauthorized:
-		return []byte(s), nil
-	case CodeChangeObservationStatusUnreachable:
-		return []byte(s), nil
-	case CodeChangeObservationStatusDisconnected:
-		return []byte(s), nil
-	default:
-		return nil, errors.Errorf("invalid value: %q", s)
-	}
-}
-
-// UnmarshalText implements encoding.TextUnmarshaler.
-func (s *CodeChangeObservationStatus) UnmarshalText(data []byte) error {
-	switch CodeChangeObservationStatus(data) {
-	case CodeChangeObservationStatusConfirmed:
-		*s = CodeChangeObservationStatusConfirmed
-		return nil
-	case CodeChangeObservationStatusMissing:
-		*s = CodeChangeObservationStatusMissing
-		return nil
-	case CodeChangeObservationStatusUnauthorized:
-		*s = CodeChangeObservationStatusUnauthorized
-		return nil
-	case CodeChangeObservationStatusUnreachable:
-		*s = CodeChangeObservationStatusUnreachable
-		return nil
-	case CodeChangeObservationStatusDisconnected:
-		*s = CodeChangeObservationStatusDisconnected
-		return nil
-	default:
-		return errors.Errorf("invalid value: %q", data)
-	}
+// SetObservedAt sets the value of ObservedAt.
+func (s *CodeChangeProviderEvidence) SetObservedAt(val time.Time) {
+	s.ObservedAt = val
 }
 
 // Ref: #/components/schemas/CodeChangeSnapshot
 type CodeChangeSnapshot struct {
-	TaskCodeChangeID     uuid.UUID                   `json:"task_code_change_id"`
-	ProjectRepositoryID  uuid.UUID                   `json:"project_repository_id"`
-	ConnectionID         uuid.UUID                   `json:"connection_id"`
-	Provider             RepositoryProvider          `json:"provider"`
-	ProviderRepositoryID string                      `json:"provider_repository_id"`
-	Kind                 CodeChangeKind              `json:"kind"`
-	ChangeNumber         int64                       `json:"change_number"`
-	ProviderChangeID     string                      `json:"provider_change_id"`
-	WebURL               url.URL                     `json:"web_url"`
-	Title                string                      `json:"title"`
-	State                CodeChangeState             `json:"state"`
-	Draft                bool                        `json:"draft"`
-	SourceBranch         string                      `json:"source_branch"`
-	TargetBranch         string                      `json:"target_branch"`
-	HeadSha              string                      `json:"head_sha"`
-	MergeCommitSha       OptString                   `json:"merge_commit_sha"`
-	MergedAt             OptDateTime                 `json:"merged_at"`
-	ObservationStatus    CodeChangeObservationStatus `json:"observation_status"`
-	ObservedAt           time.Time                   `json:"observed_at"`
+	TaskCodeChangeID    uuid.UUID                     `json:"task_code_change_id"`
+	ProjectRepositoryID uuid.UUID                     `json:"project_repository_id"`
+	Provider            RepositoryProvider            `json:"provider"`
+	Kind                CodeChangeKind                `json:"kind"`
+	ChangeNumber        int64                         `json:"change_number"`
+	WebURL              url.URL                       `json:"web_url"`
+	ProviderEvidence    OptCodeChangeProviderEvidence `json:"provider_evidence"`
 }
 
 // GetTaskCodeChangeID returns the value of TaskCodeChangeID.
@@ -1394,19 +1341,9 @@ func (s *CodeChangeSnapshot) GetProjectRepositoryID() uuid.UUID {
 	return s.ProjectRepositoryID
 }
 
-// GetConnectionID returns the value of ConnectionID.
-func (s *CodeChangeSnapshot) GetConnectionID() uuid.UUID {
-	return s.ConnectionID
-}
-
 // GetProvider returns the value of Provider.
 func (s *CodeChangeSnapshot) GetProvider() RepositoryProvider {
 	return s.Provider
-}
-
-// GetProviderRepositoryID returns the value of ProviderRepositoryID.
-func (s *CodeChangeSnapshot) GetProviderRepositoryID() string {
-	return s.ProviderRepositoryID
 }
 
 // GetKind returns the value of Kind.
@@ -1419,64 +1356,14 @@ func (s *CodeChangeSnapshot) GetChangeNumber() int64 {
 	return s.ChangeNumber
 }
 
-// GetProviderChangeID returns the value of ProviderChangeID.
-func (s *CodeChangeSnapshot) GetProviderChangeID() string {
-	return s.ProviderChangeID
-}
-
 // GetWebURL returns the value of WebURL.
 func (s *CodeChangeSnapshot) GetWebURL() url.URL {
 	return s.WebURL
 }
 
-// GetTitle returns the value of Title.
-func (s *CodeChangeSnapshot) GetTitle() string {
-	return s.Title
-}
-
-// GetState returns the value of State.
-func (s *CodeChangeSnapshot) GetState() CodeChangeState {
-	return s.State
-}
-
-// GetDraft returns the value of Draft.
-func (s *CodeChangeSnapshot) GetDraft() bool {
-	return s.Draft
-}
-
-// GetSourceBranch returns the value of SourceBranch.
-func (s *CodeChangeSnapshot) GetSourceBranch() string {
-	return s.SourceBranch
-}
-
-// GetTargetBranch returns the value of TargetBranch.
-func (s *CodeChangeSnapshot) GetTargetBranch() string {
-	return s.TargetBranch
-}
-
-// GetHeadSha returns the value of HeadSha.
-func (s *CodeChangeSnapshot) GetHeadSha() string {
-	return s.HeadSha
-}
-
-// GetMergeCommitSha returns the value of MergeCommitSha.
-func (s *CodeChangeSnapshot) GetMergeCommitSha() OptString {
-	return s.MergeCommitSha
-}
-
-// GetMergedAt returns the value of MergedAt.
-func (s *CodeChangeSnapshot) GetMergedAt() OptDateTime {
-	return s.MergedAt
-}
-
-// GetObservationStatus returns the value of ObservationStatus.
-func (s *CodeChangeSnapshot) GetObservationStatus() CodeChangeObservationStatus {
-	return s.ObservationStatus
-}
-
-// GetObservedAt returns the value of ObservedAt.
-func (s *CodeChangeSnapshot) GetObservedAt() time.Time {
-	return s.ObservedAt
+// GetProviderEvidence returns the value of ProviderEvidence.
+func (s *CodeChangeSnapshot) GetProviderEvidence() OptCodeChangeProviderEvidence {
+	return s.ProviderEvidence
 }
 
 // SetTaskCodeChangeID sets the value of TaskCodeChangeID.
@@ -1489,19 +1376,9 @@ func (s *CodeChangeSnapshot) SetProjectRepositoryID(val uuid.UUID) {
 	s.ProjectRepositoryID = val
 }
 
-// SetConnectionID sets the value of ConnectionID.
-func (s *CodeChangeSnapshot) SetConnectionID(val uuid.UUID) {
-	s.ConnectionID = val
-}
-
 // SetProvider sets the value of Provider.
 func (s *CodeChangeSnapshot) SetProvider(val RepositoryProvider) {
 	s.Provider = val
-}
-
-// SetProviderRepositoryID sets the value of ProviderRepositoryID.
-func (s *CodeChangeSnapshot) SetProviderRepositoryID(val string) {
-	s.ProviderRepositoryID = val
 }
 
 // SetKind sets the value of Kind.
@@ -1514,64 +1391,14 @@ func (s *CodeChangeSnapshot) SetChangeNumber(val int64) {
 	s.ChangeNumber = val
 }
 
-// SetProviderChangeID sets the value of ProviderChangeID.
-func (s *CodeChangeSnapshot) SetProviderChangeID(val string) {
-	s.ProviderChangeID = val
-}
-
 // SetWebURL sets the value of WebURL.
 func (s *CodeChangeSnapshot) SetWebURL(val url.URL) {
 	s.WebURL = val
 }
 
-// SetTitle sets the value of Title.
-func (s *CodeChangeSnapshot) SetTitle(val string) {
-	s.Title = val
-}
-
-// SetState sets the value of State.
-func (s *CodeChangeSnapshot) SetState(val CodeChangeState) {
-	s.State = val
-}
-
-// SetDraft sets the value of Draft.
-func (s *CodeChangeSnapshot) SetDraft(val bool) {
-	s.Draft = val
-}
-
-// SetSourceBranch sets the value of SourceBranch.
-func (s *CodeChangeSnapshot) SetSourceBranch(val string) {
-	s.SourceBranch = val
-}
-
-// SetTargetBranch sets the value of TargetBranch.
-func (s *CodeChangeSnapshot) SetTargetBranch(val string) {
-	s.TargetBranch = val
-}
-
-// SetHeadSha sets the value of HeadSha.
-func (s *CodeChangeSnapshot) SetHeadSha(val string) {
-	s.HeadSha = val
-}
-
-// SetMergeCommitSha sets the value of MergeCommitSha.
-func (s *CodeChangeSnapshot) SetMergeCommitSha(val OptString) {
-	s.MergeCommitSha = val
-}
-
-// SetMergedAt sets the value of MergedAt.
-func (s *CodeChangeSnapshot) SetMergedAt(val OptDateTime) {
-	s.MergedAt = val
-}
-
-// SetObservationStatus sets the value of ObservationStatus.
-func (s *CodeChangeSnapshot) SetObservationStatus(val CodeChangeObservationStatus) {
-	s.ObservationStatus = val
-}
-
-// SetObservedAt sets the value of ObservedAt.
-func (s *CodeChangeSnapshot) SetObservedAt(val time.Time) {
-	s.ObservedAt = val
+// SetProviderEvidence sets the value of ProviderEvidence.
+func (s *CodeChangeSnapshot) SetProviderEvidence(val OptCodeChangeProviderEvidence) {
+	s.ProviderEvidence = val
 }
 
 // Ref: #/components/schemas/CodeChangeState
@@ -1624,6 +1451,95 @@ func (s *CodeChangeState) UnmarshalText(data []byte) error {
 		return nil
 	case CodeChangeStateLocked:
 		*s = CodeChangeStateLocked
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/CodeChangeVerification
+type CodeChangeVerification struct {
+	Status      CodeChangeVerificationStatus `json:"status"`
+	AttemptedAt time.Time                    `json:"attempted_at"`
+}
+
+// GetStatus returns the value of Status.
+func (s *CodeChangeVerification) GetStatus() CodeChangeVerificationStatus {
+	return s.Status
+}
+
+// GetAttemptedAt returns the value of AttemptedAt.
+func (s *CodeChangeVerification) GetAttemptedAt() time.Time {
+	return s.AttemptedAt
+}
+
+// SetStatus sets the value of Status.
+func (s *CodeChangeVerification) SetStatus(val CodeChangeVerificationStatus) {
+	s.Status = val
+}
+
+// SetAttemptedAt sets the value of AttemptedAt.
+func (s *CodeChangeVerification) SetAttemptedAt(val time.Time) {
+	s.AttemptedAt = val
+}
+
+// Ref: #/components/schemas/CodeChangeVerificationStatus
+type CodeChangeVerificationStatus string
+
+const (
+	CodeChangeVerificationStatusVerified     CodeChangeVerificationStatus = "verified"
+	CodeChangeVerificationStatusMissing      CodeChangeVerificationStatus = "missing"
+	CodeChangeVerificationStatusUnauthorized CodeChangeVerificationStatus = "unauthorized"
+	CodeChangeVerificationStatusUnreachable  CodeChangeVerificationStatus = "unreachable"
+	CodeChangeVerificationStatusDisconnected CodeChangeVerificationStatus = "disconnected"
+)
+
+// AllValues returns all CodeChangeVerificationStatus values.
+func (CodeChangeVerificationStatus) AllValues() []CodeChangeVerificationStatus {
+	return []CodeChangeVerificationStatus{
+		CodeChangeVerificationStatusVerified,
+		CodeChangeVerificationStatusMissing,
+		CodeChangeVerificationStatusUnauthorized,
+		CodeChangeVerificationStatusUnreachable,
+		CodeChangeVerificationStatusDisconnected,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s CodeChangeVerificationStatus) MarshalText() ([]byte, error) {
+	switch s {
+	case CodeChangeVerificationStatusVerified:
+		return []byte(s), nil
+	case CodeChangeVerificationStatusMissing:
+		return []byte(s), nil
+	case CodeChangeVerificationStatusUnauthorized:
+		return []byte(s), nil
+	case CodeChangeVerificationStatusUnreachable:
+		return []byte(s), nil
+	case CodeChangeVerificationStatusDisconnected:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *CodeChangeVerificationStatus) UnmarshalText(data []byte) error {
+	switch CodeChangeVerificationStatus(data) {
+	case CodeChangeVerificationStatusVerified:
+		*s = CodeChangeVerificationStatusVerified
+		return nil
+	case CodeChangeVerificationStatusMissing:
+		*s = CodeChangeVerificationStatusMissing
+		return nil
+	case CodeChangeVerificationStatusUnauthorized:
+		*s = CodeChangeVerificationStatusUnauthorized
+		return nil
+	case CodeChangeVerificationStatusUnreachable:
+		*s = CodeChangeVerificationStatusUnreachable
+		return nil
+	case CodeChangeVerificationStatusDisconnected:
+		*s = CodeChangeVerificationStatusDisconnected
 		return nil
 	default:
 		return errors.Errorf("invalid value: %q", data)
@@ -3945,6 +3861,98 @@ func (o OptBool) Or(d bool) bool {
 	return d
 }
 
+// NewOptCodeChangeProviderEvidence returns new OptCodeChangeProviderEvidence with value set to v.
+func NewOptCodeChangeProviderEvidence(v CodeChangeProviderEvidence) OptCodeChangeProviderEvidence {
+	return OptCodeChangeProviderEvidence{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptCodeChangeProviderEvidence is optional CodeChangeProviderEvidence.
+type OptCodeChangeProviderEvidence struct {
+	Value CodeChangeProviderEvidence
+	Set   bool
+}
+
+// IsSet returns true if OptCodeChangeProviderEvidence was set.
+func (o OptCodeChangeProviderEvidence) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptCodeChangeProviderEvidence) Reset() {
+	var v CodeChangeProviderEvidence
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptCodeChangeProviderEvidence) SetTo(v CodeChangeProviderEvidence) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptCodeChangeProviderEvidence) Get() (v CodeChangeProviderEvidence, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptCodeChangeProviderEvidence) Or(d CodeChangeProviderEvidence) CodeChangeProviderEvidence {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptCodeChangeVerification returns new OptCodeChangeVerification with value set to v.
+func NewOptCodeChangeVerification(v CodeChangeVerification) OptCodeChangeVerification {
+	return OptCodeChangeVerification{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptCodeChangeVerification is optional CodeChangeVerification.
+type OptCodeChangeVerification struct {
+	Value CodeChangeVerification
+	Set   bool
+}
+
+// IsSet returns true if OptCodeChangeVerification was set.
+func (o OptCodeChangeVerification) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptCodeChangeVerification) Reset() {
+	var v CodeChangeVerification
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptCodeChangeVerification) SetTo(v CodeChangeVerification) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptCodeChangeVerification) Get() (v CodeChangeVerification, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptCodeChangeVerification) Or(d CodeChangeVerification) CodeChangeVerification {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptCompactThread returns new OptCompactThread with value set to v.
 func NewOptCompactThread(v CompactThread) OptCompactThread {
 	return OptCompactThread{
@@ -5002,6 +5010,52 @@ func (o OptProjectRef) Get() (v ProjectRef, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptProjectRef) Or(d ProjectRef) ProjectRef {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptRepositoryProvider returns new OptRepositoryProvider with value set to v.
+func NewOptRepositoryProvider(v RepositoryProvider) OptRepositoryProvider {
+	return OptRepositoryProvider{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptRepositoryProvider is optional RepositoryProvider.
+type OptRepositoryProvider struct {
+	Value RepositoryProvider
+	Set   bool
+}
+
+// IsSet returns true if OptRepositoryProvider was set.
+func (o OptRepositoryProvider) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptRepositoryProvider) Reset() {
+	var v RepositoryProvider
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptRepositoryProvider) SetTo(v RepositoryProvider) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptRepositoryProvider) Get() (v RepositoryProvider, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptRepositoryProvider) Or(d RepositoryProvider) RepositoryProvider {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -7259,15 +7313,12 @@ func (s *ProjectRef) SetName(val string) {
 
 // Ref: #/components/schemas/ProjectRepository
 type ProjectRepository struct {
-	ID                   uuid.UUID          `json:"id"`
-	CanonicalWebURL      url.URL            `json:"canonical_web_url"`
-	Label                string             `json:"label"`
-	Provider             RepositoryProvider `json:"provider"`
-	Origin               url.URL            `json:"origin"`
-	ProviderRepositoryID string             `json:"provider_repository_id"`
-	PathWithNamespace    string             `json:"path_with_namespace"`
-	DefaultBranch        string             `json:"default_branch"`
-	BoundAt              time.Time          `json:"bound_at"`
+	ID                uuid.UUID          `json:"id"`
+	CanonicalWebURL   url.URL            `json:"canonical_web_url"`
+	Provider          RepositoryProvider `json:"provider"`
+	Origin            url.URL            `json:"origin"`
+	PathWithNamespace string             `json:"path_with_namespace"`
+	BoundAt           time.Time          `json:"bound_at"`
 }
 
 // GetID returns the value of ID.
@@ -7280,11 +7331,6 @@ func (s *ProjectRepository) GetCanonicalWebURL() url.URL {
 	return s.CanonicalWebURL
 }
 
-// GetLabel returns the value of Label.
-func (s *ProjectRepository) GetLabel() string {
-	return s.Label
-}
-
 // GetProvider returns the value of Provider.
 func (s *ProjectRepository) GetProvider() RepositoryProvider {
 	return s.Provider
@@ -7295,19 +7341,9 @@ func (s *ProjectRepository) GetOrigin() url.URL {
 	return s.Origin
 }
 
-// GetProviderRepositoryID returns the value of ProviderRepositoryID.
-func (s *ProjectRepository) GetProviderRepositoryID() string {
-	return s.ProviderRepositoryID
-}
-
 // GetPathWithNamespace returns the value of PathWithNamespace.
 func (s *ProjectRepository) GetPathWithNamespace() string {
 	return s.PathWithNamespace
-}
-
-// GetDefaultBranch returns the value of DefaultBranch.
-func (s *ProjectRepository) GetDefaultBranch() string {
-	return s.DefaultBranch
 }
 
 // GetBoundAt returns the value of BoundAt.
@@ -7325,11 +7361,6 @@ func (s *ProjectRepository) SetCanonicalWebURL(val url.URL) {
 	s.CanonicalWebURL = val
 }
 
-// SetLabel sets the value of Label.
-func (s *ProjectRepository) SetLabel(val string) {
-	s.Label = val
-}
-
 // SetProvider sets the value of Provider.
 func (s *ProjectRepository) SetProvider(val RepositoryProvider) {
 	s.Provider = val
@@ -7340,19 +7371,9 @@ func (s *ProjectRepository) SetOrigin(val url.URL) {
 	s.Origin = val
 }
 
-// SetProviderRepositoryID sets the value of ProviderRepositoryID.
-func (s *ProjectRepository) SetProviderRepositoryID(val string) {
-	s.ProviderRepositoryID = val
-}
-
 // SetPathWithNamespace sets the value of PathWithNamespace.
 func (s *ProjectRepository) SetPathWithNamespace(val string) {
 	s.PathWithNamespace = val
-}
-
-// SetDefaultBranch sets the value of DefaultBranch.
-func (s *ProjectRepository) SetDefaultBranch(val string) {
-	s.DefaultBranch = val
 }
 
 // SetBoundAt sets the value of BoundAt.
@@ -7362,7 +7383,8 @@ func (s *ProjectRepository) SetBoundAt(val time.Time) {
 
 // Ref: #/components/schemas/ProjectRepositoryBind
 type ProjectRepositoryBind struct {
-	RepositoryURL url.URL `json:"repository_url"`
+	RepositoryURL url.URL               `json:"repository_url"`
+	Provider      OptRepositoryProvider `json:"provider"`
 }
 
 // GetRepositoryURL returns the value of RepositoryURL.
@@ -7370,9 +7392,19 @@ func (s *ProjectRepositoryBind) GetRepositoryURL() url.URL {
 	return s.RepositoryURL
 }
 
+// GetProvider returns the value of Provider.
+func (s *ProjectRepositoryBind) GetProvider() OptRepositoryProvider {
+	return s.Provider
+}
+
 // SetRepositoryURL sets the value of RepositoryURL.
 func (s *ProjectRepositoryBind) SetRepositoryURL(val url.URL) {
 	s.RepositoryURL = val
+}
+
+// SetProvider sets the value of Provider.
+func (s *ProjectRepositoryBind) SetProvider(val OptRepositoryProvider) {
+	s.Provider = val
 }
 
 // ProjectRepositoryChangedHeaders wraps ProjectRepositoryMutation with response headers.
@@ -8934,18 +8966,18 @@ func (s *TaskClaimStage) UnmarshalText(data []byte) error {
 
 // Ref: #/components/schemas/TaskCodeChange
 type TaskCodeChange struct {
-	ID                   uuid.UUID             `json:"id"`
-	ProjectRepositoryID  uuid.UUID             `json:"project_repository_id"`
-	Provider             RepositoryProvider    `json:"provider"`
-	RepositoryURL        url.URL               `json:"repository_url"`
-	Kind                 CodeChangeKind        `json:"kind"`
-	ChangeNumber         int64                 `json:"change_number"`
-	ProviderChangeID     string                `json:"provider_change_id"`
-	WebURL               url.URL               `json:"web_url"`
-	LinkedBy             Actor                 `json:"linked_by"`
-	LinkedThroughClaimID uuid.UUID             `json:"linked_through_claim_id"`
-	LinkedAt             time.Time             `json:"linked_at"`
-	LatestObservation    CodeChangeObservation `json:"latest_observation"`
+	ID                   uuid.UUID                     `json:"id"`
+	ProjectRepositoryID  uuid.UUID                     `json:"project_repository_id"`
+	Provider             RepositoryProvider            `json:"provider"`
+	RepositoryURL        url.URL                       `json:"repository_url"`
+	Kind                 CodeChangeKind                `json:"kind"`
+	ChangeNumber         int64                         `json:"change_number"`
+	WebURL               url.URL                       `json:"web_url"`
+	LinkedBy             Actor                         `json:"linked_by"`
+	LinkedThroughClaimID uuid.UUID                     `json:"linked_through_claim_id"`
+	LinkedAt             time.Time                     `json:"linked_at"`
+	ProviderEvidence     OptCodeChangeProviderEvidence `json:"provider_evidence"`
+	ProviderVerification OptCodeChangeVerification     `json:"provider_verification"`
 }
 
 // GetID returns the value of ID.
@@ -8978,11 +9010,6 @@ func (s *TaskCodeChange) GetChangeNumber() int64 {
 	return s.ChangeNumber
 }
 
-// GetProviderChangeID returns the value of ProviderChangeID.
-func (s *TaskCodeChange) GetProviderChangeID() string {
-	return s.ProviderChangeID
-}
-
 // GetWebURL returns the value of WebURL.
 func (s *TaskCodeChange) GetWebURL() url.URL {
 	return s.WebURL
@@ -9003,9 +9030,14 @@ func (s *TaskCodeChange) GetLinkedAt() time.Time {
 	return s.LinkedAt
 }
 
-// GetLatestObservation returns the value of LatestObservation.
-func (s *TaskCodeChange) GetLatestObservation() CodeChangeObservation {
-	return s.LatestObservation
+// GetProviderEvidence returns the value of ProviderEvidence.
+func (s *TaskCodeChange) GetProviderEvidence() OptCodeChangeProviderEvidence {
+	return s.ProviderEvidence
+}
+
+// GetProviderVerification returns the value of ProviderVerification.
+func (s *TaskCodeChange) GetProviderVerification() OptCodeChangeVerification {
+	return s.ProviderVerification
 }
 
 // SetID sets the value of ID.
@@ -9038,11 +9070,6 @@ func (s *TaskCodeChange) SetChangeNumber(val int64) {
 	s.ChangeNumber = val
 }
 
-// SetProviderChangeID sets the value of ProviderChangeID.
-func (s *TaskCodeChange) SetProviderChangeID(val string) {
-	s.ProviderChangeID = val
-}
-
 // SetWebURL sets the value of WebURL.
 func (s *TaskCodeChange) SetWebURL(val url.URL) {
 	s.WebURL = val
@@ -9063,9 +9090,14 @@ func (s *TaskCodeChange) SetLinkedAt(val time.Time) {
 	s.LinkedAt = val
 }
 
-// SetLatestObservation sets the value of LatestObservation.
-func (s *TaskCodeChange) SetLatestObservation(val CodeChangeObservation) {
-	s.LatestObservation = val
+// SetProviderEvidence sets the value of ProviderEvidence.
+func (s *TaskCodeChange) SetProviderEvidence(val OptCodeChangeProviderEvidence) {
+	s.ProviderEvidence = val
+}
+
+// SetProviderVerification sets the value of ProviderVerification.
+func (s *TaskCodeChange) SetProviderVerification(val OptCodeChangeVerification) {
+	s.ProviderVerification = val
 }
 
 // TaskCodeChangeChangedHeaders wraps TaskCodeChangeMutation with response headers.
@@ -9473,6 +9505,7 @@ func (s *TaskDeliveryComparison) SetComparison(val TaskDeliveryComparisonCompari
 type TaskDeliveryComparisonComparison string
 
 const (
+	TaskDeliveryComparisonComparisonUnverified   TaskDeliveryComparisonComparison = "unverified"
 	TaskDeliveryComparisonComparisonUnchanged    TaskDeliveryComparisonComparison = "unchanged"
 	TaskDeliveryComparisonComparisonMoved        TaskDeliveryComparisonComparison = "moved"
 	TaskDeliveryComparisonComparisonMerged       TaskDeliveryComparisonComparison = "merged"
@@ -9485,6 +9518,7 @@ const (
 // AllValues returns all TaskDeliveryComparisonComparison values.
 func (TaskDeliveryComparisonComparison) AllValues() []TaskDeliveryComparisonComparison {
 	return []TaskDeliveryComparisonComparison{
+		TaskDeliveryComparisonComparisonUnverified,
 		TaskDeliveryComparisonComparisonUnchanged,
 		TaskDeliveryComparisonComparisonMoved,
 		TaskDeliveryComparisonComparisonMerged,
@@ -9498,6 +9532,8 @@ func (TaskDeliveryComparisonComparison) AllValues() []TaskDeliveryComparisonComp
 // MarshalText implements encoding.TextMarshaler.
 func (s TaskDeliveryComparisonComparison) MarshalText() ([]byte, error) {
 	switch s {
+	case TaskDeliveryComparisonComparisonUnverified:
+		return []byte(s), nil
 	case TaskDeliveryComparisonComparisonUnchanged:
 		return []byte(s), nil
 	case TaskDeliveryComparisonComparisonMoved:
@@ -9520,6 +9556,9 @@ func (s TaskDeliveryComparisonComparison) MarshalText() ([]byte, error) {
 // UnmarshalText implements encoding.TextUnmarshaler.
 func (s *TaskDeliveryComparisonComparison) UnmarshalText(data []byte) error {
 	switch TaskDeliveryComparisonComparison(data) {
+	case TaskDeliveryComparisonComparisonUnverified:
+		*s = TaskDeliveryComparisonComparisonUnverified
+		return nil
 	case TaskDeliveryComparisonComparisonUnchanged:
 		*s = TaskDeliveryComparisonComparisonUnchanged
 		return nil

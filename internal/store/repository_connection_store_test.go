@@ -98,7 +98,7 @@ func TestRepositoryConnectionStoreRejectsDuplicateActiveRepository(t *testing.T)
 	require.ErrorIs(t, err, domain.ErrConflict)
 }
 
-func TestProjectRepositoryBindingProtectsActiveConnectionAndVersionsProject(t *testing.T) {
+func TestProjectRepositoryBindingIsIndependentFromConnectionAndVersionsProject(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 	now := time.Date(2026, 8, 13, 8, 0, 0, 0, time.UTC)
@@ -116,35 +116,38 @@ func TestProjectRepositoryBindingProtectsActiveConnectionAndVersionsProject(t *t
 	repositories := store.NewProjectRepositoryStore(db)
 
 	bound, err := repositories.Bind(
-		ctx, project.Project.ID, project.Project.Version, connection.ID,
+		ctx, project.Project.ID, project.Project.Version, repositoryReference(connection),
 		domain.SessionOperation(userA, "bind-repository"), now.Add(time.Minute),
 	)
 	require.NoError(t, err)
 	require.Equal(t, project.Project.Version+1, bound.ProjectVersion)
-	require.True(t, bound.Repository.Repository.Active())
+	require.True(t, bound.Repository.Active())
 
 	listed, err := repositories.ListActive(ctx, project.Project.ID)
 	require.NoError(t, err)
 	require.Len(t, listed, 1)
-	require.Equal(t, connection.CanonicalWebURL, listed[0].Connection.CanonicalWebURL)
+	require.Equal(t, connection.CanonicalWebURL, listed[0].CanonicalWebURL)
 
 	_, err = connections.Disable(
 		ctx, connection.ID, 1, domain.SessionOperation(userA, "disable-bound-connection"), now.Add(2*time.Minute),
 	)
-	require.ErrorIs(t, err, domain.ErrConflict)
+	require.NoError(t, err)
 
 	unbound, err := repositories.Unbind(
-		ctx, project.Project.ID, bound.ProjectVersion, bound.Repository.Repository.ID,
+		ctx, project.Project.ID, bound.ProjectVersion, bound.Repository.ID,
 		domain.SessionOperation(userA, "unbind-repository"), now.Add(3*time.Minute),
 	)
 	require.NoError(t, err)
 	require.Equal(t, bound.ProjectVersion+1, unbound.ProjectVersion)
-	require.False(t, unbound.Repository.Repository.Active())
+	require.False(t, unbound.Repository.Active())
+}
 
-	_, err = connections.Disable(
-		ctx, connection.ID, 1, domain.SessionOperation(userA, "disable-unbound-connection"), now.Add(4*time.Minute),
-	)
-	require.NoError(t, err)
+func repositoryReference(connection domain.RepositoryConnection) domain.RepositoryReference {
+	return domain.RepositoryReference{
+		Provider: connection.Provider, Origin: connection.Origin,
+		PathWithNamespace: connection.PathWithNamespace, PathLookupKey: connection.PathLookupKey,
+		WebURL: connection.CanonicalWebURL,
+	}
 }
 
 func testRepositoryConnection(now time.Time) domain.RepositoryConnection {

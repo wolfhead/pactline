@@ -131,12 +131,14 @@ production `X-User-Id` fallback.
   `execution_verification`; review Claims produce current-cycle `acceptance`.
   Completion considers only current criterion revisions and current review
   cycle acceptance.
-- GitLab Connections are repository-scoped, read-only machine identities
-  created by the System Administrator. Project administrators bind them by
-  repository URL after live authentication. Execution Claim owners may link
-  multiple MRs from repositories bound to the Task's immutable Project;
-  completion freezes the exact delivery set for review. Provider state is
-  on-demand evidence, never Task workflow authority, and there is no polling.
+- Project administrators add provider-neutral repository membership without a
+  Connection. Execution Claim owners may link multiple PR/MR URLs from
+  repositories in the Task's immutable Project; completion freezes the exact
+  delivery set for review. Repository Connections are optional,
+  repository-scoped read-only identities created by the System Administrator
+  and matched automatically to enrich provider evidence. Missing or failing
+  provider access never changes Agent or Task behavior. Provider refresh is on
+  demand only; there is no polling.
 - The `work:execute` scope permits Claim-owned transitions and acceptance
   checks but not task-definition, criterion, Project, or comment mutation.
 - Tasks are archived/restored, never hard-deleted. Their sequential numbers are

@@ -13,13 +13,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-type ProjectRepositoryWithConnection struct {
-	Repository domain.ProjectRepository
-	Connection domain.RepositoryConnection
-}
-
 type ProjectRepositoryMutation struct {
-	Repository     ProjectRepositoryWithConnection
+	Repository     domain.ProjectRepository
 	ProjectVersion int64
 }
 
@@ -32,23 +27,22 @@ func NewProjectRepositoryStore(db *DB) *ProjectRepositoryStore {
 func (s *ProjectRepositoryStore) ListActive(
 	ctx context.Context,
 	projectID uuid.UUID,
-) ([]ProjectRepositoryWithConnection, error) {
+) ([]domain.ProjectRepository, error) {
 	rows, err := s.db.Pool.Query(ctx, `
 		SELECT
-			repository.id, repository.project_id, repository.connection_id,
-			repository.bound_by, repository.bound_at, repository.unbound_by, repository.unbound_at,
-			`+prefixedRepositoryConnectionColumns("connection")+`
+			repository.id, repository.project_id, repository.provider, repository.origin,
+			repository.path_with_namespace, repository.path_lookup_key, repository.canonical_web_url,
+			repository.bound_by, repository.bound_at, repository.unbound_by, repository.unbound_at
 		FROM project_repositories repository
-		JOIN repository_connections connection ON connection.id=repository.connection_id
 		WHERE repository.project_id=$1 AND repository.unbound_at IS NULL
-		ORDER BY connection.path_lookup_key, repository.id`, projectID)
+		ORDER BY repository.provider, repository.origin, repository.path_lookup_key, repository.id`, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("list Project repositories: %w", err)
 	}
 	defer rows.Close()
-	result := []ProjectRepositoryWithConnection{}
+	result := []domain.ProjectRepository{}
 	for rows.Next() {
-		item, err := scanProjectRepositoryWithConnection(rows)
+		item, err := scanProjectRepository(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -61,21 +55,19 @@ func (s *ProjectRepositoryStore) FindActiveByReference(
 	ctx context.Context,
 	projectID uuid.UUID,
 	reference domain.RepositoryReference,
-) (ProjectRepositoryWithConnection, error) {
-	item, err := scanProjectRepositoryWithConnection(s.db.Pool.QueryRow(ctx, `
+) (domain.ProjectRepository, error) {
+	item, err := scanProjectRepository(s.db.Pool.QueryRow(ctx, `
 		SELECT
-			repository.id, repository.project_id, repository.connection_id,
-			repository.bound_by, repository.bound_at, repository.unbound_by, repository.unbound_at,
-			`+prefixedRepositoryConnectionColumns("connection")+`
+			repository.id, repository.project_id, repository.provider, repository.origin,
+			repository.path_with_namespace, repository.path_lookup_key, repository.canonical_web_url,
+			repository.bound_by, repository.bound_at, repository.unbound_by, repository.unbound_at
 		FROM project_repositories repository
-		JOIN repository_connections connection ON connection.id=repository.connection_id
 		WHERE repository.project_id=$1 AND repository.unbound_at IS NULL
-		  AND connection.status='active' AND connection.provider=$2
-		  AND connection.origin=$3 AND connection.path_lookup_key=$4`,
+		  AND repository.provider=$2 AND repository.origin=$3 AND repository.path_lookup_key=$4`,
 		projectID, reference.Provider, reference.Origin, reference.PathLookupKey,
 	))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ProjectRepositoryWithConnection{}, domain.ErrNotFound
+		return domain.ProjectRepository{}, domain.ErrNotFound
 	}
 	return item, err
 }
@@ -84,11 +76,14 @@ func (s *ProjectRepositoryStore) Bind(
 	ctx context.Context,
 	projectID uuid.UUID,
 	expectedProjectVersion int64,
-	connectionID uuid.UUID,
+	reference domain.RepositoryReference,
 	operation domain.OperationActor,
 	now time.Time,
 ) (ProjectRepositoryMutation, error) {
 	if err := operation.Validate(); err != nil {
+		return ProjectRepositoryMutation{}, err
+	}
+	if err := reference.Validate(); err != nil {
 		return ProjectRepositoryMutation{}, err
 	}
 	tx, err := s.db.Pool.Begin(ctx)
@@ -110,30 +105,23 @@ func (s *ProjectRepositoryStore) Bind(
 	if archivedAt != nil {
 		return ProjectRepositoryMutation{}, fmt.Errorf("%w: archived Projects are read-only", domain.ErrConflict)
 	}
-	connection, err := scanRepositoryConnection(tx.QueryRow(ctx, `
-		SELECT `+repositoryConnectionColumns+`
-		FROM repository_connections WHERE id=$1 FOR SHARE`, connectionID))
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ProjectRepositoryMutation{}, domain.ErrNotFound
-	}
-	if err != nil {
-		return ProjectRepositoryMutation{}, err
-	}
-	if connection.Status != domain.RepositoryConnectionStatusActive {
-		return ProjectRepositoryMutation{}, fmt.Errorf("%w: Repository Connection is disabled", domain.ErrConflict)
-	}
 	repository := domain.ProjectRepository{
-		ID: uuid.New(), ProjectID: projectID, ConnectionID: connectionID,
-		BoundBy: operation.UserID, BoundAt: now,
+		ID: uuid.New(), ProjectID: projectID,
+		Provider: reference.Provider, Origin: reference.Origin,
+		PathWithNamespace: reference.PathWithNamespace, PathLookupKey: reference.PathLookupKey,
+		CanonicalWebURL: reference.WebURL,
+		BoundBy:         operation.UserID, BoundAt: now,
 	}
 	if err := repository.Validate(); err != nil {
 		return ProjectRepositoryMutation{}, err
 	}
 	_, err = tx.Exec(ctx, `
 		INSERT INTO project_repositories (
-			id, project_id, connection_id, bound_by, bound_at
-		) VALUES ($1,$2,$3,$4,$5)`,
-		repository.ID, repository.ProjectID, repository.ConnectionID,
+			id, project_id, provider, origin, path_with_namespace, path_lookup_key,
+			canonical_web_url, bound_by, bound_at
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+		repository.ID, repository.ProjectID, repository.Provider, repository.Origin,
+		repository.PathWithNamespace, repository.PathLookupKey, repository.CanonicalWebURL,
 		repository.BoundBy, repository.BoundAt,
 	)
 	if err != nil {
@@ -144,12 +132,12 @@ func (s *ProjectRepositoryStore) Bind(
 		return ProjectRepositoryMutation{}, err
 	}
 	if err := insertProjectRepositoryActivity(
-		ctx, tx, projectID, operation, "project_repository_bound", connection.CanonicalWebURL,
-		"", connection.CanonicalWebURL,
+		ctx, tx, projectID, operation, "project_repository_bound", repository.CanonicalWebURL,
+		"", repository.CanonicalWebURL,
 	); err != nil {
 		return ProjectRepositoryMutation{}, err
 	}
-	newValue, _ := json.Marshal(projectRepositoryAuditValue(repository, connection))
+	newValue, _ := json.Marshal(projectRepositoryAuditValue(repository))
 	if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
 		OccurredAt: now, Actor: operation, EntityType: "project_repository",
 		EntityID: repository.ID, Action: "bound", NewValue: newValue,
@@ -160,7 +148,7 @@ func (s *ProjectRepositoryStore) Bind(
 		return ProjectRepositoryMutation{}, fmt.Errorf("commit Project repository bind: %w", err)
 	}
 	return ProjectRepositoryMutation{
-		Repository:     ProjectRepositoryWithConnection{Repository: repository, Connection: connection},
+		Repository:     repository,
 		ProjectVersion: projectVersion,
 	}, nil
 }
@@ -195,13 +183,12 @@ func (s *ProjectRepositoryStore) Unbind(
 	if archivedAt != nil {
 		return ProjectRepositoryMutation{}, fmt.Errorf("%w: archived Projects are read-only", domain.ErrConflict)
 	}
-	item, err := scanProjectRepositoryWithConnection(tx.QueryRow(ctx, `
+	item, err := scanProjectRepository(tx.QueryRow(ctx, `
 		SELECT
-			repository.id, repository.project_id, repository.connection_id,
-			repository.bound_by, repository.bound_at, repository.unbound_by, repository.unbound_at,
-			`+prefixedRepositoryConnectionColumns("connection")+`
+			repository.id, repository.project_id, repository.provider, repository.origin,
+			repository.path_with_namespace, repository.path_lookup_key, repository.canonical_web_url,
+			repository.bound_by, repository.bound_at, repository.unbound_by, repository.unbound_at
 		FROM project_repositories repository
-		JOIN repository_connections connection ON connection.id=repository.connection_id
 		WHERE repository.id=$1 AND repository.project_id=$2
 		FOR UPDATE OF repository`, repositoryID, projectID))
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -210,7 +197,7 @@ func (s *ProjectRepositoryStore) Unbind(
 	if err != nil {
 		return ProjectRepositoryMutation{}, err
 	}
-	if !item.Repository.Active() {
+	if !item.Active() {
 		return ProjectRepositoryMutation{}, fmt.Errorf("%w: Project repository is already unbound", domain.ErrConflict)
 	}
 	_, err = tx.Exec(ctx, `
@@ -220,26 +207,26 @@ func (s *ProjectRepositoryStore) Unbind(
 	if err != nil {
 		return ProjectRepositoryMutation{}, mapPgError(err)
 	}
-	item.Repository.UnboundBy = &operation.UserID
-	item.Repository.UnboundAt = &now
+	item.UnboundBy = &operation.UserID
+	item.UnboundAt = &now
 	projectVersion, err = incrementVersion(ctx, tx, "projects", projectID, projectVersion)
 	if err != nil {
 		return ProjectRepositoryMutation{}, err
 	}
 	if err := insertProjectRepositoryActivity(
 		ctx, tx, projectID, operation, "project_repository_unbound",
-		item.Connection.CanonicalWebURL, item.Connection.CanonicalWebURL, "",
+		item.CanonicalWebURL, item.CanonicalWebURL, "",
 	); err != nil {
 		return ProjectRepositoryMutation{}, err
 	}
 	oldValue, _ := json.Marshal(projectRepositoryAuditValue(
 		domain.ProjectRepository{
-			ID: item.Repository.ID, ProjectID: item.Repository.ProjectID,
-			ConnectionID: item.Repository.ConnectionID, BoundBy: item.Repository.BoundBy,
-			BoundAt: item.Repository.BoundAt,
-		}, item.Connection,
+			ID: item.ID, ProjectID: item.ProjectID, Provider: item.Provider, Origin: item.Origin,
+			PathWithNamespace: item.PathWithNamespace, PathLookupKey: item.PathLookupKey,
+			CanonicalWebURL: item.CanonicalWebURL, BoundBy: item.BoundBy, BoundAt: item.BoundAt,
+		},
 	))
-	newValue, _ := json.Marshal(projectRepositoryAuditValue(item.Repository, item.Connection))
+	newValue, _ := json.Marshal(projectRepositoryAuditValue(item))
 	if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
 		OccurredAt: now, Actor: operation, EntityType: "project_repository",
 		EntityID: repositoryID, Action: "unbound", OldValue: oldValue, NewValue: newValue,
@@ -277,51 +264,28 @@ func insertProjectRepositoryActivity(
 	return nil
 }
 
-func projectRepositoryAuditValue(
-	repository domain.ProjectRepository,
-	connection domain.RepositoryConnection,
-) map[string]any {
+func projectRepositoryAuditValue(repository domain.ProjectRepository) map[string]any {
 	return map[string]any{
-		"project_id": repository.ProjectID, "connection_id": repository.ConnectionID,
-		"provider": connection.Provider, "provider_repository_id": connection.ProviderRepositoryID,
-		"canonical_web_url": connection.CanonicalWebURL,
+		"project_id": repository.ProjectID, "provider": repository.Provider,
+		"origin": repository.Origin, "path_with_namespace": repository.PathWithNamespace,
+		"canonical_web_url": repository.CanonicalWebURL,
 		"bound_at":          repository.BoundAt, "unbound_at": repository.UnboundAt,
 	}
-}
-
-func prefixedRepositoryConnectionColumns(alias string) string {
-	return alias + `.id, ` + alias + `.version, ` + alias + `.label, ` + alias + `.origin, ` +
-		alias + `.provider, ` + alias + `.provider_repository_id, ` + alias + `.path_with_namespace, ` +
-		alias + `.path_lookup_key, ` + alias + `.canonical_web_url, ` +
-		alias + `.default_branch, ` + alias + `.credential_ciphertext, ` +
-		alias + `.encryption_key_id, ` + alias + `.credential_expires_at, ` +
-		alias + `.status, ` + alias + `.last_validated_at, ` + alias + `.created_by, ` +
-		alias + `.disabled_by, ` + alias + `.disabled_at, ` + alias + `.created_at, ` +
-		alias + `.updated_at`
 }
 
 type projectRepositoryScanner interface {
 	Scan(dest ...any) error
 }
 
-func scanProjectRepositoryWithConnection(row projectRepositoryScanner) (ProjectRepositoryWithConnection, error) {
-	var item ProjectRepositoryWithConnection
+func scanProjectRepository(row projectRepositoryScanner) (domain.ProjectRepository, error) {
+	var repository domain.ProjectRepository
 	err := row.Scan(
-		&item.Repository.ID, &item.Repository.ProjectID, &item.Repository.ConnectionID,
-		&item.Repository.BoundBy, &item.Repository.BoundAt,
-		&item.Repository.UnboundBy, &item.Repository.UnboundAt,
-		&item.Connection.ID, &item.Connection.Version, &item.Connection.Label,
-		&item.Connection.Origin, &item.Connection.Provider, &item.Connection.ProviderRepositoryID,
-		&item.Connection.PathWithNamespace, &item.Connection.PathLookupKey,
-		&item.Connection.CanonicalWebURL, &item.Connection.DefaultBranch,
-		&item.Connection.CredentialCiphertext, &item.Connection.EncryptionKeyID,
-		&item.Connection.CredentialExpiresAt, &item.Connection.Status,
-		&item.Connection.LastValidatedAt, &item.Connection.CreatedBy,
-		&item.Connection.DisabledBy, &item.Connection.DisabledAt,
-		&item.Connection.CreatedAt, &item.Connection.UpdatedAt,
+		&repository.ID, &repository.ProjectID, &repository.Provider, &repository.Origin,
+		&repository.PathWithNamespace, &repository.PathLookupKey, &repository.CanonicalWebURL,
+		&repository.BoundBy, &repository.BoundAt, &repository.UnboundBy, &repository.UnboundAt,
 	)
 	if err != nil {
-		return ProjectRepositoryWithConnection{}, err
+		return domain.ProjectRepository{}, err
 	}
-	return item, nil
+	return repository, nil
 }

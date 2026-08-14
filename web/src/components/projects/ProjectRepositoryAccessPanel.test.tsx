@@ -22,8 +22,8 @@ describe('ProjectRepositoryAccessPanel', () => {
       project_version: 4,
       repository: {
         id: 'repository-1', canonical_web_url: 'https://gitlab.example/team/app',
-		label: 'App', provider: 'gitlab', origin: 'https://gitlab.example', provider_repository_id: '42',
-        path_with_namespace: 'team/app', default_branch: 'main', bound_at: '2026-08-13T00:00:00Z',
+        provider: 'gitlab', origin: 'https://gitlab.example',
+        path_with_namespace: 'team/app', bound_at: '2026-08-13T00:00:00Z',
       },
     })
     vi.mocked(unbindProjectRepository).mockReset()
@@ -40,13 +40,14 @@ describe('ProjectRepositoryAccessPanel', () => {
         onChanged={onChanged}
       />,
     )
-    await screen.findByText('尚未绑定代码仓库。系统管理员需要先为仓库创建 Connection。')
-	fireEvent.change(screen.getByLabelText('代码仓库地址'), {
+    await screen.findByText('尚未添加代码仓库。项目管理员可以直接粘贴 GitHub 或 GitLab 仓库地址。')
+    fireEvent.change(screen.getByLabelText('代码仓库地址'), {
       target: { value: 'https://gitlab.example/team/app' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '绑定并鉴权' }))
+    fireEvent.change(screen.getByLabelText('仓库类型'), { target: { value: 'gitlab' } })
+    fireEvent.click(screen.getByRole('button', { name: '添加仓库' }))
     await waitFor(() => expect(bindProjectRepository).toHaveBeenCalledWith(
-      12, 3, 'https://gitlab.example/team/app',
+      12, 3, 'https://gitlab.example/team/app', 'gitlab',
     ))
     expect(onChanged).toHaveBeenCalledOnce()
   })
@@ -61,8 +62,8 @@ describe('ProjectRepositoryAccessPanel', () => {
         onChanged={vi.fn()}
       />,
     )
-    await screen.findByText('尚未绑定代码仓库。系统管理员需要先为仓库创建 Connection。')
-	expect(screen.queryByLabelText('代码仓库地址')).not.toBeInTheDocument()
+    await screen.findByText('尚未添加代码仓库。项目管理员可以直接粘贴 GitHub 或 GitLab 仓库地址。')
+    expect(screen.queryByLabelText('代码仓库地址')).not.toBeInTheDocument()
   })
 
   it('does not present a loading failure as an unbound Project', async () => {
@@ -78,6 +79,6 @@ describe('ProjectRepositoryAccessPanel', () => {
     )
 
     expect(await screen.findByRole('alert')).toHaveTextContent('read failed')
-    expect(screen.queryByText('尚未绑定代码仓库。系统管理员需要先为仓库创建 Connection。')).not.toBeInTheDocument()
+    expect(screen.queryByText('尚未添加代码仓库。项目管理员可以直接粘贴 GitHub 或 GitLab 仓库地址。')).not.toBeInTheDocument()
   })
 })

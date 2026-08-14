@@ -20,6 +20,7 @@ const taskDeliveryRefreshTimeout = 15 * time.Second
 type TaskDeliveryService struct {
 	CodeChanges  *store.TaskCodeChangeStore
 	Repositories *store.ProjectRepositoryStore
+	Connections  *store.RepositoryConnectionStore
 	Access       *ProjectAccessService
 	Providers    *RepositoryProviderRegistry
 	Cipher       *identity.CredentialCipher
@@ -45,10 +46,7 @@ func (s *TaskDeliveryService) GetDelivery(
 	if err != nil {
 		return TaskDelivery{}, err
 	}
-	links, err = s.refreshLinks(ctx, links, requestID)
-	if err != nil {
-		return TaskDelivery{}, err
-	}
+	links = s.refreshLinks(ctx, links, requestID)
 	var review *store.TaskDeliverySnapshot
 	if task.Task.Phase == domain.TaskPhaseInReview || task.Task.Phase == domain.TaskPhaseDone {
 		review, err = s.CodeChanges.GetReviewSnapshot(ctx, task.Task.ID, task.Task.ReviewCycle)
@@ -73,28 +71,14 @@ func (s *TaskDeliveryService) PrepareCompletion(
 	if err != nil {
 		return nil, err
 	}
-	links, err = s.refreshLinks(ctx, links, requestID)
-	if err != nil {
-		return nil, err
-	}
+	links = s.refreshLinks(ctx, links, requestID)
 	snapshots := make([]domain.CodeChangeSnapshot, len(links))
 	for index, link := range links {
-		observation := link.CodeChange.LatestObservation
 		snapshots[index] = domain.CodeChangeSnapshot{
-			TaskCodeChangeID:     link.CodeChange.ID,
-			ProjectRepositoryID:  link.Repository.ID,
-			ConnectionID:         link.Connection.ID,
-			Provider:             link.Connection.Provider,
-			ProviderRepositoryID: link.Connection.ProviderRepositoryID,
-			Kind:                 link.CodeChange.Kind,
-			ChangeNumber:         link.CodeChange.ChangeNumber,
-			ProviderChangeID:     link.CodeChange.ProviderChangeID,
-			WebURL:               link.CodeChange.WebURL, Title: observation.Title,
-			State: observation.State, Draft: observation.Draft,
-			SourceBranch: observation.SourceBranch, TargetBranch: observation.TargetBranch,
-			HeadSHA: observation.HeadSHA, MergeCommitSHA: observation.MergeCommitSHA,
-			MergedAt: observation.MergedAt, ObservationStatus: observation.Status,
-			ObservedAt: observation.ObservedAt,
+			TaskCodeChangeID: link.CodeChange.ID, ProjectRepositoryID: link.Repository.ID,
+			Provider: link.CodeChange.Provider, Kind: link.CodeChange.Kind,
+			ChangeNumber: link.CodeChange.ChangeNumber, WebURL: link.CodeChange.WebURL,
+			ProviderEvidence: link.CodeChange.ProviderEvidence,
 		}
 		if err := snapshots[index].Validate(); err != nil {
 			return nil, err
@@ -107,131 +91,190 @@ func (s *TaskDeliveryService) refreshLinks(
 	ctx context.Context,
 	links []store.TaskCodeChangeWithRepository,
 	requestID string,
-) ([]store.TaskCodeChangeWithRepository, error) {
+) []store.TaskCodeChangeWithRepository {
 	if len(links) == 0 {
-		return links, nil
+		return links
 	}
 	results := append([]store.TaskCodeChangeWithRepository(nil), links...)
 	refreshContext, cancelRefresh := context.WithTimeout(ctx, taskDeliveryRefreshTimeout)
 	defer cancelRefresh()
 	semaphore := make(chan struct{}, 4)
 	var waitGroup sync.WaitGroup
-	var firstError error
-	var errorLock sync.Mutex
 	for index := range results {
 		waitGroup.Add(1)
 		go func(index int) {
 			defer waitGroup.Done()
-			var observation domain.CodeChangeObservation
 			select {
 			case semaphore <- struct{}{}:
 				defer func() { <-semaphore }()
-				observation = s.refreshObservation(refreshContext, results[index], requestID)
+				results[index] = s.refreshProviderEvidence(refreshContext, results[index], requestID)
 			case <-refreshContext.Done():
-				observation = domain.CodeChangeObservation{
-					Status: domain.CodeChangeObservationUnreachable, ObservedAt: s.now(),
+				if results[index].CodeChange.ProviderEvidence != nil {
+					verification := domain.CodeChangeVerification{
+						Status: domain.CodeChangeVerificationUnreachable, AttemptedAt: s.now(),
+					}
+					s.persistVerification(ctx, &results[index], verification, requestID)
 				}
-			}
-			if err := s.CodeChanges.UpdateObservation(
-				ctx, results[index].CodeChange.ID, observation, s.now(),
-			); err != nil {
-				errorLock.Lock()
-				if firstError == nil {
-					firstError = err
-				}
-				errorLock.Unlock()
-				return
-			}
-			if observation.Status == domain.CodeChangeObservationConfirmed {
-				results[index].CodeChange.LatestObservation = observation
-			} else {
-				results[index].CodeChange.LatestObservation.Status = observation.Status
-				results[index].CodeChange.LatestObservation.ObservedAt = observation.ObservedAt
 			}
 		}(index)
 	}
 	waitGroup.Wait()
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if firstError != nil {
-		return nil, firstError
-	}
-	return results, nil
+	return results
 }
 
-func (s *TaskDeliveryService) refreshObservation(
+func (s *TaskDeliveryService) refreshProviderEvidence(
 	ctx context.Context,
 	item store.TaskCodeChangeWithRepository,
 	requestID string,
-) domain.CodeChangeObservation {
+) store.TaskCodeChangeWithRepository {
 	now := s.now()
-	if item.Connection.Status != domain.RepositoryConnectionStatusActive || s.Providers == nil || s.Cipher == nil {
-		return domain.CodeChangeObservation{Status: domain.CodeChangeObservationDisconnected, ObservedAt: now}
+	if s.Connections == nil {
+		return item
 	}
-	provider, err := s.Providers.Provider(item.Connection.Provider)
+	connection, err := s.Connections.FindActiveByRepository(ctx, item.Repository.Reference())
+	if errors.Is(err, domain.ErrNotFound) {
+		if item.CodeChange.ProviderEvidence != nil {
+			s.persistVerification(ctx, &item, domain.CodeChangeVerification{
+				Status: domain.CodeChangeVerificationDisconnected, AttemptedAt: now,
+			}, requestID)
+		}
+		return item
+	}
 	if err != nil {
-		return domain.CodeChangeObservation{Status: domain.CodeChangeObservationDisconnected, ObservedAt: now}
+		slog.WarnContext(ctx, "match repository connection for delivery evidence",
+			"project_repository_id", item.Repository.ID, "provider", item.Repository.Provider,
+			"request_id", requestID, "error", err)
+		return item
+	}
+	if s.Providers == nil || s.Cipher == nil {
+		s.persistVerification(ctx, &item, domain.CodeChangeVerification{
+			Status: domain.CodeChangeVerificationDisconnected, AttemptedAt: now,
+		}, requestID)
+		return item
+	}
+	provider, err := s.Providers.Provider(connection.Provider)
+	if err != nil {
+		s.persistVerification(ctx, &item, domain.CodeChangeVerification{
+			Status: domain.CodeChangeVerificationDisconnected, AttemptedAt: now,
+		}, requestID)
+		return item
 	}
 	credential, err := s.Cipher.Decrypt(
-		item.Connection.EncryptionKeyID, item.Connection.CredentialCiphertext,
+		connection.EncryptionKeyID, connection.CredentialCiphertext,
 	)
 	if err != nil {
 		slog.ErrorContext(ctx, "decrypt repository delivery credential",
-			"connection_id", item.Connection.ID,
-			"provider", item.Connection.Provider,
-			"provider_repository_id", item.Connection.ProviderRepositoryID,
+			"connection_id", connection.ID, "provider", connection.Provider,
+			"provider_repository_id", connection.ProviderRepositoryID,
 			"change_number", item.CodeChange.ChangeNumber,
 			"request_id", requestID, "error", err)
-		return domain.CodeChangeObservation{Status: domain.CodeChangeObservationDisconnected, ObservedAt: now}
+		s.persistVerification(ctx, &item, domain.CodeChangeVerification{
+			Status: domain.CodeChangeVerificationDisconnected, AttemptedAt: now,
+		}, requestID)
+		return item
 	}
 	defer clear(credential)
 	codeChange, err := provider.GetCodeChange(
-		ctx, repositoryReference(item.Connection), item.Connection.ProviderRepositoryID,
+		ctx, item.Repository.Reference(), connection.ProviderRepositoryID,
 		item.CodeChange.Kind, item.CodeChange.ChangeNumber, credential, requestID,
 	)
 	if err != nil {
-		mapped := mapRepositoryProviderError(item.Connection.Provider, err)
-		status := domain.CodeChangeObservationUnreachable
+		mapped := mapRepositoryProviderError(connection.Provider, err)
+		status := domain.CodeChangeVerificationUnreachable
 		switch {
 		case errors.Is(mapped, domain.ErrNotFound):
-			status = domain.CodeChangeObservationMissing
+			status = domain.CodeChangeVerificationMissing
 		case errors.Is(mapped, domain.ErrProviderUnauthorized):
-			status = domain.CodeChangeObservationUnauthorized
+			status = domain.CodeChangeVerificationUnauthorized
 		}
-		return domain.CodeChangeObservation{Status: status, ObservedAt: now}
+		s.persistVerification(ctx, &item, domain.CodeChangeVerification{Status: status, AttemptedAt: now}, requestID)
+		return item
 	}
-	if codeChange.ProviderChangeID != item.CodeChange.ProviderChangeID ||
+	providerReference, parseErr := provider.ParseCodeChangeURL(codeChange.WebURL)
+	if parseErr != nil || providerReference.Repository.Provider != item.Repository.Provider ||
+		providerReference.Repository.Origin != item.Repository.Origin ||
+		providerReference.Repository.PathLookupKey != item.Repository.PathLookupKey ||
+		(item.CodeChange.ProviderEvidence != nil &&
+			codeChange.ProviderChangeID != item.CodeChange.ProviderEvidence.ProviderChangeID) ||
 		codeChange.ChangeNumber != item.CodeChange.ChangeNumber || codeChange.Kind != item.CodeChange.Kind {
 		slog.WarnContext(ctx, "repository delivery identity changed",
-			"connection_id", item.Connection.ID,
-			"provider", item.Connection.Provider,
-			"provider_repository_id", item.Connection.ProviderRepositoryID,
+			"connection_id", connection.ID, "provider", connection.Provider,
+			"provider_repository_id", connection.ProviderRepositoryID,
 			"kind", item.CodeChange.Kind, "change_number", item.CodeChange.ChangeNumber,
 			"request_id", requestID)
-		return domain.CodeChangeObservation{Status: domain.CodeChangeObservationMissing, ObservedAt: now}
+		s.persistVerification(ctx, &item, domain.CodeChangeVerification{
+			Status: domain.CodeChangeVerificationMissing, AttemptedAt: now,
+		}, requestID)
+		return item
 	}
-	return codeChange.Observation
+	observation := codeChange.Observation
+	if observation.Status != domain.CodeChangeObservationConfirmed {
+		s.persistVerification(ctx, &item, domain.CodeChangeVerification{
+			Status: domain.CodeChangeVerificationUnreachable, AttemptedAt: now,
+		}, requestID)
+		return item
+	}
+	evidence := domain.CodeChangeProviderEvidence{
+		ConnectionID: connection.ID, ProviderRepositoryID: connection.ProviderRepositoryID,
+		ProviderChangeID: codeChange.ProviderChangeID, Title: observation.Title,
+		State: observation.State, Draft: observation.Draft,
+		SourceBranch: observation.SourceBranch, TargetBranch: observation.TargetBranch,
+		HeadSHA: observation.HeadSHA, MergeCommitSHA: observation.MergeCommitSHA,
+		MergedAt: observation.MergedAt, ProviderUpdatedAt: observation.ProviderUpdatedAt,
+		ObservedAt: observation.ObservedAt,
+	}
+	verification := domain.CodeChangeVerification{
+		Status: domain.CodeChangeVerificationVerified, AttemptedAt: now,
+	}
+	if err := s.CodeChanges.UpdateProviderEvidence(ctx, item.CodeChange.ID, evidence, verification, now); err != nil {
+		slog.WarnContext(ctx, "persist repository delivery evidence",
+			"task_code_change_id", item.CodeChange.ID, "connection_id", connection.ID,
+			"provider", connection.Provider, "request_id", requestID, "error", err)
+		return item
+	}
+	item.CodeChange.ProviderEvidence = &evidence
+	item.CodeChange.ProviderVerification = &verification
+	return item
+}
+
+func (s *TaskDeliveryService) persistVerification(
+	ctx context.Context,
+	item *store.TaskCodeChangeWithRepository,
+	verification domain.CodeChangeVerification,
+	requestID string,
+) {
+	if err := s.CodeChanges.UpdateProviderVerification(ctx, item.CodeChange.ID, verification, s.now()); err != nil {
+		slog.WarnContext(ctx, "persist repository delivery verification",
+			"task_code_change_id", item.CodeChange.ID, "provider", item.CodeChange.Provider,
+			"verification_status", verification.Status, "request_id", requestID, "error", err)
+		return
+	}
+	item.CodeChange.ProviderVerification = &verification
 }
 
 func DeliveryComparison(snapshot domain.CodeChangeSnapshot, current *domain.TaskCodeChange) string {
 	if current == nil {
 		return "missing"
 	}
-	switch current.LatestObservation.Status {
-	case domain.CodeChangeObservationMissing:
-		return "missing"
-	case domain.CodeChangeObservationUnauthorized:
-		return "unauthorized"
-	case domain.CodeChangeObservationUnreachable:
-		return "unreachable"
-	case domain.CodeChangeObservationDisconnected:
-		return "disconnected"
+	if snapshot.ProviderEvidence == nil || current.ProviderEvidence == nil {
+		return "unverified"
 	}
-	if current.LatestObservation.State == domain.CodeChangeStateMerged {
+	if current.ProviderVerification != nil {
+		switch current.ProviderVerification.Status {
+		case domain.CodeChangeVerificationMissing:
+			return "missing"
+		case domain.CodeChangeVerificationUnauthorized:
+			return "unauthorized"
+		case domain.CodeChangeVerificationUnreachable:
+			return "unreachable"
+		case domain.CodeChangeVerificationDisconnected:
+			return "disconnected"
+		}
+	}
+	if current.ProviderEvidence.State == domain.CodeChangeStateMerged {
 		return "merged"
 	}
-	if current.LatestObservation.HeadSHA != snapshot.HeadSHA {
+	if current.ProviderEvidence.HeadSHA != snapshot.ProviderEvidence.HeadSHA {
 		return "moved"
 	}
 	return "unchanged"
@@ -248,9 +291,6 @@ func (s *TaskDeliveryService) LinkCodeChange(
 	actor domain.Actor,
 	operation domain.OperationActor,
 ) (store.TaskCodeChangeMutation, error) {
-	if s.Providers == nil || s.Cipher == nil {
-		return store.TaskCodeChangeMutation{}, domain.ErrIntegrationNotConfigured
-	}
 	task, err := s.Access.RequireTaskByNumber(ctx, taskNumber, subject, ProjectPermissionRead)
 	if err != nil {
 		return store.TaskCodeChangeMutation{}, err
@@ -260,7 +300,7 @@ func (s *TaskDeliveryService) LinkCodeChange(
 		return store.TaskCodeChangeMutation{}, err
 	}
 	var reference domain.CodeChangeReference
-	var repository store.ProjectRepositoryWithConnection
+	var repository domain.ProjectRepository
 	matchCount := 0
 	for _, candidate := range candidates {
 		matched, findErr := s.Repositories.FindActiveByReference(ctx, task.Task.ProjectID, candidate.Repository)
@@ -281,38 +321,15 @@ func (s *TaskDeliveryService) LinkCodeChange(
 			"%w: code change URL matches more than one repository bound to the Project", domain.ErrConflict,
 		)
 	}
-	provider, err := s.Providers.Provider(repository.Connection.Provider)
+	mutation, err := s.CodeChanges.Link(
+		ctx, taskNumber, claimID, expectedTaskVersion, expectedClaimVersion,
+		repository.ID, reference, actor, operation, s.now(),
+	)
 	if err != nil {
 		return store.TaskCodeChangeMutation{}, err
 	}
-	credential, err := s.Cipher.Decrypt(
-		repository.Connection.EncryptionKeyID, repository.Connection.CredentialCiphertext,
-	)
-	if err != nil {
-		return store.TaskCodeChangeMutation{}, fmt.Errorf("decrypt repository credential: %w", err)
-	}
-	defer clear(credential)
-	codeChange, err := provider.GetCodeChange(
-		ctx, repositoryReference(repository.Connection), repository.Connection.ProviderRepositoryID,
-		reference.Kind, reference.ChangeNumber, credential, operation.RequestID,
-	)
-	if err != nil {
-		return store.TaskCodeChangeMutation{}, mapRepositoryProviderError(repository.Connection.Provider, err)
-	}
-	providerReference, err := provider.ParseCodeChangeURL(codeChange.WebURL)
-	if err != nil || providerReference.Repository.Provider != reference.Repository.Provider ||
-		providerReference.Repository.Origin != reference.Repository.Origin ||
-		providerReference.Repository.PathLookupKey != reference.Repository.PathLookupKey ||
-		providerReference.Kind != reference.Kind || providerReference.ChangeNumber != reference.ChangeNumber {
-		return store.TaskCodeChangeMutation{}, fmt.Errorf(
-			"%w: provider returned a different code change identity", domain.ErrProviderRejected,
-		)
-	}
-	codeChange.WebURL = providerReference.WebURL
-	return s.CodeChanges.Link(
-		ctx, taskNumber, claimID, expectedTaskVersion, expectedClaimVersion,
-		repository.Repository.ID, codeChange, actor, operation, s.now(),
-	)
+	mutation.CodeChange = s.refreshProviderEvidence(ctx, mutation.CodeChange, operation.RequestID)
+	return mutation, nil
 }
 
 func (s *TaskDeliveryService) UnlinkCodeChange(

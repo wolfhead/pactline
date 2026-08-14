@@ -21,7 +21,6 @@ type TaskDeliverySnapshot struct {
 type TaskCodeChangeWithRepository struct {
 	CodeChange domain.TaskCodeChange
 	Repository domain.ProjectRepository
-	Connection domain.RepositoryConnection
 }
 
 type TaskCodeChangeMutation struct {
@@ -41,7 +40,7 @@ func (s *TaskCodeChangeStore) ListActive(
 ) ([]TaskCodeChangeWithRepository, error) {
 	rows, err := s.db.Pool.Query(ctx, taskCodeChangeSelect+`
 		WHERE code_change.task_id=$1 AND code_change.unlinked_at IS NULL
-		ORDER BY connection.provider, connection.origin, connection.provider_repository_id,
+		ORDER BY repository.provider, repository.origin, repository.path_lookup_key,
 			code_change.kind, code_change.change_number, code_change.id`, taskID)
 	if err != nil {
 		return nil, fmt.Errorf("list active Task code changes: %w", err)
@@ -90,10 +89,14 @@ func (s *TaskCodeChangeStore) GetReviewSnapshot(
 		payload.CodeChanges = []domain.CodeChangeSnapshot{}
 	}
 	for index := range payload.CodeChanges {
-		payload.CodeChanges[index].ObservedAt = payload.CodeChanges[index].ObservedAt.UTC()
-		if payload.CodeChanges[index].MergedAt != nil {
-			mergedAt := payload.CodeChanges[index].MergedAt.UTC()
-			payload.CodeChanges[index].MergedAt = &mergedAt
+		evidence := payload.CodeChanges[index].ProviderEvidence
+		if evidence != nil {
+			evidence.ObservedAt = evidence.ObservedAt.UTC()
+			evidence.ProviderUpdatedAt = evidence.ProviderUpdatedAt.UTC()
+			if evidence.MergedAt != nil {
+				mergedAt := evidence.MergedAt.UTC()
+				evidence.MergedAt = &mergedAt
+			}
 		}
 	}
 	return &TaskDeliverySnapshot{
@@ -108,18 +111,13 @@ func (s *TaskCodeChangeStore) Link(
 	expectedTaskVersion int64,
 	expectedClaimVersion int64,
 	projectRepositoryID uuid.UUID,
-	codeChange domain.CodeChange,
+	reference domain.CodeChangeReference,
 	actor domain.Actor,
 	operation domain.OperationActor,
 	now time.Time,
 ) (TaskCodeChangeMutation, error) {
-	if err := codeChange.Validate(); err != nil {
+	if err := reference.Validate(); err != nil {
 		return TaskCodeChangeMutation{}, err
-	}
-	if codeChange.Observation.Status != domain.CodeChangeObservationConfirmed {
-		return TaskCodeChangeMutation{}, fmt.Errorf(
-			"%w: a code change must be confirmed before linking", domain.ErrInvalidInput,
-		)
 	}
 	tx, err := s.db.Pool.Begin(ctx)
 	if err != nil {
@@ -138,22 +136,22 @@ func (s *TaskCodeChangeStore) Link(
 			"%w: code changes can be linked only during claimed execution", domain.ErrInvalidTransition,
 		)
 	}
-	repository, connection, err := lockActiveProjectRepository(
+	repository, err := lockActiveProjectRepository(
 		ctx, tx, projectRepositoryID, task.ProjectID,
 	)
 	if err != nil {
 		return TaskCodeChangeMutation{}, err
 	}
-	if connection.Provider != codeChange.Provider {
-		return TaskCodeChangeMutation{}, fmt.Errorf("%w: code change provider does not match Repository Connection", domain.ErrConflict)
+	if repository.Provider != reference.Repository.Provider || repository.Origin != reference.Repository.Origin ||
+		repository.PathLookupKey != reference.Repository.PathLookupKey {
+		return TaskCodeChangeMutation{}, fmt.Errorf("%w: code change does not belong to the Project repository", domain.ErrConflict)
 	}
 	link := domain.TaskCodeChange{
 		ID: uuid.New(), TaskID: task.TaskID, ProjectID: task.ProjectID,
 		ProjectRepositoryID: repository.ID,
-		Provider:            codeChange.Provider, Kind: codeChange.Kind,
-		ChangeNumber: codeChange.ChangeNumber, ProviderChangeID: codeChange.ProviderChangeID,
-		WebURL: codeChange.WebURL, LinkedBy: actor, LinkedThroughClaimID: claim.ID,
-		LinkedAt: now, LatestObservation: codeChange.Observation,
+		Provider:            reference.Repository.Provider, Kind: reference.Kind,
+		ChangeNumber: reference.ChangeNumber, WebURL: reference.WebURL,
+		LinkedBy: actor, LinkedThroughClaimID: claim.ID, LinkedAt: now,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	if err := link.Validate(); err != nil {
@@ -162,26 +160,16 @@ func (s *TaskCodeChangeStore) Link(
 	_, err = tx.Exec(ctx, `
 		INSERT INTO task_code_changes (
 			id, task_id, project_id, project_repository_id,
-			kind, change_number, provider_change_id, web_url,
+			kind, change_number, web_url,
 			linked_by_type, linked_by_user_id, linked_by_ref,
-			linked_through_claim_id, linked_at,
-			observation_status, observed_at, title, state, draft,
-			source_branch, target_branch, head_sha, merge_commit_sha,
-			merged_at, provider_updated_at, created_at, updated_at
+			linked_through_claim_id, linked_at, created_at, updated_at
 		) VALUES (
-			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
-			$19,$20,$21,$22,$23,$24,$25,$26
+			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14
 		)`,
 		link.ID, link.TaskID, link.ProjectID, link.ProjectRepositoryID,
-		link.Kind, link.ChangeNumber, link.ProviderChangeID, link.WebURL,
+		link.Kind, link.ChangeNumber, link.WebURL,
 		link.LinkedBy.Type, link.LinkedBy.UserID, nullIfEmpty(link.LinkedBy.Ref),
-		link.LinkedThroughClaimID, link.LinkedAt,
-		link.LatestObservation.Status, link.LatestObservation.ObservedAt,
-		link.LatestObservation.Title, link.LatestObservation.State, link.LatestObservation.Draft,
-		link.LatestObservation.SourceBranch, link.LatestObservation.TargetBranch,
-		link.LatestObservation.HeadSHA, link.LatestObservation.MergeCommitSHA,
-		link.LatestObservation.MergedAt, link.LatestObservation.ProviderUpdatedAt,
-		link.CreatedAt, link.UpdatedAt,
+		link.LinkedThroughClaimID, link.LinkedAt, link.CreatedAt, link.UpdatedAt,
 	)
 	if err != nil {
 		return TaskCodeChangeMutation{}, mapPgError(err)
@@ -194,7 +182,7 @@ func (s *TaskCodeChangeStore) Link(
 	); err != nil {
 		return TaskCodeChangeMutation{}, err
 	}
-	newValue, _ := json.Marshal(taskCodeChangeAuditValue(link, connection))
+	newValue, _ := json.Marshal(taskCodeChangeAuditValue(link))
 	if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
 		OccurredAt: now, Actor: operation, EntityType: "task_code_change",
 		EntityID: link.ID, EntityNumber: &task.TaskNumber,
@@ -206,10 +194,8 @@ func (s *TaskCodeChangeStore) Link(
 		return TaskCodeChangeMutation{}, fmt.Errorf("commit Task code change link: %w", err)
 	}
 	return TaskCodeChangeMutation{
-		Task: task.TaskWorkflowSnapshot,
-		CodeChange: TaskCodeChangeWithRepository{
-			CodeChange: link, Repository: repository, Connection: connection,
-		},
+		Task:       task.TaskWorkflowSnapshot,
+		CodeChange: TaskCodeChangeWithRepository{CodeChange: link, Repository: repository},
 	}, nil
 }
 
@@ -276,7 +262,7 @@ func (s *TaskCodeChangeStore) Unlink(
 	); err != nil {
 		return TaskCodeChangeMutation{}, err
 	}
-	oldValue, _ := json.Marshal(taskCodeChangeAuditValue(item.CodeChange, item.Connection))
+	oldValue, _ := json.Marshal(taskCodeChangeAuditValue(item.CodeChange))
 	if err := InsertBusinessAudit(ctx, tx, domain.BusinessAuditEvent{
 		OccurredAt: now, Actor: operation, EntityType: "task_code_change",
 		EntityID: item.CodeChange.ID, EntityNumber: &task.TaskNumber,
@@ -290,34 +276,61 @@ func (s *TaskCodeChangeStore) Unlink(
 	return TaskCodeChangeMutation{Task: task.TaskWorkflowSnapshot, CodeChange: item}, nil
 }
 
-func (s *TaskCodeChangeStore) UpdateObservation(
+func (s *TaskCodeChangeStore) UpdateProviderEvidence(
 	ctx context.Context,
 	linkID uuid.UUID,
-	observation domain.CodeChangeObservation,
+	evidence domain.CodeChangeProviderEvidence,
+	verification domain.CodeChangeVerification,
 	now time.Time,
 ) error {
-	if err := observation.Validate(); err != nil {
+	if err := evidence.Validate(); err != nil {
 		return err
+	}
+	if err := verification.Validate(); err != nil {
+		return err
+	}
+	if verification.Status != domain.CodeChangeVerificationVerified {
+		return fmt.Errorf("%w: successful provider evidence requires verified status", domain.ErrInvalidInput)
 	}
 	commandTag, err := s.db.Pool.Exec(ctx, `
 		UPDATE task_code_changes SET
-			observation_status=$2, observed_at=$3,
-			title=CASE WHEN $2='confirmed' THEN $4 ELSE title END,
-			state=CASE WHEN $2='confirmed' THEN $5 ELSE state END,
-			draft=CASE WHEN $2='confirmed' THEN $6 ELSE draft END,
-			source_branch=CASE WHEN $2='confirmed' THEN $7 ELSE source_branch END,
-			target_branch=CASE WHEN $2='confirmed' THEN $8 ELSE target_branch END,
-			head_sha=CASE WHEN $2='confirmed' THEN $9 ELSE head_sha END,
-			merge_commit_sha=CASE WHEN $2='confirmed' THEN $10 ELSE merge_commit_sha END,
-			merged_at=CASE WHEN $2='confirmed' THEN $11 ELSE merged_at END,
-			provider_updated_at=CASE WHEN $2='confirmed' THEN $12 ELSE provider_updated_at END,
-			updated_at=$13
+			evidence_connection_id=$2, evidence_provider_repository_id=$3,
+			provider_change_id=$4, evidence_observed_at=$5,
+			title=$6, state=$7, draft=$8, source_branch=$9, target_branch=$10,
+			head_sha=$11, merge_commit_sha=$12, merged_at=$13, provider_updated_at=$14,
+			verification_status=$15, verification_attempted_at=$16, updated_at=$17
 		WHERE id=$1`,
-		linkID, observation.Status, observation.ObservedAt,
-		observation.Title, observation.State, observation.Draft,
-		observation.SourceBranch, observation.TargetBranch, observation.HeadSHA,
-		observation.MergeCommitSHA, observation.MergedAt, observation.ProviderUpdatedAt, now,
+		linkID, evidence.ConnectionID, evidence.ProviderRepositoryID, evidence.ProviderChangeID,
+		evidence.ObservedAt, evidence.Title, evidence.State, evidence.Draft,
+		evidence.SourceBranch, evidence.TargetBranch, evidence.HeadSHA,
+		evidence.MergeCommitSHA, evidence.MergedAt, evidence.ProviderUpdatedAt,
+		verification.Status, verification.AttemptedAt, now,
 	)
+	if err != nil {
+		return mapPgError(err)
+	}
+	if commandTag.RowsAffected() != 1 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
+func (s *TaskCodeChangeStore) UpdateProviderVerification(
+	ctx context.Context,
+	linkID uuid.UUID,
+	verification domain.CodeChangeVerification,
+	now time.Time,
+) error {
+	if err := verification.Validate(); err != nil {
+		return err
+	}
+	if verification.Status == domain.CodeChangeVerificationVerified {
+		return fmt.Errorf("%w: verified status must be stored with provider evidence", domain.ErrInvalidInput)
+	}
+	commandTag, err := s.db.Pool.Exec(ctx, `
+		UPDATE task_code_changes SET
+			verification_status=$2, verification_attempted_at=$3, updated_at=$4
+		WHERE id=$1`, linkID, verification.Status, verification.AttemptedAt, now)
 	if err != nil {
 		return mapPgError(err)
 	}
@@ -332,65 +345,64 @@ func lockActiveProjectRepository(
 	tx pgx.Tx,
 	repositoryID uuid.UUID,
 	projectID uuid.UUID,
-) (domain.ProjectRepository, domain.RepositoryConnection, error) {
-	item, err := scanProjectRepositoryWithConnection(tx.QueryRow(ctx, `
+) (domain.ProjectRepository, error) {
+	repository, err := scanProjectRepository(tx.QueryRow(ctx, `
 		SELECT
-			repository.id, repository.project_id, repository.connection_id,
-			repository.bound_by, repository.bound_at, repository.unbound_by, repository.unbound_at,
-			`+prefixedRepositoryConnectionColumns("connection")+`
+			repository.id, repository.project_id, repository.provider, repository.origin,
+			repository.path_with_namespace, repository.path_lookup_key, repository.canonical_web_url,
+			repository.bound_by, repository.bound_at, repository.unbound_by, repository.unbound_at
 		FROM project_repositories repository
-		JOIN repository_connections connection ON connection.id=repository.connection_id
 		WHERE repository.id=$1 AND repository.project_id=$2
-		  AND repository.unbound_at IS NULL AND connection.status='active'
-		FOR SHARE OF repository, connection`, repositoryID, projectID))
+		  AND repository.unbound_at IS NULL
+		FOR SHARE OF repository`, repositoryID, projectID))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.ProjectRepository{}, domain.RepositoryConnection{}, domain.ErrNotFound
+		return domain.ProjectRepository{}, domain.ErrNotFound
 	}
 	if err != nil {
-		return domain.ProjectRepository{}, domain.RepositoryConnection{}, err
+		return domain.ProjectRepository{}, err
 	}
-	return item.Repository, item.Connection, nil
+	return repository, nil
 }
 
-func taskCodeChangeAuditValue(
-	codeChange domain.TaskCodeChange,
-	connection domain.RepositoryConnection,
-) map[string]any {
-	return map[string]any{
-		"project_repository_id":  codeChange.ProjectRepositoryID,
-		"provider":               connection.Provider,
-		"provider_repository_id": connection.ProviderRepositoryID,
-		"kind":                   codeChange.Kind,
-		"change_number":          codeChange.ChangeNumber,
-		"provider_change_id":     codeChange.ProviderChangeID,
-		"web_url":                codeChange.WebURL,
-		"head_sha":               codeChange.LatestObservation.HeadSHA,
-		"observation_status":     codeChange.LatestObservation.Status,
+func taskCodeChangeAuditValue(codeChange domain.TaskCodeChange) map[string]any {
+	value := map[string]any{
+		"project_repository_id": codeChange.ProjectRepositoryID,
+		"provider":              codeChange.Provider, "kind": codeChange.Kind,
+		"change_number": codeChange.ChangeNumber, "web_url": codeChange.WebURL,
 	}
+	if codeChange.ProviderEvidence != nil {
+		value["provider_change_id"] = codeChange.ProviderEvidence.ProviderChangeID
+		value["head_sha"] = codeChange.ProviderEvidence.HeadSHA
+	}
+	if codeChange.ProviderVerification != nil {
+		value["verification_status"] = codeChange.ProviderVerification.Status
+	}
+	return value
 }
 
 var taskCodeChangeSelect = `
 	SELECT
 		code_change.id, code_change.task_id, code_change.project_id,
-		code_change.project_repository_id, connection.provider, code_change.kind,
+		code_change.project_repository_id, repository.provider, code_change.kind,
 		code_change.change_number, code_change.provider_change_id, code_change.web_url,
 		code_change.linked_by_type, code_change.linked_by_user_id,
 		code_change.linked_by_ref, code_change.linked_through_claim_id,
 		code_change.linked_at, code_change.unlinked_by_type,
 		code_change.unlinked_by_user_id, code_change.unlinked_by_ref,
 		code_change.unlinked_through_claim_id, code_change.unlinked_at,
-		code_change.observation_status, code_change.observed_at,
+		code_change.verification_status, code_change.verification_attempted_at,
+		code_change.evidence_connection_id, code_change.evidence_provider_repository_id,
+		code_change.evidence_observed_at,
 		code_change.title, code_change.state, code_change.draft,
 		code_change.source_branch, code_change.target_branch,
 		code_change.head_sha, code_change.merge_commit_sha,
 		code_change.merged_at, code_change.provider_updated_at,
 		code_change.created_at, code_change.updated_at,
-		repository.id, repository.project_id, repository.connection_id,
-		repository.bound_by, repository.bound_at, repository.unbound_by, repository.unbound_at,
-		` + prefixedRepositoryConnectionColumns("connection") + `
+		repository.id, repository.project_id, repository.provider, repository.origin,
+		repository.path_with_namespace, repository.path_lookup_key, repository.canonical_web_url,
+		repository.bound_by, repository.bound_at, repository.unbound_by, repository.unbound_at
 	FROM task_code_changes code_change
 	JOIN project_repositories repository ON repository.id=code_change.project_repository_id
-	JOIN repository_connections connection ON connection.id=repository.connection_id
 `
 
 type taskCodeChangeScanner interface {
@@ -405,35 +417,38 @@ func scanTaskCodeChangeWithRepository(row taskCodeChangeScanner) (TaskCodeChange
 	var unlinkedType *string
 	var unlinkedUserID *uuid.UUID
 	var unlinkedRef *string
+	var providerChangeID *string
+	var verificationStatus *domain.CodeChangeVerificationStatus
+	var verificationAttemptedAt *time.Time
+	var evidenceConnectionID *uuid.UUID
+	var evidenceProviderRepositoryID *string
+	var evidenceObservedAt *time.Time
+	var title *string
+	var state *domain.CodeChangeState
+	var draft *bool
+	var sourceBranch *string
+	var targetBranch *string
+	var headSHA *string
+	var mergeCommitSHA *string
+	var mergedAt *time.Time
+	var providerUpdatedAt *time.Time
 	err := row.Scan(
 		&item.CodeChange.ID, &item.CodeChange.TaskID, &item.CodeChange.ProjectID,
 		&item.CodeChange.ProjectRepositoryID, &item.CodeChange.Provider, &item.CodeChange.Kind,
-		&item.CodeChange.ChangeNumber, &item.CodeChange.ProviderChangeID, &item.CodeChange.WebURL,
+		&item.CodeChange.ChangeNumber, &providerChangeID, &item.CodeChange.WebURL,
 		&linkedType, &linkedUserID, &linkedRef, &item.CodeChange.LinkedThroughClaimID,
 		&item.CodeChange.LinkedAt, &unlinkedType, &unlinkedUserID, &unlinkedRef,
 		&item.CodeChange.UnlinkedThroughClaimID, &item.CodeChange.UnlinkedAt,
-		&item.CodeChange.LatestObservation.Status, &item.CodeChange.LatestObservation.ObservedAt,
-		&item.CodeChange.LatestObservation.Title, &item.CodeChange.LatestObservation.State,
-		&item.CodeChange.LatestObservation.Draft,
-		&item.CodeChange.LatestObservation.SourceBranch,
-		&item.CodeChange.LatestObservation.TargetBranch,
-		&item.CodeChange.LatestObservation.HeadSHA,
-		&item.CodeChange.LatestObservation.MergeCommitSHA,
-		&item.CodeChange.LatestObservation.MergedAt,
-		&item.CodeChange.LatestObservation.ProviderUpdatedAt,
+		&verificationStatus, &verificationAttemptedAt,
+		&evidenceConnectionID, &evidenceProviderRepositoryID, &evidenceObservedAt,
+		&title, &state, &draft, &sourceBranch, &targetBranch, &headSHA,
+		&mergeCommitSHA, &mergedAt, &providerUpdatedAt,
 		&item.CodeChange.CreatedAt, &item.CodeChange.UpdatedAt,
-		&item.Repository.ID, &item.Repository.ProjectID, &item.Repository.ConnectionID,
+		&item.Repository.ID, &item.Repository.ProjectID, &item.Repository.Provider,
+		&item.Repository.Origin, &item.Repository.PathWithNamespace,
+		&item.Repository.PathLookupKey, &item.Repository.CanonicalWebURL,
 		&item.Repository.BoundBy, &item.Repository.BoundAt,
 		&item.Repository.UnboundBy, &item.Repository.UnboundAt,
-		&item.Connection.ID, &item.Connection.Version, &item.Connection.Label,
-		&item.Connection.Origin, &item.Connection.Provider, &item.Connection.ProviderRepositoryID,
-		&item.Connection.PathWithNamespace, &item.Connection.PathLookupKey,
-		&item.Connection.CanonicalWebURL, &item.Connection.DefaultBranch,
-		&item.Connection.CredentialCiphertext, &item.Connection.EncryptionKeyID,
-		&item.Connection.CredentialExpiresAt, &item.Connection.Status,
-		&item.Connection.LastValidatedAt, &item.Connection.CreatedBy,
-		&item.Connection.DisabledBy, &item.Connection.DisabledAt,
-		&item.Connection.CreatedAt, &item.Connection.UpdatedAt,
 	)
 	if err != nil {
 		return TaskCodeChangeWithRepository{}, err
@@ -442,6 +457,22 @@ func scanTaskCodeChangeWithRepository(row taskCodeChangeScanner) (TaskCodeChange
 	if unlinkedType != nil {
 		actor := actorFromStored(*unlinkedType, unlinkedUserID, unlinkedRef)
 		item.CodeChange.UnlinkedBy = &actor
+	}
+	if verificationStatus != nil && verificationAttemptedAt != nil {
+		item.CodeChange.ProviderVerification = &domain.CodeChangeVerification{
+			Status: *verificationStatus, AttemptedAt: *verificationAttemptedAt,
+		}
+	}
+	if evidenceConnectionID != nil && evidenceProviderRepositoryID != nil && providerChangeID != nil &&
+		evidenceObservedAt != nil && title != nil && state != nil && draft != nil &&
+		sourceBranch != nil && targetBranch != nil && headSHA != nil && providerUpdatedAt != nil {
+		item.CodeChange.ProviderEvidence = &domain.CodeChangeProviderEvidence{
+			ConnectionID: *evidenceConnectionID, ProviderRepositoryID: *evidenceProviderRepositoryID,
+			ProviderChangeID: *providerChangeID, Title: *title, State: *state, Draft: *draft,
+			SourceBranch: *sourceBranch, TargetBranch: *targetBranch, HeadSHA: *headSHA,
+			MergeCommitSHA: mergeCommitSHA, MergedAt: mergedAt,
+			ProviderUpdatedAt: *providerUpdatedAt, ObservedAt: *evidenceObservedAt,
+		}
 	}
 	return item, nil
 }

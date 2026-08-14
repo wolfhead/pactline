@@ -3,11 +3,18 @@ import type { Actor, TaskStageClaim, TaskWorkflow } from "@/task-types";
 
 export type RepositoryProvider = "gitlab" | "github";
 export type CodeChangeKind = "merge_request" | "pull_request";
-export type CodeChangeObservationStatus = "confirmed" | "missing" | "unauthorized" | "unreachable" | "disconnected";
+export type CodeChangeVerificationStatus = "verified" | "missing" | "unauthorized" | "unreachable" | "disconnected";
 export type CodeChangeState = "opened" | "closed" | "merged" | "locked";
 
-export interface CodeChangeObservation {
-  status: CodeChangeObservationStatus;
+export interface CodeChangeVerification {
+  status: CodeChangeVerificationStatus;
+  attempted_at: string;
+}
+
+export interface CodeChangeProviderEvidence {
+  connection_id: string;
+  provider_repository_id: string;
+  provider_change_id: string;
   observed_at: string;
   title: string;
   state: CodeChangeState;
@@ -27,37 +34,25 @@ export interface TaskCodeChange {
   repository_url: string;
   kind: CodeChangeKind;
   change_number: number;
-  provider_change_id: string;
   web_url: string;
   linked_by: Actor;
   linked_through_claim_id: string;
   linked_at: string;
-  latest_observation: CodeChangeObservation;
+  provider_evidence?: CodeChangeProviderEvidence;
+  provider_verification?: CodeChangeVerification;
 }
 
 export interface CodeChangeSnapshot {
   task_code_change_id: string;
   project_repository_id: string;
-  connection_id: string;
   provider: RepositoryProvider;
-  provider_repository_id: string;
   kind: CodeChangeKind;
   change_number: number;
-  provider_change_id: string;
   web_url: string;
-  title: string;
-  state: CodeChangeState;
-  draft: boolean;
-  source_branch: string;
-  target_branch: string;
-  head_sha: string;
-  merge_commit_sha?: string;
-  merged_at?: string;
-  observation_status: CodeChangeObservationStatus;
-  observed_at: string;
+  provider_evidence?: CodeChangeProviderEvidence;
 }
 
-export type DeliveryComparison = "unchanged" | "moved" | "merged" | "missing" | "unauthorized" | "unreachable" | "disconnected";
+export type DeliveryComparison = "unverified" | "unchanged" | "moved" | "merged" | "missing" | "unauthorized" | "unreachable" | "disconnected";
 
 export interface TaskDeliveryComparison {
   snapshot: CodeChangeSnapshot;

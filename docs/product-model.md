@@ -114,23 +114,25 @@ entirely unscheduled work available for explicit placement.
 
 ## Repository delivery evidence
 
-A Repository Connection is a repository-scoped machine identity created and
-managed by the platform Administrator. One active Connection identifies
-exactly one provider, origin, and provider repository ID. Its read credential
-is encrypted at rest and never returned by an API. Pactline uses it only for
-read-only repository and code-change requests; it does not write to the
-provider, merge code, trigger CI, or treat provider state as Task workflow
-authority. The runtime supports GitLab Merge Requests and GitHub Pull Requests,
-including `github.com` and HTTPS GitHub Enterprise Server. Provider credentials
-remain server-side and are never needed by a CLI or delegated repository worker.
-
-A Project administrator authorizes a repository for one Project by pasting its
-repository URL. Pactline matches an existing active Connection and
-performs live authentication before atomically creating the Project binding.
-Connections may be shared by several Projects, and one Project may authorize
-several repositories. The binding authorizes evidence only; it does not define
-a local checkout location or permit a Task to cross its immutable Project
+A Project administrator adds a repository to one Project by pasting its root
+URL. The Project repository stores provider, origin, normalized path, and
+canonical URL as Project-owned membership data; it does not require provider
+credentials. GitHub.com and GitLab.com are inferred. A self-hosted origin
+requires the administrator to select GitHub or GitLab so Pactline can apply the
+correct URL grammar. One Project may contain several repositories, and the
+same repository may belong to several Projects. Repository membership does not
+define a local checkout or permit a Task to cross its immutable Project
 boundary.
+
+A Repository Connection is an optional, repository-scoped machine identity
+created and managed by the platform Administrator. Pactline matches it by
+provider, origin, and normalized repository path to enrich existing delivery
+links with read-only provider evidence. Its credential is encrypted at rest
+and never returned by an API. Pactline does not write to the provider, merge
+code, trigger CI, or treat provider state as Task workflow authority. The
+runtime supports GitLab Merge Requests and GitHub Pull Requests, including
+GitHub Enterprise Server. Provider credentials remain server-side and are
+never needed by a CLI or delegated repository worker.
 
 During an owned execution Claim, a person or Agent may link or unlink several
 Pull Requests or Merge Requests from the Task's authorized repositories. These commands
@@ -138,14 +140,15 @@ preserve Claim ownership and Claim version while incrementing Task version.
 Work submission remains repeatable and does not freeze the set. A review Claim
 cannot edit delivery links.
 
-Completing execution refreshes the active links and freezes their exact,
-ordered identities and observations in the immutable completion Thread Item
-for the new review cycle. The review read model presents that frozen snapshot
-beside current provider observations and classifies each code change as unchanged, moved,
-merged, missing, unauthorized, unreachable, or disconnected. Provider failure
-does not by itself block completion because each link required a successful
-initial resolution; the frozen snapshot retains last-known metadata and the
-failure status for the reviewer.
+Completing execution freezes the active links' exact ordered URL identities in
+the immutable completion Thread Item for the new review cycle. When a matching
+Connection is available, the snapshot also includes the latest successful
+provider evidence. The review read model presents the frozen snapshot beside
+current evidence and classifies each code change as unverified, unchanged,
+moved, merged, missing, unauthorized, unreachable, or disconnected. Missing
+credentials and provider failures never block linking, completion, review, or
+acceptance. A failed refresh preserves the last successful provider facts and
+records the latest verification result separately.
 
 Provider refresh is bounded and on demand through the dedicated Task delivery
 read. Ordinary Task lists never contact repository providers, and Pactline has no scheduled

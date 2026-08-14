@@ -2981,18 +2981,29 @@ components:
     CodeChangeKind:
       type: string
       enum: [merge_request, pull_request]
-    CodeChangeObservationStatus:
+    CodeChangeVerificationStatus:
       type: string
-      enum: [confirmed, missing, unauthorized, unreachable, disconnected]
+      enum: [verified, missing, unauthorized, unreachable, disconnected]
     CodeChangeState:
       type: string
       enum: [opened, closed, merged, locked]
-    CodeChangeObservation:
+    CodeChangeVerification:
+      type: object
+      additionalProperties: false
+      required: [status, attempted_at]
+      properties:
+        status:
+          $ref: "#/components/schemas/CodeChangeVerificationStatus"
+        attempted_at:
+          type: string
+          format: date-time
+    CodeChangeProviderEvidence:
       type: object
       additionalProperties: false
       required:
-        - status
-        - observed_at
+        - connection_id
+        - provider_repository_id
+        - provider_change_id
         - title
         - state
         - draft
@@ -3000,12 +3011,17 @@ components:
         - target_branch
         - head_sha
         - provider_updated_at
+        - observed_at
       properties:
-        status:
-          $ref: "#/components/schemas/CodeChangeObservationStatus"
-        observed_at:
+        connection_id:
           type: string
-          format: date-time
+          format: uuid
+        provider_repository_id:
+          type: string
+          minLength: 1
+        provider_change_id:
+          type: string
+          minLength: 1
         title:
           type: string
         state:
@@ -3026,6 +3042,9 @@ components:
         provider_updated_at:
           type: string
           format: date-time
+        observed_at:
+          type: string
+          format: date-time
     TaskCodeChange:
       type: object
       additionalProperties: false
@@ -3036,12 +3055,10 @@ components:
         - repository_url
         - kind
         - change_number
-        - provider_change_id
         - web_url
         - linked_by
         - linked_through_claim_id
         - linked_at
-        - latest_observation
       properties:
         id:
           type: string
@@ -3060,9 +3077,6 @@ components:
           type: integer
           format: int64
           minimum: 1
-        provider_change_id:
-          type: string
-          minLength: 1
         web_url:
           type: string
           format: uri
@@ -3074,29 +3088,20 @@ components:
         linked_at:
           type: string
           format: date-time
-        latest_observation:
-          $ref: "#/components/schemas/CodeChangeObservation"
+        provider_evidence:
+          $ref: "#/components/schemas/CodeChangeProviderEvidence"
+        provider_verification:
+          $ref: "#/components/schemas/CodeChangeVerification"
     CodeChangeSnapshot:
       type: object
       additionalProperties: false
       required:
         - task_code_change_id
         - project_repository_id
-        - connection_id
         - provider
-        - provider_repository_id
         - kind
         - change_number
-        - provider_change_id
         - web_url
-        - title
-        - state
-        - draft
-        - source_branch
-        - target_branch
-        - head_sha
-        - observation_status
-        - observed_at
       properties:
         task_code_change_id:
           type: string
@@ -3104,48 +3109,19 @@ components:
         project_repository_id:
           type: string
           format: uuid
-        connection_id:
-          type: string
-          format: uuid
         provider:
           $ref: "#/components/schemas/RepositoryProvider"
-        provider_repository_id:
-          type: string
-          minLength: 1
         kind:
           $ref: "#/components/schemas/CodeChangeKind"
         change_number:
           type: integer
           format: int64
           minimum: 1
-        provider_change_id:
-          type: string
-          minLength: 1
         web_url:
           type: string
           format: uri
-        title:
-          type: string
-        state:
-          $ref: "#/components/schemas/CodeChangeState"
-        draft:
-          type: boolean
-        source_branch:
-          type: string
-        target_branch:
-          type: string
-        head_sha:
-          type: string
-        merge_commit_sha:
-          type: string
-        merged_at:
-          type: string
-          format: date-time
-        observation_status:
-          $ref: "#/components/schemas/CodeChangeObservationStatus"
-        observed_at:
-          type: string
-          format: date-time
+        provider_evidence:
+          $ref: "#/components/schemas/CodeChangeProviderEvidence"
     TaskDeliveryComparison:
       type: object
       additionalProperties: false
@@ -3157,7 +3133,7 @@ components:
           $ref: "#/components/schemas/TaskCodeChange"
         comparison:
           type: string
-          enum: [unchanged, moved, merged, missing, unauthorized, unreachable, disconnected]
+          enum: [unverified, unchanged, moved, merged, missing, unauthorized, unreachable, disconnected]
     TaskDeliveryReview:
       type: object
       additionalProperties: false
@@ -3718,18 +3694,17 @@ components:
           format: uri
           minLength: 1
           maxLength: 2048
+        provider:
+          $ref: "#/components/schemas/RepositoryProvider"
     ProjectRepository:
       type: object
       additionalProperties: false
       required:
         - id
         - canonical_web_url
-        - label
         - provider
         - origin
-        - provider_repository_id
         - path_with_namespace
-        - default_branch
         - bound_at
       properties:
         id:
@@ -3738,19 +3713,12 @@ components:
         canonical_web_url:
           type: string
           format: uri
-        label:
-          type: string
         provider:
           $ref: "#/components/schemas/RepositoryProvider"
         origin:
           type: string
           format: uri
-        provider_repository_id:
-          type: string
-          minLength: 1
         path_with_namespace:
-          type: string
-        default_branch:
           type: string
         bound_at:
           type: string

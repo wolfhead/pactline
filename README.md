@@ -137,7 +137,8 @@ phase without inferring or reviving the ended Claim.
 
 System Administrators can create encrypted, repository-scoped, read-only
 Connections for GitLab or GitHub, including GitHub Enterprise Server. Project
-Administrators authorize one by pasting its repository URL. GitHub uses a
+Administrators add repository URLs independently; Connections are optional
+provider-evidence enrichment and never change Agent or Task behavior. GitHub uses a
 fine-grained personal access token limited to the selected repository with
 repository metadata and Pull Request read access. Pactline performs no provider
 writes, polling, CI queries, reviews, or merges.

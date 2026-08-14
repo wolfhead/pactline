@@ -7,6 +7,7 @@ import (
 
 	baseapi "github.com/wolfhead/pactline/internal/api"
 	generated "github.com/wolfhead/pactline/internal/api/v1generated"
+	"github.com/wolfhead/pactline/internal/domain"
 	"github.com/wolfhead/pactline/internal/store"
 )
 
@@ -52,8 +53,13 @@ func (h *Handler) BindProjectRepository(
 	if err != nil {
 		return nil, err
 	}
+	var provider *domain.RepositoryProvider
+	if value, ok := req.Provider.Get(); ok {
+		converted := domain.RepositoryProvider(value)
+		provider = &converted
+	}
 	mutation, err := h.ProjectRepositories.Bind(
-		ctx, params.Number, expectedVersion, req.RepositoryURL.String(), subject, operation,
+		ctx, params.Number, expectedVersion, req.RepositoryURL.String(), provider, subject, operation,
 	)
 	if err != nil {
 		return nil, err
@@ -105,21 +111,19 @@ func projectRepositoryMutationResponse(
 }
 
 func projectRepositoryFromDomain(
-	item store.ProjectRepositoryWithConnection,
+	item domain.ProjectRepository,
 ) (generated.ProjectRepository, error) {
-	canonicalURL, err := url.Parse(item.Connection.CanonicalWebURL)
+	canonicalURL, err := url.Parse(item.CanonicalWebURL)
 	if err != nil {
 		return generated.ProjectRepository{}, fmt.Errorf("parse canonical repository URL: %w", err)
 	}
-	origin, err := url.Parse(item.Connection.Origin)
+	origin, err := url.Parse(item.Origin)
 	if err != nil {
 		return generated.ProjectRepository{}, fmt.Errorf("parse repository origin: %w", err)
 	}
 	return generated.ProjectRepository{
-		ID: item.Repository.ID, CanonicalWebURL: *canonicalURL,
-		Label: item.Connection.Label, Provider: generated.RepositoryProvider(item.Connection.Provider),
-		Origin: *origin, ProviderRepositoryID: item.Connection.ProviderRepositoryID,
-		PathWithNamespace: item.Connection.PathWithNamespace,
-		DefaultBranch:     item.Connection.DefaultBranch, BoundAt: item.Repository.BoundAt,
+		ID: item.ID, CanonicalWebURL: *canonicalURL,
+		Provider: generated.RepositoryProvider(item.Provider), Origin: *origin,
+		PathWithNamespace: item.PathWithNamespace, BoundAt: item.BoundAt,
 	}, nil
 }

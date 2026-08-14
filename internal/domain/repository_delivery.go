@@ -108,27 +108,40 @@ func (c RepositoryConnection) Validate() error {
 }
 
 type ProjectRepository struct {
-	ID           uuid.UUID
-	ProjectID    uuid.UUID
-	ConnectionID uuid.UUID
-	BoundBy      uuid.UUID
-	BoundAt      time.Time
-	UnboundBy    *uuid.UUID
-	UnboundAt    *time.Time
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	Provider          RepositoryProvider
+	Origin            string
+	PathWithNamespace string
+	PathLookupKey     string
+	CanonicalWebURL   string
+	BoundBy           uuid.UUID
+	BoundAt           time.Time
+	UnboundBy         *uuid.UUID
+	UnboundAt         *time.Time
 }
 
 func (r ProjectRepository) Active() bool { return r.UnboundAt == nil }
 
 func (r ProjectRepository) Validate() error {
-	if r.ID == uuid.Nil || r.ProjectID == uuid.Nil || r.ConnectionID == uuid.Nil ||
-		r.BoundBy == uuid.Nil || r.BoundAt.IsZero() {
+	if r.ID == uuid.Nil || r.ProjectID == uuid.Nil || r.BoundBy == uuid.Nil || r.BoundAt.IsZero() {
 		return fmt.Errorf("%w: Project repository binding is incomplete", ErrInvalidInput)
+	}
+	if err := r.Reference().Validate(); err != nil {
+		return fmt.Errorf("%w: Project repository identity is incomplete", ErrInvalidInput)
 	}
 	if (r.UnboundBy == nil) != (r.UnboundAt == nil) ||
 		(r.UnboundBy != nil && (*r.UnboundBy == uuid.Nil || r.UnboundAt.Before(r.BoundAt))) {
 		return fmt.Errorf("%w: Project repository unbind metadata is inconsistent", ErrInvalidInput)
 	}
 	return nil
+}
+
+func (r ProjectRepository) Reference() RepositoryReference {
+	return RepositoryReference{
+		Provider: r.Provider, Origin: r.Origin, PathWithNamespace: r.PathWithNamespace,
+		PathLookupKey: r.PathLookupKey, WebURL: r.CanonicalWebURL,
+	}
 }
 
 type CodeChangeKind string
@@ -248,6 +261,66 @@ func (c CodeChange) Validate() error {
 	return c.Observation.Validate()
 }
 
+type CodeChangeVerificationStatus string
+
+const (
+	CodeChangeVerificationVerified     CodeChangeVerificationStatus = "verified"
+	CodeChangeVerificationMissing      CodeChangeVerificationStatus = "missing"
+	CodeChangeVerificationUnauthorized CodeChangeVerificationStatus = "unauthorized"
+	CodeChangeVerificationUnreachable  CodeChangeVerificationStatus = "unreachable"
+	CodeChangeVerificationDisconnected CodeChangeVerificationStatus = "disconnected"
+)
+
+func (s CodeChangeVerificationStatus) Valid() bool {
+	switch s {
+	case CodeChangeVerificationVerified, CodeChangeVerificationMissing,
+		CodeChangeVerificationUnauthorized, CodeChangeVerificationUnreachable,
+		CodeChangeVerificationDisconnected:
+		return true
+	default:
+		return false
+	}
+}
+
+type CodeChangeVerification struct {
+	Status      CodeChangeVerificationStatus
+	AttemptedAt time.Time
+}
+
+func (v CodeChangeVerification) Validate() error {
+	if !v.Status.Valid() || v.AttemptedAt.IsZero() {
+		return fmt.Errorf("%w: code change verification is incomplete", ErrInvalidInput)
+	}
+	return nil
+}
+
+type CodeChangeProviderEvidence struct {
+	ConnectionID         uuid.UUID       `json:"connection_id"`
+	ProviderRepositoryID string          `json:"provider_repository_id"`
+	ProviderChangeID     string          `json:"provider_change_id"`
+	Title                string          `json:"title"`
+	State                CodeChangeState `json:"state"`
+	Draft                bool            `json:"draft"`
+	SourceBranch         string          `json:"source_branch"`
+	TargetBranch         string          `json:"target_branch"`
+	HeadSHA              string          `json:"head_sha"`
+	MergeCommitSHA       *string         `json:"merge_commit_sha,omitempty"`
+	MergedAt             *time.Time      `json:"merged_at,omitempty"`
+	ProviderUpdatedAt    time.Time       `json:"provider_updated_at"`
+	ObservedAt           time.Time       `json:"observed_at"`
+}
+
+func (e CodeChangeProviderEvidence) Validate() error {
+	if e.ConnectionID == uuid.Nil || strings.TrimSpace(e.ProviderRepositoryID) == "" ||
+		strings.TrimSpace(e.ProviderChangeID) == "" || strings.TrimSpace(e.Title) == "" ||
+		!e.State.Valid() || strings.TrimSpace(e.SourceBranch) == "" ||
+		strings.TrimSpace(e.TargetBranch) == "" || strings.TrimSpace(e.HeadSHA) == "" ||
+		e.ProviderUpdatedAt.IsZero() || e.ObservedAt.IsZero() {
+		return fmt.Errorf("%w: code change provider evidence is incomplete", ErrInvalidInput)
+	}
+	return nil
+}
+
 type TaskCodeChange struct {
 	ID                     uuid.UUID
 	TaskID                 uuid.UUID
@@ -256,7 +329,6 @@ type TaskCodeChange struct {
 	Provider               RepositoryProvider
 	Kind                   CodeChangeKind
 	ChangeNumber           int64
-	ProviderChangeID       string
 	WebURL                 string
 	LinkedBy               Actor
 	LinkedThroughClaimID   uuid.UUID
@@ -264,7 +336,8 @@ type TaskCodeChange struct {
 	UnlinkedBy             *Actor
 	UnlinkedThroughClaimID *uuid.UUID
 	UnlinkedAt             *time.Time
-	LatestObservation      CodeChangeObservation
+	ProviderEvidence       *CodeChangeProviderEvidence
+	ProviderVerification   *CodeChangeVerification
 	CreatedAt              time.Time
 	UpdatedAt              time.Time
 }
@@ -274,13 +347,26 @@ func (c TaskCodeChange) Active() bool { return c.UnlinkedAt == nil }
 func (c TaskCodeChange) Validate() error {
 	if c.ID == uuid.Nil || c.TaskID == uuid.Nil || c.ProjectID == uuid.Nil ||
 		c.ProjectRepositoryID == uuid.Nil || !c.Kind.CompatibleWith(c.Provider) ||
-		c.ChangeNumber < 1 || strings.TrimSpace(c.ProviderChangeID) == "" || strings.TrimSpace(c.WebURL) == "" ||
+		c.ChangeNumber < 1 || strings.TrimSpace(c.WebURL) == "" ||
 		!validDeliveryActor(c.LinkedBy) || c.LinkedThroughClaimID == uuid.Nil ||
 		c.LinkedAt.IsZero() || c.CreatedAt.IsZero() || c.UpdatedAt.IsZero() {
 		return fmt.Errorf("%w: Task code change link is incomplete", ErrInvalidInput)
 	}
-	if err := c.LatestObservation.Validate(); err != nil {
-		return err
+	if c.ProviderEvidence != nil {
+		if err := c.ProviderEvidence.Validate(); err != nil {
+			return err
+		}
+	}
+	if c.ProviderVerification != nil {
+		if err := c.ProviderVerification.Validate(); err != nil {
+			return err
+		}
+		if c.ProviderVerification.Status == CodeChangeVerificationVerified && c.ProviderEvidence == nil {
+			return fmt.Errorf("%w: verified code change requires provider evidence", ErrInvalidInput)
+		}
+	}
+	if c.ProviderEvidence != nil && c.ProviderVerification == nil {
+		return fmt.Errorf("%w: code change provider evidence requires verification", ErrInvalidInput)
 	}
 	if (c.UnlinkedBy == nil) != (c.UnlinkedAt == nil) ||
 		(c.UnlinkedThroughClaimID == nil) != (c.UnlinkedAt == nil) {
@@ -300,37 +386,24 @@ func validDeliveryActor(actor Actor) bool {
 }
 
 type CodeChangeSnapshot struct {
-	TaskCodeChangeID     uuid.UUID                   `json:"task_code_change_id"`
-	ProjectRepositoryID  uuid.UUID                   `json:"project_repository_id"`
-	ConnectionID         uuid.UUID                   `json:"connection_id"`
-	Provider             RepositoryProvider          `json:"provider"`
-	ProviderRepositoryID string                      `json:"provider_repository_id"`
-	Kind                 CodeChangeKind              `json:"kind"`
-	ChangeNumber         int64                       `json:"change_number"`
-	ProviderChangeID     string                      `json:"provider_change_id"`
-	WebURL               string                      `json:"web_url"`
-	Title                string                      `json:"title"`
-	State                CodeChangeState             `json:"state"`
-	Draft                bool                        `json:"draft"`
-	SourceBranch         string                      `json:"source_branch"`
-	TargetBranch         string                      `json:"target_branch"`
-	HeadSHA              string                      `json:"head_sha"`
-	MergeCommitSHA       *string                     `json:"merge_commit_sha,omitempty"`
-	MergedAt             *time.Time                  `json:"merged_at,omitempty"`
-	ObservationStatus    CodeChangeObservationStatus `json:"observation_status"`
-	ObservedAt           time.Time                   `json:"observed_at"`
+	TaskCodeChangeID    uuid.UUID                   `json:"task_code_change_id"`
+	ProjectRepositoryID uuid.UUID                   `json:"project_repository_id"`
+	Provider            RepositoryProvider          `json:"provider"`
+	Kind                CodeChangeKind              `json:"kind"`
+	ChangeNumber        int64                       `json:"change_number"`
+	WebURL              string                      `json:"web_url"`
+	ProviderEvidence    *CodeChangeProviderEvidence `json:"provider_evidence,omitempty"`
 }
 
 func (s CodeChangeSnapshot) Validate() error {
-	if s.TaskCodeChangeID == uuid.Nil || s.ProjectRepositoryID == uuid.Nil || s.ConnectionID == uuid.Nil ||
-		!s.Kind.CompatibleWith(s.Provider) || strings.TrimSpace(s.ProviderRepositoryID) == "" ||
-		s.ChangeNumber < 1 || strings.TrimSpace(s.ProviderChangeID) == "" || strings.TrimSpace(s.WebURL) == "" ||
-		!s.ObservationStatus.Valid() || s.ObservedAt.IsZero() {
+	if s.TaskCodeChangeID == uuid.Nil || s.ProjectRepositoryID == uuid.Nil ||
+		!s.Kind.CompatibleWith(s.Provider) || s.ChangeNumber < 1 || strings.TrimSpace(s.WebURL) == "" {
 		return fmt.Errorf("%w: code change snapshot is incomplete", ErrInvalidInput)
 	}
-	if s.ObservationStatus == CodeChangeObservationConfirmed &&
-		(strings.TrimSpace(s.Title) == "" || !s.State.Valid() || strings.TrimSpace(s.HeadSHA) == "") {
-		return fmt.Errorf("%w: confirmed code change snapshot is incomplete", ErrInvalidInput)
+	if s.ProviderEvidence != nil {
+		if err := s.ProviderEvidence.Validate(); err != nil {
+			return err
+		}
 	}
 	return nil
 }

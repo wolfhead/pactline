@@ -343,7 +343,7 @@ func TestClaimCodeChangeListAndUnlinkUseClaimAssociation(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/claims/"+claimID:
 			_, _ = io.WriteString(w, `{"id":"`+claimID+`","task_number":142,"stage":"execution","status":"active","version":1}`)
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/tasks/142/code-changes":
-			_, _ = io.WriteString(w, `{"active_links":[{"id":"`+linkID+`","web_url":"https://gitlab.example/team/repo/-/merge_requests/42","latest_observation":{"state":"opened"}}]}`)
+			_, _ = io.WriteString(w, `{"active_links":[{"id":"`+linkID+`","web_url":"https://gitlab.example/team/repo/-/merge_requests/42","provider_evidence":{"state":"opened"},"provider_verification":{"status":"verified"}}]}`)
 		case r.Method == http.MethodDelete && r.URL.Path == "/api/v1/claims/"+claimID+"/code-changes/"+linkID:
 			require.Equal(t, `"9"`, r.Header.Get("If-Match"))
 			require.NotEmpty(t, r.Header.Get("Idempotency-Key"))
@@ -362,6 +362,7 @@ func TestClaimCodeChangeListAndUnlinkUseClaimAssociation(t *testing.T) {
 	code := ExecuteArgs(context.Background(), []string{"claim", "change", "list", claimID}, strings.NewReader(""), &stdout, &stderr)
 	require.Zero(t, code, stderr.String())
 	require.Contains(t, stdout.String(), linkID)
+	require.Contains(t, stdout.String(), "opened  verified")
 	require.Equal(t, []string{
 		"GET /api/v1/claims/" + claimID,
 		"GET /api/v1/tasks/142/code-changes",

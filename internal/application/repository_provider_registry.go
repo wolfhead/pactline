@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"sort"
+	"strings"
 
 	"github.com/wolfhead/pactline/internal/domain"
 )
@@ -19,6 +21,34 @@ type RepositoryProviderClient interface {
 	GetCodeChange(
 		context.Context, domain.RepositoryReference, string, domain.CodeChangeKind, int64, []byte, string,
 	) (domain.CodeChange, error)
+}
+
+func (r *RepositoryProviderRegistry) ParseProjectRepositoryURL(
+	rawURL string,
+	provider *domain.RepositoryProvider,
+) (domain.RepositoryReference, error) {
+	if provider != nil {
+		if !provider.Valid() {
+			return domain.RepositoryReference{}, fmt.Errorf("%w: repository provider is invalid", domain.ErrInvalidInput)
+		}
+		return r.ParseRepositoryURL(*provider, rawURL)
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return domain.RepositoryReference{}, fmt.Errorf("%w: repository URL is invalid", domain.ErrInvalidInput)
+	}
+	var inferred domain.RepositoryProvider
+	switch strings.ToLower(parsed.Hostname()) {
+	case "github.com":
+		inferred = domain.RepositoryProviderGitHub
+	case "gitlab.com":
+		inferred = domain.RepositoryProviderGitLab
+	default:
+		return domain.RepositoryReference{}, fmt.Errorf(
+			"%w: provider is required for a self-hosted repository URL", domain.ErrInvalidInput,
+		)
+	}
+	return r.ParseRepositoryURL(inferred, rawURL)
 }
 
 type RepositoryProviderRegistry struct {

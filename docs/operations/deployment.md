@@ -30,14 +30,17 @@ mesh, or an automated deployment agent.
 Repository Connections are created after deployment from the System
 Administrator UI; provider tokens are not deployment environment variables.
 Each Connection covers exactly one repository and is encrypted with the
-configured token-encryption key.
+configured token-encryption key. Connections are optional: Projects and Tasks
+can add repositories, link PR/MR URLs, complete execution, and accept work with
+no provider credential configured.
 
 For GitHub.com or GitHub Enterprise Server, create a fine-grained personal
 access token restricted to the selected repository. Grant read-only repository
 metadata and Pull Request access. GitLab Connections likewise use a read-only
 token scoped to one repository. Paste the repository root URL and token into
-the Connection form, verify the immediate live-authentication result, and then
-let a Project Administrator bind the same repository URL to a Project.
+the Connection form and verify the immediate live-authentication result.
+Pactline automatically matches it to any Project repository with the same
+provider, origin, and normalized path; no Project rebinding is required.
 
 Pactline records optional credential expiry metadata but does not rotate,
 poll, or refresh credentials in the background. Rotate credentials explicitly

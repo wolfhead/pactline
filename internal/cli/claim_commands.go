@@ -426,8 +426,17 @@ func printCodeChangeDelivery(w io.Writer, delivery map[string]any) {
 	fmt.Fprintf(w, "Active code changes: %d\n", len(links))
 	for _, raw := range links {
 		link, _ := raw.(map[string]any)
-		observation, _ := link["latest_observation"].(map[string]any)
-		fmt.Fprintf(w, "  %v  %v  %v\n", link["id"], observation["state"], link["web_url"])
+		evidence, hasEvidence := link["provider_evidence"].(map[string]any)
+		verification, hasVerification := link["provider_verification"].(map[string]any)
+		state := "unverified"
+		if hasEvidence {
+			state = stringValue(evidence["state"])
+		}
+		verificationStatus := "unverified"
+		if hasVerification {
+			verificationStatus = stringValue(verification["status"])
+		}
+		fmt.Fprintf(w, "  %v  %s  %s  %v\n", link["id"], state, verificationStatus, link["web_url"])
 	}
 	if review, ok := delivery["review"].(map[string]any); ok {
 		comparisons, _ := review["code_changes"].([]any)

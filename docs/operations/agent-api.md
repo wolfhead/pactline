@@ -88,8 +88,9 @@ contract check. Protocol 2 reports `repository_code_change_links` and uses
 `pactline claim change list|link|unlink`; protocol 1 and `claim mr` are not
 compatible aliases. The parent Harness should retain the Token and exact Claim
 ID; a delegated repository worker does not need the Token. These commands are
-provider-neutral: server-side Repository Connections determine whether GitHub
-Pull Request and GitLab Merge Request URLs can be linked.
+provider-neutral. A URL can be linked when its repository belongs to the
+Task's Project; a matching server-side Repository Connection only adds
+read-only provider evidence.
 
 Use one bounded context request before and after Claim creation:
 

@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -13,19 +12,17 @@ import (
 )
 
 type ProjectRepositoryService struct {
-	Repositories      *store.ProjectRepositoryStore
-	Connections       *store.RepositoryConnectionStore
-	ConnectionService *RepositoryConnectionService
-	Providers         *RepositoryProviderRegistry
-	Access            *ProjectAccessService
-	Now               func() time.Time
+	Repositories *store.ProjectRepositoryStore
+	Providers    *RepositoryProviderRegistry
+	Access       *ProjectAccessService
+	Now          func() time.Time
 }
 
 func (s *ProjectRepositoryService) List(
 	ctx context.Context,
 	projectNumber int64,
 	subject domain.ProjectAccessSubject,
-) ([]store.ProjectRepositoryWithConnection, error) {
+) ([]domain.ProjectRepository, error) {
 	project, err := s.Access.RequireProjectByNumber(
 		ctx, projectNumber, subject, ProjectPermissionRead,
 	)
@@ -40,6 +37,7 @@ func (s *ProjectRepositoryService) Bind(
 	projectNumber int64,
 	expectedProjectVersion int64,
 	repositoryURL string,
+	provider *domain.RepositoryProvider,
 	subject domain.ProjectAccessSubject,
 	operation domain.OperationActor,
 ) (store.ProjectRepositoryMutation, error) {
@@ -54,45 +52,12 @@ func (s *ProjectRepositoryService) Bind(
 			"%w: archived Projects are read-only", domain.ErrConflict,
 		)
 	}
-	candidates, err := s.Providers.RepositoryURLCandidates(repositoryURL)
+	reference, err := s.Providers.ParseProjectRepositoryURL(repositoryURL, provider)
 	if err != nil {
 		return store.ProjectRepositoryMutation{}, err
-	}
-	var reference domain.RepositoryReference
-	var connection domain.RepositoryConnection
-	matchCount := 0
-	for _, candidate := range candidates {
-		matched, findErr := s.Connections.FindActiveByRepository(ctx, candidate)
-		if errors.Is(findErr, domain.ErrNotFound) {
-			continue
-		}
-		if findErr != nil {
-			return store.ProjectRepositoryMutation{}, findErr
-		}
-		reference, connection = candidate, matched
-		matchCount++
-	}
-	if matchCount == 0 {
-		return store.ProjectRepositoryMutation{}, domain.ErrNotFound
-	}
-	if matchCount > 1 {
-		return store.ProjectRepositoryMutation{}, fmt.Errorf(
-			"%w: repository URL matches more than one active Repository Connection", domain.ErrConflict,
-		)
-	}
-	validation, err := s.ConnectionService.validateExisting(ctx, connection, operation.RequestID)
-	if err != nil {
-		return store.ProjectRepositoryMutation{}, err
-	}
-	if validation.Reference.Origin != reference.Origin ||
-		validation.Reference.Provider != reference.Provider ||
-		validation.Reference.PathLookupKey != reference.PathLookupKey {
-		return store.ProjectRepositoryMutation{}, fmt.Errorf(
-			"%w: repository URL does not match the Repository Connection", domain.ErrConflict,
-		)
 	}
 	return s.Repositories.Bind(
-		ctx, project.Project.ID, expectedProjectVersion, connection.ID, operation, s.now(),
+		ctx, project.Project.ID, expectedProjectVersion, reference, operation, s.now(),
 	)
 }
 

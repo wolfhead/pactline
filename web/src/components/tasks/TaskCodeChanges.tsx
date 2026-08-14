@@ -1,20 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { ExternalLink, GitMerge, Link2, RefreshCw, Unlink } from "lucide-react";
-import { getTaskDelivery, linkTaskCodeChange, unlinkTaskCodeChange, type DeliveryComparison, type CodeChangeObservationStatus, type TaskDelivery, type TaskCodeChange } from "@/api/task-delivery";
+import { getTaskDelivery, linkTaskCodeChange, unlinkTaskCodeChange, type DeliveryComparison, type CodeChangeVerificationStatus, type TaskDelivery, type TaskCodeChange } from "@/api/task-delivery";
 import { listTaskStageClaims } from "@/api/task-workflow";
 import { ProblemError } from "@/api/v1/client";
 import { useIdentity } from "@/identity";
 import type { Task, TaskStageClaim } from "@/task-types";
 
-const OBSERVATION_LABELS: Record<CodeChangeObservationStatus, string> = {
-  confirmed: "已确认",
-  missing: "无法找到",
-  unauthorized: "鉴权失败",
-  unreachable: "暂时不可用",
-  disconnected: "连接已停用",
+const VERIFICATION_LABELS: Record<CodeChangeVerificationStatus, string> = {
+  verified: "Provider 已验证",
+  missing: "Provider 无法找到此变更",
+  unauthorized: "Provider 鉴权失败",
+  unreachable: "Provider 暂时不可用",
+  disconnected: "Provider Connection 不可用",
 };
 
 const COMPARISON_LABELS: Record<DeliveryComparison, string> = {
+  unverified: "Provider 未验证",
   unchanged: "与提交执行时一致",
   moved: "提交后有新提交",
   merged: "已合并",
@@ -62,7 +63,8 @@ function codeChangeState(state: keyof typeof CODE_CHANGE_STATE_LABELS, draft: bo
 }
 
 function CodeChangeRow({ codeChange, canUnlink, onUnlink }: { codeChange: TaskCodeChange; canUnlink: boolean; onUnlink: () => void }) {
-  const observation = codeChange.latest_observation;
+  const evidence = codeChange.provider_evidence;
+  const verification = codeChange.provider_verification;
   const symbol = codeChange.kind === "pull_request" ? "#" : "!";
   return (
     <li className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
@@ -71,13 +73,19 @@ function CodeChangeRow({ codeChange, canUnlink, onUnlink }: { codeChange: TaskCo
         <a href={codeChange.web_url} target="_blank" rel="noreferrer" className="inline-flex max-w-full items-center gap-1 text-sm font-medium text-accent hover:underline">
           <span className="truncate">
             {providerLabel(codeChange.provider)} · {repositoryLabel(codeChange.repository_url)} · {symbol}
-            {codeChange.change_number} {observation.title || codeChange.web_url}
+            {codeChange.change_number} {evidence?.title || codeChange.web_url}
           </span>
           <ExternalLink className="size-3.5 shrink-0" aria-hidden="true" />
         </a>
-        <p className="mt-1 text-xs leading-5 text-fg-muted">
-          {codeChangeState(observation.state, observation.draft)} · {observation.source_branch || "未知分支"} → {observation.target_branch || "未知分支"} · {shortSHA(observation.head_sha)} · {OBSERVATION_LABELS[observation.status]}，{observedAt(observation.observed_at)}
-        </p>
+        {evidence ? (
+          <p className="mt-1 text-xs leading-5 text-fg-muted">
+            {codeChangeState(evidence.state, evidence.draft)} · {evidence.source_branch} → {evidence.target_branch} · {shortSHA(evidence.head_sha)} · {verification ? VERIFICATION_LABELS[verification.status] : "Provider 已验证"}，证据更新于 {observedAt(evidence.observed_at)}
+          </p>
+        ) : (
+          <p className="mt-1 text-xs leading-5 text-fg-muted">
+            {verification ? VERIFICATION_LABELS[verification.status] : "Provider 未验证"} · 链接已保存，不影响任务提交与验收
+          </p>
+        )}
       </div>
       {canUnlink && (
         <button type="button" onClick={onUnlink} className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs text-danger hover:bg-danger-subtle">
@@ -193,7 +201,7 @@ export default function TaskCodeChanges({ task, onChanged }: { task: Task; onCha
           <input id={`task-${task.number}-code-change-url`} type="url" required value={codeChangeURL} onChange={(event) => setCodeChangeURL(event.target.value)} placeholder="https://github.com/owner/repository/pull/42" className="h-9 min-w-0 flex-1 rounded-md border border-border-strong bg-surface px-3 text-sm outline-none focus:border-accent focus:ring-3 focus:ring-accent/20" />
           <button type="submit" disabled={pending || !codeChangeURL.trim()} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-accent px-3 text-xs font-medium text-accent-fg disabled:cursor-wait disabled:opacity-50">
             <Link2 className="size-3.5" aria-hidden="true" />
-            {pending ? "正在确认…" : "关联 PR / MR"}
+            {pending ? "正在关联…" : "关联 PR / MR"}
           </button>
         </form>
       )}
@@ -214,20 +222,26 @@ export default function TaskCodeChanges({ task, onChanged }: { task: Task; onCha
             <p className="mt-2 text-xs text-fg-muted">本轮完成执行时没有关联代码变更。</p>
           ) : (
             <ul className="mt-2 divide-y divide-border">
-              {delivery.review.code_changes.map(({ snapshot, current, comparison }) => (
+              {delivery.review.code_changes.map(({ snapshot, current, comparison }) => {
+                const frozenEvidence = snapshot.provider_evidence;
+                const currentEvidence = current?.provider_evidence;
+                return (
                 <li key={snapshot.task_code_change_id} className="py-2.5 first:pt-0 last:pb-0">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <a href={snapshot.web_url} target="_blank" rel="noreferrer" className="text-sm font-medium text-accent hover:underline">
                       {providerLabel(snapshot.provider)} · {repositoryLabel(snapshot.web_url)} · {snapshot.kind === "pull_request" ? "#" : "!"}
-                      {snapshot.change_number} {snapshot.title || snapshot.web_url}
+                      {snapshot.change_number} {frozenEvidence?.title || snapshot.web_url}
                     </a>
-                    <span className={`rounded-full px-2 py-0.5 text-xs ${comparison === "unchanged" || comparison === "merged" ? "bg-secondary-subtle text-secondary" : "bg-warning/10 text-warning"}`}>{COMPARISON_LABELS[comparison]}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-xs ${comparison === "unchanged" || comparison === "merged" ? "bg-secondary-subtle text-secondary" : comparison === "unverified" ? "bg-surface text-fg-muted" : "bg-warning/10 text-warning"}`}>{COMPARISON_LABELS[comparison]}</span>
                   </div>
                   <p className="mt-1 text-xs text-fg-muted">
-                    冻结 {codeChangeState(snapshot.state, snapshot.draft)} / {shortSHA(snapshot.head_sha)} · 当前 {current ? `${codeChangeState(current.latest_observation.state, current.latest_observation.draft)} / ${shortSHA(current.latest_observation.head_sha)}` : "不可读取"} · 快照于 {observedAt(snapshot.observed_at)}
+                    {frozenEvidence ? `冻结 ${codeChangeState(frozenEvidence.state, frozenEvidence.draft)} / ${shortSHA(frozenEvidence.head_sha)} · ` : "冻结链接 · Provider 未验证 · "}
+                    当前 {current ? currentEvidence ? `${codeChangeState(currentEvidence.state, currentEvidence.draft)} / ${shortSHA(currentEvidence.head_sha)}` : "Provider 未验证" : "链接已移除"}
+                    {frozenEvidence ? ` · 证据快照于 ${observedAt(frozenEvidence.observed_at)}` : ""}
                   </p>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
         </div>

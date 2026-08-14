@@ -84,9 +84,9 @@ the execution Claim and moves the Task to `in_review.available`. Neither a
 code-change state nor a submission changes Task phase implicitly.
 
 The same `claim change` commands handle GitHub Pull Requests and GitLab Merge
-Requests. The server's configured Repository Connections determine which
-providers and repositories are available; the CLI does not infer or store
-provider credentials.
+Requests. Pactline accepts the URL when its repository belongs to the Task's
+Project. A server-side Repository Connection is optional enrichment; the CLI
+does not select a Connection or store provider credentials.
 
 A reviewer claims the same Task with `--stage review`. This flag is a local
 safety assertion: Pactline still derives the actual Claim stage from the Task's

@@ -149,7 +149,7 @@ func taskCodeChangeMutationResponse(
 }
 
 func taskCodeChangeFromDomain(item store.TaskCodeChangeWithRepository) (generated.TaskCodeChange, error) {
-	repositoryURL, err := url.Parse(item.Connection.CanonicalWebURL)
+	repositoryURL, err := url.Parse(item.Repository.CanonicalWebURL)
 	if err != nil {
 		return generated.TaskCodeChange{}, fmt.Errorf("parse canonical repository URL: %w", err)
 	}
@@ -157,35 +157,46 @@ func taskCodeChangeFromDomain(item store.TaskCodeChangeWithRepository) (generate
 	if err != nil {
 		return generated.TaskCodeChange{}, fmt.Errorf("parse code change URL: %w", err)
 	}
-	return generated.TaskCodeChange{
+	out := generated.TaskCodeChange{
 		ID:                   item.CodeChange.ID,
 		ProjectRepositoryID:  item.CodeChange.ProjectRepositoryID,
-		Provider:             generated.RepositoryProvider(item.Connection.Provider),
+		Provider:             generated.RepositoryProvider(item.CodeChange.Provider),
 		RepositoryURL:        *repositoryURL,
 		Kind:                 generated.CodeChangeKind(item.CodeChange.Kind),
 		ChangeNumber:         item.CodeChange.ChangeNumber,
-		ProviderChangeID:     item.CodeChange.ProviderChangeID,
 		WebURL:               *codeChangeURL,
 		LinkedBy:             actorFromDomain(item.CodeChange.LinkedBy),
 		LinkedThroughClaimID: item.CodeChange.LinkedThroughClaimID,
 		LinkedAt:             item.CodeChange.LinkedAt,
-		LatestObservation:    codeChangeObservationFromDomain(item.CodeChange.LatestObservation),
-	}, nil
+	}
+	if item.CodeChange.ProviderEvidence != nil {
+		out.ProviderEvidence = generated.NewOptCodeChangeProviderEvidence(
+			codeChangeProviderEvidenceFromDomain(*item.CodeChange.ProviderEvidence),
+		)
+	}
+	if item.CodeChange.ProviderVerification != nil {
+		out.ProviderVerification = generated.NewOptCodeChangeVerification(generated.CodeChangeVerification{
+			Status:      generated.CodeChangeVerificationStatus(item.CodeChange.ProviderVerification.Status),
+			AttemptedAt: item.CodeChange.ProviderVerification.AttemptedAt,
+		})
+	}
+	return out, nil
 }
 
-func codeChangeObservationFromDomain(observation domain.CodeChangeObservation) generated.CodeChangeObservation {
-	out := generated.CodeChangeObservation{
-		Status:     generated.CodeChangeObservationStatus(observation.Status),
-		ObservedAt: observation.ObservedAt, Title: observation.Title,
-		State: generated.CodeChangeState(observation.State), Draft: observation.Draft,
-		SourceBranch: observation.SourceBranch, TargetBranch: observation.TargetBranch,
-		HeadSha: observation.HeadSHA, ProviderUpdatedAt: observation.ProviderUpdatedAt,
+func codeChangeProviderEvidenceFromDomain(evidence domain.CodeChangeProviderEvidence) generated.CodeChangeProviderEvidence {
+	out := generated.CodeChangeProviderEvidence{
+		ConnectionID: evidence.ConnectionID, ProviderRepositoryID: evidence.ProviderRepositoryID,
+		ProviderChangeID: evidence.ProviderChangeID, Title: evidence.Title,
+		State: generated.CodeChangeState(evidence.State), Draft: evidence.Draft,
+		SourceBranch: evidence.SourceBranch, TargetBranch: evidence.TargetBranch,
+		HeadSha: evidence.HeadSHA, ProviderUpdatedAt: evidence.ProviderUpdatedAt,
+		ObservedAt: evidence.ObservedAt,
 	}
-	if observation.MergeCommitSHA != nil {
-		out.MergeCommitSha = generated.NewOptString(*observation.MergeCommitSHA)
+	if evidence.MergeCommitSHA != nil {
+		out.MergeCommitSha = generated.NewOptString(*evidence.MergeCommitSHA)
 	}
-	if observation.MergedAt != nil {
-		out.MergedAt = generated.NewOptDateTime(*observation.MergedAt)
+	if evidence.MergedAt != nil {
+		out.MergedAt = generated.NewOptDateTime(*evidence.MergedAt)
 	}
 	return out
 }
@@ -193,26 +204,16 @@ func codeChangeObservationFromDomain(observation domain.CodeChangeObservation) g
 func codeChangeSnapshotFromDomain(snapshot domain.CodeChangeSnapshot) generated.CodeChangeSnapshot {
 	webURL, _ := url.Parse(snapshot.WebURL)
 	out := generated.CodeChangeSnapshot{
-		TaskCodeChangeID:     snapshot.TaskCodeChangeID,
-		ProjectRepositoryID:  snapshot.ProjectRepositoryID,
-		ConnectionID:         snapshot.ConnectionID,
-		Provider:             generated.RepositoryProvider(snapshot.Provider),
-		ProviderRepositoryID: snapshot.ProviderRepositoryID,
-		Kind:                 generated.CodeChangeKind(snapshot.Kind),
-		ChangeNumber:         snapshot.ChangeNumber,
-		ProviderChangeID:     snapshot.ProviderChangeID,
-		WebURL:               *webURL, Title: snapshot.Title,
-		State: generated.CodeChangeState(snapshot.State), Draft: snapshot.Draft,
-		SourceBranch: snapshot.SourceBranch, TargetBranch: snapshot.TargetBranch,
-		HeadSha:           snapshot.HeadSHA,
-		ObservationStatus: generated.CodeChangeObservationStatus(snapshot.ObservationStatus),
-		ObservedAt:        snapshot.ObservedAt,
+		TaskCodeChangeID:    snapshot.TaskCodeChangeID,
+		ProjectRepositoryID: snapshot.ProjectRepositoryID,
+		Provider:            generated.RepositoryProvider(snapshot.Provider),
+		Kind:                generated.CodeChangeKind(snapshot.Kind), ChangeNumber: snapshot.ChangeNumber,
+		WebURL: *webURL,
 	}
-	if snapshot.MergeCommitSHA != nil {
-		out.MergeCommitSha = generated.NewOptString(*snapshot.MergeCommitSHA)
-	}
-	if snapshot.MergedAt != nil {
-		out.MergedAt = generated.NewOptDateTime(*snapshot.MergedAt)
+	if snapshot.ProviderEvidence != nil {
+		out.ProviderEvidence = generated.NewOptCodeChangeProviderEvidence(
+			codeChangeProviderEvidenceFromDomain(*snapshot.ProviderEvidence),
+		)
 	}
 	return out
 }

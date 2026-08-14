@@ -8,6 +8,15 @@ import {
 } from '@/api/project-repositories'
 import { ProblemError } from '@/api/v1/client'
 
+function requiresExplicitProvider(repositoryURL: string) {
+  try {
+    const hostname = new URL(repositoryURL).hostname.toLowerCase()
+    return hostname !== 'github.com' && hostname !== 'gitlab.com'
+  } catch {
+    return false
+  }
+}
+
 interface Props {
   projectNumber: number
   projectVersion: number
@@ -25,6 +34,7 @@ export default function ProjectRepositoryAccessPanel({
 }: Props) {
   const [repositories, setRepositories] = useState<ProjectRepository[]>([])
   const [repositoryURL, setRepositoryURL] = useState('')
+  const [provider, setProvider] = useState<ProjectRepository['provider'] | ''>('')
   const [loading, setLoading] = useState(true)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
@@ -49,8 +59,14 @@ export default function ProjectRepositoryAccessPanel({
     setPending(true)
     setError('')
     try {
-      await bindProjectRepository(projectNumber, projectVersion, repositoryURL.trim())
+      await bindProjectRepository(
+        projectNumber,
+        projectVersion,
+        repositoryURL.trim(),
+        requiresExplicitProvider(repositoryURL) ? provider || undefined : undefined,
+      )
       setRepositoryURL('')
+      setProvider('')
       await Promise.all([reload(), onChanged()])
     } catch (reason) {
       if (reason instanceof ProblemError && reason.code === 'VERSION_CONFLICT') {
@@ -90,47 +106,65 @@ export default function ProjectRepositoryAccessPanel({
           <GitBranch className="size-4" aria-hidden="true" />
         </span>
         <div>
-          <h3 id="project-repositories-title" className="text-sm font-semibold">代码仓库授权</h3>
+          <h3 id="project-repositories-title" className="text-sm font-semibold">代码仓库</h3>
           <p className="mt-0.5 text-xs leading-5 text-fg-muted">
-			绑定后，本项目的执行者可以把该仓库中的 Pull Request / Merge Request 关联为交付证据。
+            添加后，本项目的执行者可以把该仓库中的 Pull Request / Merge Request 关联为交付证据，无需配置 Provider Connection。
           </p>
         </div>
       </div>
 
       {canManage && !archived && (
-        <form onSubmit={(event) => void bind(event)} className="mt-3 flex flex-col gap-2 sm:flex-row">
-		  <label htmlFor="project-repository-url" className="sr-only">代码仓库地址</label>
-          <input
-            id="project-repository-url"
-            type="url"
-            required
-            value={repositoryURL}
-            onChange={(event) => setRepositoryURL(event.target.value)}
-            placeholder="https://github.com/owner/repository 或 GitLab 仓库地址"
-            className="h-10 min-w-0 flex-1 rounded-md border border-border-strong bg-surface px-3 text-sm outline-none focus:border-accent focus:ring-3 focus:ring-accent/20"
-          />
+        <form onSubmit={(event) => void bind(event)} className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+          <div className="min-w-0 flex-1">
+            <label htmlFor="project-repository-url" className="mb-1 block text-xs font-medium text-fg-muted">代码仓库地址</label>
+            <input
+              id="project-repository-url"
+              type="url"
+              required
+              value={repositoryURL}
+              onChange={(event) => setRepositoryURL(event.target.value)}
+              placeholder="https://github.com/owner/repository"
+              className="h-10 w-full min-w-0 rounded-md border border-border-strong bg-surface px-3 text-sm outline-none focus:border-accent focus:ring-3 focus:ring-accent/20"
+            />
+          </div>
+          {requiresExplicitProvider(repositoryURL) && (
+            <div>
+              <label htmlFor="project-repository-provider" className="mb-1 block text-xs font-medium text-fg-muted">仓库类型</label>
+              <select
+                id="project-repository-provider"
+                required
+                value={provider}
+                onChange={(event) => setProvider(event.target.value as ProjectRepository['provider'] | '')}
+                className="h-10 rounded-md border border-border-strong bg-surface px-3 text-sm outline-none focus:border-accent focus:ring-3 focus:ring-accent/20"
+              >
+                <option value="">请选择</option>
+                <option value="github">GitHub</option>
+                <option value="gitlab">GitLab</option>
+              </select>
+            </div>
+          )}
           <button
             type="submit"
-            disabled={pending || !repositoryURL.trim()}
+            disabled={pending || !repositoryURL.trim() || (requiresExplicitProvider(repositoryURL) && !provider)}
             className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-accent px-4 text-sm font-medium text-accent-fg disabled:cursor-wait disabled:opacity-50"
           >
             <Link2 className="size-4" aria-hidden="true" />
-            {pending ? '正在鉴权…' : '绑定并鉴权'}
+            {pending ? '正在添加…' : '添加仓库'}
           </button>
         </form>
       )}
 
       {error && (
         <div role="alert" className="mt-3 flex items-center justify-between gap-3 rounded-md bg-danger-subtle px-3 py-2 text-sm text-danger">
-          <span>仓库授权操作失败：{error}</span>
+          <span>代码仓库操作失败：{error}</span>
           <button type="button" onClick={() => void reload()} className="shrink-0 rounded-md px-2 py-1 text-xs font-medium hover:bg-danger/10">重试加载</button>
         </div>
       )}
       {loading ? (
-        <p className="mt-3 text-sm text-fg-muted">正在加载仓库授权…</p>
+        <p className="mt-3 text-sm text-fg-muted">正在加载代码仓库…</p>
       ) : error && repositories.length === 0 ? null : repositories.length === 0 ? (
         <p className="mt-3 rounded-md bg-surface-subtle px-3 py-3 text-sm text-fg-muted">
-          尚未绑定代码仓库。系统管理员需要先为仓库创建 Connection。
+          尚未添加代码仓库。项目管理员可以直接粘贴 GitHub 或 GitLab 仓库地址。
         </p>
       ) : (
         <ul className="mt-3 divide-y divide-border rounded-lg border border-border bg-surface">
@@ -142,7 +176,7 @@ export default function ProjectRepositoryAccessPanel({
                   {repository.path_with_namespace}
                 </a>
                 <p className="mt-0.5 truncate text-xs text-fg-muted">
-                  {repository.label} · 默认分支 {repository.default_branch || '未设置'}
+                  {repository.provider === 'github' ? 'GitHub' : 'GitLab'} · {new URL(repository.origin).host}
                 </p>
               </div>
               {canManage && !archived && (
@@ -152,7 +186,7 @@ export default function ProjectRepositoryAccessPanel({
                   onClick={() => void unbind(repository)}
                   className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-danger hover:bg-danger-subtle disabled:opacity-50"
                 >
-                  <Unlink className="size-3.5" aria-hidden="true" />取消绑定
+                  <Unlink className="size-3.5" aria-hidden="true" />移除仓库
                 </button>
               )}
             </li>

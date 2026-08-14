@@ -250,16 +250,13 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 		Now: time.Now,
 	}
 	projectRepositoryService := &application.ProjectRepositoryService{
-		Repositories:      store.NewProjectRepositoryStore(db),
-		Connections:       store.NewRepositoryConnectionStore(db),
-		ConnectionService: repositoryConnectionService,
-		Providers:         repositoryProviders,
-		Access:            projectAccess,
-		Now:               time.Now,
+		Repositories: store.NewProjectRepositoryStore(db),
+		Providers:    repositoryProviders, Access: projectAccess, Now: time.Now,
 	}
 	taskDeliveryService := &application.TaskDeliveryService{
 		CodeChanges:  store.NewTaskCodeChangeStore(db),
 		Repositories: store.NewProjectRepositoryStore(db),
+		Connections:  store.NewRepositoryConnectionStore(db),
 		Access:       projectAccess,
 		Providers:    repositoryProviders,
 		Cipher:       gitLabCipher,

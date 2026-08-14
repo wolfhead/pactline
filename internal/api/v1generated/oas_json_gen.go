@@ -1924,21 +1924,25 @@ func (s *CodeChangeKind) UnmarshalJSON(data []byte) error {
 }
 
 // Encode implements json.Marshaler.
-func (s *CodeChangeObservation) Encode(e *jx.Encoder) {
+func (s *CodeChangeProviderEvidence) Encode(e *jx.Encoder) {
 	e.ObjStart()
 	s.encodeFields(e)
 	e.ObjEnd()
 }
 
 // encodeFields encodes fields.
-func (s *CodeChangeObservation) encodeFields(e *jx.Encoder) {
+func (s *CodeChangeProviderEvidence) encodeFields(e *jx.Encoder) {
 	{
-		e.FieldStart("status")
-		s.Status.Encode(e)
+		e.FieldStart("connection_id")
+		json.EncodeUUID(e, s.ConnectionID)
 	}
 	{
-		e.FieldStart("observed_at")
-		json.EncodeDateTime(e, s.ObservedAt)
+		e.FieldStart("provider_repository_id")
+		e.Str(s.ProviderRepositoryID)
+	}
+	{
+		e.FieldStart("provider_change_id")
+		e.Str(s.ProviderChangeID)
 	}
 	{
 		e.FieldStart("title")
@@ -1980,55 +1984,75 @@ func (s *CodeChangeObservation) encodeFields(e *jx.Encoder) {
 		e.FieldStart("provider_updated_at")
 		json.EncodeDateTime(e, s.ProviderUpdatedAt)
 	}
+	{
+		e.FieldStart("observed_at")
+		json.EncodeDateTime(e, s.ObservedAt)
+	}
 }
 
-var jsonFieldsNameOfCodeChangeObservation = [11]string{
-	0:  "status",
-	1:  "observed_at",
-	2:  "title",
-	3:  "state",
-	4:  "draft",
-	5:  "source_branch",
-	6:  "target_branch",
-	7:  "head_sha",
-	8:  "merge_commit_sha",
-	9:  "merged_at",
-	10: "provider_updated_at",
+var jsonFieldsNameOfCodeChangeProviderEvidence = [13]string{
+	0:  "connection_id",
+	1:  "provider_repository_id",
+	2:  "provider_change_id",
+	3:  "title",
+	4:  "state",
+	5:  "draft",
+	6:  "source_branch",
+	7:  "target_branch",
+	8:  "head_sha",
+	9:  "merge_commit_sha",
+	10: "merged_at",
+	11: "provider_updated_at",
+	12: "observed_at",
 }
 
-// Decode decodes CodeChangeObservation from json.
-func (s *CodeChangeObservation) Decode(d *jx.Decoder) error {
+// Decode decodes CodeChangeProviderEvidence from json.
+func (s *CodeChangeProviderEvidence) Decode(d *jx.Decoder) error {
 	if s == nil {
-		return errors.New("invalid: unable to decode CodeChangeObservation to nil")
+		return errors.New("invalid: unable to decode CodeChangeProviderEvidence to nil")
 	}
 	var requiredBitSet [2]uint8
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
-		case "status":
+		case "connection_id":
 			requiredBitSet[0] |= 1 << 0
 			if err := func() error {
-				if err := s.Status.Decode(d); err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"status\"")
-			}
-		case "observed_at":
-			requiredBitSet[0] |= 1 << 1
-			if err := func() error {
-				v, err := json.DecodeDateTime(d)
-				s.ObservedAt = v
+				v, err := json.DecodeUUID(d)
+				s.ConnectionID = v
 				if err != nil {
 					return err
 				}
 				return nil
 			}(); err != nil {
-				return errors.Wrap(err, "decode field \"observed_at\"")
+				return errors.Wrap(err, "decode field \"connection_id\"")
+			}
+		case "provider_repository_id":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				v, err := d.Str()
+				s.ProviderRepositoryID = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"provider_repository_id\"")
+			}
+		case "provider_change_id":
+			requiredBitSet[0] |= 1 << 2
+			if err := func() error {
+				v, err := d.Str()
+				s.ProviderChangeID = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"provider_change_id\"")
 			}
 		case "title":
-			requiredBitSet[0] |= 1 << 2
+			requiredBitSet[0] |= 1 << 3
 			if err := func() error {
 				v, err := d.Str()
 				s.Title = string(v)
@@ -2040,7 +2064,7 @@ func (s *CodeChangeObservation) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"title\"")
 			}
 		case "state":
-			requiredBitSet[0] |= 1 << 3
+			requiredBitSet[0] |= 1 << 4
 			if err := func() error {
 				if err := s.State.Decode(d); err != nil {
 					return err
@@ -2050,7 +2074,7 @@ func (s *CodeChangeObservation) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"state\"")
 			}
 		case "draft":
-			requiredBitSet[0] |= 1 << 4
+			requiredBitSet[0] |= 1 << 5
 			if err := func() error {
 				v, err := d.Bool()
 				s.Draft = bool(v)
@@ -2062,7 +2086,7 @@ func (s *CodeChangeObservation) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"draft\"")
 			}
 		case "source_branch":
-			requiredBitSet[0] |= 1 << 5
+			requiredBitSet[0] |= 1 << 6
 			if err := func() error {
 				v, err := d.Str()
 				s.SourceBranch = string(v)
@@ -2074,7 +2098,7 @@ func (s *CodeChangeObservation) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"source_branch\"")
 			}
 		case "target_branch":
-			requiredBitSet[0] |= 1 << 6
+			requiredBitSet[0] |= 1 << 7
 			if err := func() error {
 				v, err := d.Str()
 				s.TargetBranch = string(v)
@@ -2086,7 +2110,7 @@ func (s *CodeChangeObservation) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"target_branch\"")
 			}
 		case "head_sha":
-			requiredBitSet[0] |= 1 << 7
+			requiredBitSet[1] |= 1 << 0
 			if err := func() error {
 				v, err := d.Str()
 				s.HeadSha = string(v)
@@ -2118,7 +2142,7 @@ func (s *CodeChangeObservation) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"merged_at\"")
 			}
 		case "provider_updated_at":
-			requiredBitSet[1] |= 1 << 2
+			requiredBitSet[1] |= 1 << 3
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.ProviderUpdatedAt = v
@@ -2129,18 +2153,30 @@ func (s *CodeChangeObservation) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"provider_updated_at\"")
 			}
+		case "observed_at":
+			requiredBitSet[1] |= 1 << 4
+			if err := func() error {
+				v, err := json.DecodeDateTime(d)
+				s.ObservedAt = v
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"observed_at\"")
+			}
 		default:
 			return errors.Errorf("unexpected field %q", k)
 		}
 		return nil
 	}); err != nil {
-		return errors.Wrap(err, "decode CodeChangeObservation")
+		return errors.Wrap(err, "decode CodeChangeProviderEvidence")
 	}
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [2]uint8{
 		0b11111111,
-		0b00000100,
+		0b00011001,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -2152,8 +2188,8 @@ func (s *CodeChangeObservation) Decode(d *jx.Decoder) error {
 				bitIdx := bits.TrailingZeros8(result)
 				fieldIdx := i*8 + bitIdx
 				var name string
-				if fieldIdx < len(jsonFieldsNameOfCodeChangeObservation) {
-					name = jsonFieldsNameOfCodeChangeObservation[fieldIdx]
+				if fieldIdx < len(jsonFieldsNameOfCodeChangeProviderEvidence) {
+					name = jsonFieldsNameOfCodeChangeProviderEvidence[fieldIdx]
 				} else {
 					name = strconv.Itoa(fieldIdx)
 				}
@@ -2174,60 +2210,14 @@ func (s *CodeChangeObservation) Decode(d *jx.Decoder) error {
 }
 
 // MarshalJSON implements stdjson.Marshaler.
-func (s *CodeChangeObservation) MarshalJSON() ([]byte, error) {
+func (s *CodeChangeProviderEvidence) MarshalJSON() ([]byte, error) {
 	e := jx.Encoder{}
 	s.Encode(&e)
 	return e.Bytes(), nil
 }
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
-func (s *CodeChangeObservation) UnmarshalJSON(data []byte) error {
-	d := jx.DecodeBytes(data)
-	return s.Decode(d)
-}
-
-// Encode encodes CodeChangeObservationStatus as json.
-func (s CodeChangeObservationStatus) Encode(e *jx.Encoder) {
-	e.Str(string(s))
-}
-
-// Decode decodes CodeChangeObservationStatus from json.
-func (s *CodeChangeObservationStatus) Decode(d *jx.Decoder) error {
-	if s == nil {
-		return errors.New("invalid: unable to decode CodeChangeObservationStatus to nil")
-	}
-	v, err := d.StrBytes()
-	if err != nil {
-		return err
-	}
-	// Try to use constant string.
-	switch CodeChangeObservationStatus(v) {
-	case CodeChangeObservationStatusConfirmed:
-		*s = CodeChangeObservationStatusConfirmed
-	case CodeChangeObservationStatusMissing:
-		*s = CodeChangeObservationStatusMissing
-	case CodeChangeObservationStatusUnauthorized:
-		*s = CodeChangeObservationStatusUnauthorized
-	case CodeChangeObservationStatusUnreachable:
-		*s = CodeChangeObservationStatusUnreachable
-	case CodeChangeObservationStatusDisconnected:
-		*s = CodeChangeObservationStatusDisconnected
-	default:
-		*s = CodeChangeObservationStatus(v)
-	}
-
-	return nil
-}
-
-// MarshalJSON implements stdjson.Marshaler.
-func (s CodeChangeObservationStatus) MarshalJSON() ([]byte, error) {
-	e := jx.Encoder{}
-	s.Encode(&e)
-	return e.Bytes(), nil
-}
-
-// UnmarshalJSON implements stdjson.Unmarshaler.
-func (s *CodeChangeObservationStatus) UnmarshalJSON(data []byte) error {
+func (s *CodeChangeProviderEvidence) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -2250,16 +2240,8 @@ func (s *CodeChangeSnapshot) encodeFields(e *jx.Encoder) {
 		json.EncodeUUID(e, s.ProjectRepositoryID)
 	}
 	{
-		e.FieldStart("connection_id")
-		json.EncodeUUID(e, s.ConnectionID)
-	}
-	{
 		e.FieldStart("provider")
 		s.Provider.Encode(e)
-	}
-	{
-		e.FieldStart("provider_repository_id")
-		e.Str(s.ProviderRepositoryID)
 	}
 	{
 		e.FieldStart("kind")
@@ -2270,79 +2252,25 @@ func (s *CodeChangeSnapshot) encodeFields(e *jx.Encoder) {
 		e.Int64(s.ChangeNumber)
 	}
 	{
-		e.FieldStart("provider_change_id")
-		e.Str(s.ProviderChangeID)
-	}
-	{
 		e.FieldStart("web_url")
 		json.EncodeURI(e, s.WebURL)
 	}
 	{
-		e.FieldStart("title")
-		e.Str(s.Title)
-	}
-	{
-		e.FieldStart("state")
-		s.State.Encode(e)
-	}
-	{
-		e.FieldStart("draft")
-		e.Bool(s.Draft)
-	}
-	{
-		e.FieldStart("source_branch")
-		e.Str(s.SourceBranch)
-	}
-	{
-		e.FieldStart("target_branch")
-		e.Str(s.TargetBranch)
-	}
-	{
-		e.FieldStart("head_sha")
-		e.Str(s.HeadSha)
-	}
-	{
-		if s.MergeCommitSha.Set {
-			e.FieldStart("merge_commit_sha")
-			s.MergeCommitSha.Encode(e)
+		if s.ProviderEvidence.Set {
+			e.FieldStart("provider_evidence")
+			s.ProviderEvidence.Encode(e)
 		}
-	}
-	{
-		if s.MergedAt.Set {
-			e.FieldStart("merged_at")
-			s.MergedAt.Encode(e, json.EncodeDateTime)
-		}
-	}
-	{
-		e.FieldStart("observation_status")
-		s.ObservationStatus.Encode(e)
-	}
-	{
-		e.FieldStart("observed_at")
-		json.EncodeDateTime(e, s.ObservedAt)
 	}
 }
 
-var jsonFieldsNameOfCodeChangeSnapshot = [19]string{
-	0:  "task_code_change_id",
-	1:  "project_repository_id",
-	2:  "connection_id",
-	3:  "provider",
-	4:  "provider_repository_id",
-	5:  "kind",
-	6:  "change_number",
-	7:  "provider_change_id",
-	8:  "web_url",
-	9:  "title",
-	10: "state",
-	11: "draft",
-	12: "source_branch",
-	13: "target_branch",
-	14: "head_sha",
-	15: "merge_commit_sha",
-	16: "merged_at",
-	17: "observation_status",
-	18: "observed_at",
+var jsonFieldsNameOfCodeChangeSnapshot = [7]string{
+	0: "task_code_change_id",
+	1: "project_repository_id",
+	2: "provider",
+	3: "kind",
+	4: "change_number",
+	5: "web_url",
+	6: "provider_evidence",
 }
 
 // Decode decodes CodeChangeSnapshot from json.
@@ -2350,7 +2278,7 @@ func (s *CodeChangeSnapshot) Decode(d *jx.Decoder) error {
 	if s == nil {
 		return errors.New("invalid: unable to decode CodeChangeSnapshot to nil")
 	}
-	var requiredBitSet [3]uint8
+	var requiredBitSet [1]uint8
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -2378,20 +2306,8 @@ func (s *CodeChangeSnapshot) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"project_repository_id\"")
 			}
-		case "connection_id":
-			requiredBitSet[0] |= 1 << 2
-			if err := func() error {
-				v, err := json.DecodeUUID(d)
-				s.ConnectionID = v
-				if err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"connection_id\"")
-			}
 		case "provider":
-			requiredBitSet[0] |= 1 << 3
+			requiredBitSet[0] |= 1 << 2
 			if err := func() error {
 				if err := s.Provider.Decode(d); err != nil {
 					return err
@@ -2400,20 +2316,8 @@ func (s *CodeChangeSnapshot) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"provider\"")
 			}
-		case "provider_repository_id":
-			requiredBitSet[0] |= 1 << 4
-			if err := func() error {
-				v, err := d.Str()
-				s.ProviderRepositoryID = string(v)
-				if err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"provider_repository_id\"")
-			}
 		case "kind":
-			requiredBitSet[0] |= 1 << 5
+			requiredBitSet[0] |= 1 << 3
 			if err := func() error {
 				if err := s.Kind.Decode(d); err != nil {
 					return err
@@ -2423,7 +2327,7 @@ func (s *CodeChangeSnapshot) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"kind\"")
 			}
 		case "change_number":
-			requiredBitSet[0] |= 1 << 6
+			requiredBitSet[0] |= 1 << 4
 			if err := func() error {
 				v, err := d.Int64()
 				s.ChangeNumber = int64(v)
@@ -2434,20 +2338,8 @@ func (s *CodeChangeSnapshot) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"change_number\"")
 			}
-		case "provider_change_id":
-			requiredBitSet[0] |= 1 << 7
-			if err := func() error {
-				v, err := d.Str()
-				s.ProviderChangeID = string(v)
-				if err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"provider_change_id\"")
-			}
 		case "web_url":
-			requiredBitSet[1] |= 1 << 0
+			requiredBitSet[0] |= 1 << 5
 			if err := func() error {
 				v, err := json.DecodeURI(d)
 				s.WebURL = v
@@ -2458,117 +2350,15 @@ func (s *CodeChangeSnapshot) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"web_url\"")
 			}
-		case "title":
-			requiredBitSet[1] |= 1 << 1
+		case "provider_evidence":
 			if err := func() error {
-				v, err := d.Str()
-				s.Title = string(v)
-				if err != nil {
+				s.ProviderEvidence.Reset()
+				if err := s.ProviderEvidence.Decode(d); err != nil {
 					return err
 				}
 				return nil
 			}(); err != nil {
-				return errors.Wrap(err, "decode field \"title\"")
-			}
-		case "state":
-			requiredBitSet[1] |= 1 << 2
-			if err := func() error {
-				if err := s.State.Decode(d); err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"state\"")
-			}
-		case "draft":
-			requiredBitSet[1] |= 1 << 3
-			if err := func() error {
-				v, err := d.Bool()
-				s.Draft = bool(v)
-				if err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"draft\"")
-			}
-		case "source_branch":
-			requiredBitSet[1] |= 1 << 4
-			if err := func() error {
-				v, err := d.Str()
-				s.SourceBranch = string(v)
-				if err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"source_branch\"")
-			}
-		case "target_branch":
-			requiredBitSet[1] |= 1 << 5
-			if err := func() error {
-				v, err := d.Str()
-				s.TargetBranch = string(v)
-				if err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"target_branch\"")
-			}
-		case "head_sha":
-			requiredBitSet[1] |= 1 << 6
-			if err := func() error {
-				v, err := d.Str()
-				s.HeadSha = string(v)
-				if err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"head_sha\"")
-			}
-		case "merge_commit_sha":
-			if err := func() error {
-				s.MergeCommitSha.Reset()
-				if err := s.MergeCommitSha.Decode(d); err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"merge_commit_sha\"")
-			}
-		case "merged_at":
-			if err := func() error {
-				s.MergedAt.Reset()
-				if err := s.MergedAt.Decode(d, json.DecodeDateTime); err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"merged_at\"")
-			}
-		case "observation_status":
-			requiredBitSet[2] |= 1 << 1
-			if err := func() error {
-				if err := s.ObservationStatus.Decode(d); err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"observation_status\"")
-			}
-		case "observed_at":
-			requiredBitSet[2] |= 1 << 2
-			if err := func() error {
-				v, err := json.DecodeDateTime(d)
-				s.ObservedAt = v
-				if err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"observed_at\"")
+				return errors.Wrap(err, "decode field \"provider_evidence\"")
 			}
 		default:
 			return errors.Errorf("unexpected field %q", k)
@@ -2579,10 +2369,8 @@ func (s *CodeChangeSnapshot) Decode(d *jx.Decoder) error {
 	}
 	// Validate required fields.
 	var failures []validate.FieldError
-	for i, mask := range [3]uint8{
-		0b11111111,
-		0b01111111,
-		0b00000110,
+	for i, mask := range [1]uint8{
+		0b00111111,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -2668,6 +2456,163 @@ func (s CodeChangeState) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *CodeChangeState) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *CodeChangeVerification) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *CodeChangeVerification) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("status")
+		s.Status.Encode(e)
+	}
+	{
+		e.FieldStart("attempted_at")
+		json.EncodeDateTime(e, s.AttemptedAt)
+	}
+}
+
+var jsonFieldsNameOfCodeChangeVerification = [2]string{
+	0: "status",
+	1: "attempted_at",
+}
+
+// Decode decodes CodeChangeVerification from json.
+func (s *CodeChangeVerification) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode CodeChangeVerification to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "status":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				if err := s.Status.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"status\"")
+			}
+		case "attempted_at":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				v, err := json.DecodeDateTime(d)
+				s.AttemptedAt = v
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"attempted_at\"")
+			}
+		default:
+			return errors.Errorf("unexpected field %q", k)
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode CodeChangeVerification")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00000011,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfCodeChangeVerification) {
+					name = jsonFieldsNameOfCodeChangeVerification[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *CodeChangeVerification) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *CodeChangeVerification) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes CodeChangeVerificationStatus as json.
+func (s CodeChangeVerificationStatus) Encode(e *jx.Encoder) {
+	e.Str(string(s))
+}
+
+// Decode decodes CodeChangeVerificationStatus from json.
+func (s *CodeChangeVerificationStatus) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode CodeChangeVerificationStatus to nil")
+	}
+	v, err := d.StrBytes()
+	if err != nil {
+		return err
+	}
+	// Try to use constant string.
+	switch CodeChangeVerificationStatus(v) {
+	case CodeChangeVerificationStatusVerified:
+		*s = CodeChangeVerificationStatusVerified
+	case CodeChangeVerificationStatusMissing:
+		*s = CodeChangeVerificationStatusMissing
+	case CodeChangeVerificationStatusUnauthorized:
+		*s = CodeChangeVerificationStatusUnauthorized
+	case CodeChangeVerificationStatusUnreachable:
+		*s = CodeChangeVerificationStatusUnreachable
+	case CodeChangeVerificationStatusDisconnected:
+		*s = CodeChangeVerificationStatusDisconnected
+	default:
+		*s = CodeChangeVerificationStatus(v)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s CodeChangeVerificationStatus) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *CodeChangeVerificationStatus) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -5471,6 +5416,72 @@ func (s *OptBool) UnmarshalJSON(data []byte) error {
 	return s.Decode(d)
 }
 
+// Encode encodes CodeChangeProviderEvidence as json.
+func (o OptCodeChangeProviderEvidence) Encode(e *jx.Encoder) {
+	if !o.Set {
+		return
+	}
+	o.Value.Encode(e)
+}
+
+// Decode decodes CodeChangeProviderEvidence from json.
+func (o *OptCodeChangeProviderEvidence) Decode(d *jx.Decoder) error {
+	if o == nil {
+		return errors.New("invalid: unable to decode OptCodeChangeProviderEvidence to nil")
+	}
+	o.Set = true
+	if err := o.Value.Decode(d); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s OptCodeChangeProviderEvidence) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *OptCodeChangeProviderEvidence) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes CodeChangeVerification as json.
+func (o OptCodeChangeVerification) Encode(e *jx.Encoder) {
+	if !o.Set {
+		return
+	}
+	o.Value.Encode(e)
+}
+
+// Decode decodes CodeChangeVerification from json.
+func (o *OptCodeChangeVerification) Decode(d *jx.Decoder) error {
+	if o == nil {
+		return errors.New("invalid: unable to decode OptCodeChangeVerification to nil")
+	}
+	o.Set = true
+	if err := o.Value.Decode(d); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s OptCodeChangeVerification) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *OptCodeChangeVerification) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
 // Encode encodes CompactThread as json.
 func (o OptCompactThread) Encode(e *jx.Encoder) {
 	if !o.Set {
@@ -6090,6 +6101,39 @@ func (s OptProjectRef) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *OptProjectRef) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes RepositoryProvider as json.
+func (o OptRepositoryProvider) Encode(e *jx.Encoder) {
+	if !o.Set {
+		return
+	}
+	e.Str(string(o.Value))
+}
+
+// Decode decodes RepositoryProvider from json.
+func (o *OptRepositoryProvider) Decode(d *jx.Decoder) error {
+	if o == nil {
+		return errors.New("invalid: unable to decode OptRepositoryProvider to nil")
+	}
+	o.Set = true
+	if err := o.Value.Decode(d); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s OptRepositoryProvider) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *OptRepositoryProvider) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -8774,10 +8818,6 @@ func (s *ProjectRepository) encodeFields(e *jx.Encoder) {
 		json.EncodeURI(e, s.CanonicalWebURL)
 	}
 	{
-		e.FieldStart("label")
-		e.Str(s.Label)
-	}
-	{
 		e.FieldStart("provider")
 		s.Provider.Encode(e)
 	}
@@ -8786,16 +8826,8 @@ func (s *ProjectRepository) encodeFields(e *jx.Encoder) {
 		json.EncodeURI(e, s.Origin)
 	}
 	{
-		e.FieldStart("provider_repository_id")
-		e.Str(s.ProviderRepositoryID)
-	}
-	{
 		e.FieldStart("path_with_namespace")
 		e.Str(s.PathWithNamespace)
-	}
-	{
-		e.FieldStart("default_branch")
-		e.Str(s.DefaultBranch)
 	}
 	{
 		e.FieldStart("bound_at")
@@ -8803,16 +8835,13 @@ func (s *ProjectRepository) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfProjectRepository = [9]string{
+var jsonFieldsNameOfProjectRepository = [6]string{
 	0: "id",
 	1: "canonical_web_url",
-	2: "label",
-	3: "provider",
-	4: "origin",
-	5: "provider_repository_id",
-	6: "path_with_namespace",
-	7: "default_branch",
-	8: "bound_at",
+	2: "provider",
+	3: "origin",
+	4: "path_with_namespace",
+	5: "bound_at",
 }
 
 // Decode decodes ProjectRepository from json.
@@ -8820,7 +8849,7 @@ func (s *ProjectRepository) Decode(d *jx.Decoder) error {
 	if s == nil {
 		return errors.New("invalid: unable to decode ProjectRepository to nil")
 	}
-	var requiredBitSet [2]uint8
+	var requiredBitSet [1]uint8
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -8848,20 +8877,8 @@ func (s *ProjectRepository) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"canonical_web_url\"")
 			}
-		case "label":
-			requiredBitSet[0] |= 1 << 2
-			if err := func() error {
-				v, err := d.Str()
-				s.Label = string(v)
-				if err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"label\"")
-			}
 		case "provider":
-			requiredBitSet[0] |= 1 << 3
+			requiredBitSet[0] |= 1 << 2
 			if err := func() error {
 				if err := s.Provider.Decode(d); err != nil {
 					return err
@@ -8871,7 +8888,7 @@ func (s *ProjectRepository) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"provider\"")
 			}
 		case "origin":
-			requiredBitSet[0] |= 1 << 4
+			requiredBitSet[0] |= 1 << 3
 			if err := func() error {
 				v, err := json.DecodeURI(d)
 				s.Origin = v
@@ -8882,20 +8899,8 @@ func (s *ProjectRepository) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"origin\"")
 			}
-		case "provider_repository_id":
-			requiredBitSet[0] |= 1 << 5
-			if err := func() error {
-				v, err := d.Str()
-				s.ProviderRepositoryID = string(v)
-				if err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"provider_repository_id\"")
-			}
 		case "path_with_namespace":
-			requiredBitSet[0] |= 1 << 6
+			requiredBitSet[0] |= 1 << 4
 			if err := func() error {
 				v, err := d.Str()
 				s.PathWithNamespace = string(v)
@@ -8906,20 +8911,8 @@ func (s *ProjectRepository) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"path_with_namespace\"")
 			}
-		case "default_branch":
-			requiredBitSet[0] |= 1 << 7
-			if err := func() error {
-				v, err := d.Str()
-				s.DefaultBranch = string(v)
-				if err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"default_branch\"")
-			}
 		case "bound_at":
-			requiredBitSet[1] |= 1 << 0
+			requiredBitSet[0] |= 1 << 5
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.BoundAt = v
@@ -8939,9 +8932,8 @@ func (s *ProjectRepository) Decode(d *jx.Decoder) error {
 	}
 	// Validate required fields.
 	var failures []validate.FieldError
-	for i, mask := range [2]uint8{
-		0b11111111,
-		0b00000001,
+	for i, mask := range [1]uint8{
+		0b00111111,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -9000,10 +8992,17 @@ func (s *ProjectRepositoryBind) encodeFields(e *jx.Encoder) {
 		e.FieldStart("repository_url")
 		json.EncodeURI(e, s.RepositoryURL)
 	}
+	{
+		if s.Provider.Set {
+			e.FieldStart("provider")
+			s.Provider.Encode(e)
+		}
+	}
 }
 
-var jsonFieldsNameOfProjectRepositoryBind = [1]string{
+var jsonFieldsNameOfProjectRepositoryBind = [2]string{
 	0: "repository_url",
+	1: "provider",
 }
 
 // Decode decodes ProjectRepositoryBind from json.
@@ -9026,6 +9025,16 @@ func (s *ProjectRepositoryBind) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"repository_url\"")
+			}
+		case "provider":
+			if err := func() error {
+				s.Provider.Reset()
+				if err := s.Provider.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"provider\"")
 			}
 		default:
 			return errors.Errorf("unexpected field %q", k)
@@ -11665,10 +11674,6 @@ func (s *TaskCodeChange) encodeFields(e *jx.Encoder) {
 		e.Int64(s.ChangeNumber)
 	}
 	{
-		e.FieldStart("provider_change_id")
-		e.Str(s.ProviderChangeID)
-	}
-	{
 		e.FieldStart("web_url")
 		json.EncodeURI(e, s.WebURL)
 	}
@@ -11685,8 +11690,16 @@ func (s *TaskCodeChange) encodeFields(e *jx.Encoder) {
 		json.EncodeDateTime(e, s.LinkedAt)
 	}
 	{
-		e.FieldStart("latest_observation")
-		s.LatestObservation.Encode(e)
+		if s.ProviderEvidence.Set {
+			e.FieldStart("provider_evidence")
+			s.ProviderEvidence.Encode(e)
+		}
+	}
+	{
+		if s.ProviderVerification.Set {
+			e.FieldStart("provider_verification")
+			s.ProviderVerification.Encode(e)
+		}
 	}
 }
 
@@ -11697,12 +11710,12 @@ var jsonFieldsNameOfTaskCodeChange = [12]string{
 	3:  "repository_url",
 	4:  "kind",
 	5:  "change_number",
-	6:  "provider_change_id",
-	7:  "web_url",
-	8:  "linked_by",
-	9:  "linked_through_claim_id",
-	10: "linked_at",
-	11: "latest_observation",
+	6:  "web_url",
+	7:  "linked_by",
+	8:  "linked_through_claim_id",
+	9:  "linked_at",
+	10: "provider_evidence",
+	11: "provider_verification",
 }
 
 // Decode decodes TaskCodeChange from json.
@@ -11782,20 +11795,8 @@ func (s *TaskCodeChange) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"change_number\"")
 			}
-		case "provider_change_id":
-			requiredBitSet[0] |= 1 << 6
-			if err := func() error {
-				v, err := d.Str()
-				s.ProviderChangeID = string(v)
-				if err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"provider_change_id\"")
-			}
 		case "web_url":
-			requiredBitSet[0] |= 1 << 7
+			requiredBitSet[0] |= 1 << 6
 			if err := func() error {
 				v, err := json.DecodeURI(d)
 				s.WebURL = v
@@ -11807,7 +11808,7 @@ func (s *TaskCodeChange) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"web_url\"")
 			}
 		case "linked_by":
-			requiredBitSet[1] |= 1 << 0
+			requiredBitSet[0] |= 1 << 7
 			if err := func() error {
 				if err := s.LinkedBy.Decode(d); err != nil {
 					return err
@@ -11817,7 +11818,7 @@ func (s *TaskCodeChange) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"linked_by\"")
 			}
 		case "linked_through_claim_id":
-			requiredBitSet[1] |= 1 << 1
+			requiredBitSet[1] |= 1 << 0
 			if err := func() error {
 				v, err := json.DecodeUUID(d)
 				s.LinkedThroughClaimID = v
@@ -11829,7 +11830,7 @@ func (s *TaskCodeChange) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"linked_through_claim_id\"")
 			}
 		case "linked_at":
-			requiredBitSet[1] |= 1 << 2
+			requiredBitSet[1] |= 1 << 1
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.LinkedAt = v
@@ -11840,15 +11841,25 @@ func (s *TaskCodeChange) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"linked_at\"")
 			}
-		case "latest_observation":
-			requiredBitSet[1] |= 1 << 3
+		case "provider_evidence":
 			if err := func() error {
-				if err := s.LatestObservation.Decode(d); err != nil {
+				s.ProviderEvidence.Reset()
+				if err := s.ProviderEvidence.Decode(d); err != nil {
 					return err
 				}
 				return nil
 			}(); err != nil {
-				return errors.Wrap(err, "decode field \"latest_observation\"")
+				return errors.Wrap(err, "decode field \"provider_evidence\"")
+			}
+		case "provider_verification":
+			if err := func() error {
+				s.ProviderVerification.Reset()
+				if err := s.ProviderVerification.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"provider_verification\"")
 			}
 		default:
 			return errors.Errorf("unexpected field %q", k)
@@ -11861,7 +11872,7 @@ func (s *TaskCodeChange) Decode(d *jx.Decoder) error {
 	var failures []validate.FieldError
 	for i, mask := range [2]uint8{
 		0b11111111,
-		0b00001111,
+		0b00000011,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -12704,6 +12715,8 @@ func (s *TaskDeliveryComparisonComparison) Decode(d *jx.Decoder) error {
 	}
 	// Try to use constant string.
 	switch TaskDeliveryComparisonComparison(v) {
+	case TaskDeliveryComparisonComparisonUnverified:
+		*s = TaskDeliveryComparisonComparisonUnverified
 	case TaskDeliveryComparisonComparisonUnchanged:
 		*s = TaskDeliveryComparisonComparisonUnchanged
 	case TaskDeliveryComparisonComparisonMoved:

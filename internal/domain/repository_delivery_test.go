@@ -26,22 +26,43 @@ func TestCodeChangeObservationAllowsDegradedEvidenceWithoutProviderMetadata(t *t
 	}).Validate())
 }
 
-func TestCodeChangeSnapshotRequiresStableProviderIdentities(t *testing.T) {
+func TestCodeChangeSnapshotAllowsCoreIdentityWithoutProviderEvidence(t *testing.T) {
 	now := time.Now().UTC()
 	snapshot := domain.CodeChangeSnapshot{
-		TaskCodeChangeID: uuid.New(), ProjectRepositoryID: uuid.New(), ConnectionID: uuid.New(),
-		Provider: domain.RepositoryProviderGitLab, ProviderRepositoryID: "17",
-		Kind: domain.CodeChangeKindMergeRequest, ChangeNumber: 42, ProviderChangeID: "91",
+		TaskCodeChangeID: uuid.New(), ProjectRepositoryID: uuid.New(),
+		Provider: domain.RepositoryProviderGitLab,
+		Kind:     domain.CodeChangeKindMergeRequest, ChangeNumber: 42,
 		WebURL: "https://gitlab.example/group/repo/-/merge_requests/42",
-		Title:  "Implement evidence", State: domain.CodeChangeStateOpened, HeadSHA: "abc123",
-		ObservationStatus: domain.CodeChangeObservationConfirmed, ObservedAt: now,
 	}
 	require.NoError(t, snapshot.Validate())
 
-	snapshot.ProviderChangeID = ""
-	require.Error(t, snapshot.Validate())
+	snapshot.ProviderEvidence = &domain.CodeChangeProviderEvidence{
+		ConnectionID: uuid.New(), ProviderRepositoryID: "17", ProviderChangeID: "91",
+		Title: "Implement evidence", State: domain.CodeChangeStateOpened,
+		SourceBranch: "feature", TargetBranch: "main", HeadSHA: "abc123",
+		ProviderUpdatedAt: now, ObservedAt: now,
+	}
+	require.NoError(t, snapshot.Validate())
 
-	snapshot.ProviderChangeID = "91"
-	snapshot.Kind = domain.CodeChangeKindPullRequest
+	snapshot.ProviderEvidence.ProviderChangeID = ""
 	require.Error(t, snapshot.Validate())
+}
+
+func TestTaskCodeChangeAllowsFailedVerificationWithoutProviderEvidence(t *testing.T) {
+	now := time.Now().UTC()
+	userID := uuid.New()
+	change := domain.TaskCodeChange{
+		ID: uuid.New(), TaskID: uuid.New(), ProjectID: uuid.New(), ProjectRepositoryID: uuid.New(),
+		Provider: domain.RepositoryProviderGitHub, Kind: domain.CodeChangeKindPullRequest,
+		ChangeNumber: 7, WebURL: "https://github.com/example/repo/pull/7",
+		LinkedBy:             domain.Actor{Type: domain.ActorTypeUser, UserID: &userID},
+		LinkedThroughClaimID: uuid.New(), LinkedAt: now,
+		ProviderVerification: &domain.CodeChangeVerification{
+			Status: domain.CodeChangeVerificationUnreachable, AttemptedAt: now,
+		},
+		CreatedAt: now, UpdatedAt: now,
+	}
+	require.NoError(t, change.Validate())
+	change.ProviderVerification.Status = domain.CodeChangeVerificationVerified
+	require.Error(t, change.Validate())
 }

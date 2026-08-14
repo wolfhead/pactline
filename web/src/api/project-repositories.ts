@@ -3,12 +3,9 @@ import { etagForVersion, requireVersioned, v1Delete, v1Get, v1Post } from './v1/
 export interface ProjectRepository {
   id: string
   canonical_web_url: string
-	label: string
-	provider: 'gitlab' | 'github'
-	origin: string
-	provider_repository_id: string
+  provider: 'gitlab' | 'github'
+  origin: string
   path_with_namespace: string
-  default_branch: string
   bound_at: string
 }
 
@@ -27,10 +24,11 @@ export function bindProjectRepository(
   projectNumber: number,
   projectVersion: number,
   repositoryURL: string,
+  provider?: ProjectRepository['provider'],
 ): Promise<ProjectRepositoryMutation> {
   return v1Post<ProjectRepositoryMutation>(`/api/v1/projects/${projectNumber}/repositories`, {
     ifMatch: etagForVersion(projectVersion),
-    body: { repository_url: repositoryURL },
+    body: { repository_url: repositoryURL, ...(provider ? { provider } : {}) },
   }).then((response) => requireVersioned(response).value)
 }
 

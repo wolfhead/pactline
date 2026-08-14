@@ -23,8 +23,10 @@ const CLAIM = {
   stage: "execution",
   claimed_by: { type: "user", user_id: "user-1" },
 } as TaskStageClaim;
-const OBSERVATION = {
-  status: "confirmed" as const,
+const EVIDENCE = {
+  connection_id: "connection-1",
+  provider_repository_id: "42",
+  provider_change_id: "91",
   observed_at: "2026-08-13T08:00:00Z",
   title: "Deliver evidence",
   state: "opened" as const,
@@ -41,12 +43,12 @@ const LINK = {
   repository_url: "https://gitlab.example/team/app",
   kind: "merge_request" as const,
   change_number: 42,
-  provider_change_id: "91",
   web_url: "https://gitlab.example/team/app/-/merge_requests/42",
   linked_by: { type: "user" as const, user_id: "user-1" },
   linked_through_claim_id: "claim-1",
   linked_at: "2026-08-13T08:00:00Z",
-  latest_observation: OBSERVATION,
+  provider_evidence: EVIDENCE,
+  provider_verification: { status: "verified" as const, attempted_at: "2026-08-13T08:00:00Z" },
 };
 
 describe("TaskCodeChanges", () => {
@@ -116,7 +118,7 @@ describe("TaskCodeChanges", () => {
       active_links: [
         {
           ...LINK,
-          latest_observation: { ...OBSERVATION, head_sha: "fedcba987654" },
+          provider_evidence: { ...EVIDENCE, head_sha: "fedcba987654" },
         },
       ],
       review: {
@@ -126,26 +128,16 @@ describe("TaskCodeChanges", () => {
             comparison: "moved",
             current: {
               ...LINK,
-              latest_observation: { ...OBSERVATION, head_sha: "fedcba987654" },
+              provider_evidence: { ...EVIDENCE, head_sha: "fedcba987654" },
             },
             snapshot: {
               task_code_change_id: "link-1",
               project_repository_id: "repo-1",
-              connection_id: "connection-1",
               provider: "gitlab",
-              provider_repository_id: "42",
               kind: "merge_request",
               change_number: 42,
-              provider_change_id: "91",
               web_url: LINK.web_url,
-              title: "Deliver evidence",
-              state: "opened",
-              draft: false,
-              source_branch: "feature/evidence",
-              target_branch: "main",
-              head_sha: "abcdef123456",
-              observation_status: "confirmed",
-              observed_at: "2026-08-13T08:00:00Z",
+              provider_evidence: EVIDENCE,
             },
           },
         ],
@@ -156,5 +148,15 @@ describe("TaskCodeChanges", () => {
     expect(screen.getByText(/冻结 打开 \/ abcdef12 · 当前 打开 \/ fedcba98/)).toBeInTheDocument();
     expect(screen.getAllByText(/GitLab · gitlab\.example\/team\/app · !42/)).toHaveLength(2);
     expect(screen.queryByLabelText("Pull Request 或 Merge Request 地址")).not.toBeInTheDocument();
+  });
+
+  it("shows an unverified link as valid delivery evidence", async () => {
+    vi.mocked(getTaskDelivery).mockResolvedValue({
+      active_links: [{ ...LINK, provider_evidence: undefined, provider_verification: undefined }],
+    });
+    render(<TaskCodeChanges task={TASK} onChanged={vi.fn()} />);
+
+    expect(await screen.findByText(/Provider 未验证 · 链接已保存/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "取消关联" })).toBeInTheDocument();
   });
 });

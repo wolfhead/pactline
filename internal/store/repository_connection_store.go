@@ -304,17 +304,6 @@ func (s *RepositoryConnectionStore) Disable(
 	if current.Status != domain.RepositoryConnectionStatusActive {
 		return domain.RepositoryConnection{}, fmt.Errorf("%w: Repository Connection is already disabled", domain.ErrConflict)
 	}
-	var activeBindings int
-	if err := tx.QueryRow(ctx, `
-		SELECT count(*) FROM project_repositories
-		WHERE connection_id=$1 AND unbound_at IS NULL`, id).Scan(&activeBindings); err != nil {
-		return domain.RepositoryConnection{}, fmt.Errorf("count active Repository Connection bindings: %w", err)
-	}
-	if activeBindings > 0 {
-		return domain.RepositoryConnection{}, fmt.Errorf(
-			"%w: Repository Connection has active Project bindings", domain.ErrConflict,
-		)
-	}
 	updated, err := scanRepositoryConnection(tx.QueryRow(ctx, `
 		UPDATE repository_connections SET
 			version=version+1, status='disabled', disabled_by=$2, disabled_at=$3, updated_at=$3
