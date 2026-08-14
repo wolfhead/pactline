@@ -300,6 +300,12 @@ Issue. Resolution records the conclusion, merges the original request and final
 resolution into one structured Main Thread Item, and returns the same phase to
 `available`. The old Claim is not restored.
 
+The standalone external CLI exposes bounded complete Thread reads, ordinary
+message participation, message ownership operations, and explicit Issue
+resolution through the same API. Issue resolution targets Task and Thread
+versions because the Claim that requested it has already ended; it never
+selects or revives a Claim for the resolver.
+
 Application events use one typed contract and are committed atomically with
 the state change through a PostgreSQL outbox. A confirmed publisher relays
 them to durable RabbitMQ topic/retry/dead-letter topology, where consumers bind

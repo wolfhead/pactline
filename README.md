@@ -130,7 +130,10 @@ stage-aware bounded queues, and read one server-aggregated compact work packet
 for a Task or explicit Claim. GitLab Merge Request delivery is linked through
 Claim-centric CLI commands; repository workers do not need the Pactline Token.
 Reviewers claim `in_review.available` work explicitly, record server-derived
-acceptance evidence, and either request changes or accept the Task.
+acceptance evidence, and either request changes or accept the Task. After a
+Claim opens a blocking Issue, the same CLI can inspect and discuss its Thread,
+resolve it with explicit Task and Thread versions, and reclaim the available
+phase without inferring or reviving the ended Claim.
 
 Create an executor-scoped personal Token in the account UI, install the CLI or
 the `pactline-work` Codex skill, and keep developer-specific Project/repository

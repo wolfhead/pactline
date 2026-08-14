@@ -46,7 +46,17 @@ Review workflow
 7. claim request-changes returns the Task to in_progress.available, or
    claim accept completes it as done.
 
-Neither MR state, work submission, nor Claim release implicitly accepts a Task.`,
+Blocking Issue workflow
+
+1. claim request-resolution ends the current Claim and opens a typed Issue.
+2. task show --compact includes the active Issue and its recent discussion.
+3. task threads lists durable Main and Issue Thread identities and versions.
+4. thread items reads one bounded page; thread post participates explicitly.
+5. issue resolve requires Task and Issue Thread versions and records the conclusion.
+6. The same Task phase becomes available with no active Claim.
+7. A worker explicitly claims the Task again; the ended Claim is never revived.
+
+Neither MR state, work submission, Claim release, nor Issue resolution implicitly accepts a Task.`,
 		"identity": `Identity and continuation
 
 A Claim belongs to the authenticated logical principal: exact API Token,

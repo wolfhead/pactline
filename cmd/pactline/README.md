@@ -3,7 +3,8 @@
 `pactline` is a single, CGO-free executable for people and Agents executing and
 reviewing Pactline Tasks. It has no Python, Node.js, Docker, or repository
 dependency. The CLI covers the complete Claim workflow from assigned execution
-discovery through review acceptance or a request for changes.
+discovery through review acceptance or a request for changes, plus the Thread
+discussion and explicit Issue resolution needed after a Claim blocks.
 
 ## Install
 
@@ -98,6 +99,39 @@ pactline claim accept <review-claim-id> \
 `in_review.available`, or `claim request-resolution` to open a blocking Issue
 Thread while preserving the review phase.
 
+## Blocking Issue collaboration
+
+`claim request-resolution` ends the active Claim and opens a typed Issue
+Thread. The old Claim is intentionally no longer a valid continuation handle.
+Use the Task and Thread identities returned by the server:
+
+```bash
+pactline claim request-resolution <claim-id> \
+  --task-version 7 --issue-type decision_required \
+  --message "Choose the release strategy before implementation continues"
+
+pactline task show 142 --compact
+pactline task threads 142
+pactline thread items <issue-thread-id> --limit 50
+pactline thread post <issue-thread-id> \
+  --message "The staged option keeps rollback available" \
+  --reply-to <item-id> --mention <user-id>
+
+pactline issue resolve 142 <issue-thread-id> \
+  --task-version 8 --thread-version 2 \
+  --message "Use the staged rollout"
+
+pactline task show 142 --compact
+pactline task claim 142 --task-version 9
+```
+
+Resolution returns the same execution or review phase to `available`; it does
+not revive the old Claim or claim work for the resolver. `thread edit` and
+`thread delete` require the explicit Item version and retain the server's
+message-ownership and tombstone rules. Complete Thread history is read one
+bounded page at a time with `thread items`; use its returned `next_cursor` for
+the next page.
+
 `task list` defaults to assigned execution work. `--stage review` lists visible
 `in_review.available` work without treating the Task assignee as a reviewer
 assignment. `--project` and `--limit` are server-side bounds; results are
@@ -120,6 +154,8 @@ pactline claim complete --help
 pactline claim request-changes --help
 pactline claim accept --help
 pactline claim mr --help
+pactline thread --help
+pactline issue resolve --help
 ```
 
 ## Explicit targeting and concurrency

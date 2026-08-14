@@ -47,6 +47,15 @@ func TestHelpIsSelfExplainingAndHasNoUnplannedCommands(t *testing.T) {
 	require.Contains(t, stdout.String(), "Review workflow")
 	require.Contains(t, stdout.String(), "claim request-changes")
 	require.Contains(t, stdout.String(), "claim accept")
+	require.Contains(t, stdout.String(), "Blocking Issue workflow")
+	require.Contains(t, stdout.String(), "thread post")
+	require.Contains(t, stdout.String(), "issue resolve")
+
+	stdout.Reset()
+	code = ExecuteArgs(context.Background(), []string{"issue", "resolve", "--help"}, strings.NewReader(""), &stdout, &stderr)
+	require.Zero(t, code)
+	require.Contains(t, stdout.String(), "never revives or infers a Claim")
+	require.Contains(t, stdout.String(), "--thread-version")
 }
 
 func TestJSONFailureIsOneDocumentAndVerboseStaysOnStderr(t *testing.T) {
@@ -203,8 +212,9 @@ func TestCapabilitiesIsOfflineAndStable(t *testing.T) {
 	require.Equal(t, []string{
 		"bounded_work_packets", "claim_progress", "claim_release", "execution_claims",
 		"execution_completion", "execution_verification", "gitlab_merge_request_links",
-		"repeatable_submission", "resolution_request", "review_acceptance",
+		"issue_resolution", "repeatable_submission", "resolution_request", "review_acceptance",
 		"review_claims", "review_request_changes", "success_metadata", "task_acceptance",
+		"thread_collaboration",
 	}, envelope.Data.Features)
 }
 

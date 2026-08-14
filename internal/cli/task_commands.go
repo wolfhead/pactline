@@ -29,8 +29,8 @@ type taskPage struct {
 }
 
 func (a *App) taskCommand() *cobra.Command {
-	command := &cobra.Command{Use: "task", Short: "Discover and claim execution or review work"}
-	command.AddCommand(a.taskListCommand(), a.taskShowCommand(), a.taskClaimCommand())
+	command := &cobra.Command{Use: "task", Short: "Discover, inspect, and claim execution or review work"}
+	command.AddCommand(a.taskListCommand(), a.taskShowCommand(), a.taskClaimCommand(), a.taskThreadsCommand())
 	return command
 }
 
