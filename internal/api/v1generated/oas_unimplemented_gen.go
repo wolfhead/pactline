@@ -60,7 +60,7 @@ func (UnimplementedHandler) ArchiveTask(ctx context.Context, params ArchiveTaskP
 
 // BindProjectRepository implements bindProjectRepository operation.
 //
-// Bind a GitLab repository to a Project by URL.
+// Bind a repository to a Project by URL.
 //
 // POST /api/v1/projects/{number}/repositories
 func (UnimplementedHandler) BindProjectRepository(ctx context.Context, req *ProjectRepositoryBind, params BindProjectRepositoryParams) (r BindProjectRepositoryRes, _ error) {
@@ -303,9 +303,9 @@ func (UnimplementedHandler) GetTaskAttachmentContent(ctx context.Context, params
 
 // GetTaskDelivery implements getTaskDelivery operation.
 //
-// Get active and frozen Task merge-request delivery state.
+// Get active and frozen Task code-change delivery state.
 //
-// GET /api/v1/tasks/{number}/merge-requests
+// GET /api/v1/tasks/{number}/code-changes
 func (UnimplementedHandler) GetTaskDelivery(ctx context.Context, params GetTaskDeliveryParams) (r GetTaskDeliveryRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
@@ -328,12 +328,12 @@ func (UnimplementedHandler) GetTaskWorkPacket(ctx context.Context, params GetTas
 	return r, ht.ErrNotImplemented
 }
 
-// LinkTaskMergeRequest implements linkTaskMergeRequest operation.
+// LinkTaskCodeChange implements linkTaskCodeChange operation.
 //
-// Link a GitLab merge request during claimed execution.
+// Link a provider code change during claimed execution.
 //
-// POST /api/v1/claims/{claim_id}/merge-requests
-func (UnimplementedHandler) LinkTaskMergeRequest(ctx context.Context, req *TaskMergeRequestLink, params LinkTaskMergeRequestParams) (r LinkTaskMergeRequestRes, _ error) {
+// POST /api/v1/claims/{claim_id}/code-changes
+func (UnimplementedHandler) LinkTaskCodeChange(ctx context.Context, req *TaskCodeChangeLink, params LinkTaskCodeChangeParams) (r LinkTaskCodeChangeRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -582,19 +582,19 @@ func (UnimplementedHandler) RestoreTask(ctx context.Context, params RestoreTaskP
 
 // UnbindProjectRepository implements unbindProjectRepository operation.
 //
-// Unbind a GitLab repository from a Project.
+// Unbind a repository from a Project.
 //
 // DELETE /api/v1/projects/{number}/repositories/{repository_id}
 func (UnimplementedHandler) UnbindProjectRepository(ctx context.Context, params UnbindProjectRepositoryParams) (r UnbindProjectRepositoryRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
-// UnlinkTaskMergeRequest implements unlinkTaskMergeRequest operation.
+// UnlinkTaskCodeChange implements unlinkTaskCodeChange operation.
 //
-// Unlink a GitLab merge request during claimed execution.
+// Unlink a provider code change during claimed execution.
 //
-// DELETE /api/v1/claims/{claim_id}/merge-requests/{link_id}
-func (UnimplementedHandler) UnlinkTaskMergeRequest(ctx context.Context, params UnlinkTaskMergeRequestParams) (r UnlinkTaskMergeRequestRes, _ error) {
+// DELETE /api/v1/claims/{claim_id}/code-changes/{link_id}
+func (UnimplementedHandler) UnlinkTaskCodeChange(ctx context.Context, params UnlinkTaskCodeChangeParams) (r UnlinkTaskCodeChangeRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

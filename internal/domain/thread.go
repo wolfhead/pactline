@@ -187,7 +187,7 @@ type ExecutionCompletedPayload struct {
 	SubmissionItemIDs  []uuid.UUID                 `json:"submission_item_ids"`
 	ExecutionCheckIDs  []uuid.UUID                 `json:"execution_check_ids"`
 	CriterionRevisions []CriterionRevisionSnapshot `json:"criterion_revisions"`
-	MergeRequests      []MergeRequestSnapshot      `json:"merge_requests,omitempty"`
+	CodeChanges        []CodeChangeSnapshot        `json:"code_changes"`
 }
 
 func (p ExecutionCompletedPayload) Validate() error {
@@ -204,8 +204,8 @@ func (p ExecutionCompletedPayload) Validate() error {
 			return fmt.Errorf("%w: execution completion criterion snapshot is invalid", ErrInvalidInput)
 		}
 	}
-	for _, mergeRequest := range p.MergeRequests {
-		if err := mergeRequest.Validate(); err != nil {
+	for _, codeChange := range p.CodeChanges {
+		if err := codeChange.Validate(); err != nil {
 			return err
 		}
 	}

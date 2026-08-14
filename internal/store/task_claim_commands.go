@@ -82,7 +82,7 @@ func (s *TaskWorkflowStore) CompleteExecutionByID(
 	claimID uuid.UUID,
 	expectedTaskVersion int64,
 	summary string,
-	mergeRequests []domain.MergeRequestSnapshot,
+	codeChanges []domain.CodeChangeSnapshot,
 	actor domain.Actor,
 	operation domain.OperationActor,
 	now time.Time,
@@ -92,7 +92,7 @@ func (s *TaskWorkflowStore) CompleteExecutionByID(
 		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, domain.ThreadItem{}, err
 	}
 	return s.CompleteExecutionWithDelivery(ctx, claim.TaskNumber, claimID,
-		expectedTaskVersion, claim.Version, summary, mergeRequests, actor, operation, now)
+		expectedTaskVersion, claim.Version, summary, codeChanges, actor, operation, now)
 }
 
 func (s *TaskWorkflowStore) RequestChangesByID(

@@ -12,7 +12,7 @@ import ProjectControl from './controls/ProjectControl'
 import TaskRelations from './TaskRelations'
 import TaskThreads from './TaskThreads'
 import TaskWorkflowPanel from './TaskWorkflowPanel'
-import TaskMergeRequests from './TaskMergeRequests'
+import TaskCodeChanges from './TaskCodeChanges'
 import { archiveTask, getTask, listLabels, restoreTask, updateTask } from '@/api/tasks'
 import {
   checkTaskCriterionThroughClaim,
@@ -478,7 +478,7 @@ export default function TaskDetail({
         onChanged={() => reloadTaskAndAcceptance(task.number)}
       />
 
-      <TaskMergeRequests
+		<TaskCodeChanges
         task={task}
         onChanged={() => reloadTaskAndAcceptance(task.number)}
       />

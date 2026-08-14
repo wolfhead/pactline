@@ -59,10 +59,10 @@ pactline claim verify <claim-id> <criterion-id> \
   --task-version 4 --criterion-revision 2 --outcome passed \
   --evidence "go test ./... passed"
 pactline claim submit <claim-id> --task-version 4 --message "Delivery update"
-pactline claim mr link <claim-id> \
+pactline claim change link <claim-id> \
   --url https://gitlab.example/team/repository/-/merge_requests/42 \
   --task-version 4
-pactline claim mr list <claim-id>
+pactline claim change list <claim-id>
 pactline claim complete <claim-id> --task-version 4 --message "Ready for review"
 
 pactline task list --stage review --project 12 --limit 50
@@ -71,14 +71,14 @@ pactline task claim 142 --stage review --task-version 5
 pactline claim show <review-claim-id> --compact
 pactline claim verify <review-claim-id> <criterion-id> \
   --task-version 6 --criterion-revision 2 --outcome passed \
-  --evidence "Reviewed the frozen MR and reran the acceptance checks"
+  --evidence "Reviewed the frozen code change and reran the acceptance checks"
 pactline claim accept <review-claim-id> \
   --task-version 6 --message "Acceptance contract satisfied"
 ```
 
 `submit` is repeatable and keeps execution owned. `complete` explicitly ends
-the execution Claim and moves the Task to `in_review.available`. Neither an MR
-state nor a submission changes Task phase implicitly.
+the execution Claim and moves the Task to `in_review.available`. Neither a
+code-change state nor a submission changes Task phase implicitly.
 
 A reviewer claims the same Task with `--stage review`. This flag is a local
 safety assertion: Pactline still derives the actual Claim stage from the Task's
@@ -153,7 +153,7 @@ pactline help output
 pactline claim complete --help
 pactline claim request-changes --help
 pactline claim accept --help
-pactline claim mr --help
+pactline claim change --help
 pactline thread --help
 pactline issue resolve --help
 ```
@@ -170,7 +170,9 @@ An external Harness should retain the Token and Claim ID in its parent
 orchestrator and expose only typed Pactline operations to repository workers.
 The repository worker does not need the Pactline Token. `pactline capabilities
 --json` is offline and reports the stable protocol and features implemented by
-the installed binary.
+the installed binary. This release reports protocol 2 and capability
+`repository_code_change_links`; the removed protocol-1 `claim mr` command is
+not retained as an alias.
 
 ## Output and diagnostics
 

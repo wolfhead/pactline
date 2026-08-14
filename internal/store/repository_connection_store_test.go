@@ -12,13 +12,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGitLabConnectionStoreCreateRotateAndDisable(t *testing.T) {
+func TestRepositoryConnectionStoreCreateRotateAndDisable(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
-	connections := store.NewGitLabConnectionStore(db)
+	connections := store.NewRepositoryConnectionStore(db)
 	now := time.Date(2026, 8, 13, 8, 0, 0, 0, time.UTC)
-	connection := testGitLabConnection(now)
-	cleanupGitLabConnection(t, db, connection.ID)
+	connection := testRepositoryConnection(now)
+	cleanupRepositoryConnection(t, db, connection.ID)
 
 	created, err := connections.Create(
 		ctx, connection, domain.SessionOperation(userA, "create-connection"),
@@ -27,21 +27,21 @@ func TestGitLabConnectionStoreCreateRotateAndDisable(t *testing.T) {
 	require.Equal(t, int64(1), created.Version)
 	require.Equal(t, connection.CredentialCiphertext, created.CredentialCiphertext)
 
-	found, err := connections.FindActiveByRepository(ctx, domain.GitLabRepositoryReference{
-		Origin: connection.Origin, PathLookupKey: connection.PathLookupKey,
+	found, err := connections.FindActiveByRepository(ctx, domain.RepositoryReference{
+		Provider: connection.Provider, Origin: connection.Origin, PathLookupKey: connection.PathLookupKey,
 	})
 	require.NoError(t, err)
 	require.Equal(t, connection.ID, found.ID)
 
 	rotated, err := connections.RotateCredential(
 		ctx, connection.ID, 1,
-		store.GitLabConnectionValidation{
-			Reference: domain.GitLabRepositoryReference{
-				Origin: connection.Origin, PathWithNamespace: "group/repo",
+		store.RepositoryConnectionValidation{
+			Reference: domain.RepositoryReference{
+				Provider: connection.Provider, Origin: connection.Origin, PathWithNamespace: "group/repo",
 				PathLookupKey: "group/repo", WebURL: "https://gitlab.example/group/repo",
 			},
-			Project: domain.GitLabProjectIdentity{
-				ID: 17, PathWithNamespace: "group/repo",
+			Repository: domain.RepositoryIdentity{
+				ProviderRepositoryID: "17", PathWithNamespace: "group/repo",
 				WebURL: "https://gitlab.example/group/repo", DefaultBranch: "trunk",
 			},
 			At: now.Add(time.Hour),
@@ -65,35 +65,35 @@ func TestGitLabConnectionStoreCreateRotateAndDisable(t *testing.T) {
 		ctx, connection.ID, 2, domain.SessionOperation(userA, "disable-connection"), now.Add(2*time.Hour),
 	)
 	require.NoError(t, err)
-	require.Equal(t, domain.GitLabConnectionStatusDisabled, disabled.Status)
+	require.Equal(t, domain.RepositoryConnectionStatusDisabled, disabled.Status)
 	require.Equal(t, int64(3), disabled.Version)
 	require.NotNil(t, disabled.DisabledAt)
 
-	_, err = connections.FindActiveByRepository(ctx, domain.GitLabRepositoryReference{
-		Origin: connection.Origin, PathLookupKey: connection.PathLookupKey,
+	_, err = connections.FindActiveByRepository(ctx, domain.RepositoryReference{
+		Provider: connection.Provider, Origin: connection.Origin, PathLookupKey: connection.PathLookupKey,
 	})
 	require.ErrorIs(t, err, domain.ErrNotFound)
 
 	var eventCount int
 	require.NoError(t, db.Pool.QueryRow(ctx, `
-		SELECT count(*) FROM gitlab_connection_events WHERE connection_id=$1`, connection.ID,
+		SELECT count(*) FROM repository_connection_events WHERE connection_id=$1`, connection.ID,
 	).Scan(&eventCount))
 	require.Equal(t, 3, eventCount)
 }
 
-func TestGitLabConnectionStoreRejectsDuplicateActiveRepository(t *testing.T) {
+func TestRepositoryConnectionStoreRejectsDuplicateActiveRepository(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
-	connections := store.NewGitLabConnectionStore(db)
+	connections := store.NewRepositoryConnectionStore(db)
 	now := time.Date(2026, 8, 13, 8, 0, 0, 0, time.UTC)
-	first := testGitLabConnection(now)
-	cleanupGitLabConnection(t, db, first.ID)
+	first := testRepositoryConnection(now)
+	cleanupRepositoryConnection(t, db, first.ID)
 	_, err := connections.Create(ctx, first, domain.SessionOperation(userA, "create-first"))
 	require.NoError(t, err)
 
-	second := testGitLabConnection(now.Add(time.Minute))
+	second := testRepositoryConnection(now.Add(time.Minute))
 	second.ID = uuid.New()
-	cleanupGitLabConnection(t, db, second.ID)
+	cleanupRepositoryConnection(t, db, second.ID)
 	_, err = connections.Create(ctx, second, domain.SessionOperation(userA, "create-second"))
 	require.ErrorIs(t, err, domain.ErrConflict)
 }
@@ -102,14 +102,14 @@ func TestProjectRepositoryBindingProtectsActiveConnectionAndVersionsProject(t *t
 	db := newTestDB(t)
 	ctx := context.Background()
 	now := time.Date(2026, 8, 13, 8, 0, 0, 0, time.UTC)
-	connections := store.NewGitLabConnectionStore(db)
-	connection := testGitLabConnection(now)
-	cleanupGitLabConnection(t, db, connection.ID)
+	connections := store.NewRepositoryConnectionStore(db)
+	connection := testRepositoryConnection(now)
+	cleanupRepositoryConnection(t, db, connection.ID)
 	_, err := connections.Create(ctx, connection, domain.SessionOperation(userA, "create-binding-connection"))
 	require.NoError(t, err)
 
 	project, err := store.NewProjectStore(db).Create(ctx, domain.Project{
-		Name: "GitLab binding project", CreatorID: userA,
+		Name: "Repository binding project", CreatorID: userA,
 	})
 	require.NoError(t, err)
 	cleanupProject(t, db, project.Project.ID)
@@ -147,29 +147,30 @@ func TestProjectRepositoryBindingProtectsActiveConnectionAndVersionsProject(t *t
 	require.NoError(t, err)
 }
 
-func testGitLabConnection(now time.Time) domain.GitLabConnection {
-	return domain.GitLabConnection{
+func testRepositoryConnection(now time.Time) domain.RepositoryConnection {
+	return domain.RepositoryConnection{
 		ID: uuid.New(), Version: 1, Label: "Example repository",
-		Origin: "https://gitlab.example", GitLabProjectID: 17,
+		Provider: domain.RepositoryProviderGitLab,
+		Origin:   "https://gitlab.example", ProviderRepositoryID: "17",
 		PathWithNamespace: "group/repo", PathLookupKey: "group/repo",
 		CanonicalWebURL: "https://gitlab.example/group/repo", DefaultBranch: "main",
 		CredentialCiphertext: []byte("encrypted-credential"), EncryptionKeyID: "key-1",
-		Status: domain.GitLabConnectionStatusActive, LastValidatedAt: now,
+		Status: domain.RepositoryConnectionStatusActive, LastValidatedAt: now,
 		CreatedBy: userA, CreatedAt: now, UpdatedAt: now,
 	}
 }
 
-func cleanupGitLabConnection(t *testing.T, db *store.DB, connectionID uuid.UUID) {
+func cleanupRepositoryConnection(t *testing.T, db *store.DB, connectionID uuid.UUID) {
 	t.Helper()
 	t.Cleanup(func() {
 		ctx := context.Background()
 		_, err := db.Pool.Exec(ctx, `
 			DELETE FROM business_audit_events
-			WHERE entity_type='gitlab_connection' AND entity_id=$1`, connectionID)
+			WHERE entity_type='repository_connection' AND entity_id=$1`, connectionID)
 		require.NoError(t, err)
-		_, err = db.Pool.Exec(ctx, `DELETE FROM gitlab_connection_events WHERE connection_id=$1`, connectionID)
+		_, err = db.Pool.Exec(ctx, `DELETE FROM repository_connection_events WHERE connection_id=$1`, connectionID)
 		require.NoError(t, err)
-		_, err = db.Pool.Exec(ctx, `DELETE FROM gitlab_connections WHERE id=$1`, connectionID)
+		_, err = db.Pool.Exec(ctx, `DELETE FROM repository_connections WHERE id=$1`, connectionID)
 		require.NoError(t, err)
 	})
 }

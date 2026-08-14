@@ -173,7 +173,7 @@ func (a *App) capabilitiesCommand() *cobra.Command {
 		"execution_claims",
 		"execution_completion",
 		"execution_verification",
-		"gitlab_merge_request_links",
+		"repository_code_change_links",
 		"issue_resolution",
 		"repeatable_submission",
 		"resolution_request",
@@ -188,9 +188,9 @@ func (a *App) capabilitiesCommand() *cobra.Command {
 		Use: "capabilities", Short: "Print the offline machine-integration contract",
 		Long: "Reports features implemented by this CLI binary. It never reads configuration or contacts the server.",
 		Args: cobra.NoArgs, RunE: func(*cobra.Command, []string) error {
-			data := map[string]any{"protocol": 1, "cli_version": Version, "features": features}
+			data := map[string]any{"protocol": 2, "cli_version": Version, "features": features}
 			return a.output(data, func(w io.Writer) {
-				fmt.Fprintf(w, "Protocol: 1\nCLI version: %s\nFeatures:\n", Version)
+				fmt.Fprintf(w, "Protocol: 2\nCLI version: %s\nFeatures:\n", Version)
 				for _, feature := range features {
 					fmt.Fprintf(w, "  - %s\n", feature)
 				}

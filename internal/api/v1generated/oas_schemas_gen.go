@@ -1131,6 +1131,505 @@ func (s *ClaimWorkPacketHeaders) SetResponse(val ClaimWorkPacket) {
 
 func (*ClaimWorkPacketHeaders) getClaimWorkPacketRes() {}
 
+// Ref: #/components/schemas/CodeChangeKind
+type CodeChangeKind string
+
+const (
+	CodeChangeKindMergeRequest CodeChangeKind = "merge_request"
+	CodeChangeKindPullRequest  CodeChangeKind = "pull_request"
+)
+
+// AllValues returns all CodeChangeKind values.
+func (CodeChangeKind) AllValues() []CodeChangeKind {
+	return []CodeChangeKind{
+		CodeChangeKindMergeRequest,
+		CodeChangeKindPullRequest,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s CodeChangeKind) MarshalText() ([]byte, error) {
+	switch s {
+	case CodeChangeKindMergeRequest:
+		return []byte(s), nil
+	case CodeChangeKindPullRequest:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *CodeChangeKind) UnmarshalText(data []byte) error {
+	switch CodeChangeKind(data) {
+	case CodeChangeKindMergeRequest:
+		*s = CodeChangeKindMergeRequest
+		return nil
+	case CodeChangeKindPullRequest:
+		*s = CodeChangeKindPullRequest
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/CodeChangeObservation
+type CodeChangeObservation struct {
+	Status            CodeChangeObservationStatus `json:"status"`
+	ObservedAt        time.Time                   `json:"observed_at"`
+	Title             string                      `json:"title"`
+	State             CodeChangeState             `json:"state"`
+	Draft             bool                        `json:"draft"`
+	SourceBranch      string                      `json:"source_branch"`
+	TargetBranch      string                      `json:"target_branch"`
+	HeadSha           string                      `json:"head_sha"`
+	MergeCommitSha    OptString                   `json:"merge_commit_sha"`
+	MergedAt          OptDateTime                 `json:"merged_at"`
+	ProviderUpdatedAt time.Time                   `json:"provider_updated_at"`
+}
+
+// GetStatus returns the value of Status.
+func (s *CodeChangeObservation) GetStatus() CodeChangeObservationStatus {
+	return s.Status
+}
+
+// GetObservedAt returns the value of ObservedAt.
+func (s *CodeChangeObservation) GetObservedAt() time.Time {
+	return s.ObservedAt
+}
+
+// GetTitle returns the value of Title.
+func (s *CodeChangeObservation) GetTitle() string {
+	return s.Title
+}
+
+// GetState returns the value of State.
+func (s *CodeChangeObservation) GetState() CodeChangeState {
+	return s.State
+}
+
+// GetDraft returns the value of Draft.
+func (s *CodeChangeObservation) GetDraft() bool {
+	return s.Draft
+}
+
+// GetSourceBranch returns the value of SourceBranch.
+func (s *CodeChangeObservation) GetSourceBranch() string {
+	return s.SourceBranch
+}
+
+// GetTargetBranch returns the value of TargetBranch.
+func (s *CodeChangeObservation) GetTargetBranch() string {
+	return s.TargetBranch
+}
+
+// GetHeadSha returns the value of HeadSha.
+func (s *CodeChangeObservation) GetHeadSha() string {
+	return s.HeadSha
+}
+
+// GetMergeCommitSha returns the value of MergeCommitSha.
+func (s *CodeChangeObservation) GetMergeCommitSha() OptString {
+	return s.MergeCommitSha
+}
+
+// GetMergedAt returns the value of MergedAt.
+func (s *CodeChangeObservation) GetMergedAt() OptDateTime {
+	return s.MergedAt
+}
+
+// GetProviderUpdatedAt returns the value of ProviderUpdatedAt.
+func (s *CodeChangeObservation) GetProviderUpdatedAt() time.Time {
+	return s.ProviderUpdatedAt
+}
+
+// SetStatus sets the value of Status.
+func (s *CodeChangeObservation) SetStatus(val CodeChangeObservationStatus) {
+	s.Status = val
+}
+
+// SetObservedAt sets the value of ObservedAt.
+func (s *CodeChangeObservation) SetObservedAt(val time.Time) {
+	s.ObservedAt = val
+}
+
+// SetTitle sets the value of Title.
+func (s *CodeChangeObservation) SetTitle(val string) {
+	s.Title = val
+}
+
+// SetState sets the value of State.
+func (s *CodeChangeObservation) SetState(val CodeChangeState) {
+	s.State = val
+}
+
+// SetDraft sets the value of Draft.
+func (s *CodeChangeObservation) SetDraft(val bool) {
+	s.Draft = val
+}
+
+// SetSourceBranch sets the value of SourceBranch.
+func (s *CodeChangeObservation) SetSourceBranch(val string) {
+	s.SourceBranch = val
+}
+
+// SetTargetBranch sets the value of TargetBranch.
+func (s *CodeChangeObservation) SetTargetBranch(val string) {
+	s.TargetBranch = val
+}
+
+// SetHeadSha sets the value of HeadSha.
+func (s *CodeChangeObservation) SetHeadSha(val string) {
+	s.HeadSha = val
+}
+
+// SetMergeCommitSha sets the value of MergeCommitSha.
+func (s *CodeChangeObservation) SetMergeCommitSha(val OptString) {
+	s.MergeCommitSha = val
+}
+
+// SetMergedAt sets the value of MergedAt.
+func (s *CodeChangeObservation) SetMergedAt(val OptDateTime) {
+	s.MergedAt = val
+}
+
+// SetProviderUpdatedAt sets the value of ProviderUpdatedAt.
+func (s *CodeChangeObservation) SetProviderUpdatedAt(val time.Time) {
+	s.ProviderUpdatedAt = val
+}
+
+// Ref: #/components/schemas/CodeChangeObservationStatus
+type CodeChangeObservationStatus string
+
+const (
+	CodeChangeObservationStatusConfirmed    CodeChangeObservationStatus = "confirmed"
+	CodeChangeObservationStatusMissing      CodeChangeObservationStatus = "missing"
+	CodeChangeObservationStatusUnauthorized CodeChangeObservationStatus = "unauthorized"
+	CodeChangeObservationStatusUnreachable  CodeChangeObservationStatus = "unreachable"
+	CodeChangeObservationStatusDisconnected CodeChangeObservationStatus = "disconnected"
+)
+
+// AllValues returns all CodeChangeObservationStatus values.
+func (CodeChangeObservationStatus) AllValues() []CodeChangeObservationStatus {
+	return []CodeChangeObservationStatus{
+		CodeChangeObservationStatusConfirmed,
+		CodeChangeObservationStatusMissing,
+		CodeChangeObservationStatusUnauthorized,
+		CodeChangeObservationStatusUnreachable,
+		CodeChangeObservationStatusDisconnected,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s CodeChangeObservationStatus) MarshalText() ([]byte, error) {
+	switch s {
+	case CodeChangeObservationStatusConfirmed:
+		return []byte(s), nil
+	case CodeChangeObservationStatusMissing:
+		return []byte(s), nil
+	case CodeChangeObservationStatusUnauthorized:
+		return []byte(s), nil
+	case CodeChangeObservationStatusUnreachable:
+		return []byte(s), nil
+	case CodeChangeObservationStatusDisconnected:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *CodeChangeObservationStatus) UnmarshalText(data []byte) error {
+	switch CodeChangeObservationStatus(data) {
+	case CodeChangeObservationStatusConfirmed:
+		*s = CodeChangeObservationStatusConfirmed
+		return nil
+	case CodeChangeObservationStatusMissing:
+		*s = CodeChangeObservationStatusMissing
+		return nil
+	case CodeChangeObservationStatusUnauthorized:
+		*s = CodeChangeObservationStatusUnauthorized
+		return nil
+	case CodeChangeObservationStatusUnreachable:
+		*s = CodeChangeObservationStatusUnreachable
+		return nil
+	case CodeChangeObservationStatusDisconnected:
+		*s = CodeChangeObservationStatusDisconnected
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/CodeChangeSnapshot
+type CodeChangeSnapshot struct {
+	TaskCodeChangeID     uuid.UUID                   `json:"task_code_change_id"`
+	ProjectRepositoryID  uuid.UUID                   `json:"project_repository_id"`
+	ConnectionID         uuid.UUID                   `json:"connection_id"`
+	Provider             RepositoryProvider          `json:"provider"`
+	ProviderRepositoryID string                      `json:"provider_repository_id"`
+	Kind                 CodeChangeKind              `json:"kind"`
+	ChangeNumber         int64                       `json:"change_number"`
+	ProviderChangeID     string                      `json:"provider_change_id"`
+	WebURL               url.URL                     `json:"web_url"`
+	Title                string                      `json:"title"`
+	State                CodeChangeState             `json:"state"`
+	Draft                bool                        `json:"draft"`
+	SourceBranch         string                      `json:"source_branch"`
+	TargetBranch         string                      `json:"target_branch"`
+	HeadSha              string                      `json:"head_sha"`
+	MergeCommitSha       OptString                   `json:"merge_commit_sha"`
+	MergedAt             OptDateTime                 `json:"merged_at"`
+	ObservationStatus    CodeChangeObservationStatus `json:"observation_status"`
+	ObservedAt           time.Time                   `json:"observed_at"`
+}
+
+// GetTaskCodeChangeID returns the value of TaskCodeChangeID.
+func (s *CodeChangeSnapshot) GetTaskCodeChangeID() uuid.UUID {
+	return s.TaskCodeChangeID
+}
+
+// GetProjectRepositoryID returns the value of ProjectRepositoryID.
+func (s *CodeChangeSnapshot) GetProjectRepositoryID() uuid.UUID {
+	return s.ProjectRepositoryID
+}
+
+// GetConnectionID returns the value of ConnectionID.
+func (s *CodeChangeSnapshot) GetConnectionID() uuid.UUID {
+	return s.ConnectionID
+}
+
+// GetProvider returns the value of Provider.
+func (s *CodeChangeSnapshot) GetProvider() RepositoryProvider {
+	return s.Provider
+}
+
+// GetProviderRepositoryID returns the value of ProviderRepositoryID.
+func (s *CodeChangeSnapshot) GetProviderRepositoryID() string {
+	return s.ProviderRepositoryID
+}
+
+// GetKind returns the value of Kind.
+func (s *CodeChangeSnapshot) GetKind() CodeChangeKind {
+	return s.Kind
+}
+
+// GetChangeNumber returns the value of ChangeNumber.
+func (s *CodeChangeSnapshot) GetChangeNumber() int64 {
+	return s.ChangeNumber
+}
+
+// GetProviderChangeID returns the value of ProviderChangeID.
+func (s *CodeChangeSnapshot) GetProviderChangeID() string {
+	return s.ProviderChangeID
+}
+
+// GetWebURL returns the value of WebURL.
+func (s *CodeChangeSnapshot) GetWebURL() url.URL {
+	return s.WebURL
+}
+
+// GetTitle returns the value of Title.
+func (s *CodeChangeSnapshot) GetTitle() string {
+	return s.Title
+}
+
+// GetState returns the value of State.
+func (s *CodeChangeSnapshot) GetState() CodeChangeState {
+	return s.State
+}
+
+// GetDraft returns the value of Draft.
+func (s *CodeChangeSnapshot) GetDraft() bool {
+	return s.Draft
+}
+
+// GetSourceBranch returns the value of SourceBranch.
+func (s *CodeChangeSnapshot) GetSourceBranch() string {
+	return s.SourceBranch
+}
+
+// GetTargetBranch returns the value of TargetBranch.
+func (s *CodeChangeSnapshot) GetTargetBranch() string {
+	return s.TargetBranch
+}
+
+// GetHeadSha returns the value of HeadSha.
+func (s *CodeChangeSnapshot) GetHeadSha() string {
+	return s.HeadSha
+}
+
+// GetMergeCommitSha returns the value of MergeCommitSha.
+func (s *CodeChangeSnapshot) GetMergeCommitSha() OptString {
+	return s.MergeCommitSha
+}
+
+// GetMergedAt returns the value of MergedAt.
+func (s *CodeChangeSnapshot) GetMergedAt() OptDateTime {
+	return s.MergedAt
+}
+
+// GetObservationStatus returns the value of ObservationStatus.
+func (s *CodeChangeSnapshot) GetObservationStatus() CodeChangeObservationStatus {
+	return s.ObservationStatus
+}
+
+// GetObservedAt returns the value of ObservedAt.
+func (s *CodeChangeSnapshot) GetObservedAt() time.Time {
+	return s.ObservedAt
+}
+
+// SetTaskCodeChangeID sets the value of TaskCodeChangeID.
+func (s *CodeChangeSnapshot) SetTaskCodeChangeID(val uuid.UUID) {
+	s.TaskCodeChangeID = val
+}
+
+// SetProjectRepositoryID sets the value of ProjectRepositoryID.
+func (s *CodeChangeSnapshot) SetProjectRepositoryID(val uuid.UUID) {
+	s.ProjectRepositoryID = val
+}
+
+// SetConnectionID sets the value of ConnectionID.
+func (s *CodeChangeSnapshot) SetConnectionID(val uuid.UUID) {
+	s.ConnectionID = val
+}
+
+// SetProvider sets the value of Provider.
+func (s *CodeChangeSnapshot) SetProvider(val RepositoryProvider) {
+	s.Provider = val
+}
+
+// SetProviderRepositoryID sets the value of ProviderRepositoryID.
+func (s *CodeChangeSnapshot) SetProviderRepositoryID(val string) {
+	s.ProviderRepositoryID = val
+}
+
+// SetKind sets the value of Kind.
+func (s *CodeChangeSnapshot) SetKind(val CodeChangeKind) {
+	s.Kind = val
+}
+
+// SetChangeNumber sets the value of ChangeNumber.
+func (s *CodeChangeSnapshot) SetChangeNumber(val int64) {
+	s.ChangeNumber = val
+}
+
+// SetProviderChangeID sets the value of ProviderChangeID.
+func (s *CodeChangeSnapshot) SetProviderChangeID(val string) {
+	s.ProviderChangeID = val
+}
+
+// SetWebURL sets the value of WebURL.
+func (s *CodeChangeSnapshot) SetWebURL(val url.URL) {
+	s.WebURL = val
+}
+
+// SetTitle sets the value of Title.
+func (s *CodeChangeSnapshot) SetTitle(val string) {
+	s.Title = val
+}
+
+// SetState sets the value of State.
+func (s *CodeChangeSnapshot) SetState(val CodeChangeState) {
+	s.State = val
+}
+
+// SetDraft sets the value of Draft.
+func (s *CodeChangeSnapshot) SetDraft(val bool) {
+	s.Draft = val
+}
+
+// SetSourceBranch sets the value of SourceBranch.
+func (s *CodeChangeSnapshot) SetSourceBranch(val string) {
+	s.SourceBranch = val
+}
+
+// SetTargetBranch sets the value of TargetBranch.
+func (s *CodeChangeSnapshot) SetTargetBranch(val string) {
+	s.TargetBranch = val
+}
+
+// SetHeadSha sets the value of HeadSha.
+func (s *CodeChangeSnapshot) SetHeadSha(val string) {
+	s.HeadSha = val
+}
+
+// SetMergeCommitSha sets the value of MergeCommitSha.
+func (s *CodeChangeSnapshot) SetMergeCommitSha(val OptString) {
+	s.MergeCommitSha = val
+}
+
+// SetMergedAt sets the value of MergedAt.
+func (s *CodeChangeSnapshot) SetMergedAt(val OptDateTime) {
+	s.MergedAt = val
+}
+
+// SetObservationStatus sets the value of ObservationStatus.
+func (s *CodeChangeSnapshot) SetObservationStatus(val CodeChangeObservationStatus) {
+	s.ObservationStatus = val
+}
+
+// SetObservedAt sets the value of ObservedAt.
+func (s *CodeChangeSnapshot) SetObservedAt(val time.Time) {
+	s.ObservedAt = val
+}
+
+// Ref: #/components/schemas/CodeChangeState
+type CodeChangeState string
+
+const (
+	CodeChangeStateOpened CodeChangeState = "opened"
+	CodeChangeStateClosed CodeChangeState = "closed"
+	CodeChangeStateMerged CodeChangeState = "merged"
+	CodeChangeStateLocked CodeChangeState = "locked"
+)
+
+// AllValues returns all CodeChangeState values.
+func (CodeChangeState) AllValues() []CodeChangeState {
+	return []CodeChangeState{
+		CodeChangeStateOpened,
+		CodeChangeStateClosed,
+		CodeChangeStateMerged,
+		CodeChangeStateLocked,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s CodeChangeState) MarshalText() ([]byte, error) {
+	switch s {
+	case CodeChangeStateOpened:
+		return []byte(s), nil
+	case CodeChangeStateClosed:
+		return []byte(s), nil
+	case CodeChangeStateMerged:
+		return []byte(s), nil
+	case CodeChangeStateLocked:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *CodeChangeState) UnmarshalText(data []byte) error {
+	switch CodeChangeState(data) {
+	case CodeChangeStateOpened:
+		*s = CodeChangeStateOpened
+		return nil
+	case CodeChangeStateClosed:
+		*s = CodeChangeStateClosed
+		return nil
+	case CodeChangeStateMerged:
+		*s = CodeChangeStateMerged
+		return nil
+	case CodeChangeStateLocked:
+		*s = CodeChangeStateLocked
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
 // Ref: #/components/schemas/CompactThread
 type CompactThread struct {
 	Thread        TaskThread       `json:"thread"`
@@ -1779,7 +2278,7 @@ type ExecutionCompletedPayload struct {
 	SubmissionItemIds  []uuid.UUID                 `json:"submission_item_ids"`
 	ExecutionCheckIds  []uuid.UUID                 `json:"execution_check_ids"`
 	CriterionRevisions []CriterionRevisionSnapshot `json:"criterion_revisions"`
-	MergeRequests      []MergeRequestSnapshot      `json:"merge_requests"`
+	CodeChanges        []CodeChangeSnapshot        `json:"code_changes"`
 }
 
 // GetReviewCycle returns the value of ReviewCycle.
@@ -1802,9 +2301,9 @@ func (s *ExecutionCompletedPayload) GetCriterionRevisions() []CriterionRevisionS
 	return s.CriterionRevisions
 }
 
-// GetMergeRequests returns the value of MergeRequests.
-func (s *ExecutionCompletedPayload) GetMergeRequests() []MergeRequestSnapshot {
-	return s.MergeRequests
+// GetCodeChanges returns the value of CodeChanges.
+func (s *ExecutionCompletedPayload) GetCodeChanges() []CodeChangeSnapshot {
+	return s.CodeChanges
 }
 
 // SetReviewCycle sets the value of ReviewCycle.
@@ -1827,9 +2326,9 @@ func (s *ExecutionCompletedPayload) SetCriterionRevisions(val []CriterionRevisio
 	s.CriterionRevisions = val
 }
 
-// SetMergeRequests sets the value of MergeRequests.
-func (s *ExecutionCompletedPayload) SetMergeRequests(val []MergeRequestSnapshot) {
-	s.MergeRequests = val
+// SetCodeChanges sets the value of CodeChanges.
+func (s *ExecutionCompletedPayload) SetCodeChanges(val []CodeChangeSnapshot) {
+	s.CodeChanges = val
 }
 
 type GetTaskAttachmentContentDisposition string
@@ -1914,250 +2413,6 @@ func (s *GetTaskAttachmentContentOKHeaders) SetResponse(val GetTaskAttachmentCon
 }
 
 func (*GetTaskAttachmentContentOKHeaders) getTaskAttachmentContentRes() {}
-
-// Ref: #/components/schemas/GitLabMergeRequestObservation
-type GitLabMergeRequestObservation struct {
-	Status            GitLabObservationStatus `json:"status"`
-	ObservedAt        time.Time               `json:"observed_at"`
-	Title             string                  `json:"title"`
-	State             GitLabMergeRequestState `json:"state"`
-	Draft             bool                    `json:"draft"`
-	SourceBranch      string                  `json:"source_branch"`
-	TargetBranch      string                  `json:"target_branch"`
-	HeadSha           string                  `json:"head_sha"`
-	MergeCommitSha    OptString               `json:"merge_commit_sha"`
-	MergedAt          OptDateTime             `json:"merged_at"`
-	ProviderUpdatedAt time.Time               `json:"provider_updated_at"`
-}
-
-// GetStatus returns the value of Status.
-func (s *GitLabMergeRequestObservation) GetStatus() GitLabObservationStatus {
-	return s.Status
-}
-
-// GetObservedAt returns the value of ObservedAt.
-func (s *GitLabMergeRequestObservation) GetObservedAt() time.Time {
-	return s.ObservedAt
-}
-
-// GetTitle returns the value of Title.
-func (s *GitLabMergeRequestObservation) GetTitle() string {
-	return s.Title
-}
-
-// GetState returns the value of State.
-func (s *GitLabMergeRequestObservation) GetState() GitLabMergeRequestState {
-	return s.State
-}
-
-// GetDraft returns the value of Draft.
-func (s *GitLabMergeRequestObservation) GetDraft() bool {
-	return s.Draft
-}
-
-// GetSourceBranch returns the value of SourceBranch.
-func (s *GitLabMergeRequestObservation) GetSourceBranch() string {
-	return s.SourceBranch
-}
-
-// GetTargetBranch returns the value of TargetBranch.
-func (s *GitLabMergeRequestObservation) GetTargetBranch() string {
-	return s.TargetBranch
-}
-
-// GetHeadSha returns the value of HeadSha.
-func (s *GitLabMergeRequestObservation) GetHeadSha() string {
-	return s.HeadSha
-}
-
-// GetMergeCommitSha returns the value of MergeCommitSha.
-func (s *GitLabMergeRequestObservation) GetMergeCommitSha() OptString {
-	return s.MergeCommitSha
-}
-
-// GetMergedAt returns the value of MergedAt.
-func (s *GitLabMergeRequestObservation) GetMergedAt() OptDateTime {
-	return s.MergedAt
-}
-
-// GetProviderUpdatedAt returns the value of ProviderUpdatedAt.
-func (s *GitLabMergeRequestObservation) GetProviderUpdatedAt() time.Time {
-	return s.ProviderUpdatedAt
-}
-
-// SetStatus sets the value of Status.
-func (s *GitLabMergeRequestObservation) SetStatus(val GitLabObservationStatus) {
-	s.Status = val
-}
-
-// SetObservedAt sets the value of ObservedAt.
-func (s *GitLabMergeRequestObservation) SetObservedAt(val time.Time) {
-	s.ObservedAt = val
-}
-
-// SetTitle sets the value of Title.
-func (s *GitLabMergeRequestObservation) SetTitle(val string) {
-	s.Title = val
-}
-
-// SetState sets the value of State.
-func (s *GitLabMergeRequestObservation) SetState(val GitLabMergeRequestState) {
-	s.State = val
-}
-
-// SetDraft sets the value of Draft.
-func (s *GitLabMergeRequestObservation) SetDraft(val bool) {
-	s.Draft = val
-}
-
-// SetSourceBranch sets the value of SourceBranch.
-func (s *GitLabMergeRequestObservation) SetSourceBranch(val string) {
-	s.SourceBranch = val
-}
-
-// SetTargetBranch sets the value of TargetBranch.
-func (s *GitLabMergeRequestObservation) SetTargetBranch(val string) {
-	s.TargetBranch = val
-}
-
-// SetHeadSha sets the value of HeadSha.
-func (s *GitLabMergeRequestObservation) SetHeadSha(val string) {
-	s.HeadSha = val
-}
-
-// SetMergeCommitSha sets the value of MergeCommitSha.
-func (s *GitLabMergeRequestObservation) SetMergeCommitSha(val OptString) {
-	s.MergeCommitSha = val
-}
-
-// SetMergedAt sets the value of MergedAt.
-func (s *GitLabMergeRequestObservation) SetMergedAt(val OptDateTime) {
-	s.MergedAt = val
-}
-
-// SetProviderUpdatedAt sets the value of ProviderUpdatedAt.
-func (s *GitLabMergeRequestObservation) SetProviderUpdatedAt(val time.Time) {
-	s.ProviderUpdatedAt = val
-}
-
-// Ref: #/components/schemas/GitLabMergeRequestState
-type GitLabMergeRequestState string
-
-const (
-	GitLabMergeRequestStateOpened GitLabMergeRequestState = "opened"
-	GitLabMergeRequestStateClosed GitLabMergeRequestState = "closed"
-	GitLabMergeRequestStateMerged GitLabMergeRequestState = "merged"
-	GitLabMergeRequestStateLocked GitLabMergeRequestState = "locked"
-)
-
-// AllValues returns all GitLabMergeRequestState values.
-func (GitLabMergeRequestState) AllValues() []GitLabMergeRequestState {
-	return []GitLabMergeRequestState{
-		GitLabMergeRequestStateOpened,
-		GitLabMergeRequestStateClosed,
-		GitLabMergeRequestStateMerged,
-		GitLabMergeRequestStateLocked,
-	}
-}
-
-// MarshalText implements encoding.TextMarshaler.
-func (s GitLabMergeRequestState) MarshalText() ([]byte, error) {
-	switch s {
-	case GitLabMergeRequestStateOpened:
-		return []byte(s), nil
-	case GitLabMergeRequestStateClosed:
-		return []byte(s), nil
-	case GitLabMergeRequestStateMerged:
-		return []byte(s), nil
-	case GitLabMergeRequestStateLocked:
-		return []byte(s), nil
-	default:
-		return nil, errors.Errorf("invalid value: %q", s)
-	}
-}
-
-// UnmarshalText implements encoding.TextUnmarshaler.
-func (s *GitLabMergeRequestState) UnmarshalText(data []byte) error {
-	switch GitLabMergeRequestState(data) {
-	case GitLabMergeRequestStateOpened:
-		*s = GitLabMergeRequestStateOpened
-		return nil
-	case GitLabMergeRequestStateClosed:
-		*s = GitLabMergeRequestStateClosed
-		return nil
-	case GitLabMergeRequestStateMerged:
-		*s = GitLabMergeRequestStateMerged
-		return nil
-	case GitLabMergeRequestStateLocked:
-		*s = GitLabMergeRequestStateLocked
-		return nil
-	default:
-		return errors.Errorf("invalid value: %q", data)
-	}
-}
-
-// Ref: #/components/schemas/GitLabObservationStatus
-type GitLabObservationStatus string
-
-const (
-	GitLabObservationStatusConfirmed    GitLabObservationStatus = "confirmed"
-	GitLabObservationStatusMissing      GitLabObservationStatus = "missing"
-	GitLabObservationStatusUnauthorized GitLabObservationStatus = "unauthorized"
-	GitLabObservationStatusUnreachable  GitLabObservationStatus = "unreachable"
-	GitLabObservationStatusDisconnected GitLabObservationStatus = "disconnected"
-)
-
-// AllValues returns all GitLabObservationStatus values.
-func (GitLabObservationStatus) AllValues() []GitLabObservationStatus {
-	return []GitLabObservationStatus{
-		GitLabObservationStatusConfirmed,
-		GitLabObservationStatusMissing,
-		GitLabObservationStatusUnauthorized,
-		GitLabObservationStatusUnreachable,
-		GitLabObservationStatusDisconnected,
-	}
-}
-
-// MarshalText implements encoding.TextMarshaler.
-func (s GitLabObservationStatus) MarshalText() ([]byte, error) {
-	switch s {
-	case GitLabObservationStatusConfirmed:
-		return []byte(s), nil
-	case GitLabObservationStatusMissing:
-		return []byte(s), nil
-	case GitLabObservationStatusUnauthorized:
-		return []byte(s), nil
-	case GitLabObservationStatusUnreachable:
-		return []byte(s), nil
-	case GitLabObservationStatusDisconnected:
-		return []byte(s), nil
-	default:
-		return nil, errors.Errorf("invalid value: %q", s)
-	}
-}
-
-// UnmarshalText implements encoding.TextUnmarshaler.
-func (s *GitLabObservationStatus) UnmarshalText(data []byte) error {
-	switch GitLabObservationStatus(data) {
-	case GitLabObservationStatusConfirmed:
-		*s = GitLabObservationStatusConfirmed
-		return nil
-	case GitLabObservationStatusMissing:
-		*s = GitLabObservationStatusMissing
-		return nil
-	case GitLabObservationStatusUnauthorized:
-		*s = GitLabObservationStatusUnauthorized
-		return nil
-	case GitLabObservationStatusUnreachable:
-		*s = GitLabObservationStatusUnreachable
-		return nil
-	case GitLabObservationStatusDisconnected:
-		*s = GitLabObservationStatusDisconnected
-		return nil
-	default:
-		return errors.Errorf("invalid value: %q", data)
-	}
-}
 
 // Ref: #/components/schemas/IssueResolutionPayload
 type IssueResolutionPayload struct {
@@ -2868,186 +3123,6 @@ func (s *ListTasksSort) UnmarshalText(data []byte) error {
 	default:
 		return errors.Errorf("invalid value: %q", data)
 	}
-}
-
-// Ref: #/components/schemas/MergeRequestSnapshot
-type MergeRequestSnapshot struct {
-	TaskMergeRequestID  uuid.UUID               `json:"task_merge_request_id"`
-	ProjectRepositoryID uuid.UUID               `json:"project_repository_id"`
-	ConnectionID        uuid.UUID               `json:"connection_id"`
-	GitlabProjectID     int64                   `json:"gitlab_project_id"`
-	MergeRequestIid     int64                   `json:"merge_request_iid"`
-	WebURL              url.URL                 `json:"web_url"`
-	Title               string                  `json:"title"`
-	State               GitLabMergeRequestState `json:"state"`
-	Draft               bool                    `json:"draft"`
-	SourceBranch        string                  `json:"source_branch"`
-	TargetBranch        string                  `json:"target_branch"`
-	HeadSha             string                  `json:"head_sha"`
-	MergeCommitSha      OptString               `json:"merge_commit_sha"`
-	MergedAt            OptDateTime             `json:"merged_at"`
-	ObservationStatus   GitLabObservationStatus `json:"observation_status"`
-	ObservedAt          time.Time               `json:"observed_at"`
-}
-
-// GetTaskMergeRequestID returns the value of TaskMergeRequestID.
-func (s *MergeRequestSnapshot) GetTaskMergeRequestID() uuid.UUID {
-	return s.TaskMergeRequestID
-}
-
-// GetProjectRepositoryID returns the value of ProjectRepositoryID.
-func (s *MergeRequestSnapshot) GetProjectRepositoryID() uuid.UUID {
-	return s.ProjectRepositoryID
-}
-
-// GetConnectionID returns the value of ConnectionID.
-func (s *MergeRequestSnapshot) GetConnectionID() uuid.UUID {
-	return s.ConnectionID
-}
-
-// GetGitlabProjectID returns the value of GitlabProjectID.
-func (s *MergeRequestSnapshot) GetGitlabProjectID() int64 {
-	return s.GitlabProjectID
-}
-
-// GetMergeRequestIid returns the value of MergeRequestIid.
-func (s *MergeRequestSnapshot) GetMergeRequestIid() int64 {
-	return s.MergeRequestIid
-}
-
-// GetWebURL returns the value of WebURL.
-func (s *MergeRequestSnapshot) GetWebURL() url.URL {
-	return s.WebURL
-}
-
-// GetTitle returns the value of Title.
-func (s *MergeRequestSnapshot) GetTitle() string {
-	return s.Title
-}
-
-// GetState returns the value of State.
-func (s *MergeRequestSnapshot) GetState() GitLabMergeRequestState {
-	return s.State
-}
-
-// GetDraft returns the value of Draft.
-func (s *MergeRequestSnapshot) GetDraft() bool {
-	return s.Draft
-}
-
-// GetSourceBranch returns the value of SourceBranch.
-func (s *MergeRequestSnapshot) GetSourceBranch() string {
-	return s.SourceBranch
-}
-
-// GetTargetBranch returns the value of TargetBranch.
-func (s *MergeRequestSnapshot) GetTargetBranch() string {
-	return s.TargetBranch
-}
-
-// GetHeadSha returns the value of HeadSha.
-func (s *MergeRequestSnapshot) GetHeadSha() string {
-	return s.HeadSha
-}
-
-// GetMergeCommitSha returns the value of MergeCommitSha.
-func (s *MergeRequestSnapshot) GetMergeCommitSha() OptString {
-	return s.MergeCommitSha
-}
-
-// GetMergedAt returns the value of MergedAt.
-func (s *MergeRequestSnapshot) GetMergedAt() OptDateTime {
-	return s.MergedAt
-}
-
-// GetObservationStatus returns the value of ObservationStatus.
-func (s *MergeRequestSnapshot) GetObservationStatus() GitLabObservationStatus {
-	return s.ObservationStatus
-}
-
-// GetObservedAt returns the value of ObservedAt.
-func (s *MergeRequestSnapshot) GetObservedAt() time.Time {
-	return s.ObservedAt
-}
-
-// SetTaskMergeRequestID sets the value of TaskMergeRequestID.
-func (s *MergeRequestSnapshot) SetTaskMergeRequestID(val uuid.UUID) {
-	s.TaskMergeRequestID = val
-}
-
-// SetProjectRepositoryID sets the value of ProjectRepositoryID.
-func (s *MergeRequestSnapshot) SetProjectRepositoryID(val uuid.UUID) {
-	s.ProjectRepositoryID = val
-}
-
-// SetConnectionID sets the value of ConnectionID.
-func (s *MergeRequestSnapshot) SetConnectionID(val uuid.UUID) {
-	s.ConnectionID = val
-}
-
-// SetGitlabProjectID sets the value of GitlabProjectID.
-func (s *MergeRequestSnapshot) SetGitlabProjectID(val int64) {
-	s.GitlabProjectID = val
-}
-
-// SetMergeRequestIid sets the value of MergeRequestIid.
-func (s *MergeRequestSnapshot) SetMergeRequestIid(val int64) {
-	s.MergeRequestIid = val
-}
-
-// SetWebURL sets the value of WebURL.
-func (s *MergeRequestSnapshot) SetWebURL(val url.URL) {
-	s.WebURL = val
-}
-
-// SetTitle sets the value of Title.
-func (s *MergeRequestSnapshot) SetTitle(val string) {
-	s.Title = val
-}
-
-// SetState sets the value of State.
-func (s *MergeRequestSnapshot) SetState(val GitLabMergeRequestState) {
-	s.State = val
-}
-
-// SetDraft sets the value of Draft.
-func (s *MergeRequestSnapshot) SetDraft(val bool) {
-	s.Draft = val
-}
-
-// SetSourceBranch sets the value of SourceBranch.
-func (s *MergeRequestSnapshot) SetSourceBranch(val string) {
-	s.SourceBranch = val
-}
-
-// SetTargetBranch sets the value of TargetBranch.
-func (s *MergeRequestSnapshot) SetTargetBranch(val string) {
-	s.TargetBranch = val
-}
-
-// SetHeadSha sets the value of HeadSha.
-func (s *MergeRequestSnapshot) SetHeadSha(val string) {
-	s.HeadSha = val
-}
-
-// SetMergeCommitSha sets the value of MergeCommitSha.
-func (s *MergeRequestSnapshot) SetMergeCommitSha(val OptString) {
-	s.MergeCommitSha = val
-}
-
-// SetMergedAt sets the value of MergedAt.
-func (s *MergeRequestSnapshot) SetMergedAt(val OptDateTime) {
-	s.MergedAt = val
-}
-
-// SetObservationStatus sets the value of ObservationStatus.
-func (s *MergeRequestSnapshot) SetObservationStatus(val GitLabObservationStatus) {
-	s.ObservationStatus = val
-}
-
-// SetObservedAt sets the value of ObservedAt.
-func (s *MergeRequestSnapshot) SetObservedAt(val time.Time) {
-	s.ObservedAt = val
 }
 
 // Ref: #/components/schemas/Milestone
@@ -5117,6 +5192,52 @@ func (o OptTaskClaimStage) Or(d TaskClaimStage) TaskClaimStage {
 	return d
 }
 
+// NewOptTaskCodeChange returns new OptTaskCodeChange with value set to v.
+func NewOptTaskCodeChange(v TaskCodeChange) OptTaskCodeChange {
+	return OptTaskCodeChange{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptTaskCodeChange is optional TaskCodeChange.
+type OptTaskCodeChange struct {
+	Value TaskCodeChange
+	Set   bool
+}
+
+// IsSet returns true if OptTaskCodeChange was set.
+func (o OptTaskCodeChange) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptTaskCodeChange) Reset() {
+	var v TaskCodeChange
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptTaskCodeChange) SetTo(v TaskCodeChange) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptTaskCodeChange) Get() (v TaskCodeChange, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptTaskCodeChange) Or(d TaskCodeChange) TaskCodeChange {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptTaskDeliveryReview returns new OptTaskDeliveryReview with value set to v.
 func NewOptTaskDeliveryReview(v TaskDeliveryReview) OptTaskDeliveryReview {
 	return OptTaskDeliveryReview{
@@ -5157,52 +5278,6 @@ func (o OptTaskDeliveryReview) Get() (v TaskDeliveryReview, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptTaskDeliveryReview) Or(d TaskDeliveryReview) TaskDeliveryReview {
-	if v, ok := o.Get(); ok {
-		return v
-	}
-	return d
-}
-
-// NewOptTaskMergeRequest returns new OptTaskMergeRequest with value set to v.
-func NewOptTaskMergeRequest(v TaskMergeRequest) OptTaskMergeRequest {
-	return OptTaskMergeRequest{
-		Value: v,
-		Set:   true,
-	}
-}
-
-// OptTaskMergeRequest is optional TaskMergeRequest.
-type OptTaskMergeRequest struct {
-	Value TaskMergeRequest
-	Set   bool
-}
-
-// IsSet returns true if OptTaskMergeRequest was set.
-func (o OptTaskMergeRequest) IsSet() bool { return o.Set }
-
-// Reset unsets value.
-func (o *OptTaskMergeRequest) Reset() {
-	var v TaskMergeRequest
-	o.Value = v
-	o.Set = false
-}
-
-// SetTo sets value to v.
-func (o *OptTaskMergeRequest) SetTo(v TaskMergeRequest) {
-	o.Set = true
-	o.Value = v
-}
-
-// Get returns value and boolean that denotes whether value was set.
-func (o OptTaskMergeRequest) Get() (v TaskMergeRequest, ok bool) {
-	if !o.Set {
-		return v, false
-	}
-	return o.Value, true
-}
-
-// Or returns value if set, or given parameter if does not.
-func (o OptTaskMergeRequest) Or(d TaskMergeRequest) TaskMergeRequest {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -6081,7 +6156,7 @@ func (*ProblemStatusCodeWithHeaders) getTaskDeliveryRes()                       
 func (*ProblemStatusCodeWithHeaders) getTaskRes()                                     {}
 func (*ProblemStatusCodeWithHeaders) getTaskStageClaimRes()                           {}
 func (*ProblemStatusCodeWithHeaders) getTaskWorkPacketRes()                           {}
-func (*ProblemStatusCodeWithHeaders) linkTaskMergeRequestRes()                        {}
+func (*ProblemStatusCodeWithHeaders) linkTaskCodeChangeRes()                          {}
 func (*ProblemStatusCodeWithHeaders) listAgentConversationsRes()                      {}
 func (*ProblemStatusCodeWithHeaders) listLabelsRes()                                  {}
 func (*ProblemStatusCodeWithHeaders) listMilestoneCriteriaRes()                       {}
@@ -6110,7 +6185,7 @@ func (*ProblemStatusCodeWithHeaders) resolveTaskIssueRes()                      
 func (*ProblemStatusCodeWithHeaders) restoreProjectRes()                              {}
 func (*ProblemStatusCodeWithHeaders) restoreTaskRes()                                 {}
 func (*ProblemStatusCodeWithHeaders) unbindProjectRepositoryRes()                     {}
-func (*ProblemStatusCodeWithHeaders) unlinkTaskMergeRequestRes()                      {}
+func (*ProblemStatusCodeWithHeaders) unlinkTaskCodeChangeRes()                        {}
 func (*ProblemStatusCodeWithHeaders) updateAgentConversationRes()                     {}
 func (*ProblemStatusCodeWithHeaders) updateCriterionRes()                             {}
 func (*ProblemStatusCodeWithHeaders) updateCurrentAgentConversationConfigurationRes() {}
@@ -7184,14 +7259,15 @@ func (s *ProjectRef) SetName(val string) {
 
 // Ref: #/components/schemas/ProjectRepository
 type ProjectRepository struct {
-	ID                uuid.UUID `json:"id"`
-	CanonicalWebURL   url.URL   `json:"canonical_web_url"`
-	Label             string    `json:"label"`
-	Origin            url.URL   `json:"origin"`
-	GitlabProjectID   int64     `json:"gitlab_project_id"`
-	PathWithNamespace string    `json:"path_with_namespace"`
-	DefaultBranch     string    `json:"default_branch"`
-	BoundAt           time.Time `json:"bound_at"`
+	ID                   uuid.UUID          `json:"id"`
+	CanonicalWebURL      url.URL            `json:"canonical_web_url"`
+	Label                string             `json:"label"`
+	Provider             RepositoryProvider `json:"provider"`
+	Origin               url.URL            `json:"origin"`
+	ProviderRepositoryID string             `json:"provider_repository_id"`
+	PathWithNamespace    string             `json:"path_with_namespace"`
+	DefaultBranch        string             `json:"default_branch"`
+	BoundAt              time.Time          `json:"bound_at"`
 }
 
 // GetID returns the value of ID.
@@ -7209,14 +7285,19 @@ func (s *ProjectRepository) GetLabel() string {
 	return s.Label
 }
 
+// GetProvider returns the value of Provider.
+func (s *ProjectRepository) GetProvider() RepositoryProvider {
+	return s.Provider
+}
+
 // GetOrigin returns the value of Origin.
 func (s *ProjectRepository) GetOrigin() url.URL {
 	return s.Origin
 }
 
-// GetGitlabProjectID returns the value of GitlabProjectID.
-func (s *ProjectRepository) GetGitlabProjectID() int64 {
-	return s.GitlabProjectID
+// GetProviderRepositoryID returns the value of ProviderRepositoryID.
+func (s *ProjectRepository) GetProviderRepositoryID() string {
+	return s.ProviderRepositoryID
 }
 
 // GetPathWithNamespace returns the value of PathWithNamespace.
@@ -7249,14 +7330,19 @@ func (s *ProjectRepository) SetLabel(val string) {
 	s.Label = val
 }
 
+// SetProvider sets the value of Provider.
+func (s *ProjectRepository) SetProvider(val RepositoryProvider) {
+	s.Provider = val
+}
+
 // SetOrigin sets the value of Origin.
 func (s *ProjectRepository) SetOrigin(val url.URL) {
 	s.Origin = val
 }
 
-// SetGitlabProjectID sets the value of GitlabProjectID.
-func (s *ProjectRepository) SetGitlabProjectID(val int64) {
-	s.GitlabProjectID = val
+// SetProviderRepositoryID sets the value of ProviderRepositoryID.
+func (s *ProjectRepository) SetProviderRepositoryID(val string) {
+	s.ProviderRepositoryID = val
 }
 
 // SetPathWithNamespace sets the value of PathWithNamespace.
@@ -7464,6 +7550,48 @@ func (s *ReasonWrite) GetReason() string {
 // SetReason sets the value of Reason.
 func (s *ReasonWrite) SetReason(val string) {
 	s.Reason = val
+}
+
+// Ref: #/components/schemas/RepositoryProvider
+type RepositoryProvider string
+
+const (
+	RepositoryProviderGitlab RepositoryProvider = "gitlab"
+	RepositoryProviderGithub RepositoryProvider = "github"
+)
+
+// AllValues returns all RepositoryProvider values.
+func (RepositoryProvider) AllValues() []RepositoryProvider {
+	return []RepositoryProvider{
+		RepositoryProviderGitlab,
+		RepositoryProviderGithub,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s RepositoryProvider) MarshalText() ([]byte, error) {
+	switch s {
+	case RepositoryProviderGitlab:
+		return []byte(s), nil
+	case RepositoryProviderGithub:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *RepositoryProvider) UnmarshalText(data []byte) error {
+	switch RepositoryProvider(data) {
+	case RepositoryProviderGitlab:
+		*s = RepositoryProviderGitlab
+		return nil
+	case RepositoryProviderGithub:
+		*s = RepositoryProviderGithub
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
 }
 
 type SessionCookie struct {
@@ -8804,6 +8932,234 @@ func (s *TaskClaimStage) UnmarshalText(data []byte) error {
 	}
 }
 
+// Ref: #/components/schemas/TaskCodeChange
+type TaskCodeChange struct {
+	ID                   uuid.UUID             `json:"id"`
+	ProjectRepositoryID  uuid.UUID             `json:"project_repository_id"`
+	Provider             RepositoryProvider    `json:"provider"`
+	RepositoryURL        url.URL               `json:"repository_url"`
+	Kind                 CodeChangeKind        `json:"kind"`
+	ChangeNumber         int64                 `json:"change_number"`
+	ProviderChangeID     string                `json:"provider_change_id"`
+	WebURL               url.URL               `json:"web_url"`
+	LinkedBy             Actor                 `json:"linked_by"`
+	LinkedThroughClaimID uuid.UUID             `json:"linked_through_claim_id"`
+	LinkedAt             time.Time             `json:"linked_at"`
+	LatestObservation    CodeChangeObservation `json:"latest_observation"`
+}
+
+// GetID returns the value of ID.
+func (s *TaskCodeChange) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetProjectRepositoryID returns the value of ProjectRepositoryID.
+func (s *TaskCodeChange) GetProjectRepositoryID() uuid.UUID {
+	return s.ProjectRepositoryID
+}
+
+// GetProvider returns the value of Provider.
+func (s *TaskCodeChange) GetProvider() RepositoryProvider {
+	return s.Provider
+}
+
+// GetRepositoryURL returns the value of RepositoryURL.
+func (s *TaskCodeChange) GetRepositoryURL() url.URL {
+	return s.RepositoryURL
+}
+
+// GetKind returns the value of Kind.
+func (s *TaskCodeChange) GetKind() CodeChangeKind {
+	return s.Kind
+}
+
+// GetChangeNumber returns the value of ChangeNumber.
+func (s *TaskCodeChange) GetChangeNumber() int64 {
+	return s.ChangeNumber
+}
+
+// GetProviderChangeID returns the value of ProviderChangeID.
+func (s *TaskCodeChange) GetProviderChangeID() string {
+	return s.ProviderChangeID
+}
+
+// GetWebURL returns the value of WebURL.
+func (s *TaskCodeChange) GetWebURL() url.URL {
+	return s.WebURL
+}
+
+// GetLinkedBy returns the value of LinkedBy.
+func (s *TaskCodeChange) GetLinkedBy() Actor {
+	return s.LinkedBy
+}
+
+// GetLinkedThroughClaimID returns the value of LinkedThroughClaimID.
+func (s *TaskCodeChange) GetLinkedThroughClaimID() uuid.UUID {
+	return s.LinkedThroughClaimID
+}
+
+// GetLinkedAt returns the value of LinkedAt.
+func (s *TaskCodeChange) GetLinkedAt() time.Time {
+	return s.LinkedAt
+}
+
+// GetLatestObservation returns the value of LatestObservation.
+func (s *TaskCodeChange) GetLatestObservation() CodeChangeObservation {
+	return s.LatestObservation
+}
+
+// SetID sets the value of ID.
+func (s *TaskCodeChange) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetProjectRepositoryID sets the value of ProjectRepositoryID.
+func (s *TaskCodeChange) SetProjectRepositoryID(val uuid.UUID) {
+	s.ProjectRepositoryID = val
+}
+
+// SetProvider sets the value of Provider.
+func (s *TaskCodeChange) SetProvider(val RepositoryProvider) {
+	s.Provider = val
+}
+
+// SetRepositoryURL sets the value of RepositoryURL.
+func (s *TaskCodeChange) SetRepositoryURL(val url.URL) {
+	s.RepositoryURL = val
+}
+
+// SetKind sets the value of Kind.
+func (s *TaskCodeChange) SetKind(val CodeChangeKind) {
+	s.Kind = val
+}
+
+// SetChangeNumber sets the value of ChangeNumber.
+func (s *TaskCodeChange) SetChangeNumber(val int64) {
+	s.ChangeNumber = val
+}
+
+// SetProviderChangeID sets the value of ProviderChangeID.
+func (s *TaskCodeChange) SetProviderChangeID(val string) {
+	s.ProviderChangeID = val
+}
+
+// SetWebURL sets the value of WebURL.
+func (s *TaskCodeChange) SetWebURL(val url.URL) {
+	s.WebURL = val
+}
+
+// SetLinkedBy sets the value of LinkedBy.
+func (s *TaskCodeChange) SetLinkedBy(val Actor) {
+	s.LinkedBy = val
+}
+
+// SetLinkedThroughClaimID sets the value of LinkedThroughClaimID.
+func (s *TaskCodeChange) SetLinkedThroughClaimID(val uuid.UUID) {
+	s.LinkedThroughClaimID = val
+}
+
+// SetLinkedAt sets the value of LinkedAt.
+func (s *TaskCodeChange) SetLinkedAt(val time.Time) {
+	s.LinkedAt = val
+}
+
+// SetLatestObservation sets the value of LatestObservation.
+func (s *TaskCodeChange) SetLatestObservation(val CodeChangeObservation) {
+	s.LatestObservation = val
+}
+
+// TaskCodeChangeChangedHeaders wraps TaskCodeChangeMutation with response headers.
+type TaskCodeChangeChangedHeaders struct {
+	Etag                OptString
+	IdempotencyReplayed OptBool
+	XRequestID          OptString
+	Response            TaskCodeChangeMutation
+}
+
+// GetEtag returns the value of Etag.
+func (s *TaskCodeChangeChangedHeaders) GetEtag() OptString {
+	return s.Etag
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *TaskCodeChangeChangedHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskCodeChangeChangedHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskCodeChangeChangedHeaders) GetResponse() TaskCodeChangeMutation {
+	return s.Response
+}
+
+// SetEtag sets the value of Etag.
+func (s *TaskCodeChangeChangedHeaders) SetEtag(val OptString) {
+	s.Etag = val
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *TaskCodeChangeChangedHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskCodeChangeChangedHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskCodeChangeChangedHeaders) SetResponse(val TaskCodeChangeMutation) {
+	s.Response = val
+}
+
+func (*TaskCodeChangeChangedHeaders) linkTaskCodeChangeRes()   {}
+func (*TaskCodeChangeChangedHeaders) unlinkTaskCodeChangeRes() {}
+
+// Ref: #/components/schemas/TaskCodeChangeLink
+type TaskCodeChangeLink struct {
+	CodeChangeURL url.URL `json:"code_change_url"`
+}
+
+// GetCodeChangeURL returns the value of CodeChangeURL.
+func (s *TaskCodeChangeLink) GetCodeChangeURL() url.URL {
+	return s.CodeChangeURL
+}
+
+// SetCodeChangeURL sets the value of CodeChangeURL.
+func (s *TaskCodeChangeLink) SetCodeChangeURL(val url.URL) {
+	s.CodeChangeURL = val
+}
+
+// Ref: #/components/schemas/TaskCodeChangeMutation
+type TaskCodeChangeMutation struct {
+	Task       TaskWorkflow   `json:"task"`
+	CodeChange TaskCodeChange `json:"code_change"`
+}
+
+// GetTask returns the value of Task.
+func (s *TaskCodeChangeMutation) GetTask() TaskWorkflow {
+	return s.Task
+}
+
+// GetCodeChange returns the value of CodeChange.
+func (s *TaskCodeChangeMutation) GetCodeChange() TaskCodeChange {
+	return s.CodeChange
+}
+
+// SetTask sets the value of Task.
+func (s *TaskCodeChangeMutation) SetTask(val TaskWorkflow) {
+	s.Task = val
+}
+
+// SetCodeChange sets the value of CodeChange.
+func (s *TaskCodeChangeMutation) SetCodeChange(val TaskCodeChange) {
+	s.CodeChange = val
+}
+
 // Ref: #/components/schemas/TaskCreate
 type TaskCreate struct {
 	Title string `json:"title"`
@@ -9053,12 +9409,12 @@ func (*TaskCreatedHeaders) createTaskRes() {}
 
 // Ref: #/components/schemas/TaskDelivery
 type TaskDelivery struct {
-	ActiveLinks []TaskMergeRequest    `json:"active_links"`
+	ActiveLinks []TaskCodeChange      `json:"active_links"`
 	Review      OptTaskDeliveryReview `json:"review"`
 }
 
 // GetActiveLinks returns the value of ActiveLinks.
-func (s *TaskDelivery) GetActiveLinks() []TaskMergeRequest {
+func (s *TaskDelivery) GetActiveLinks() []TaskCodeChange {
 	return s.ActiveLinks
 }
 
@@ -9068,7 +9424,7 @@ func (s *TaskDelivery) GetReview() OptTaskDeliveryReview {
 }
 
 // SetActiveLinks sets the value of ActiveLinks.
-func (s *TaskDelivery) SetActiveLinks(val []TaskMergeRequest) {
+func (s *TaskDelivery) SetActiveLinks(val []TaskCodeChange) {
 	s.ActiveLinks = val
 }
 
@@ -9079,18 +9435,18 @@ func (s *TaskDelivery) SetReview(val OptTaskDeliveryReview) {
 
 // Ref: #/components/schemas/TaskDeliveryComparison
 type TaskDeliveryComparison struct {
-	Snapshot   MergeRequestSnapshot             `json:"snapshot"`
-	Current    OptTaskMergeRequest              `json:"current"`
+	Snapshot   CodeChangeSnapshot               `json:"snapshot"`
+	Current    OptTaskCodeChange                `json:"current"`
 	Comparison TaskDeliveryComparisonComparison `json:"comparison"`
 }
 
 // GetSnapshot returns the value of Snapshot.
-func (s *TaskDeliveryComparison) GetSnapshot() MergeRequestSnapshot {
+func (s *TaskDeliveryComparison) GetSnapshot() CodeChangeSnapshot {
 	return s.Snapshot
 }
 
 // GetCurrent returns the value of Current.
-func (s *TaskDeliveryComparison) GetCurrent() OptTaskMergeRequest {
+func (s *TaskDeliveryComparison) GetCurrent() OptTaskCodeChange {
 	return s.Current
 }
 
@@ -9100,12 +9456,12 @@ func (s *TaskDeliveryComparison) GetComparison() TaskDeliveryComparisonCompariso
 }
 
 // SetSnapshot sets the value of Snapshot.
-func (s *TaskDeliveryComparison) SetSnapshot(val MergeRequestSnapshot) {
+func (s *TaskDeliveryComparison) SetSnapshot(val CodeChangeSnapshot) {
 	s.Snapshot = val
 }
 
 // SetCurrent sets the value of Current.
-func (s *TaskDeliveryComparison) SetCurrent(val OptTaskMergeRequest) {
+func (s *TaskDeliveryComparison) SetCurrent(val OptTaskCodeChange) {
 	s.Current = val
 }
 
@@ -9220,8 +9576,8 @@ func (*TaskDeliveryHeaders) getTaskDeliveryRes() {}
 
 // Ref: #/components/schemas/TaskDeliveryReview
 type TaskDeliveryReview struct {
-	ReviewCycle   int64                    `json:"review_cycle"`
-	MergeRequests []TaskDeliveryComparison `json:"merge_requests"`
+	ReviewCycle int64                    `json:"review_cycle"`
+	CodeChanges []TaskDeliveryComparison `json:"code_changes"`
 }
 
 // GetReviewCycle returns the value of ReviewCycle.
@@ -9229,9 +9585,9 @@ func (s *TaskDeliveryReview) GetReviewCycle() int64 {
 	return s.ReviewCycle
 }
 
-// GetMergeRequests returns the value of MergeRequests.
-func (s *TaskDeliveryReview) GetMergeRequests() []TaskDeliveryComparison {
-	return s.MergeRequests
+// GetCodeChanges returns the value of CodeChanges.
+func (s *TaskDeliveryReview) GetCodeChanges() []TaskDeliveryComparison {
+	return s.CodeChanges
 }
 
 // SetReviewCycle sets the value of ReviewCycle.
@@ -9239,9 +9595,9 @@ func (s *TaskDeliveryReview) SetReviewCycle(val int64) {
 	s.ReviewCycle = val
 }
 
-// SetMergeRequests sets the value of MergeRequests.
-func (s *TaskDeliveryReview) SetMergeRequests(val []TaskDeliveryComparison) {
-	s.MergeRequests = val
+// SetCodeChanges sets the value of CodeChanges.
+func (s *TaskDeliveryReview) SetCodeChanges(val []TaskDeliveryComparison) {
+	s.CodeChanges = val
 }
 
 // Ref: #/components/schemas/TaskExecutionCompletionCommand
@@ -9595,212 +9951,6 @@ func (s *TaskListHeaders) SetResponse(val TaskList) {
 }
 
 func (*TaskListHeaders) listTasksRes() {}
-
-// Ref: #/components/schemas/TaskMergeRequest
-type TaskMergeRequest struct {
-	ID                   uuid.UUID                     `json:"id"`
-	ProjectRepositoryID  uuid.UUID                     `json:"project_repository_id"`
-	RepositoryURL        url.URL                       `json:"repository_url"`
-	MergeRequestIid      int64                         `json:"merge_request_iid"`
-	GitlabMergeRequestID int64                         `json:"gitlab_merge_request_id"`
-	WebURL               url.URL                       `json:"web_url"`
-	LinkedBy             Actor                         `json:"linked_by"`
-	LinkedThroughClaimID uuid.UUID                     `json:"linked_through_claim_id"`
-	LinkedAt             time.Time                     `json:"linked_at"`
-	LatestObservation    GitLabMergeRequestObservation `json:"latest_observation"`
-}
-
-// GetID returns the value of ID.
-func (s *TaskMergeRequest) GetID() uuid.UUID {
-	return s.ID
-}
-
-// GetProjectRepositoryID returns the value of ProjectRepositoryID.
-func (s *TaskMergeRequest) GetProjectRepositoryID() uuid.UUID {
-	return s.ProjectRepositoryID
-}
-
-// GetRepositoryURL returns the value of RepositoryURL.
-func (s *TaskMergeRequest) GetRepositoryURL() url.URL {
-	return s.RepositoryURL
-}
-
-// GetMergeRequestIid returns the value of MergeRequestIid.
-func (s *TaskMergeRequest) GetMergeRequestIid() int64 {
-	return s.MergeRequestIid
-}
-
-// GetGitlabMergeRequestID returns the value of GitlabMergeRequestID.
-func (s *TaskMergeRequest) GetGitlabMergeRequestID() int64 {
-	return s.GitlabMergeRequestID
-}
-
-// GetWebURL returns the value of WebURL.
-func (s *TaskMergeRequest) GetWebURL() url.URL {
-	return s.WebURL
-}
-
-// GetLinkedBy returns the value of LinkedBy.
-func (s *TaskMergeRequest) GetLinkedBy() Actor {
-	return s.LinkedBy
-}
-
-// GetLinkedThroughClaimID returns the value of LinkedThroughClaimID.
-func (s *TaskMergeRequest) GetLinkedThroughClaimID() uuid.UUID {
-	return s.LinkedThroughClaimID
-}
-
-// GetLinkedAt returns the value of LinkedAt.
-func (s *TaskMergeRequest) GetLinkedAt() time.Time {
-	return s.LinkedAt
-}
-
-// GetLatestObservation returns the value of LatestObservation.
-func (s *TaskMergeRequest) GetLatestObservation() GitLabMergeRequestObservation {
-	return s.LatestObservation
-}
-
-// SetID sets the value of ID.
-func (s *TaskMergeRequest) SetID(val uuid.UUID) {
-	s.ID = val
-}
-
-// SetProjectRepositoryID sets the value of ProjectRepositoryID.
-func (s *TaskMergeRequest) SetProjectRepositoryID(val uuid.UUID) {
-	s.ProjectRepositoryID = val
-}
-
-// SetRepositoryURL sets the value of RepositoryURL.
-func (s *TaskMergeRequest) SetRepositoryURL(val url.URL) {
-	s.RepositoryURL = val
-}
-
-// SetMergeRequestIid sets the value of MergeRequestIid.
-func (s *TaskMergeRequest) SetMergeRequestIid(val int64) {
-	s.MergeRequestIid = val
-}
-
-// SetGitlabMergeRequestID sets the value of GitlabMergeRequestID.
-func (s *TaskMergeRequest) SetGitlabMergeRequestID(val int64) {
-	s.GitlabMergeRequestID = val
-}
-
-// SetWebURL sets the value of WebURL.
-func (s *TaskMergeRequest) SetWebURL(val url.URL) {
-	s.WebURL = val
-}
-
-// SetLinkedBy sets the value of LinkedBy.
-func (s *TaskMergeRequest) SetLinkedBy(val Actor) {
-	s.LinkedBy = val
-}
-
-// SetLinkedThroughClaimID sets the value of LinkedThroughClaimID.
-func (s *TaskMergeRequest) SetLinkedThroughClaimID(val uuid.UUID) {
-	s.LinkedThroughClaimID = val
-}
-
-// SetLinkedAt sets the value of LinkedAt.
-func (s *TaskMergeRequest) SetLinkedAt(val time.Time) {
-	s.LinkedAt = val
-}
-
-// SetLatestObservation sets the value of LatestObservation.
-func (s *TaskMergeRequest) SetLatestObservation(val GitLabMergeRequestObservation) {
-	s.LatestObservation = val
-}
-
-// TaskMergeRequestChangedHeaders wraps TaskMergeRequestMutation with response headers.
-type TaskMergeRequestChangedHeaders struct {
-	Etag                OptString
-	IdempotencyReplayed OptBool
-	XRequestID          OptString
-	Response            TaskMergeRequestMutation
-}
-
-// GetEtag returns the value of Etag.
-func (s *TaskMergeRequestChangedHeaders) GetEtag() OptString {
-	return s.Etag
-}
-
-// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
-func (s *TaskMergeRequestChangedHeaders) GetIdempotencyReplayed() OptBool {
-	return s.IdempotencyReplayed
-}
-
-// GetXRequestID returns the value of XRequestID.
-func (s *TaskMergeRequestChangedHeaders) GetXRequestID() OptString {
-	return s.XRequestID
-}
-
-// GetResponse returns the value of Response.
-func (s *TaskMergeRequestChangedHeaders) GetResponse() TaskMergeRequestMutation {
-	return s.Response
-}
-
-// SetEtag sets the value of Etag.
-func (s *TaskMergeRequestChangedHeaders) SetEtag(val OptString) {
-	s.Etag = val
-}
-
-// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
-func (s *TaskMergeRequestChangedHeaders) SetIdempotencyReplayed(val OptBool) {
-	s.IdempotencyReplayed = val
-}
-
-// SetXRequestID sets the value of XRequestID.
-func (s *TaskMergeRequestChangedHeaders) SetXRequestID(val OptString) {
-	s.XRequestID = val
-}
-
-// SetResponse sets the value of Response.
-func (s *TaskMergeRequestChangedHeaders) SetResponse(val TaskMergeRequestMutation) {
-	s.Response = val
-}
-
-func (*TaskMergeRequestChangedHeaders) linkTaskMergeRequestRes()   {}
-func (*TaskMergeRequestChangedHeaders) unlinkTaskMergeRequestRes() {}
-
-// Ref: #/components/schemas/TaskMergeRequestLink
-type TaskMergeRequestLink struct {
-	MergeRequestURL url.URL `json:"merge_request_url"`
-}
-
-// GetMergeRequestURL returns the value of MergeRequestURL.
-func (s *TaskMergeRequestLink) GetMergeRequestURL() url.URL {
-	return s.MergeRequestURL
-}
-
-// SetMergeRequestURL sets the value of MergeRequestURL.
-func (s *TaskMergeRequestLink) SetMergeRequestURL(val url.URL) {
-	s.MergeRequestURL = val
-}
-
-// Ref: #/components/schemas/TaskMergeRequestMutation
-type TaskMergeRequestMutation struct {
-	Task         TaskWorkflow     `json:"task"`
-	MergeRequest TaskMergeRequest `json:"merge_request"`
-}
-
-// GetTask returns the value of Task.
-func (s *TaskMergeRequestMutation) GetTask() TaskWorkflow {
-	return s.Task
-}
-
-// GetMergeRequest returns the value of MergeRequest.
-func (s *TaskMergeRequestMutation) GetMergeRequest() TaskMergeRequest {
-	return s.MergeRequest
-}
-
-// SetTask sets the value of Task.
-func (s *TaskMergeRequestMutation) SetTask(val TaskWorkflow) {
-	s.Task = val
-}
-
-// SetMergeRequest sets the value of MergeRequest.
-func (s *TaskMergeRequestMutation) SetMergeRequest(val TaskMergeRequest) {
-	s.MergeRequest = val
-}
 
 // Ref: #/components/schemas/TaskPatch
 type TaskPatch struct {

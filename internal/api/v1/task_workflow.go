@@ -307,13 +307,13 @@ func (h *Handler) CompleteTaskExecution(
 	if _, _, err := claimClientProvenance(actor, params.PactlineClientKind.Or(""), params.PactlineClientSessionID.Or("")); err != nil {
 		return nil, err
 	}
-	mergeRequests := []domain.MergeRequestSnapshot{}
+	codeChanges := []domain.CodeChangeSnapshot{}
 	if h.Delivery != nil {
 		subject, subjectErr := accessSubject(ctx)
 		if subjectErr != nil {
 			return nil, subjectErr
 		}
-		mergeRequests, err = h.Delivery.PrepareCompletion(
+		codeChanges, err = h.Delivery.PrepareCompletion(
 			ctx, claimTarget.TaskNumber, subject, baseapi.RequestIDFromContext(ctx),
 		)
 		if err != nil {
@@ -321,7 +321,7 @@ func (h *Handler) CompleteTaskExecution(
 		}
 	}
 	task, claim, completion, err := h.Workflow.CompleteExecutionByID(
-		ctx, params.ClaimID, expectedVersion, req.Body, mergeRequests, actor, operation, time.Now().UTC(),
+		ctx, params.ClaimID, expectedVersion, req.Body, codeChanges, actor, operation, time.Now().UTC(),
 	)
 	if err != nil {
 		return nil, err
@@ -946,16 +946,16 @@ func taskThreadItemFromDomain(item domain.ThreadItem) generated.TaskThreadItem {
 				CriterionID: revision.CriterionID, Revision: revision.Revision,
 			}
 		}
-		mergeRequests := make([]generated.MergeRequestSnapshot, len(payload.MergeRequests))
-		for index, mergeRequest := range payload.MergeRequests {
-			mergeRequests[index] = mergeRequestSnapshotFromDomain(mergeRequest)
+		codeChanges := make([]generated.CodeChangeSnapshot, len(payload.CodeChanges))
+		for index, codeChange := range payload.CodeChanges {
+			codeChanges[index] = codeChangeSnapshotFromDomain(codeChange)
 		}
 		out.ExecutionCompleted = generated.NewOptExecutionCompletedPayload(generated.ExecutionCompletedPayload{
 			ReviewCycle:        payload.ReviewCycle,
 			SubmissionItemIds:  submissionItemIDs,
 			ExecutionCheckIds:  executionCheckIDs,
 			CriterionRevisions: criterionRevisions,
-			MergeRequests:      mergeRequests,
+			CodeChanges:        codeChanges,
 		})
 	}
 	if item.TaskStageClaimID != nil {

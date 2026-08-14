@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -47,6 +49,8 @@ func (e *ProviderError) Error() string {
 
 func (e *ProviderError) Unwrap() error { return e.Err }
 
+func (e *ProviderError) RepositoryProviderErrorCategory() string { return string(e.Category) }
+
 func ErrorCategoryOf(err error) ErrorCategory {
 	var providerError *ProviderError
 	if errors.As(err, &providerError) {
@@ -59,6 +63,71 @@ type Client struct {
 	httpClient *http.Client
 	timeout    time.Duration
 	now        func() time.Time
+}
+
+func (*Client) Provider() domain.RepositoryProvider { return domain.RepositoryProviderGitLab }
+
+func (*Client) ParseRepositoryURL(raw string) (domain.RepositoryReference, error) {
+	parsed, err := parseHTTPSURL(raw)
+	if err != nil {
+		return domain.RepositoryReference{}, err
+	}
+	if strings.Contains(parsed.Path, "/-/") {
+		return domain.RepositoryReference{}, &ProviderError{
+			Category: ErrorInvalidReference, Err: errors.New("GitLab repository URL must not contain a subpage"),
+		}
+	}
+	repositoryPath, err := normalizeRepositoryPath(parsed.EscapedPath())
+	if err != nil {
+		return domain.RepositoryReference{}, err
+	}
+	origin := (&url.URL{Scheme: "https", Host: parsed.Host}).String()
+	canonical := &url.URL{Scheme: "https", Host: parsed.Host, Path: "/" + repositoryPath}
+	return domain.RepositoryReference{
+		Provider: domain.RepositoryProviderGitLab, Origin: origin,
+		PathWithNamespace: repositoryPath, PathLookupKey: strings.ToLower(repositoryPath),
+		WebURL: canonical.String(),
+	}, nil
+}
+
+func (c *Client) ParseCodeChangeURL(raw string) (domain.CodeChangeReference, error) {
+	parsed, err := parseHTTPSURL(raw)
+	if err != nil {
+		return domain.CodeChangeReference{}, err
+	}
+	const marker = "/-/merge_requests/"
+	markerIndex := strings.LastIndex(parsed.Path, marker)
+	if markerIndex <= 0 {
+		return domain.CodeChangeReference{}, &ProviderError{
+			Category: ErrorInvalidReference, Err: errors.New("GitLab merge request URL is invalid"),
+		}
+	}
+	numberText := parsed.Path[markerIndex+len(marker):]
+	if numberText == "" || strings.Contains(numberText, "/") {
+		return domain.CodeChangeReference{}, &ProviderError{
+			Category: ErrorInvalidReference, Err: errors.New("GitLab merge request URL is invalid"),
+		}
+	}
+	number, err := strconv.ParseInt(numberText, 10, 64)
+	if err != nil || number < 1 {
+		return domain.CodeChangeReference{}, &ProviderError{
+			Category: ErrorInvalidReference, Err: errors.New("GitLab merge request IID is invalid"),
+		}
+	}
+	repository, err := c.ParseRepositoryURL((&url.URL{
+		Scheme: "https", Host: parsed.Host, Path: parsed.Path[:markerIndex],
+	}).String())
+	if err != nil {
+		return domain.CodeChangeReference{}, err
+	}
+	canonical := &url.URL{
+		Scheme: "https", Host: parsed.Host,
+		Path: "/" + repository.PathWithNamespace + marker + strconv.FormatInt(number, 10),
+	}
+	return domain.CodeChangeReference{
+		Repository: repository, Kind: domain.CodeChangeKindMergeRequest,
+		ChangeNumber: number, WebURL: canonical.String(),
+	}, nil
 }
 
 func NewClient(httpClient *http.Client, timeout time.Duration) *Client {
@@ -85,60 +154,70 @@ func NewClient(httpClient *http.Client, timeout time.Duration) *Client {
 	return &Client{httpClient: &owned, timeout: timeout, now: time.Now}
 }
 
-func (c *Client) ResolveProject(
+func (c *Client) ResolveRepository(
 	ctx context.Context,
-	origin string,
-	pathWithNamespace string,
+	reference domain.RepositoryReference,
 	credential []byte,
 	requestID string,
-) (domain.GitLabProjectIdentity, error) {
-	endpoint, err := projectEndpoint(origin, pathWithNamespace)
+) (domain.RepositoryIdentity, error) {
+	if reference.Provider != domain.RepositoryProviderGitLab {
+		return domain.RepositoryIdentity{}, &ProviderError{Category: ErrorInvalidReference, Err: errors.New("repository provider is not GitLab")}
+	}
+	endpoint, err := projectEndpoint(reference.Origin, reference.PathWithNamespace)
 	if err != nil {
-		return domain.GitLabProjectIdentity{}, err
+		return domain.RepositoryIdentity{}, err
 	}
 	var response projectResponse
 	if err := c.getJSON(ctx, endpoint, credential, requestID, "resolve_project", 0, 0, &response); err != nil {
-		return domain.GitLabProjectIdentity{}, err
+		return domain.RepositoryIdentity{}, err
 	}
-	project := domain.GitLabProjectIdentity{
-		ID:                response.ID,
-		PathWithNamespace: response.PathWithNamespace,
-		WebURL:            response.WebURL,
+	project := domain.RepositoryIdentity{
+		ProviderRepositoryID: strconv.FormatInt(response.ID, 10),
+		PathWithNamespace:    response.PathWithNamespace,
+		WebURL:               response.WebURL,
 	}
 	if response.DefaultBranch != nil {
 		project.DefaultBranch = *response.DefaultBranch
 	}
 	if err := project.Validate(); err != nil {
-		return domain.GitLabProjectIdentity{}, &ProviderError{
+		return domain.RepositoryIdentity{}, &ProviderError{
 			Category: ErrorProviderRejected, Err: fmt.Errorf("validate GitLab project response: %w", err),
 		}
 	}
 	return project, nil
 }
 
-func (c *Client) GetMergeRequest(
+func (c *Client) GetCodeChange(
 	ctx context.Context,
 	origin string,
-	gitLabProjectID int64,
-	iid int64,
+	providerRepositoryID string,
+	kind domain.CodeChangeKind,
+	changeNumber int64,
 	credential []byte,
 	requestID string,
-) (domain.GitLabMergeRequest, error) {
-	endpoint, err := mergeRequestEndpoint(origin, gitLabProjectID, iid)
+) (domain.CodeChange, error) {
+	if kind != domain.CodeChangeKindMergeRequest {
+		return domain.CodeChange{}, &ProviderError{Category: ErrorInvalidReference, Err: errors.New("GitLab code change kind must be merge_request")}
+	}
+	projectID, err := strconv.ParseInt(providerRepositoryID, 10, 64)
+	if err != nil || projectID < 1 {
+		return domain.CodeChange{}, &ProviderError{Category: ErrorInvalidReference, Err: errors.New("GitLab repository ID is invalid")}
+	}
+	endpoint, err := mergeRequestEndpoint(origin, projectID, changeNumber)
 	if err != nil {
-		return domain.GitLabMergeRequest{}, err
+		return domain.CodeChange{}, err
 	}
 	var response mergeRequestResponse
 	if err := c.getJSON(
-		ctx, endpoint, credential, requestID, "get_merge_request", gitLabProjectID, iid, &response,
+		ctx, endpoint, credential, requestID, "get_merge_request", projectID, changeNumber, &response,
 	); err != nil {
-		return domain.GitLabMergeRequest{}, err
+		return domain.CodeChange{}, err
 	}
-	observation := domain.GitLabMergeRequestObservation{
-		Status:            domain.GitLabObservationConfirmed,
+	observation := domain.CodeChangeObservation{
+		Status:            domain.CodeChangeObservationConfirmed,
 		ObservedAt:        c.now().UTC(),
 		Title:             response.Title,
-		State:             domain.GitLabMergeRequestState(response.State),
+		State:             domain.CodeChangeState(response.State),
 		Draft:             response.Draft,
 		SourceBranch:      response.SourceBranch,
 		TargetBranch:      response.TargetBranch,
@@ -147,21 +226,23 @@ func (c *Client) GetMergeRequest(
 		MergedAt:          response.MergedAt,
 		ProviderUpdatedAt: response.UpdatedAt,
 	}
-	mergeRequest := domain.GitLabMergeRequest{
-		ID: response.ID, IID: response.IID, WebURL: response.WebURL, Observation: observation,
+	codeChange := domain.CodeChange{
+		Provider: domain.RepositoryProviderGitLab, Kind: domain.CodeChangeKindMergeRequest,
+		ProviderChangeID: strconv.FormatInt(response.ID, 10), ChangeNumber: response.IID,
+		WebURL: response.WebURL, Observation: observation,
 	}
-	if mergeRequest.IID != iid {
-		return domain.GitLabMergeRequest{}, &ProviderError{
+	if codeChange.ChangeNumber != changeNumber {
+		return domain.CodeChange{}, &ProviderError{
 			Category: ErrorProviderRejected,
-			Err:      fmt.Errorf("GitLab merge request response IID %d does not match %d", mergeRequest.IID, iid),
+			Err:      fmt.Errorf("GitLab merge request response IID %d does not match %d", codeChange.ChangeNumber, changeNumber),
 		}
 	}
-	if err := mergeRequest.Validate(); err != nil {
-		return domain.GitLabMergeRequest{}, &ProviderError{
+	if err := codeChange.Validate(); err != nil {
+		return domain.CodeChange{}, &ProviderError{
 			Category: ErrorProviderRejected, Err: fmt.Errorf("validate GitLab merge request response: %w", err),
 		}
 	}
-	return mergeRequest, nil
+	return codeChange, nil
 }
 
 func (c *Client) getJSON(
@@ -241,7 +322,7 @@ func (c *Client) getJSON(
 	}
 	c.logResult(
 		request, requestID, operation, projectID, iid, response.StatusCode,
-		domain.GitLabObservationConfirmed, providerRequestID, started,
+		domain.CodeChangeObservationConfirmed, providerRequestID, started,
 	)
 	return nil
 }
@@ -320,6 +401,48 @@ func categoryForStatus(status int) ErrorCategory {
 
 func sameOrigin(left, right *url.URL) bool {
 	return strings.EqualFold(left.Scheme, right.Scheme) && strings.EqualFold(left.Host, right.Host)
+}
+
+func parseHTTPSURL(raw string) (*url.URL, error) {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil ||
+		parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Opaque != "" {
+		return nil, &ProviderError{Category: ErrorInvalidReference, Err: errors.New("an HTTPS GitLab URL without credentials, query, or fragment is required")}
+	}
+	if parsed.Hostname() == "" || net.ParseIP(parsed.Hostname()) == nil && strings.Contains(parsed.Hostname(), " ") {
+		return nil, &ProviderError{Category: ErrorInvalidReference, Err: errors.New("GitLab URL host is invalid")}
+	}
+	parsed.Scheme = "https"
+	hostname := strings.ToLower(parsed.Hostname())
+	port := parsed.Port()
+	parsed.Host = hostname
+	if port != "" {
+		parsed.Host = net.JoinHostPort(hostname, port)
+	}
+	return parsed, nil
+}
+
+func normalizeRepositoryPath(escapedPath string) (string, error) {
+	unescaped, err := url.PathUnescape(escapedPath)
+	if err != nil {
+		return "", &ProviderError{Category: ErrorInvalidReference, Err: errors.New("GitLab repository path escaping is invalid")}
+	}
+	unescaped = strings.TrimSuffix(unescaped, "/")
+	unescaped = strings.TrimSuffix(unescaped, ".git")
+	unescaped = strings.TrimPrefix(unescaped, "/")
+	if unescaped == "" || path.Clean(unescaped) != unescaped || strings.Contains(unescaped, "//") {
+		return "", &ProviderError{Category: ErrorInvalidReference, Err: errors.New("GitLab repository path is invalid")}
+	}
+	segments := strings.Split(unescaped, "/")
+	if len(segments) < 2 {
+		return "", &ProviderError{Category: ErrorInvalidReference, Err: errors.New("GitLab repository path must include a namespace")}
+	}
+	for _, segment := range segments {
+		if strings.TrimSpace(segment) == "" || segment == "." || segment == ".." {
+			return "", &ProviderError{Category: ErrorInvalidReference, Err: errors.New("GitLab repository path is invalid")}
+		}
+	}
+	return unescaped, nil
 }
 
 type projectResponse struct {

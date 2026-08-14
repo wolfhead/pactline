@@ -92,14 +92,14 @@ export default function ProjectRepositoryAccessPanel({
         <div>
           <h3 id="project-repositories-title" className="text-sm font-semibold">代码仓库授权</h3>
           <p className="mt-0.5 text-xs leading-5 text-fg-muted">
-            绑定后，本项目的执行者可以把该仓库中的 GitLab Merge Request 关联为交付证据。
+			绑定后，本项目的执行者可以把该仓库中的 Pull Request / Merge Request 关联为交付证据。
           </p>
         </div>
       </div>
 
       {canManage && !archived && (
         <form onSubmit={(event) => void bind(event)} className="mt-3 flex flex-col gap-2 sm:flex-row">
-          <label htmlFor="project-repository-url" className="sr-only">GitLab 仓库地址</label>
+		  <label htmlFor="project-repository-url" className="sr-only">代码仓库地址</label>
           <input
             id="project-repository-url"
             type="url"

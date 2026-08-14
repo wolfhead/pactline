@@ -128,18 +128,25 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	gitLabConnectionService := &application.GitLabConnectionService{
-		Connections: store.NewGitLabConnectionStore(db),
-		Provider:    gitlabintegration.NewClient(nil, 10*time.Second),
+	gitLabProvider := gitlabintegration.NewClient(nil, 10*time.Second)
+	repositoryProviders, err := application.NewRepositoryProviderRegistry(gitLabProvider)
+	if err != nil {
+		slog.Error("configure repository providers", "error", err)
+		os.Exit(1)
+	}
+	repositoryConnectionService := &application.RepositoryConnectionService{
+		Connections: store.NewRepositoryConnectionStore(db),
+		Providers:   repositoryProviders,
 		Cipher:      credentialCipher, EncryptionKeyID: cfg.TokenEncryptionKeyID,
 		Now: time.Now,
 	}
 	projectRepositoryService := &application.ProjectRepositoryService{
-		Repositories: store.NewProjectRepositoryStore(db),
-		Connections:  store.NewGitLabConnectionStore(db),
-		GitLab:       gitLabConnectionService,
-		Access:       projectAccess,
-		Now:          time.Now,
+		Repositories:      store.NewProjectRepositoryStore(db),
+		Connections:       store.NewRepositoryConnectionStore(db),
+		ConnectionService: repositoryConnectionService,
+		Providers:         repositoryProviders,
+		Access:            projectAccess,
+		Now:               time.Now,
 	}
 	tokenService := access.NewService(
 		store.NewAccessStore(db), identity.SystemClock{}, access.CryptoSecretGenerator{},
@@ -155,12 +162,12 @@ func main() {
 		Now:           time.Now,
 	}
 	taskDeliveryService := &application.TaskDeliveryService{
-		MergeRequests: store.NewTaskMergeRequestStore(db),
-		Repositories:  store.NewProjectRepositoryStore(db),
-		Access:        projectAccess,
-		Provider:      gitlabintegration.NewClient(nil, 10*time.Second),
-		Cipher:        credentialCipher,
-		Now:           time.Now,
+		CodeChanges:  store.NewTaskCodeChangeStore(db),
+		Repositories: store.NewProjectRepositoryStore(db),
+		Access:       projectAccess,
+		Providers:    repositoryProviders,
+		Cipher:       credentialCipher,
+		Now:          time.Now,
 	}
 	taskThreadStore := store.NewTaskThreadStore(db)
 	taskWorkPacketService := &application.TaskWorkPacketService{
@@ -361,11 +368,11 @@ func main() {
 			LarkEnabled:   cfg.AuthProvider == AuthProviderLark,
 			SecureCookies: cfg.AppEnv != EnvironmentDevelopment && cfg.AppEnv != EnvironmentTest,
 		},
-		V1:                     v1Handler,
-		OpenAPI:                apiv1.OpenAPIHandler(contract.OpenAPIDocument),
-		AgentStatus:            agentConnection,
-		AdminTools:             notificationTestService,
-		AdminGitLabConnections: gitLabConnectionService,
+		V1:                         v1Handler,
+		OpenAPI:                    apiv1.OpenAPIHandler(contract.OpenAPIDocument),
+		AgentStatus:                agentConnection,
+		AdminTools:                 notificationTestService,
+		AdminRepositoryConnections: repositoryConnectionService,
 	})
 	var agentWorker *agentruntime.Worker
 	if cfg.AgentEnabled {

@@ -242,12 +242,12 @@ paths:
           $ref: "#/components/responses/AcceptanceCheckCreated"
         default:
           $ref: "#/components/responses/Problem"
-  /api/v1/claims/{claim_id}/merge-requests:
+  /api/v1/claims/{claim_id}/code-changes:
     parameters:
       - $ref: "#/components/parameters/ClaimID"
     post:
-      operationId: linkTaskMergeRequest
-      summary: Link a GitLab merge request during claimed execution
+      operationId: linkTaskCodeChange
+      summary: Link a provider code change during claimed execution
       parameters:
         - $ref: "#/components/parameters/IfMatch"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -258,13 +258,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/TaskMergeRequestLink"
+              $ref: "#/components/schemas/TaskCodeChangeLink"
       responses:
         "201":
-          $ref: "#/components/responses/TaskMergeRequestChanged"
+          $ref: "#/components/responses/TaskCodeChangeChanged"
         default:
           $ref: "#/components/responses/Problem"
-  /api/v1/claims/{claim_id}/merge-requests/{link_id}:
+  /api/v1/claims/{claim_id}/code-changes/{link_id}:
     parameters:
       - $ref: "#/components/parameters/ClaimID"
       - name: link_id
@@ -274,8 +274,8 @@ paths:
           type: string
           format: uuid
     delete:
-      operationId: unlinkTaskMergeRequest
-      summary: Unlink a GitLab merge request during claimed execution
+      operationId: unlinkTaskCodeChange
+      summary: Unlink a provider code change during claimed execution
       parameters:
         - $ref: "#/components/parameters/IfMatch"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -283,7 +283,7 @@ paths:
         - $ref: "#/components/parameters/ClientSessionIDHeader"
       responses:
         "200":
-          $ref: "#/components/responses/TaskMergeRequestChanged"
+          $ref: "#/components/responses/TaskCodeChangeChanged"
         default:
           $ref: "#/components/responses/Problem"
   /api/v1/users:
@@ -539,12 +539,12 @@ paths:
           $ref: "#/components/responses/TaskWorkPacket"
         default:
           $ref: "#/components/responses/Problem"
-  /api/v1/tasks/{number}/merge-requests:
+  /api/v1/tasks/{number}/code-changes:
     parameters:
       - $ref: "#/components/parameters/TaskNumber"
     get:
       operationId: getTaskDelivery
-      summary: Get active and frozen Task merge-request delivery state
+      summary: Get active and frozen Task code-change delivery state
       responses:
         "200":
           $ref: "#/components/responses/TaskDelivery"
@@ -923,7 +923,7 @@ paths:
           $ref: "#/components/responses/Problem"
     post:
       operationId: bindProjectRepository
-      summary: Bind a GitLab repository to a Project by URL
+      summary: Bind a repository to a Project by URL
       security:
         - sessionCookie: []
       parameters:
@@ -951,7 +951,7 @@ paths:
           format: uuid
     delete:
       operationId: unbindProjectRepository
-      summary: Unbind a GitLab repository from a Project
+      summary: Unbind a repository from a Project
       security:
         - sessionCookie: []
       parameters:
@@ -1759,7 +1759,7 @@ components:
           schema:
             $ref: "#/components/schemas/TaskThreadItem"
     TaskDelivery:
-      description: Current and frozen Task merge-request delivery state
+      description: Current and frozen Task code-change delivery state
       headers:
         X-Request-Id:
           $ref: "#/components/headers/RequestID"
@@ -1789,8 +1789,8 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ClaimWorkPacket"
-    TaskMergeRequestChanged:
-      description: Task merge-request delivery changed
+    TaskCodeChangeChanged:
+      description: Task code-change delivery changed
       headers:
         Etag:
           $ref: "#/components/headers/Etag"
@@ -1801,7 +1801,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/TaskMergeRequestMutation"
+            $ref: "#/components/schemas/TaskCodeChangeMutation"
     TaskAttachmentList:
       description: Active Task attachment collection
       headers:
@@ -2951,7 +2951,7 @@ components:
     ExecutionCompletedPayload:
       type: object
       additionalProperties: false
-      required: [review_cycle, submission_item_ids, execution_check_ids, criterion_revisions, merge_requests]
+      required: [review_cycle, submission_item_ids, execution_check_ids, criterion_revisions, code_changes]
       properties:
         review_cycle:
           type: integer
@@ -2971,17 +2971,23 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/CriterionRevisionSnapshot"
-        merge_requests:
+        code_changes:
           type: array
           items:
-            $ref: "#/components/schemas/MergeRequestSnapshot"
-    GitLabObservationStatus:
+            $ref: "#/components/schemas/CodeChangeSnapshot"
+    RepositoryProvider:
+      type: string
+      enum: [gitlab, github]
+    CodeChangeKind:
+      type: string
+      enum: [merge_request, pull_request]
+    CodeChangeObservationStatus:
       type: string
       enum: [confirmed, missing, unauthorized, unreachable, disconnected]
-    GitLabMergeRequestState:
+    CodeChangeState:
       type: string
       enum: [opened, closed, merged, locked]
-    GitLabMergeRequestObservation:
+    CodeChangeObservation:
       type: object
       additionalProperties: false
       required:
@@ -2996,14 +3002,14 @@ components:
         - provider_updated_at
       properties:
         status:
-          $ref: "#/components/schemas/GitLabObservationStatus"
+          $ref: "#/components/schemas/CodeChangeObservationStatus"
         observed_at:
           type: string
           format: date-time
         title:
           type: string
         state:
-          $ref: "#/components/schemas/GitLabMergeRequestState"
+          $ref: "#/components/schemas/CodeChangeState"
         draft:
           type: boolean
         source_branch:
@@ -3020,15 +3026,17 @@ components:
         provider_updated_at:
           type: string
           format: date-time
-    TaskMergeRequest:
+    TaskCodeChange:
       type: object
       additionalProperties: false
       required:
         - id
         - project_repository_id
+        - provider
         - repository_url
-        - merge_request_iid
-        - gitlab_merge_request_id
+        - kind
+        - change_number
+        - provider_change_id
         - web_url
         - linked_by
         - linked_through_claim_id
@@ -3041,17 +3049,20 @@ components:
         project_repository_id:
           type: string
           format: uuid
+        provider:
+          $ref: "#/components/schemas/RepositoryProvider"
         repository_url:
           type: string
           format: uri
-        merge_request_iid:
+        kind:
+          $ref: "#/components/schemas/CodeChangeKind"
+        change_number:
           type: integer
           format: int64
           minimum: 1
-        gitlab_merge_request_id:
-          type: integer
-          format: int64
-          minimum: 1
+        provider_change_id:
+          type: string
+          minLength: 1
         web_url:
           type: string
           format: uri
@@ -3064,16 +3075,19 @@ components:
           type: string
           format: date-time
         latest_observation:
-          $ref: "#/components/schemas/GitLabMergeRequestObservation"
-    MergeRequestSnapshot:
+          $ref: "#/components/schemas/CodeChangeObservation"
+    CodeChangeSnapshot:
       type: object
       additionalProperties: false
       required:
-        - task_merge_request_id
+        - task_code_change_id
         - project_repository_id
         - connection_id
-        - gitlab_project_id
-        - merge_request_iid
+        - provider
+        - provider_repository_id
+        - kind
+        - change_number
+        - provider_change_id
         - web_url
         - title
         - state
@@ -3084,7 +3098,7 @@ components:
         - observation_status
         - observed_at
       properties:
-        task_merge_request_id:
+        task_code_change_id:
           type: string
           format: uuid
         project_repository_id:
@@ -3093,21 +3107,27 @@ components:
         connection_id:
           type: string
           format: uuid
-        gitlab_project_id:
+        provider:
+          $ref: "#/components/schemas/RepositoryProvider"
+        provider_repository_id:
+          type: string
+          minLength: 1
+        kind:
+          $ref: "#/components/schemas/CodeChangeKind"
+        change_number:
           type: integer
           format: int64
           minimum: 1
-        merge_request_iid:
-          type: integer
-          format: int64
-          minimum: 1
+        provider_change_id:
+          type: string
+          minLength: 1
         web_url:
           type: string
           format: uri
         title:
           type: string
         state:
-          $ref: "#/components/schemas/GitLabMergeRequestState"
+          $ref: "#/components/schemas/CodeChangeState"
         draft:
           type: boolean
         source_branch:
@@ -3122,7 +3142,7 @@ components:
           type: string
           format: date-time
         observation_status:
-          $ref: "#/components/schemas/GitLabObservationStatus"
+          $ref: "#/components/schemas/CodeChangeObservationStatus"
         observed_at:
           type: string
           format: date-time
@@ -3132,22 +3152,22 @@ components:
       required: [snapshot, comparison]
       properties:
         snapshot:
-          $ref: "#/components/schemas/MergeRequestSnapshot"
+          $ref: "#/components/schemas/CodeChangeSnapshot"
         current:
-          $ref: "#/components/schemas/TaskMergeRequest"
+          $ref: "#/components/schemas/TaskCodeChange"
         comparison:
           type: string
           enum: [unchanged, moved, merged, missing, unauthorized, unreachable, disconnected]
     TaskDeliveryReview:
       type: object
       additionalProperties: false
-      required: [review_cycle, merge_requests]
+      required: [review_cycle, code_changes]
       properties:
         review_cycle:
           type: integer
           format: int64
           minimum: 1
-        merge_requests:
+        code_changes:
           type: array
           items:
             $ref: "#/components/schemas/TaskDeliveryComparison"
@@ -3159,7 +3179,7 @@ components:
         active_links:
           type: array
           items:
-            $ref: "#/components/schemas/TaskMergeRequest"
+            $ref: "#/components/schemas/TaskCodeChange"
         review:
           $ref: "#/components/schemas/TaskDeliveryReview"
     CompactThread:
@@ -3234,24 +3254,24 @@ components:
         resolved_issue_thread_count:
           type: integer
           minimum: 0
-    TaskMergeRequestLink:
+    TaskCodeChangeLink:
       type: object
       additionalProperties: false
-      required: [merge_request_url]
+      required: [code_change_url]
       properties:
-        merge_request_url:
+        code_change_url:
           type: string
           format: uri
           maxLength: 2048
-    TaskMergeRequestMutation:
+    TaskCodeChangeMutation:
       type: object
       additionalProperties: false
-      required: [task, merge_request]
+      required: [task, code_change]
       properties:
         task:
           $ref: "#/components/schemas/TaskWorkflow"
-        merge_request:
-          $ref: "#/components/schemas/TaskMergeRequest"
+        code_change:
+          $ref: "#/components/schemas/TaskCodeChange"
     TaskThreadItem:
       type: object
       additionalProperties: false
@@ -3705,8 +3725,9 @@ components:
         - id
         - canonical_web_url
         - label
+        - provider
         - origin
-        - gitlab_project_id
+        - provider_repository_id
         - path_with_namespace
         - default_branch
         - bound_at
@@ -3719,13 +3740,14 @@ components:
           format: uri
         label:
           type: string
+        provider:
+          $ref: "#/components/schemas/RepositoryProvider"
         origin:
           type: string
           format: uri
-        gitlab_project_id:
-          type: integer
-          format: int64
-          minimum: 1
+        provider_repository_id:
+          type: string
+          minLength: 1
         path_with_namespace:
           type: string
         default_branch:

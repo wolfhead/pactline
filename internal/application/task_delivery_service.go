@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -9,7 +10,6 @@ import (
 
 	"github.com/wolfhead/pactline/internal/domain"
 	"github.com/wolfhead/pactline/internal/identity"
-	gitlabintegration "github.com/wolfhead/pactline/internal/integrations/gitlab"
 	"github.com/wolfhead/pactline/internal/store"
 
 	"github.com/google/uuid"
@@ -17,23 +17,17 @@ import (
 
 const taskDeliveryRefreshTimeout = 15 * time.Second
 
-type taskDeliveryProvider interface {
-	GetMergeRequest(
-		context.Context, string, int64, int64, []byte, string,
-	) (domain.GitLabMergeRequest, error)
-}
-
 type TaskDeliveryService struct {
-	MergeRequests *store.TaskMergeRequestStore
-	Repositories  *store.ProjectRepositoryStore
-	Access        *ProjectAccessService
-	Provider      taskDeliveryProvider
-	Cipher        *identity.CredentialCipher
-	Now           func() time.Time
+	CodeChanges  *store.TaskCodeChangeStore
+	Repositories *store.ProjectRepositoryStore
+	Access       *ProjectAccessService
+	Providers    *RepositoryProviderRegistry
+	Cipher       *identity.CredentialCipher
+	Now          func() time.Time
 }
 
 type TaskDelivery struct {
-	ActiveLinks []store.TaskMergeRequestWithRepository
+	ActiveLinks []store.TaskCodeChangeWithRepository
 	Review      *store.TaskDeliverySnapshot
 }
 
@@ -47,7 +41,7 @@ func (s *TaskDeliveryService) GetDelivery(
 	if err != nil {
 		return TaskDelivery{}, err
 	}
-	links, err := s.MergeRequests.ListActive(ctx, task.Task.ID)
+	links, err := s.CodeChanges.ListActive(ctx, task.Task.ID)
 	if err != nil {
 		return TaskDelivery{}, err
 	}
@@ -57,7 +51,7 @@ func (s *TaskDeliveryService) GetDelivery(
 	}
 	var review *store.TaskDeliverySnapshot
 	if task.Task.Phase == domain.TaskPhaseInReview || task.Task.Phase == domain.TaskPhaseDone {
-		review, err = s.MergeRequests.GetReviewSnapshot(ctx, task.Task.ID, task.Task.ReviewCycle)
+		review, err = s.CodeChanges.GetReviewSnapshot(ctx, task.Task.ID, task.Task.ReviewCycle)
 		if err != nil {
 			return TaskDelivery{}, err
 		}
@@ -70,12 +64,12 @@ func (s *TaskDeliveryService) PrepareCompletion(
 	taskNumber int64,
 	subject domain.ProjectAccessSubject,
 	requestID string,
-) ([]domain.MergeRequestSnapshot, error) {
+) ([]domain.CodeChangeSnapshot, error) {
 	task, err := s.Access.RequireTaskByNumber(ctx, taskNumber, subject, ProjectPermissionRead)
 	if err != nil {
 		return nil, err
 	}
-	links, err := s.MergeRequests.ListActive(ctx, task.Task.ID)
+	links, err := s.CodeChanges.ListActive(ctx, task.Task.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -83,16 +77,19 @@ func (s *TaskDeliveryService) PrepareCompletion(
 	if err != nil {
 		return nil, err
 	}
-	snapshots := make([]domain.MergeRequestSnapshot, len(links))
+	snapshots := make([]domain.CodeChangeSnapshot, len(links))
 	for index, link := range links {
-		observation := link.MergeRequest.LatestObservation
-		snapshots[index] = domain.MergeRequestSnapshot{
-			TaskMergeRequestID:  link.MergeRequest.ID,
-			ProjectRepositoryID: link.Repository.ID,
-			ConnectionID:        link.Connection.ID,
-			GitLabProjectID:     link.Connection.GitLabProjectID,
-			MergeRequestIID:     link.MergeRequest.MergeRequestIID,
-			WebURL:              link.MergeRequest.WebURL, Title: observation.Title,
+		observation := link.CodeChange.LatestObservation
+		snapshots[index] = domain.CodeChangeSnapshot{
+			TaskCodeChangeID:     link.CodeChange.ID,
+			ProjectRepositoryID:  link.Repository.ID,
+			ConnectionID:         link.Connection.ID,
+			Provider:             link.Connection.Provider,
+			ProviderRepositoryID: link.Connection.ProviderRepositoryID,
+			Kind:                 link.CodeChange.Kind,
+			ChangeNumber:         link.CodeChange.ChangeNumber,
+			ProviderChangeID:     link.CodeChange.ProviderChangeID,
+			WebURL:               link.CodeChange.WebURL, Title: observation.Title,
 			State: observation.State, Draft: observation.Draft,
 			SourceBranch: observation.SourceBranch, TargetBranch: observation.TargetBranch,
 			HeadSHA: observation.HeadSHA, MergeCommitSHA: observation.MergeCommitSHA,
@@ -108,14 +105,13 @@ func (s *TaskDeliveryService) PrepareCompletion(
 
 func (s *TaskDeliveryService) refreshLinks(
 	ctx context.Context,
-	links []store.TaskMergeRequestWithRepository,
+	links []store.TaskCodeChangeWithRepository,
 	requestID string,
-) ([]store.TaskMergeRequestWithRepository, error) {
+) ([]store.TaskCodeChangeWithRepository, error) {
 	if len(links) == 0 {
 		return links, nil
 	}
-	results := make([]store.TaskMergeRequestWithRepository, len(links))
-	copy(results, links)
+	results := append([]store.TaskCodeChangeWithRepository(nil), links...)
 	refreshContext, cancelRefresh := context.WithTimeout(ctx, taskDeliveryRefreshTimeout)
 	defer cancelRefresh()
 	semaphore := make(chan struct{}, 4)
@@ -126,18 +122,18 @@ func (s *TaskDeliveryService) refreshLinks(
 		waitGroup.Add(1)
 		go func(index int) {
 			defer waitGroup.Done()
-			observation := domain.GitLabMergeRequestObservation{}
+			var observation domain.CodeChangeObservation
 			select {
 			case semaphore <- struct{}{}:
 				defer func() { <-semaphore }()
 				observation = s.refreshObservation(refreshContext, results[index], requestID)
 			case <-refreshContext.Done():
-				observation = domain.GitLabMergeRequestObservation{
-					Status: domain.GitLabObservationUnreachable, ObservedAt: s.now(),
+				observation = domain.CodeChangeObservation{
+					Status: domain.CodeChangeObservationUnreachable, ObservedAt: s.now(),
 				}
 			}
-			if err := s.MergeRequests.UpdateObservation(
-				ctx, results[index].MergeRequest.ID, observation, s.now(),
+			if err := s.CodeChanges.UpdateObservation(
+				ctx, results[index].CodeChange.ID, observation, s.now(),
 			); err != nil {
 				errorLock.Lock()
 				if firstError == nil {
@@ -146,11 +142,11 @@ func (s *TaskDeliveryService) refreshLinks(
 				errorLock.Unlock()
 				return
 			}
-			if observation.Status == domain.GitLabObservationConfirmed {
-				results[index].MergeRequest.LatestObservation = observation
+			if observation.Status == domain.CodeChangeObservationConfirmed {
+				results[index].CodeChange.LatestObservation = observation
 			} else {
-				results[index].MergeRequest.LatestObservation.Status = observation.Status
-				results[index].MergeRequest.LatestObservation.ObservedAt = observation.ObservedAt
+				results[index].CodeChange.LatestObservation.Status = observation.Status
+				results[index].CodeChange.LatestObservation.ObservedAt = observation.ObservedAt
 			}
 		}(index)
 	}
@@ -166,75 +162,73 @@ func (s *TaskDeliveryService) refreshLinks(
 
 func (s *TaskDeliveryService) refreshObservation(
 	ctx context.Context,
-	item store.TaskMergeRequestWithRepository,
+	item store.TaskCodeChangeWithRepository,
 	requestID string,
-) domain.GitLabMergeRequestObservation {
+) domain.CodeChangeObservation {
 	now := s.now()
-	if item.Connection.Status != domain.GitLabConnectionStatusActive || s.Provider == nil || s.Cipher == nil {
-		return domain.GitLabMergeRequestObservation{
-			Status: domain.GitLabObservationDisconnected, ObservedAt: now,
-		}
+	if item.Connection.Status != domain.RepositoryConnectionStatusActive || s.Providers == nil || s.Cipher == nil {
+		return domain.CodeChangeObservation{Status: domain.CodeChangeObservationDisconnected, ObservedAt: now}
+	}
+	provider, err := s.Providers.Provider(item.Connection.Provider)
+	if err != nil {
+		return domain.CodeChangeObservation{Status: domain.CodeChangeObservationDisconnected, ObservedAt: now}
 	}
 	credential, err := s.Cipher.Decrypt(
 		item.Connection.EncryptionKeyID, item.Connection.CredentialCiphertext,
 	)
 	if err != nil {
-		slog.ErrorContext(ctx, "decrypt GitLab delivery credential",
+		slog.ErrorContext(ctx, "decrypt repository delivery credential",
 			"connection_id", item.Connection.ID,
-			"gitlab_project_id", item.Connection.GitLabProjectID,
-			"merge_request_iid", item.MergeRequest.MergeRequestIID,
+			"provider", item.Connection.Provider,
+			"provider_repository_id", item.Connection.ProviderRepositoryID,
+			"change_number", item.CodeChange.ChangeNumber,
 			"request_id", requestID, "error", err)
-		return domain.GitLabMergeRequestObservation{
-			Status: domain.GitLabObservationDisconnected, ObservedAt: now,
-		}
+		return domain.CodeChangeObservation{Status: domain.CodeChangeObservationDisconnected, ObservedAt: now}
 	}
 	defer clear(credential)
-	mergeRequest, err := s.Provider.GetMergeRequest(
-		ctx, item.Connection.Origin, item.Connection.GitLabProjectID,
-		item.MergeRequest.MergeRequestIID, credential, requestID,
+	codeChange, err := provider.GetCodeChange(
+		ctx, item.Connection.Origin, item.Connection.ProviderRepositoryID,
+		item.CodeChange.Kind, item.CodeChange.ChangeNumber, credential, requestID,
 	)
 	if err != nil {
-		status := domain.GitLabObservationUnreachable
-		switch gitlabintegration.ErrorCategoryOf(err) {
-		case gitlabintegration.ErrorNotFound:
-			status = domain.GitLabObservationMissing
-		case gitlabintegration.ErrorUnauthorized:
-			status = domain.GitLabObservationUnauthorized
+		mapped := mapRepositoryProviderError(item.Connection.Provider, err)
+		status := domain.CodeChangeObservationUnreachable
+		switch {
+		case errors.Is(mapped, domain.ErrNotFound):
+			status = domain.CodeChangeObservationMissing
+		case errors.Is(mapped, domain.ErrProviderUnauthorized):
+			status = domain.CodeChangeObservationUnauthorized
 		}
-		return domain.GitLabMergeRequestObservation{Status: status, ObservedAt: now}
+		return domain.CodeChangeObservation{Status: status, ObservedAt: now}
 	}
-	if mergeRequest.ID != item.MergeRequest.GitLabMergeRequestID ||
-		mergeRequest.IID != item.MergeRequest.MergeRequestIID {
-		slog.WarnContext(ctx, "GitLab delivery identity changed",
+	if codeChange.ProviderChangeID != item.CodeChange.ProviderChangeID ||
+		codeChange.ChangeNumber != item.CodeChange.ChangeNumber || codeChange.Kind != item.CodeChange.Kind {
+		slog.WarnContext(ctx, "repository delivery identity changed",
 			"connection_id", item.Connection.ID,
-			"gitlab_project_id", item.Connection.GitLabProjectID,
-			"merge_request_iid", item.MergeRequest.MergeRequestIID,
+			"provider", item.Connection.Provider,
+			"provider_repository_id", item.Connection.ProviderRepositoryID,
+			"kind", item.CodeChange.Kind, "change_number", item.CodeChange.ChangeNumber,
 			"request_id", requestID)
-		return domain.GitLabMergeRequestObservation{
-			Status: domain.GitLabObservationMissing, ObservedAt: now,
-		}
+		return domain.CodeChangeObservation{Status: domain.CodeChangeObservationMissing, ObservedAt: now}
 	}
-	return mergeRequest.Observation
+	return codeChange.Observation
 }
 
-func DeliveryComparison(
-	snapshot domain.MergeRequestSnapshot,
-	current *domain.TaskMergeRequest,
-) string {
+func DeliveryComparison(snapshot domain.CodeChangeSnapshot, current *domain.TaskCodeChange) string {
 	if current == nil {
 		return "missing"
 	}
 	switch current.LatestObservation.Status {
-	case domain.GitLabObservationMissing:
+	case domain.CodeChangeObservationMissing:
 		return "missing"
-	case domain.GitLabObservationUnauthorized:
+	case domain.CodeChangeObservationUnauthorized:
 		return "unauthorized"
-	case domain.GitLabObservationUnreachable:
+	case domain.CodeChangeObservationUnreachable:
 		return "unreachable"
-	case domain.GitLabObservationDisconnected:
+	case domain.CodeChangeObservationDisconnected:
 		return "disconnected"
 	}
-	if current.LatestObservation.State == domain.GitLabMergeRequestMerged {
+	if current.LatestObservation.State == domain.CodeChangeStateMerged {
 		return "merged"
 	}
 	if current.LatestObservation.HeadSHA != snapshot.HeadSHA {
@@ -243,64 +237,67 @@ func DeliveryComparison(
 	return "unchanged"
 }
 
-func (s *TaskDeliveryService) LinkMergeRequest(
+func (s *TaskDeliveryService) LinkCodeChange(
 	ctx context.Context,
 	taskNumber int64,
 	claimID uuid.UUID,
 	expectedTaskVersion int64,
 	expectedClaimVersion int64,
-	mergeRequestURL string,
+	codeChangeURL string,
 	subject domain.ProjectAccessSubject,
 	actor domain.Actor,
 	operation domain.OperationActor,
-) (store.TaskMergeRequestMutation, error) {
-	if s.Provider == nil || s.Cipher == nil {
-		return store.TaskMergeRequestMutation{}, domain.ErrIntegrationNotConfigured
+) (store.TaskCodeChangeMutation, error) {
+	if s.Providers == nil || s.Cipher == nil {
+		return store.TaskCodeChangeMutation{}, domain.ErrIntegrationNotConfigured
 	}
 	task, err := s.Access.RequireTaskByNumber(ctx, taskNumber, subject, ProjectPermissionRead)
 	if err != nil {
-		return store.TaskMergeRequestMutation{}, err
+		return store.TaskCodeChangeMutation{}, err
 	}
-	reference, err := domain.ParseGitLabMergeRequestURL(mergeRequestURL)
+	reference, err := s.Providers.MatchCodeChangeURL(codeChangeURL)
 	if err != nil {
-		return store.TaskMergeRequestMutation{}, err
+		return store.TaskCodeChangeMutation{}, err
 	}
-	repository, err := s.Repositories.FindActiveByReference(
-		ctx, task.Task.ProjectID, reference.Repository,
-	)
+	repository, err := s.Repositories.FindActiveByReference(ctx, task.Task.ProjectID, reference.Repository)
 	if err != nil {
-		return store.TaskMergeRequestMutation{}, err
+		return store.TaskCodeChangeMutation{}, err
+	}
+	provider, err := s.Providers.Provider(repository.Connection.Provider)
+	if err != nil {
+		return store.TaskCodeChangeMutation{}, err
 	}
 	credential, err := s.Cipher.Decrypt(
 		repository.Connection.EncryptionKeyID, repository.Connection.CredentialCiphertext,
 	)
 	if err != nil {
-		return store.TaskMergeRequestMutation{}, fmt.Errorf("decrypt GitLab credential: %w", err)
+		return store.TaskCodeChangeMutation{}, fmt.Errorf("decrypt repository credential: %w", err)
 	}
 	defer clear(credential)
-	mergeRequest, err := s.Provider.GetMergeRequest(
-		ctx, repository.Connection.Origin, repository.Connection.GitLabProjectID,
-		reference.IID, credential, operation.RequestID,
+	codeChange, err := provider.GetCodeChange(
+		ctx, repository.Connection.Origin, repository.Connection.ProviderRepositoryID,
+		reference.Kind, reference.ChangeNumber, credential, operation.RequestID,
 	)
 	if err != nil {
-		return store.TaskMergeRequestMutation{}, mapGitLabProviderError(err)
+		return store.TaskCodeChangeMutation{}, mapRepositoryProviderError(repository.Connection.Provider, err)
 	}
-	providerReference, err := domain.ParseGitLabMergeRequestURL(mergeRequest.WebURL)
-	if err != nil || providerReference.Repository.Origin != reference.Repository.Origin ||
+	providerReference, err := provider.ParseCodeChangeURL(codeChange.WebURL)
+	if err != nil || providerReference.Repository.Provider != reference.Repository.Provider ||
+		providerReference.Repository.Origin != reference.Repository.Origin ||
 		providerReference.Repository.PathLookupKey != reference.Repository.PathLookupKey ||
-		providerReference.IID != reference.IID {
-		return store.TaskMergeRequestMutation{}, fmt.Errorf(
-			"%w: GitLab returned a different merge request identity", domain.ErrProviderRejected,
+		providerReference.Kind != reference.Kind || providerReference.ChangeNumber != reference.ChangeNumber {
+		return store.TaskCodeChangeMutation{}, fmt.Errorf(
+			"%w: provider returned a different code change identity", domain.ErrProviderRejected,
 		)
 	}
-	mergeRequest.WebURL = providerReference.WebURL
-	return s.MergeRequests.Link(
+	codeChange.WebURL = providerReference.WebURL
+	return s.CodeChanges.Link(
 		ctx, taskNumber, claimID, expectedTaskVersion, expectedClaimVersion,
-		repository.Repository.ID, mergeRequest, actor, operation, s.now(),
+		repository.Repository.ID, codeChange, actor, operation, s.now(),
 	)
 }
 
-func (s *TaskDeliveryService) UnlinkMergeRequest(
+func (s *TaskDeliveryService) UnlinkCodeChange(
 	ctx context.Context,
 	taskNumber int64,
 	claimID uuid.UUID,
@@ -310,11 +307,11 @@ func (s *TaskDeliveryService) UnlinkMergeRequest(
 	subject domain.ProjectAccessSubject,
 	actor domain.Actor,
 	operation domain.OperationActor,
-) (store.TaskMergeRequestMutation, error) {
+) (store.TaskCodeChangeMutation, error) {
 	if _, err := s.Access.RequireTaskByNumber(ctx, taskNumber, subject, ProjectPermissionRead); err != nil {
-		return store.TaskMergeRequestMutation{}, err
+		return store.TaskCodeChangeMutation{}, err
 	}
-	return s.MergeRequests.Unlink(
+	return s.CodeChanges.Unlink(
 		ctx, taskNumber, claimID, expectedTaskVersion, expectedClaimVersion,
 		linkID, actor, operation, s.now(),
 	)

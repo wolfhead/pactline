@@ -7348,9 +7348,9 @@ func encodeGetTaskWorkPacketResponse(response GetTaskWorkPacketRes, w http.Respo
 	}
 }
 
-func encodeLinkTaskMergeRequestResponse(response LinkTaskMergeRequestRes, w http.ResponseWriter, span trace.Span) error {
+func encodeLinkTaskCodeChangeResponse(response LinkTaskCodeChangeRes, w http.ResponseWriter, span trace.Span) error {
 	switch response := response.(type) {
-	case *TaskMergeRequestChangedHeaders:
+	case *TaskCodeChangeChangedHeaders:
 		if err := func() error {
 			if err := response.Validate(); err != nil {
 				return err
@@ -12887,9 +12887,9 @@ func encodeUnbindProjectRepositoryResponse(response UnbindProjectRepositoryRes, 
 	}
 }
 
-func encodeUnlinkTaskMergeRequestResponse(response UnlinkTaskMergeRequestRes, w http.ResponseWriter, span trace.Span) error {
+func encodeUnlinkTaskCodeChangeResponse(response UnlinkTaskCodeChangeRes, w http.ResponseWriter, span trace.Span) error {
 	switch response := response.(type) {
-	case *TaskMergeRequestChangedHeaders:
+	case *TaskCodeChangeChangedHeaders:
 		if err := func() error {
 			if err := response.Validate(); err != nil {
 				return err

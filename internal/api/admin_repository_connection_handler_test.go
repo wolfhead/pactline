@@ -17,66 +17,68 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type adminGitLabConnectionStub struct {
-	connection       domain.GitLabConnection
-	createInput      application.CreateGitLabConnection
+type adminRepositoryConnectionStub struct {
+	connection       domain.RepositoryConnection
+	createInput      application.CreateRepositoryConnection
 	createOperation  domain.OperationActor
 	rotateCredential string
 	resultError      error
 }
 
-func (s *adminGitLabConnectionStub) List(context.Context) ([]domain.GitLabConnection, error) {
-	return []domain.GitLabConnection{s.connection}, s.resultError
+func (s *adminRepositoryConnectionStub) List(context.Context) ([]domain.RepositoryConnection, error) {
+	return []domain.RepositoryConnection{s.connection}, s.resultError
 }
 
-func (s *adminGitLabConnectionStub) Create(
+func (s *adminRepositoryConnectionStub) Create(
 	_ context.Context,
-	input application.CreateGitLabConnection,
+	input application.CreateRepositoryConnection,
 	operation domain.OperationActor,
-) (domain.GitLabConnection, error) {
+) (domain.RepositoryConnection, error) {
 	s.createInput = input
 	s.createOperation = operation
 	return s.connection, s.resultError
 }
 
-func (s *adminGitLabConnectionStub) RotateCredential(
+func (s *adminRepositoryConnectionStub) RotateCredential(
 	_ context.Context,
 	_ uuid.UUID,
 	_ int64,
 	credential string,
 	_ *time.Time,
 	_ domain.OperationActor,
-) (domain.GitLabConnection, error) {
+) (domain.RepositoryConnection, error) {
 	s.rotateCredential = credential
 	return s.connection, s.resultError
 }
 
-func (s *adminGitLabConnectionStub) Validate(
+func (s *adminRepositoryConnectionStub) Validate(
 	context.Context, uuid.UUID, int64, domain.OperationActor,
-) (domain.GitLabConnection, error) {
+) (domain.RepositoryConnection, error) {
 	return s.connection, s.resultError
 }
 
-func (s *adminGitLabConnectionStub) Disable(
+func (s *adminRepositoryConnectionStub) Disable(
 	context.Context, uuid.UUID, int64, domain.OperationActor,
-) (domain.GitLabConnection, error) {
+) (domain.RepositoryConnection, error) {
 	return s.connection, s.resultError
 }
 
-func TestAdminGitLabConnectionCreateDoesNotReturnCredential(t *testing.T) {
-	admin := adminGitLabTestUser(domain.PlatformRoleAdmin)
+func TestAdminRepositoryConnectionCreateDoesNotReturnCredential(t *testing.T) {
+	admin := adminRepositoryTestUser(domain.PlatformRoleAdmin)
 	now := time.Date(2026, 8, 13, 8, 0, 0, 0, time.UTC)
-	stub := &adminGitLabConnectionStub{connection: domain.GitLabConnection{
+	stub := &adminRepositoryConnectionStub{connection: domain.RepositoryConnection{
 		ID: uuid.New(), Version: 1, Label: "Repository",
-		Origin: "https://gitlab.example", GitLabProjectID: 17,
+		Provider: domain.RepositoryProviderGitLab,
+		Origin:   "https://gitlab.example", ProviderRepositoryID: "17",
 		PathWithNamespace: "group/repo", CanonicalWebURL: "https://gitlab.example/group/repo",
-		Status: domain.GitLabConnectionStatusActive, LastValidatedAt: now,
+		Status: domain.RepositoryConnectionStatusActive, LastValidatedAt: now,
 		CreatedAt: now, UpdatedAt: now,
 		CredentialCiphertext: []byte("ciphertext-must-not-leak"), EncryptionKeyID: "key-1",
 	}}
-	handler := &adminGitLabHandler{connections: stub}
-	request := httptest.NewRequest(http.MethodPost, "/api/admin/gitlab-connections", bytes.NewBufferString(`{
+	handler := &adminRepositoryConnectionHandler{connections: stub}
+	request := httptest.NewRequest(http.MethodPost, "/api/admin/repository-connections", bytes.NewBufferString(`{
         "label":"Repository",
+		"provider":"gitlab",
         "repository_url":"https://gitlab.example/group/repo",
         "credential":"plain-secret"
     }`))
@@ -88,6 +90,7 @@ func TestAdminGitLabConnectionCreateDoesNotReturnCredential(t *testing.T) {
 
 	require.Equal(t, http.StatusCreated, response.Code)
 	require.Equal(t, "plain-secret", stub.createInput.Credential)
+	require.Equal(t, domain.RepositoryProviderGitLab, stub.createInput.Provider)
 	require.Equal(t, admin.ID, stub.createOperation.UserID)
 	require.NotContains(t, response.Body.String(), "plain-secret")
 	require.NotContains(t, response.Body.String(), "ciphertext-must-not-leak")
@@ -97,19 +100,19 @@ func TestAdminGitLabConnectionCreateDoesNotReturnCredential(t *testing.T) {
 	require.False(t, hasCredential)
 }
 
-func TestAdminGitLabConnectionRejectsMemberAndUnknownFields(t *testing.T) {
-	member := adminGitLabTestUser(domain.PlatformRoleMember)
-	handler := &adminGitLabHandler{connections: &adminGitLabConnectionStub{}}
-	request := httptest.NewRequest(http.MethodGet, "/api/admin/gitlab-connections", nil)
+func TestAdminRepositoryConnectionRejectsMemberAndUnknownFields(t *testing.T) {
+	member := adminRepositoryTestUser(domain.PlatformRoleMember)
+	handler := &adminRepositoryConnectionHandler{connections: &adminRepositoryConnectionStub{}}
+	request := httptest.NewRequest(http.MethodGet, "/api/admin/repository-connections", nil)
 	request = request.WithContext(identity.WithRequestIdentity(request.Context(),
 		identity.RequestIdentity{Actor: member, Subject: member}))
 	response := httptest.NewRecorder()
 	handler.list(response, request)
 	require.Equal(t, http.StatusForbidden, response.Code)
 
-	admin := adminGitLabTestUser(domain.PlatformRoleAdmin)
-	request = httptest.NewRequest(http.MethodPost, "/api/admin/gitlab-connections",
-		bytes.NewBufferString(`{"label":"Repository","repository_url":"https://gitlab.example/group/repo","credential":"secret","unexpected":true}`))
+	admin := adminRepositoryTestUser(domain.PlatformRoleAdmin)
+	request = httptest.NewRequest(http.MethodPost, "/api/admin/repository-connections",
+		bytes.NewBufferString(`{"label":"Repository","provider":"gitlab","repository_url":"https://gitlab.example/group/repo","credential":"secret","unexpected":true}`))
 	request = request.WithContext(identity.WithRequestIdentity(request.Context(),
 		identity.RequestIdentity{Actor: admin, Subject: admin}))
 	response = httptest.NewRecorder()
@@ -117,12 +120,12 @@ func TestAdminGitLabConnectionRejectsMemberAndUnknownFields(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, response.Code)
 }
 
-func TestAdminGitLabConnectionMapsProviderFailuresSafely(t *testing.T) {
-	admin := adminGitLabTestUser(domain.PlatformRoleAdmin)
-	handler := &adminGitLabHandler{connections: &adminGitLabConnectionStub{
+func TestAdminRepositoryConnectionMapsProviderFailuresSafely(t *testing.T) {
+	admin := adminRepositoryTestUser(domain.PlatformRoleAdmin)
+	handler := &adminRepositoryConnectionHandler{connections: &adminRepositoryConnectionStub{
 		resultError: domain.ErrProviderUnauthorized,
 	}}
-	request := httptest.NewRequest(http.MethodGet, "/api/admin/gitlab-connections", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/admin/repository-connections", nil)
 	request = request.WithContext(identity.WithRequestIdentity(request.Context(),
 		identity.RequestIdentity{Actor: admin, Subject: admin}))
 	response := httptest.NewRecorder()
@@ -130,10 +133,10 @@ func TestAdminGitLabConnectionMapsProviderFailuresSafely(t *testing.T) {
 	handler.list(response, request)
 
 	require.Equal(t, http.StatusBadGateway, response.Code)
-	require.JSONEq(t, `{"error":"GitLab rejected the configured credential"}`, response.Body.String())
+	require.JSONEq(t, `{"error":"Repository provider rejected the configured credential"}`, response.Body.String())
 }
 
-func adminGitLabTestUser(role domain.PlatformRole) domain.User {
+func adminRepositoryTestUser(role domain.PlatformRole) domain.User {
 	return domain.User{
 		ID: uuid.New(), Name: "Test user", PlatformRole: role,
 		AccessStatus: domain.AccessStatusApproved, Active: true,

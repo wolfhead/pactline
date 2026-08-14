@@ -109,16 +109,16 @@ func projectRepositoryFromDomain(
 ) (generated.ProjectRepository, error) {
 	canonicalURL, err := url.Parse(item.Connection.CanonicalWebURL)
 	if err != nil {
-		return generated.ProjectRepository{}, fmt.Errorf("parse canonical GitLab repository URL: %w", err)
+		return generated.ProjectRepository{}, fmt.Errorf("parse canonical repository URL: %w", err)
 	}
 	origin, err := url.Parse(item.Connection.Origin)
 	if err != nil {
-		return generated.ProjectRepository{}, fmt.Errorf("parse GitLab origin: %w", err)
+		return generated.ProjectRepository{}, fmt.Errorf("parse repository origin: %w", err)
 	}
 	return generated.ProjectRepository{
 		ID: item.Repository.ID, CanonicalWebURL: *canonicalURL,
-		Label: item.Connection.Label, Origin: *origin,
-		GitlabProjectID:   item.Connection.GitLabProjectID,
+		Label: item.Connection.Label, Provider: generated.RepositoryProvider(item.Connection.Provider),
+		Origin: *origin, ProviderRepositoryID: item.Connection.ProviderRepositoryID,
 		PathWithNamespace: item.Connection.PathWithNamespace,
 		DefaultBranch:     item.Connection.DefaultBranch, BoundAt: item.Repository.BoundAt,
 	}, nil

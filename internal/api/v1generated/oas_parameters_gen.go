@@ -6893,8 +6893,8 @@ func decodeGetTaskWorkPacketParams(args [1]string, argsEscaped bool, r *http.Req
 	return params, nil
 }
 
-// LinkTaskMergeRequestParams is parameters of linkTaskMergeRequest operation.
-type LinkTaskMergeRequestParams struct {
+// LinkTaskCodeChangeParams is parameters of linkTaskCodeChange operation.
+type LinkTaskCodeChangeParams struct {
 	// One quoted positive integer resource version, for example `"3"`.
 	IfMatch string
 	// Required for bearer-authenticated mutations; optional for browser sessions.
@@ -6906,7 +6906,7 @@ type LinkTaskMergeRequestParams struct {
 	ClaimID                 uuid.UUID
 }
 
-func unpackLinkTaskMergeRequestParams(packed middleware.Parameters) (params LinkTaskMergeRequestParams) {
+func unpackLinkTaskCodeChangeParams(packed middleware.Parameters) (params LinkTaskCodeChangeParams) {
 	{
 		key := middleware.ParameterKey{
 			Name: "If-Match",
@@ -6951,7 +6951,7 @@ func unpackLinkTaskMergeRequestParams(packed middleware.Parameters) (params Link
 	return params
 }
 
-func decodeLinkTaskMergeRequestParams(args [1]string, argsEscaped bool, r *http.Request) (params LinkTaskMergeRequestParams, _ error) {
+func decodeLinkTaskCodeChangeParams(args [1]string, argsEscaped bool, r *http.Request) (params LinkTaskCodeChangeParams, _ error) {
 	h := uri.NewHeaderDecoder(r.Header)
 	// Decode header: If-Match.
 	if err := func() error {
@@ -14672,8 +14672,8 @@ func decodeUnbindProjectRepositoryParams(args [2]string, argsEscaped bool, r *ht
 	return params, nil
 }
 
-// UnlinkTaskMergeRequestParams is parameters of unlinkTaskMergeRequest operation.
-type UnlinkTaskMergeRequestParams struct {
+// UnlinkTaskCodeChangeParams is parameters of unlinkTaskCodeChange operation.
+type UnlinkTaskCodeChangeParams struct {
 	// One quoted positive integer resource version, for example `"3"`.
 	IfMatch string
 	// Required for bearer-authenticated mutations; optional for browser sessions.
@@ -14686,7 +14686,7 @@ type UnlinkTaskMergeRequestParams struct {
 	LinkID                  uuid.UUID
 }
 
-func unpackUnlinkTaskMergeRequestParams(packed middleware.Parameters) (params UnlinkTaskMergeRequestParams) {
+func unpackUnlinkTaskCodeChangeParams(packed middleware.Parameters) (params UnlinkTaskCodeChangeParams) {
 	{
 		key := middleware.ParameterKey{
 			Name: "If-Match",
@@ -14738,7 +14738,7 @@ func unpackUnlinkTaskMergeRequestParams(packed middleware.Parameters) (params Un
 	return params
 }
 
-func decodeUnlinkTaskMergeRequestParams(args [2]string, argsEscaped bool, r *http.Request) (params UnlinkTaskMergeRequestParams, _ error) {
+func decodeUnlinkTaskCodeChangeParams(args [2]string, argsEscaped bool, r *http.Request) (params UnlinkTaskCodeChangeParams, _ error) {
 	h := uri.NewHeaderDecoder(r.Header)
 	// Decode header: If-Match.
 	if err := func() error {

@@ -40,7 +40,7 @@ type Handler interface {
 	ArchiveTask(ctx context.Context, params ArchiveTaskParams) (ArchiveTaskRes, error)
 	// BindProjectRepository implements bindProjectRepository operation.
 	//
-	// Bind a GitLab repository to a Project by URL.
+	// Bind a repository to a Project by URL.
 	//
 	// POST /api/v1/projects/{number}/repositories
 	BindProjectRepository(ctx context.Context, req *ProjectRepositoryBind, params BindProjectRepositoryParams) (BindProjectRepositoryRes, error)
@@ -202,9 +202,9 @@ type Handler interface {
 	GetTaskAttachmentContent(ctx context.Context, params GetTaskAttachmentContentParams) (GetTaskAttachmentContentRes, error)
 	// GetTaskDelivery implements getTaskDelivery operation.
 	//
-	// Get active and frozen Task merge-request delivery state.
+	// Get active and frozen Task code-change delivery state.
 	//
-	// GET /api/v1/tasks/{number}/merge-requests
+	// GET /api/v1/tasks/{number}/code-changes
 	GetTaskDelivery(ctx context.Context, params GetTaskDeliveryParams) (GetTaskDeliveryRes, error)
 	// GetTaskStageClaim implements getTaskStageClaim operation.
 	//
@@ -218,12 +218,12 @@ type Handler interface {
 	//
 	// GET /api/v1/tasks/{number}/work-packet
 	GetTaskWorkPacket(ctx context.Context, params GetTaskWorkPacketParams) (GetTaskWorkPacketRes, error)
-	// LinkTaskMergeRequest implements linkTaskMergeRequest operation.
+	// LinkTaskCodeChange implements linkTaskCodeChange operation.
 	//
-	// Link a GitLab merge request during claimed execution.
+	// Link a provider code change during claimed execution.
 	//
-	// POST /api/v1/claims/{claim_id}/merge-requests
-	LinkTaskMergeRequest(ctx context.Context, req *TaskMergeRequestLink, params LinkTaskMergeRequestParams) (LinkTaskMergeRequestRes, error)
+	// POST /api/v1/claims/{claim_id}/code-changes
+	LinkTaskCodeChange(ctx context.Context, req *TaskCodeChangeLink, params LinkTaskCodeChangeParams) (LinkTaskCodeChangeRes, error)
 	// ListAgentConversations implements listAgentConversations operation.
 	//
 	// List visible Agent conversation configurations.
@@ -388,16 +388,16 @@ type Handler interface {
 	RestoreTask(ctx context.Context, params RestoreTaskParams) (RestoreTaskRes, error)
 	// UnbindProjectRepository implements unbindProjectRepository operation.
 	//
-	// Unbind a GitLab repository from a Project.
+	// Unbind a repository from a Project.
 	//
 	// DELETE /api/v1/projects/{number}/repositories/{repository_id}
 	UnbindProjectRepository(ctx context.Context, params UnbindProjectRepositoryParams) (UnbindProjectRepositoryRes, error)
-	// UnlinkTaskMergeRequest implements unlinkTaskMergeRequest operation.
+	// UnlinkTaskCodeChange implements unlinkTaskCodeChange operation.
 	//
-	// Unlink a GitLab merge request during claimed execution.
+	// Unlink a provider code change during claimed execution.
 	//
-	// DELETE /api/v1/claims/{claim_id}/merge-requests/{link_id}
-	UnlinkTaskMergeRequest(ctx context.Context, params UnlinkTaskMergeRequestParams) (UnlinkTaskMergeRequestRes, error)
+	// DELETE /api/v1/claims/{claim_id}/code-changes/{link_id}
+	UnlinkTaskCodeChange(ctx context.Context, params UnlinkTaskCodeChangeParams) (UnlinkTaskCodeChangeRes, error)
 	// UpdateAgentConversation implements updateAgentConversation operation.
 	//
 	// Update an Agent conversation configuration.

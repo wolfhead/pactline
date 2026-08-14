@@ -1146,7 +1146,7 @@ func (s *Server) handleArchiveTaskRequest(args [1]string, argsEscaped bool, w ht
 
 // handleBindProjectRepositoryRequest handles bindProjectRepository operation.
 //
-// Bind a GitLab repository to a Project by URL.
+// Bind a repository to a Project by URL.
 //
 // POST /api/v1/projects/{number}/repositories
 func (s *Server) handleBindProjectRepositoryRequest(args [1]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -1297,7 +1297,7 @@ func (s *Server) handleBindProjectRepositoryRequest(args [1]string, argsEscaped 
 		mreq := middleware.Request{
 			Context:          ctx,
 			OperationName:    BindProjectRepositoryOperation,
-			OperationSummary: "Bind a GitLab repository to a Project by URL",
+			OperationSummary: "Bind a repository to a Project by URL",
 			OperationID:      "bindProjectRepository",
 			Body:             request,
 			RawBody:          rawBody,
@@ -7028,16 +7028,16 @@ func (s *Server) handleGetTaskAttachmentContentRequest(args [2]string, argsEscap
 
 // handleGetTaskDeliveryRequest handles getTaskDelivery operation.
 //
-// Get active and frozen Task merge-request delivery state.
+// Get active and frozen Task code-change delivery state.
 //
-// GET /api/v1/tasks/{number}/merge-requests
+// GET /api/v1/tasks/{number}/code-changes
 func (s *Server) handleGetTaskDeliveryRequest(args [1]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
 	statusWriter := &codeRecorder{ResponseWriter: w}
 	w = statusWriter
 	otelAttrs := []attribute.KeyValue{
 		otelogen.OperationID("getTaskDelivery"),
 		semconv.HTTPRequestMethodKey.String("GET"),
-		semconv.HTTPRouteKey.String("/api/v1/tasks/{number}/merge-requests"),
+		semconv.HTTPRouteKey.String("/api/v1/tasks/{number}/code-changes"),
 	}
 	// Add attributes from config.
 	otelAttrs = append(otelAttrs, s.cfg.Attributes...)
@@ -7182,7 +7182,7 @@ func (s *Server) handleGetTaskDeliveryRequest(args [1]string, argsEscaped bool, 
 		mreq := middleware.Request{
 			Context:          ctx,
 			OperationName:    GetTaskDeliveryOperation,
-			OperationSummary: "Get active and frozen Task merge-request delivery state",
+			OperationSummary: "Get active and frozen Task code-change delivery state",
 			OperationID:      "getTaskDelivery",
 			Body:             nil,
 			RawBody:          rawBody,
@@ -7645,24 +7645,24 @@ func (s *Server) handleGetTaskWorkPacketRequest(args [1]string, argsEscaped bool
 	}
 }
 
-// handleLinkTaskMergeRequestRequest handles linkTaskMergeRequest operation.
+// handleLinkTaskCodeChangeRequest handles linkTaskCodeChange operation.
 //
-// Link a GitLab merge request during claimed execution.
+// Link a provider code change during claimed execution.
 //
-// POST /api/v1/claims/{claim_id}/merge-requests
-func (s *Server) handleLinkTaskMergeRequestRequest(args [1]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
+// POST /api/v1/claims/{claim_id}/code-changes
+func (s *Server) handleLinkTaskCodeChangeRequest(args [1]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
 	statusWriter := &codeRecorder{ResponseWriter: w}
 	w = statusWriter
 	otelAttrs := []attribute.KeyValue{
-		otelogen.OperationID("linkTaskMergeRequest"),
+		otelogen.OperationID("linkTaskCodeChange"),
 		semconv.HTTPRequestMethodKey.String("POST"),
-		semconv.HTTPRouteKey.String("/api/v1/claims/{claim_id}/merge-requests"),
+		semconv.HTTPRouteKey.String("/api/v1/claims/{claim_id}/code-changes"),
 	}
 	// Add attributes from config.
 	otelAttrs = append(otelAttrs, s.cfg.Attributes...)
 
 	// Start a span for this request.
-	ctx, span := s.cfg.Tracer.Start(r.Context(), LinkTaskMergeRequestOperation,
+	ctx, span := s.cfg.Tracer.Start(r.Context(), LinkTaskCodeChangeOperation,
 		trace.WithAttributes(otelAttrs...),
 		serverSpanKind,
 	)
@@ -7717,15 +7717,15 @@ func (s *Server) handleLinkTaskMergeRequestRequest(args [1]string, argsEscaped b
 		}
 		err          error
 		opErrContext = ogenerrors.OperationContext{
-			Name: LinkTaskMergeRequestOperation,
-			ID:   "linkTaskMergeRequest",
+			Name: LinkTaskCodeChangeOperation,
+			ID:   "linkTaskCodeChange",
 		}
 	)
 	{
 		type bitset = [1]uint8
 		var satisfied bitset
 		{
-			sctx, ok, err := s.securityBearerAuth(ctx, LinkTaskMergeRequestOperation, r)
+			sctx, ok, err := s.securityBearerAuth(ctx, LinkTaskCodeChangeOperation, r)
 			if err != nil {
 				err = &ogenerrors.SecurityError{
 					OperationContext: opErrContext,
@@ -7742,7 +7742,7 @@ func (s *Server) handleLinkTaskMergeRequestRequest(args [1]string, argsEscaped b
 			}
 		}
 		{
-			sctx, ok, err := s.securitySessionCookie(ctx, LinkTaskMergeRequestOperation, r)
+			sctx, ok, err := s.securitySessionCookie(ctx, LinkTaskCodeChangeOperation, r)
 			if err != nil {
 				err = &ogenerrors.SecurityError{
 					OperationContext: opErrContext,
@@ -7783,7 +7783,7 @@ func (s *Server) handleLinkTaskMergeRequestRequest(args [1]string, argsEscaped b
 			return
 		}
 	}
-	params, err := decodeLinkTaskMergeRequestParams(args, argsEscaped, r)
+	params, err := decodeLinkTaskCodeChangeParams(args, argsEscaped, r)
 	if err != nil {
 		err = &ogenerrors.DecodeParamsError{
 			OperationContext: opErrContext,
@@ -7795,7 +7795,7 @@ func (s *Server) handleLinkTaskMergeRequestRequest(args [1]string, argsEscaped b
 	}
 
 	var rawBody []byte
-	request, rawBody, close, err := s.decodeLinkTaskMergeRequestRequest(r)
+	request, rawBody, close, err := s.decodeLinkTaskCodeChangeRequest(r)
 	if err != nil {
 		err = &ogenerrors.DecodeRequestError{
 			OperationContext: opErrContext,
@@ -7811,13 +7811,13 @@ func (s *Server) handleLinkTaskMergeRequestRequest(args [1]string, argsEscaped b
 		}
 	}()
 
-	var response LinkTaskMergeRequestRes
+	var response LinkTaskCodeChangeRes
 	if m := s.cfg.Middleware; m != nil {
 		mreq := middleware.Request{
 			Context:          ctx,
-			OperationName:    LinkTaskMergeRequestOperation,
-			OperationSummary: "Link a GitLab merge request during claimed execution",
-			OperationID:      "linkTaskMergeRequest",
+			OperationName:    LinkTaskCodeChangeOperation,
+			OperationSummary: "Link a provider code change during claimed execution",
+			OperationID:      "linkTaskCodeChange",
 			Body:             request,
 			RawBody:          rawBody,
 			Params: middleware.Parameters{
@@ -7846,9 +7846,9 @@ func (s *Server) handleLinkTaskMergeRequestRequest(args [1]string, argsEscaped b
 		}
 
 		type (
-			Request  = *TaskMergeRequestLink
-			Params   = LinkTaskMergeRequestParams
-			Response = LinkTaskMergeRequestRes
+			Request  = *TaskCodeChangeLink
+			Params   = LinkTaskCodeChangeParams
+			Response = LinkTaskCodeChangeRes
 		)
 		response, err = middleware.HookMiddleware[
 			Request,
@@ -7857,14 +7857,14 @@ func (s *Server) handleLinkTaskMergeRequestRequest(args [1]string, argsEscaped b
 		](
 			m,
 			mreq,
-			unpackLinkTaskMergeRequestParams,
+			unpackLinkTaskCodeChangeParams,
 			func(ctx context.Context, request Request, params Params) (response Response, err error) {
-				response, err = s.h.LinkTaskMergeRequest(ctx, request, params)
+				response, err = s.h.LinkTaskCodeChange(ctx, request, params)
 				return response, err
 			},
 		)
 	} else {
-		response, err = s.h.LinkTaskMergeRequest(ctx, request, params)
+		response, err = s.h.LinkTaskCodeChange(ctx, request, params)
 	}
 	if err != nil {
 		defer recordError("Internal", err)
@@ -7872,7 +7872,7 @@ func (s *Server) handleLinkTaskMergeRequestRequest(args [1]string, argsEscaped b
 		return
 	}
 
-	if err := encodeLinkTaskMergeRequestResponse(response, w, span); err != nil {
+	if err := encodeLinkTaskCodeChangeResponse(response, w, span); err != nil {
 		defer recordError("EncodeResponse", err)
 		if !errors.Is(err, ht.ErrInternalServerErrorResponse) {
 			s.cfg.ErrorHandler(ctx, w, r, err)
@@ -13807,7 +13807,7 @@ func (s *Server) handleRestoreTaskRequest(args [1]string, argsEscaped bool, w ht
 
 // handleUnbindProjectRepositoryRequest handles unbindProjectRepository operation.
 //
-// Unbind a GitLab repository from a Project.
+// Unbind a repository from a Project.
 //
 // DELETE /api/v1/projects/{number}/repositories/{repository_id}
 func (s *Server) handleUnbindProjectRepositoryRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -13943,7 +13943,7 @@ func (s *Server) handleUnbindProjectRepositoryRequest(args [2]string, argsEscape
 		mreq := middleware.Request{
 			Context:          ctx,
 			OperationName:    UnbindProjectRepositoryOperation,
-			OperationSummary: "Unbind a GitLab repository from a Project",
+			OperationSummary: "Unbind a repository from a Project",
 			OperationID:      "unbindProjectRepository",
 			Body:             nil,
 			RawBody:          rawBody,
@@ -14004,24 +14004,24 @@ func (s *Server) handleUnbindProjectRepositoryRequest(args [2]string, argsEscape
 	}
 }
 
-// handleUnlinkTaskMergeRequestRequest handles unlinkTaskMergeRequest operation.
+// handleUnlinkTaskCodeChangeRequest handles unlinkTaskCodeChange operation.
 //
-// Unlink a GitLab merge request during claimed execution.
+// Unlink a provider code change during claimed execution.
 //
-// DELETE /api/v1/claims/{claim_id}/merge-requests/{link_id}
-func (s *Server) handleUnlinkTaskMergeRequestRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
+// DELETE /api/v1/claims/{claim_id}/code-changes/{link_id}
+func (s *Server) handleUnlinkTaskCodeChangeRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
 	statusWriter := &codeRecorder{ResponseWriter: w}
 	w = statusWriter
 	otelAttrs := []attribute.KeyValue{
-		otelogen.OperationID("unlinkTaskMergeRequest"),
+		otelogen.OperationID("unlinkTaskCodeChange"),
 		semconv.HTTPRequestMethodKey.String("DELETE"),
-		semconv.HTTPRouteKey.String("/api/v1/claims/{claim_id}/merge-requests/{link_id}"),
+		semconv.HTTPRouteKey.String("/api/v1/claims/{claim_id}/code-changes/{link_id}"),
 	}
 	// Add attributes from config.
 	otelAttrs = append(otelAttrs, s.cfg.Attributes...)
 
 	// Start a span for this request.
-	ctx, span := s.cfg.Tracer.Start(r.Context(), UnlinkTaskMergeRequestOperation,
+	ctx, span := s.cfg.Tracer.Start(r.Context(), UnlinkTaskCodeChangeOperation,
 		trace.WithAttributes(otelAttrs...),
 		serverSpanKind,
 	)
@@ -14076,15 +14076,15 @@ func (s *Server) handleUnlinkTaskMergeRequestRequest(args [2]string, argsEscaped
 		}
 		err          error
 		opErrContext = ogenerrors.OperationContext{
-			Name: UnlinkTaskMergeRequestOperation,
-			ID:   "unlinkTaskMergeRequest",
+			Name: UnlinkTaskCodeChangeOperation,
+			ID:   "unlinkTaskCodeChange",
 		}
 	)
 	{
 		type bitset = [1]uint8
 		var satisfied bitset
 		{
-			sctx, ok, err := s.securityBearerAuth(ctx, UnlinkTaskMergeRequestOperation, r)
+			sctx, ok, err := s.securityBearerAuth(ctx, UnlinkTaskCodeChangeOperation, r)
 			if err != nil {
 				err = &ogenerrors.SecurityError{
 					OperationContext: opErrContext,
@@ -14101,7 +14101,7 @@ func (s *Server) handleUnlinkTaskMergeRequestRequest(args [2]string, argsEscaped
 			}
 		}
 		{
-			sctx, ok, err := s.securitySessionCookie(ctx, UnlinkTaskMergeRequestOperation, r)
+			sctx, ok, err := s.securitySessionCookie(ctx, UnlinkTaskCodeChangeOperation, r)
 			if err != nil {
 				err = &ogenerrors.SecurityError{
 					OperationContext: opErrContext,
@@ -14142,7 +14142,7 @@ func (s *Server) handleUnlinkTaskMergeRequestRequest(args [2]string, argsEscaped
 			return
 		}
 	}
-	params, err := decodeUnlinkTaskMergeRequestParams(args, argsEscaped, r)
+	params, err := decodeUnlinkTaskCodeChangeParams(args, argsEscaped, r)
 	if err != nil {
 		err = &ogenerrors.DecodeParamsError{
 			OperationContext: opErrContext,
@@ -14155,13 +14155,13 @@ func (s *Server) handleUnlinkTaskMergeRequestRequest(args [2]string, argsEscaped
 
 	var rawBody []byte
 
-	var response UnlinkTaskMergeRequestRes
+	var response UnlinkTaskCodeChangeRes
 	if m := s.cfg.Middleware; m != nil {
 		mreq := middleware.Request{
 			Context:          ctx,
-			OperationName:    UnlinkTaskMergeRequestOperation,
-			OperationSummary: "Unlink a GitLab merge request during claimed execution",
-			OperationID:      "unlinkTaskMergeRequest",
+			OperationName:    UnlinkTaskCodeChangeOperation,
+			OperationSummary: "Unlink a provider code change during claimed execution",
+			OperationID:      "unlinkTaskCodeChange",
 			Body:             nil,
 			RawBody:          rawBody,
 			Params: middleware.Parameters{
@@ -14195,8 +14195,8 @@ func (s *Server) handleUnlinkTaskMergeRequestRequest(args [2]string, argsEscaped
 
 		type (
 			Request  = struct{}
-			Params   = UnlinkTaskMergeRequestParams
-			Response = UnlinkTaskMergeRequestRes
+			Params   = UnlinkTaskCodeChangeParams
+			Response = UnlinkTaskCodeChangeRes
 		)
 		response, err = middleware.HookMiddleware[
 			Request,
@@ -14205,14 +14205,14 @@ func (s *Server) handleUnlinkTaskMergeRequestRequest(args [2]string, argsEscaped
 		](
 			m,
 			mreq,
-			unpackUnlinkTaskMergeRequestParams,
+			unpackUnlinkTaskCodeChangeParams,
 			func(ctx context.Context, request Request, params Params) (response Response, err error) {
-				response, err = s.h.UnlinkTaskMergeRequest(ctx, params)
+				response, err = s.h.UnlinkTaskCodeChange(ctx, params)
 				return response, err
 			},
 		)
 	} else {
-		response, err = s.h.UnlinkTaskMergeRequest(ctx, params)
+		response, err = s.h.UnlinkTaskCodeChange(ctx, params)
 	}
 	if err != nil {
 		defer recordError("Internal", err)
@@ -14220,7 +14220,7 @@ func (s *Server) handleUnlinkTaskMergeRequestRequest(args [2]string, argsEscaped
 		return
 	}
 
-	if err := encodeUnlinkTaskMergeRequestResponse(response, w, span); err != nil {
+	if err := encodeUnlinkTaskCodeChangeResponse(response, w, span); err != nil {
 		defer recordError("EncodeResponse", err)
 		if !errors.Is(err, ht.ErrInternalServerErrorResponse) {
 			s.cfg.ErrorHandler(ctx, w, r, err)

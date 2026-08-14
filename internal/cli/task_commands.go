@@ -217,7 +217,7 @@ func (a *App) taskPacket(command *cobra.Command, number int64) (map[string]any, 
 	paths := []struct{ name, path string }{
 		{"task", fmt.Sprintf("/api/v1/tasks/%d", number)},
 		{"threads", fmt.Sprintf("/api/v1/tasks/%d/threads", number)},
-		{"delivery", fmt.Sprintf("/api/v1/tasks/%d/merge-requests", number)},
+		{"delivery", fmt.Sprintf("/api/v1/tasks/%d/code-changes", number)},
 	}
 	result := map[string]any{}
 	for _, resource := range paths {
@@ -326,7 +326,7 @@ func printTaskPacket(w io.Writer, data map[string]any) {
 	}
 	delivery, _ := data["delivery"].(map[string]any)
 	links, _ := delivery["active_links"].([]any)
-	fmt.Fprintf(w, "Delivery: %d active Merge Requests\n", len(links))
+	fmt.Fprintf(w, "Delivery: %d active code changes\n", len(links))
 	for _, raw := range links {
 		link, _ := raw.(map[string]any)
 		fmt.Fprintf(w, "  - %v — %v\n", link["web_url"], link["title"])
@@ -374,7 +374,7 @@ func printCompactTaskPacket(w io.Writer, data map[string]any) {
 	fmt.Fprintf(w, "Resolved Issue Threads omitted: %v\n", data["resolved_issue_thread_count"])
 	delivery, _ := data["delivery"].(map[string]any)
 	links, _ := delivery["active_links"].([]any)
-	fmt.Fprintf(w, "Delivery: %d active Merge Requests\n", len(links))
+	fmt.Fprintf(w, "Delivery: %d active code changes\n", len(links))
 	for _, raw := range links {
 		link, _ := raw.(map[string]any)
 		fmt.Fprintf(w, "  - %v — %v\n", link["web_url"], link["title"])

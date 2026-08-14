@@ -23,8 +23,8 @@ func cleanupProject(t *testing.T, db *store.DB, projectID uuid.UUID) {
 				SELECT id FROM project_repositories WHERE project_id=$1
 			)`,
 			`DELETE FROM business_audit_events
-			WHERE entity_type='task_merge_request' AND entity_id IN (
-				SELECT id FROM task_merge_requests WHERE project_id=$1
+			WHERE entity_type='task_code_change' AND entity_id IN (
+				SELECT id FROM task_code_changes WHERE project_id=$1
 			)`,
 			`DELETE FROM business_audit_events
 			WHERE entity_type='project_membership' AND entity_id IN (
@@ -56,7 +56,7 @@ func cleanupProject(t *testing.T, db *store.DB, projectID uuid.UUID) {
 			`DELETE FROM task_labels WHERE task_id IN (SELECT id FROM tasks WHERE project_id=$1)`,
 			`DELETE FROM task_comments WHERE task_id IN (SELECT id FROM tasks WHERE project_id=$1)`,
 			`DELETE FROM task_activity WHERE task_id IN (SELECT id FROM tasks WHERE project_id=$1)`,
-			`DELETE FROM task_merge_requests WHERE project_id=$1`,
+			`DELETE FROM task_code_changes WHERE project_id=$1`,
 			`DELETE FROM project_repositories WHERE project_id=$1`,
 			`DELETE FROM project_activity WHERE project_id=$1`,
 			`DELETE FROM tasks WHERE project_id=$1`,
