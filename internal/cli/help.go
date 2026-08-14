@@ -32,7 +32,7 @@ func (a *App) helpCommand(root *cobra.Command) *cobra.Command {
 5. claim show --compact returns bounded Claim-specific context and checks.
 6. claim progress and claim submit may be repeated without ending the Claim.
 7. claim verify records execution verification against an explicit revision.
-8. claim mr link records each GitLab Merge Request as delivery evidence.
+8. claim change link records each Pull Request or Merge Request as delivery evidence.
 9. claim complete ends execution and moves the Task to in_review.available.
 
 Review workflow
@@ -56,7 +56,7 @@ Blocking Issue workflow
 6. The same Task phase becomes available with no active Claim.
 7. A worker explicitly claims the Task again; the ended Claim is never revived.
 
-Neither MR state, work submission, Claim release, nor Issue resolution implicitly accepts a Task.`,
+Neither code-change state, work submission, Claim release, nor Issue resolution implicitly accepts a Task.`,
 		"identity": `Identity and continuation
 
 A Claim belongs to the authenticated logical principal: exact API Token,

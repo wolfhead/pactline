@@ -60,7 +60,7 @@ type Invoker interface {
 	ArchiveTask(ctx context.Context, params ArchiveTaskParams) (ArchiveTaskRes, error)
 	// BindProjectRepository invokes bindProjectRepository operation.
 	//
-	// Bind a GitLab repository to a Project by URL.
+	// Bind a repository to a Project by URL.
 	//
 	// POST /api/v1/projects/{number}/repositories
 	BindProjectRepository(ctx context.Context, request *ProjectRepositoryBind, params BindProjectRepositoryParams) (BindProjectRepositoryRes, error)
@@ -222,9 +222,9 @@ type Invoker interface {
 	GetTaskAttachmentContent(ctx context.Context, params GetTaskAttachmentContentParams) (GetTaskAttachmentContentRes, error)
 	// GetTaskDelivery invokes getTaskDelivery operation.
 	//
-	// Get active and frozen Task merge-request delivery state.
+	// Get active and frozen Task code-change delivery state.
 	//
-	// GET /api/v1/tasks/{number}/merge-requests
+	// GET /api/v1/tasks/{number}/code-changes
 	GetTaskDelivery(ctx context.Context, params GetTaskDeliveryParams) (GetTaskDeliveryRes, error)
 	// GetTaskStageClaim invokes getTaskStageClaim operation.
 	//
@@ -238,12 +238,12 @@ type Invoker interface {
 	//
 	// GET /api/v1/tasks/{number}/work-packet
 	GetTaskWorkPacket(ctx context.Context, params GetTaskWorkPacketParams) (GetTaskWorkPacketRes, error)
-	// LinkTaskMergeRequest invokes linkTaskMergeRequest operation.
+	// LinkTaskCodeChange invokes linkTaskCodeChange operation.
 	//
-	// Link a GitLab merge request during claimed execution.
+	// Link a provider code change during claimed execution.
 	//
-	// POST /api/v1/claims/{claim_id}/merge-requests
-	LinkTaskMergeRequest(ctx context.Context, request *TaskMergeRequestLink, params LinkTaskMergeRequestParams) (LinkTaskMergeRequestRes, error)
+	// POST /api/v1/claims/{claim_id}/code-changes
+	LinkTaskCodeChange(ctx context.Context, request *TaskCodeChangeLink, params LinkTaskCodeChangeParams) (LinkTaskCodeChangeRes, error)
 	// ListAgentConversations invokes listAgentConversations operation.
 	//
 	// List visible Agent conversation configurations.
@@ -408,16 +408,16 @@ type Invoker interface {
 	RestoreTask(ctx context.Context, params RestoreTaskParams) (RestoreTaskRes, error)
 	// UnbindProjectRepository invokes unbindProjectRepository operation.
 	//
-	// Unbind a GitLab repository from a Project.
+	// Unbind a repository from a Project.
 	//
 	// DELETE /api/v1/projects/{number}/repositories/{repository_id}
 	UnbindProjectRepository(ctx context.Context, params UnbindProjectRepositoryParams) (UnbindProjectRepositoryRes, error)
-	// UnlinkTaskMergeRequest invokes unlinkTaskMergeRequest operation.
+	// UnlinkTaskCodeChange invokes unlinkTaskCodeChange operation.
 	//
-	// Unlink a GitLab merge request during claimed execution.
+	// Unlink a provider code change during claimed execution.
 	//
-	// DELETE /api/v1/claims/{claim_id}/merge-requests/{link_id}
-	UnlinkTaskMergeRequest(ctx context.Context, params UnlinkTaskMergeRequestParams) (UnlinkTaskMergeRequestRes, error)
+	// DELETE /api/v1/claims/{claim_id}/code-changes/{link_id}
+	UnlinkTaskCodeChange(ctx context.Context, params UnlinkTaskCodeChangeParams) (UnlinkTaskCodeChangeRes, error)
 	// UpdateAgentConversation invokes updateAgentConversation operation.
 	//
 	// Update an Agent conversation configuration.
@@ -1441,7 +1441,7 @@ func (c *Client) sendArchiveTask(ctx context.Context, params ArchiveTaskParams) 
 
 // BindProjectRepository invokes bindProjectRepository operation.
 //
-// Bind a GitLab repository to a Project by URL.
+// Bind a repository to a Project by URL.
 //
 // POST /api/v1/projects/{number}/repositories
 func (c *Client) BindProjectRepository(ctx context.Context, request *ProjectRepositoryBind, params BindProjectRepositoryParams) (BindProjectRepositoryRes, error) {
@@ -5983,9 +5983,9 @@ func (c *Client) sendGetTaskAttachmentContent(ctx context.Context, params GetTas
 
 // GetTaskDelivery invokes getTaskDelivery operation.
 //
-// Get active and frozen Task merge-request delivery state.
+// Get active and frozen Task code-change delivery state.
 //
-// GET /api/v1/tasks/{number}/merge-requests
+// GET /api/v1/tasks/{number}/code-changes
 func (c *Client) GetTaskDelivery(ctx context.Context, params GetTaskDeliveryParams) (GetTaskDeliveryRes, error) {
 	res, err := c.sendGetTaskDelivery(ctx, params)
 	return res, err
@@ -5995,7 +5995,7 @@ func (c *Client) sendGetTaskDelivery(ctx context.Context, params GetTaskDelivery
 	otelAttrs := []attribute.KeyValue{
 		otelogen.OperationID("getTaskDelivery"),
 		semconv.HTTPRequestMethodKey.String("GET"),
-		semconv.URLTemplateKey.String("/api/v1/tasks/{number}/merge-requests"),
+		semconv.URLTemplateKey.String("/api/v1/tasks/{number}/code-changes"),
 	}
 	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
 
@@ -6048,7 +6048,7 @@ func (c *Client) sendGetTaskDelivery(ctx context.Context, params GetTaskDelivery
 		}
 		pathParts[1] = encoded
 	}
-	pathParts[2] = "/merge-requests"
+	pathParts[2] = "/code-changes"
 	uri.AddPathParts(u, pathParts[:]...)
 
 	stage = "EncodeRequest"
@@ -6415,21 +6415,21 @@ func (c *Client) sendGetTaskWorkPacket(ctx context.Context, params GetTaskWorkPa
 	return result, nil
 }
 
-// LinkTaskMergeRequest invokes linkTaskMergeRequest operation.
+// LinkTaskCodeChange invokes linkTaskCodeChange operation.
 //
-// Link a GitLab merge request during claimed execution.
+// Link a provider code change during claimed execution.
 //
-// POST /api/v1/claims/{claim_id}/merge-requests
-func (c *Client) LinkTaskMergeRequest(ctx context.Context, request *TaskMergeRequestLink, params LinkTaskMergeRequestParams) (LinkTaskMergeRequestRes, error) {
-	res, err := c.sendLinkTaskMergeRequest(ctx, request, params)
+// POST /api/v1/claims/{claim_id}/code-changes
+func (c *Client) LinkTaskCodeChange(ctx context.Context, request *TaskCodeChangeLink, params LinkTaskCodeChangeParams) (LinkTaskCodeChangeRes, error) {
+	res, err := c.sendLinkTaskCodeChange(ctx, request, params)
 	return res, err
 }
 
-func (c *Client) sendLinkTaskMergeRequest(ctx context.Context, request *TaskMergeRequestLink, params LinkTaskMergeRequestParams) (res LinkTaskMergeRequestRes, err error) {
+func (c *Client) sendLinkTaskCodeChange(ctx context.Context, request *TaskCodeChangeLink, params LinkTaskCodeChangeParams) (res LinkTaskCodeChangeRes, err error) {
 	otelAttrs := []attribute.KeyValue{
-		otelogen.OperationID("linkTaskMergeRequest"),
+		otelogen.OperationID("linkTaskCodeChange"),
 		semconv.HTTPRequestMethodKey.String("POST"),
-		semconv.URLTemplateKey.String("/api/v1/claims/{claim_id}/merge-requests"),
+		semconv.URLTemplateKey.String("/api/v1/claims/{claim_id}/code-changes"),
 	}
 	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
 
@@ -6445,7 +6445,7 @@ func (c *Client) sendLinkTaskMergeRequest(ctx context.Context, request *TaskMerg
 	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
 
 	// Start a span for this request.
-	ctx, span := c.cfg.Tracer.Start(ctx, LinkTaskMergeRequestOperation,
+	ctx, span := c.cfg.Tracer.Start(ctx, LinkTaskCodeChangeOperation,
 		trace.WithAttributes(otelAttrs...),
 		clientSpanKind,
 	)
@@ -6482,7 +6482,7 @@ func (c *Client) sendLinkTaskMergeRequest(ctx context.Context, request *TaskMerg
 		}
 		pathParts[1] = encoded
 	}
-	pathParts[2] = "/merge-requests"
+	pathParts[2] = "/code-changes"
 	uri.AddPathParts(u, pathParts[:]...)
 
 	stage = "EncodeRequest"
@@ -6490,7 +6490,7 @@ func (c *Client) sendLinkTaskMergeRequest(ctx context.Context, request *TaskMerg
 	if err != nil {
 		return res, errors.Wrap(err, "create request")
 	}
-	if err := encodeLinkTaskMergeRequestRequest(request, r); err != nil {
+	if err := encodeLinkTaskCodeChangeRequest(request, r); err != nil {
 		return res, errors.Wrap(err, "encode request")
 	}
 
@@ -6555,7 +6555,7 @@ func (c *Client) sendLinkTaskMergeRequest(ctx context.Context, request *TaskMerg
 		var satisfied bitset
 		{
 			stage = "Security:BearerAuth"
-			switch err := c.securityBearerAuth(ctx, LinkTaskMergeRequestOperation, r); {
+			switch err := c.securityBearerAuth(ctx, LinkTaskCodeChangeOperation, r); {
 			case err == nil: // if NO error
 				satisfied[0] |= 1 << 0
 			case errors.Is(err, ogenerrors.ErrSkipClientSecurity):
@@ -6566,7 +6566,7 @@ func (c *Client) sendLinkTaskMergeRequest(ctx context.Context, request *TaskMerg
 		}
 		{
 			stage = "Security:SessionCookie"
-			switch err := c.securitySessionCookie(ctx, LinkTaskMergeRequestOperation, r); {
+			switch err := c.securitySessionCookie(ctx, LinkTaskCodeChangeOperation, r); {
 			case err == nil: // if NO error
 				satisfied[0] |= 1 << 1
 			case errors.Is(err, ogenerrors.ErrSkipClientSecurity):
@@ -6604,7 +6604,7 @@ func (c *Client) sendLinkTaskMergeRequest(ctx context.Context, request *TaskMerg
 	defer body.Close()
 
 	stage = "DecodeResponse"
-	result, err := decodeLinkTaskMergeRequestResponse(resp)
+	result, err := decodeLinkTaskCodeChangeResponse(resp)
 	if err != nil {
 		return res, errors.Wrap(err, "decode response")
 	}
@@ -11587,7 +11587,7 @@ func (c *Client) sendRestoreTask(ctx context.Context, params RestoreTaskParams) 
 
 // UnbindProjectRepository invokes unbindProjectRepository operation.
 //
-// Unbind a GitLab repository from a Project.
+// Unbind a repository from a Project.
 //
 // DELETE /api/v1/projects/{number}/repositories/{repository_id}
 func (c *Client) UnbindProjectRepository(ctx context.Context, params UnbindProjectRepositoryParams) (UnbindProjectRepositoryRes, error) {
@@ -11757,21 +11757,21 @@ func (c *Client) sendUnbindProjectRepository(ctx context.Context, params UnbindP
 	return result, nil
 }
 
-// UnlinkTaskMergeRequest invokes unlinkTaskMergeRequest operation.
+// UnlinkTaskCodeChange invokes unlinkTaskCodeChange operation.
 //
-// Unlink a GitLab merge request during claimed execution.
+// Unlink a provider code change during claimed execution.
 //
-// DELETE /api/v1/claims/{claim_id}/merge-requests/{link_id}
-func (c *Client) UnlinkTaskMergeRequest(ctx context.Context, params UnlinkTaskMergeRequestParams) (UnlinkTaskMergeRequestRes, error) {
-	res, err := c.sendUnlinkTaskMergeRequest(ctx, params)
+// DELETE /api/v1/claims/{claim_id}/code-changes/{link_id}
+func (c *Client) UnlinkTaskCodeChange(ctx context.Context, params UnlinkTaskCodeChangeParams) (UnlinkTaskCodeChangeRes, error) {
+	res, err := c.sendUnlinkTaskCodeChange(ctx, params)
 	return res, err
 }
 
-func (c *Client) sendUnlinkTaskMergeRequest(ctx context.Context, params UnlinkTaskMergeRequestParams) (res UnlinkTaskMergeRequestRes, err error) {
+func (c *Client) sendUnlinkTaskCodeChange(ctx context.Context, params UnlinkTaskCodeChangeParams) (res UnlinkTaskCodeChangeRes, err error) {
 	otelAttrs := []attribute.KeyValue{
-		otelogen.OperationID("unlinkTaskMergeRequest"),
+		otelogen.OperationID("unlinkTaskCodeChange"),
 		semconv.HTTPRequestMethodKey.String("DELETE"),
-		semconv.URLTemplateKey.String("/api/v1/claims/{claim_id}/merge-requests/{link_id}"),
+		semconv.URLTemplateKey.String("/api/v1/claims/{claim_id}/code-changes/{link_id}"),
 	}
 	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
 
@@ -11787,7 +11787,7 @@ func (c *Client) sendUnlinkTaskMergeRequest(ctx context.Context, params UnlinkTa
 	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
 
 	// Start a span for this request.
-	ctx, span := c.cfg.Tracer.Start(ctx, UnlinkTaskMergeRequestOperation,
+	ctx, span := c.cfg.Tracer.Start(ctx, UnlinkTaskCodeChangeOperation,
 		trace.WithAttributes(otelAttrs...),
 		clientSpanKind,
 	)
@@ -11824,7 +11824,7 @@ func (c *Client) sendUnlinkTaskMergeRequest(ctx context.Context, params UnlinkTa
 		}
 		pathParts[1] = encoded
 	}
-	pathParts[2] = "/merge-requests/"
+	pathParts[2] = "/code-changes/"
 	{
 		// Encode "link_id" parameter.
 		e := uri.NewPathEncoder(uri.PathEncoderConfig{
@@ -11912,7 +11912,7 @@ func (c *Client) sendUnlinkTaskMergeRequest(ctx context.Context, params UnlinkTa
 		var satisfied bitset
 		{
 			stage = "Security:BearerAuth"
-			switch err := c.securityBearerAuth(ctx, UnlinkTaskMergeRequestOperation, r); {
+			switch err := c.securityBearerAuth(ctx, UnlinkTaskCodeChangeOperation, r); {
 			case err == nil: // if NO error
 				satisfied[0] |= 1 << 0
 			case errors.Is(err, ogenerrors.ErrSkipClientSecurity):
@@ -11923,7 +11923,7 @@ func (c *Client) sendUnlinkTaskMergeRequest(ctx context.Context, params UnlinkTa
 		}
 		{
 			stage = "Security:SessionCookie"
-			switch err := c.securitySessionCookie(ctx, UnlinkTaskMergeRequestOperation, r); {
+			switch err := c.securitySessionCookie(ctx, UnlinkTaskCodeChangeOperation, r); {
 			case err == nil: // if NO error
 				satisfied[0] |= 1 << 1
 			case errors.Is(err, ogenerrors.ErrSkipClientSecurity):
@@ -11961,7 +11961,7 @@ func (c *Client) sendUnlinkTaskMergeRequest(ctx context.Context, params UnlinkTa
 	defer body.Close()
 
 	stage = "DecodeResponse"
-	result, err := decodeUnlinkTaskMergeRequestResponse(resp)
+	result, err := decodeUnlinkTaskCodeChangeResponse(resp)
 	if err != nil {
 		return res, errors.Wrap(err, "decode response")
 	}

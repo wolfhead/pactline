@@ -114,15 +114,17 @@ entirely unscheduled work available for explicit placement.
 
 ## Repository delivery evidence
 
-A GitLab Connection is a repository-scoped machine identity created and
+A Repository Connection is a repository-scoped machine identity created and
 managed by the platform Administrator. One active Connection identifies
-exactly one GitLab origin and numeric project ID. Its read credential is
-encrypted at rest and never returned by an API. Pactline uses it only for
-read-only project and Merge Request requests; it does not write to GitLab,
-merge code, trigger CI, or treat provider state as Task workflow authority.
+exactly one provider, origin, and provider repository ID. Its read credential
+is encrypted at rest and never returned by an API. Pactline uses it only for
+read-only repository and code-change requests; it does not write to the
+provider, merge code, trigger CI, or treat provider state as Task workflow
+authority. The provider-neutral contract admits GitLab and GitHub; the
+available adapter determines which provider can be used at runtime.
 
 A Project administrator authorizes a repository for one Project by pasting its
-GitLab repository URL. Pactline matches an existing active Connection and
+repository URL. Pactline matches an existing active Connection and
 performs live authentication before atomically creating the Project binding.
 Connections may be shared by several Projects, and one Project may authorize
 several repositories. The binding authorizes evidence only; it does not define
@@ -130,7 +132,7 @@ a local checkout location or permit a Task to cross its immutable Project
 boundary.
 
 During an owned execution Claim, a person or Agent may link or unlink several
-GitLab Merge Requests from the Task's authorized repositories. These commands
+Pull Requests or Merge Requests from the Task's authorized repositories. These commands
 preserve Claim ownership and Claim version while incrementing Task version.
 Work submission remains repeatable and does not freeze the set. A review Claim
 cannot edit delivery links.
@@ -138,15 +140,15 @@ cannot edit delivery links.
 Completing execution refreshes the active links and freezes their exact,
 ordered identities and observations in the immutable completion Thread Item
 for the new review cycle. The review read model presents that frozen snapshot
-beside current GitLab observations and classifies each MR as unchanged, moved,
+beside current provider observations and classifies each code change as unchanged, moved,
 merged, missing, unauthorized, unreachable, or disconnected. Provider failure
 does not by itself block completion because each link required a successful
 initial resolution; the frozen snapshot retains last-known metadata and the
 failure status for the reviewer.
 
-GitLab refresh is bounded and on demand through the dedicated Task delivery
-read. Ordinary Task lists never contact GitLab, and Pactline has no scheduled
-polling or hidden refresh loop. A merged MR is evidence only: Code Review is
+Provider refresh is bounded and on demand through the dedicated Task delivery
+read. Ordinary Task lists never contact repository providers, and Pactline has no scheduled
+polling or hidden refresh loop. A merged code change is evidence only: Code Review is
 review work, and current-cycle Acceptance Checks remain the sole authority for
 accepting the Task.
 

@@ -29,8 +29,8 @@ func cleanupTask(t *testing.T, db *store.DB, id uuid.UUID) {
 	t.Cleanup(func() {
 		_, err := db.Pool.Exec(context.Background(), `
 			DELETE FROM business_audit_events
-			WHERE entity_type='task_merge_request' AND entity_id IN (
-				SELECT id FROM task_merge_requests WHERE task_id=$1
+			WHERE entity_type='task_code_change' AND entity_id IN (
+				SELECT id FROM task_code_changes WHERE task_id=$1
 			)`, id)
 		require.NoError(t, err)
 		_, err = db.Pool.Exec(context.Background(),
@@ -45,7 +45,7 @@ func cleanupTask(t *testing.T, db *store.DB, id uuid.UUID) {
 		_, err = db.Pool.Exec(context.Background(),
 			`DELETE FROM acceptance_criteria WHERE task_id=$1`, id)
 		require.NoError(t, err)
-		_, err = db.Pool.Exec(context.Background(), `DELETE FROM task_merge_requests WHERE task_id=$1`, id)
+		_, err = db.Pool.Exec(context.Background(), `DELETE FROM task_code_changes WHERE task_id=$1`, id)
 		require.NoError(t, err)
 		_, err = db.Pool.Exec(context.Background(), `DELETE FROM tasks WHERE id = $1`, id)
 		require.NoError(t, err)

@@ -1382,8 +1382,8 @@ func (s *Server) decodeDeleteCriterionRequest(r *http.Request) (
 	}
 }
 
-func (s *Server) decodeLinkTaskMergeRequestRequest(r *http.Request) (
-	req *TaskMergeRequestLink,
+func (s *Server) decodeLinkTaskCodeChangeRequest(r *http.Request) (
+	req *TaskCodeChangeLink,
 	rawBody []byte,
 	close func() error,
 	rerr error,
@@ -1430,7 +1430,7 @@ func (s *Server) decodeLinkTaskMergeRequestRequest(r *http.Request) (
 		rawBody = append(rawBody, buf...)
 		d := jx.DecodeBytes(buf)
 
-		var request TaskMergeRequestLink
+		var request TaskCodeChangeLink
 		if err := func() error {
 			if err := request.Decode(d); err != nil {
 				return err

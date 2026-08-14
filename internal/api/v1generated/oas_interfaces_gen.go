@@ -141,8 +141,8 @@ type GetTaskWorkPacketRes interface {
 	getTaskWorkPacketRes()
 }
 
-type LinkTaskMergeRequestRes interface {
-	linkTaskMergeRequestRes()
+type LinkTaskCodeChangeRes interface {
+	linkTaskCodeChangeRes()
 }
 
 type ListAgentConversationsRes interface {
@@ -257,8 +257,8 @@ type UnbindProjectRepositoryRes interface {
 	unbindProjectRepositoryRes()
 }
 
-type UnlinkTaskMergeRequestRes interface {
-	unlinkTaskMergeRequestRes()
+type UnlinkTaskCodeChangeRes interface {
+	unlinkTaskCodeChangeRes()
 }
 
 type UpdateAgentConversationRes interface {

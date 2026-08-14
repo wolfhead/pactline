@@ -127,8 +127,8 @@ Its independent installation and command guide is
 
 External Harnesses can inspect `pactline capabilities --json`, discover
 stage-aware bounded queues, and read one server-aggregated compact work packet
-for a Task or explicit Claim. GitLab Merge Request delivery is linked through
-Claim-centric CLI commands; repository workers do not need the Pactline Token.
+for a Task or explicit Claim. Pull Request and Merge Request delivery is linked
+through Claim-centric CLI commands; repository workers do not need the Pactline Token.
 Reviewers claim `in_review.available` work explicitly, record server-derived
 acceptance evidence, and either request changes or accept the Task. After a
 Claim opens a blocking Issue, the same CLI can inspect and discuss its Thread,

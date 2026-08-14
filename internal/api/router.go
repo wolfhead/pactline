@@ -25,12 +25,12 @@ type AuthSurface struct {
 }
 
 type RouterOptions struct {
-	Auth                   AuthSurface
-	V1                     http.Handler
-	OpenAPI                http.Handler
-	AgentStatus            channel.StatusProvider
-	AdminTools             *notification.TestService
-	AdminGitLabConnections *application.GitLabConnectionService
+	Auth                       AuthSurface
+	V1                         http.Handler
+	OpenAPI                    http.Handler
+	AgentStatus                channel.StatusProvider
+	AdminTools                 *notification.TestService
+	AdminRepositoryConnections *application.RepositoryConnectionService
 }
 
 type accessAuditStore interface {
@@ -91,13 +91,13 @@ func NewRouter(
 		protected.HandleFunc("GET /api/admin/tools/notifications/recipients", adminTools.listNotificationRecipients)
 		protected.HandleFunc("POST /api/admin/tools/notifications/test", adminTools.requestDMTest)
 	}
-	if options.AdminGitLabConnections != nil {
-		adminGitLab := &adminGitLabHandler{connections: options.AdminGitLabConnections}
-		protected.HandleFunc("GET /api/admin/gitlab-connections", adminGitLab.list)
-		protected.HandleFunc("POST /api/admin/gitlab-connections", adminGitLab.create)
-		protected.HandleFunc("PATCH /api/admin/gitlab-connections/{id}/credential", adminGitLab.rotateCredential)
-		protected.HandleFunc("POST /api/admin/gitlab-connections/{id}/validate", adminGitLab.validate)
-		protected.HandleFunc("POST /api/admin/gitlab-connections/{id}/disable", adminGitLab.disable)
+	if options.AdminRepositoryConnections != nil {
+		adminConnections := &adminRepositoryConnectionHandler{connections: options.AdminRepositoryConnections}
+		protected.HandleFunc("GET /api/admin/repository-connections", adminConnections.list)
+		protected.HandleFunc("POST /api/admin/repository-connections", adminConnections.create)
+		protected.HandleFunc("PATCH /api/admin/repository-connections/{id}/credential", adminConnections.rotateCredential)
+		protected.HandleFunc("POST /api/admin/repository-connections/{id}/validate", adminConnections.validate)
+		protected.HandleFunc("POST /api/admin/repository-connections/{id}/disable", adminConnections.disable)
 	}
 
 	root := http.NewServeMux()

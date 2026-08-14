@@ -451,7 +451,7 @@ func (s *TaskWorkflowStore) CompleteExecutionWithDelivery(
 	claimID uuid.UUID,
 	expectedTaskVersion, expectedClaimVersion int64,
 	summary string,
-	mergeRequests []domain.MergeRequestSnapshot,
+	codeChanges []domain.CodeChangeSnapshot,
 	actor domain.Actor,
 	operation domain.OperationActor,
 	now time.Time,
@@ -477,7 +477,7 @@ func (s *TaskWorkflowStore) CompleteExecutionWithDelivery(
 		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, domain.ThreadItem{}, err
 	}
 	payload, err := executionCompletionPayload(
-		ctx, tx, task, task.Lifecycle.ReviewCycle, mergeRequests,
+		ctx, tx, task, task.Lifecycle.ReviewCycle, codeChanges,
 	)
 	if err != nil {
 		return TaskWorkflowSnapshot{}, domain.TaskStageClaim{}, domain.ThreadItem{}, err
@@ -648,50 +648,50 @@ func executionCompletionPayload(
 	tx pgx.Tx,
 	task workflowTask,
 	reviewCycle int64,
-	mergeRequests []domain.MergeRequestSnapshot,
+	codeChanges []domain.CodeChangeSnapshot,
 ) (domain.ExecutionCompletedPayload, error) {
 	payload := domain.ExecutionCompletedPayload{
 		ReviewCycle: reviewCycle,
-		MergeRequests: append([]domain.MergeRequestSnapshot{}, mergeRequests...),
+		CodeChanges: append([]domain.CodeChangeSnapshot{}, codeChanges...),
 	}
 	rows, err := tx.Query(ctx, `
 		SELECT id
-		FROM task_merge_requests
+		FROM task_code_changes
 		WHERE task_id=$1 AND unlinked_at IS NULL
-		ORDER BY project_repository_id,merge_request_iid,id`, task.TaskID)
+		ORDER BY project_repository_id,kind,change_number,id`, task.TaskID)
 	if err != nil {
-		return payload, fmt.Errorf("list active merge requests for completion: %w", err)
+		return payload, fmt.Errorf("list active code changes for completion: %w", err)
 	}
-	activeMergeRequestIDs := []uuid.UUID{}
+	activeCodeChangeIDs := []uuid.UUID{}
 	for rows.Next() {
 		var id uuid.UUID
 		if err := rows.Scan(&id); err != nil {
 			rows.Close()
-			return payload, fmt.Errorf("scan active merge request for completion: %w", err)
+			return payload, fmt.Errorf("scan active code change for completion: %w", err)
 		}
-		activeMergeRequestIDs = append(activeMergeRequestIDs, id)
+		activeCodeChangeIDs = append(activeCodeChangeIDs, id)
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
-		return payload, fmt.Errorf("iterate active merge requests for completion: %w", err)
+		return payload, fmt.Errorf("iterate active code changes for completion: %w", err)
 	}
 	rows.Close()
-	if len(activeMergeRequestIDs) != len(payload.MergeRequests) {
-		return payload, fmt.Errorf("%w: Task merge request delivery changed", domain.ErrConflict)
+	if len(activeCodeChangeIDs) != len(payload.CodeChanges) {
+		return payload, fmt.Errorf("%w: Task code change delivery changed", domain.ErrConflict)
 	}
-	preparedByID := make(map[uuid.UUID]domain.MergeRequestSnapshot, len(payload.MergeRequests))
-	for _, snapshot := range payload.MergeRequests {
+	preparedByID := make(map[uuid.UUID]domain.CodeChangeSnapshot, len(payload.CodeChanges))
+	for _, snapshot := range payload.CodeChanges {
 		if err := snapshot.Validate(); err != nil {
 			return payload, err
 		}
-		if _, duplicate := preparedByID[snapshot.TaskMergeRequestID]; duplicate {
-			return payload, fmt.Errorf("%w: duplicate merge request delivery snapshot", domain.ErrInvalidInput)
+		if _, duplicate := preparedByID[snapshot.TaskCodeChangeID]; duplicate {
+			return payload, fmt.Errorf("%w: duplicate code change delivery snapshot", domain.ErrInvalidInput)
 		}
-		preparedByID[snapshot.TaskMergeRequestID] = snapshot
+		preparedByID[snapshot.TaskCodeChangeID] = snapshot
 	}
-	for _, id := range activeMergeRequestIDs {
+	for _, id := range activeCodeChangeIDs {
 		if _, ok := preparedByID[id]; !ok {
-			return payload, fmt.Errorf("%w: Task merge request delivery changed", domain.ErrConflict)
+			return payload, fmt.Errorf("%w: Task code change delivery changed", domain.ErrConflict)
 		}
 	}
 	rows, err = tx.Query(ctx, `

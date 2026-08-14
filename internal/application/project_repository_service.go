@@ -12,11 +12,12 @@ import (
 )
 
 type ProjectRepositoryService struct {
-	Repositories *store.ProjectRepositoryStore
-	Connections  *store.GitLabConnectionStore
-	GitLab       *GitLabConnectionService
-	Access       *ProjectAccessService
-	Now          func() time.Time
+	Repositories      *store.ProjectRepositoryStore
+	Connections       *store.RepositoryConnectionStore
+	ConnectionService *RepositoryConnectionService
+	Providers         *RepositoryProviderRegistry
+	Access            *ProjectAccessService
+	Now               func() time.Time
 }
 
 func (s *ProjectRepositoryService) List(
@@ -52,7 +53,7 @@ func (s *ProjectRepositoryService) Bind(
 			"%w: archived Projects are read-only", domain.ErrConflict,
 		)
 	}
-	reference, err := domain.ParseGitLabRepositoryURL(repositoryURL)
+	reference, err := s.Providers.MatchRepositoryURL(repositoryURL)
 	if err != nil {
 		return store.ProjectRepositoryMutation{}, err
 	}
@@ -60,14 +61,15 @@ func (s *ProjectRepositoryService) Bind(
 	if err != nil {
 		return store.ProjectRepositoryMutation{}, err
 	}
-	validation, err := s.GitLab.validateExisting(ctx, connection, operation.RequestID)
+	validation, err := s.ConnectionService.validateExisting(ctx, connection, operation.RequestID)
 	if err != nil {
 		return store.ProjectRepositoryMutation{}, err
 	}
 	if validation.Reference.Origin != reference.Origin ||
+		validation.Reference.Provider != reference.Provider ||
 		validation.Reference.PathLookupKey != reference.PathLookupKey {
 		return store.ProjectRepositoryMutation{}, fmt.Errorf(
-			"%w: repository URL does not match the GitLab Connection", domain.ErrConflict,
+			"%w: repository URL does not match the Repository Connection", domain.ErrConflict,
 		)
 	}
 	return s.Repositories.Bind(

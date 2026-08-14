@@ -266,8 +266,8 @@ func encodeDeleteCriterionRequest(
 	return nil
 }
 
-func encodeLinkTaskMergeRequestRequest(
-	req *TaskMergeRequestLink,
+func encodeLinkTaskCodeChangeRequest(
+	req *TaskCodeChangeLink,
 	r *http.Request,
 ) error {
 	const contentType = "application/json"

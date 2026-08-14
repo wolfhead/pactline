@@ -21144,7 +21144,7 @@ func decodeGetTaskWorkPacketResponse(resp *http.Response) (res GetTaskWorkPacket
 	return res, nil
 }
 
-func decodeLinkTaskMergeRequestResponse(resp *http.Response) (res LinkTaskMergeRequestRes, _ error) {
+func decodeLinkTaskCodeChangeResponse(resp *http.Response) (res LinkTaskCodeChangeRes, _ error) {
 	switch resp.StatusCode {
 	case 201:
 		// Code 201.
@@ -21160,7 +21160,7 @@ func decodeLinkTaskMergeRequestResponse(resp *http.Response) (res LinkTaskMergeR
 			}
 			d := jx.DecodeBytes(buf)
 
-			var response TaskMergeRequestMutation
+			var response TaskCodeChangeMutation
 			if err := func() error {
 				if err := response.Decode(d); err != nil {
 					return err
@@ -21186,7 +21186,7 @@ func decodeLinkTaskMergeRequestResponse(resp *http.Response) (res LinkTaskMergeR
 			}(); err != nil {
 				return res, errors.Wrap(err, "validate")
 			}
-			var wrapper TaskMergeRequestChangedHeaders
+			var wrapper TaskCodeChangeChangedHeaders
 			wrapper.Response = response
 			h := uri.NewHeaderDecoder(resp.Header)
 			// Parse "Etag" header.
@@ -21333,7 +21333,7 @@ func decodeLinkTaskMergeRequestResponse(resp *http.Response) (res LinkTaskMergeR
 		}
 	}
 	// Default response.
-	res, err := func() (res LinkTaskMergeRequestRes, err error) {
+	res, err := func() (res LinkTaskCodeChangeRes, err error) {
 		ct, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
 		if err != nil {
 			return res, errors.Wrap(err, "parse media type")
@@ -36822,7 +36822,7 @@ func decodeUnbindProjectRepositoryResponse(resp *http.Response) (res UnbindProje
 	return res, nil
 }
 
-func decodeUnlinkTaskMergeRequestResponse(resp *http.Response) (res UnlinkTaskMergeRequestRes, _ error) {
+func decodeUnlinkTaskCodeChangeResponse(resp *http.Response) (res UnlinkTaskCodeChangeRes, _ error) {
 	switch resp.StatusCode {
 	case 200:
 		// Code 200.
@@ -36838,7 +36838,7 @@ func decodeUnlinkTaskMergeRequestResponse(resp *http.Response) (res UnlinkTaskMe
 			}
 			d := jx.DecodeBytes(buf)
 
-			var response TaskMergeRequestMutation
+			var response TaskCodeChangeMutation
 			if err := func() error {
 				if err := response.Decode(d); err != nil {
 					return err
@@ -36864,7 +36864,7 @@ func decodeUnlinkTaskMergeRequestResponse(resp *http.Response) (res UnlinkTaskMe
 			}(); err != nil {
 				return res, errors.Wrap(err, "validate")
 			}
-			var wrapper TaskMergeRequestChangedHeaders
+			var wrapper TaskCodeChangeChangedHeaders
 			wrapper.Response = response
 			h := uri.NewHeaderDecoder(resp.Header)
 			// Parse "Etag" header.
@@ -37011,7 +37011,7 @@ func decodeUnlinkTaskMergeRequestResponse(resp *http.Response) (res UnlinkTaskMe
 		}
 	}
 	// Default response.
-	res, err := func() (res UnlinkTaskMergeRequestRes, err error) {
+	res, err := func() (res UnlinkTaskCodeChangeRes, err error) {
 		ct, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
 		if err != nil {
 			return res, errors.Wrap(err, "parse media type")

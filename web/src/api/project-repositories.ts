@@ -3,9 +3,10 @@ import { etagForVersion, requireVersioned, v1Delete, v1Get, v1Post } from './v1/
 export interface ProjectRepository {
   id: string
   canonical_web_url: string
-  label: string
-  origin: string
-  gitlab_project_id: number
+	label: string
+	provider: 'gitlab' | 'github'
+	origin: string
+	provider_repository_id: string
   path_with_namespace: string
   default_branch: string
   bound_at: string

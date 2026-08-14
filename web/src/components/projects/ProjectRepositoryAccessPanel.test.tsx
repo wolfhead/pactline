@@ -22,7 +22,7 @@ describe('ProjectRepositoryAccessPanel', () => {
       project_version: 4,
       repository: {
         id: 'repository-1', canonical_web_url: 'https://gitlab.example/team/app',
-        label: 'App', origin: 'https://gitlab.example', gitlab_project_id: 42,
+		label: 'App', provider: 'gitlab', origin: 'https://gitlab.example', provider_repository_id: '42',
         path_with_namespace: 'team/app', default_branch: 'main', bound_at: '2026-08-13T00:00:00Z',
       },
     })
@@ -41,7 +41,7 @@ describe('ProjectRepositoryAccessPanel', () => {
       />,
     )
     await screen.findByText('尚未绑定代码仓库。系统管理员需要先为仓库创建 Connection。')
-    fireEvent.change(screen.getByLabelText('GitLab 仓库地址'), {
+	fireEvent.change(screen.getByLabelText('代码仓库地址'), {
       target: { value: 'https://gitlab.example/team/app' },
     })
     fireEvent.click(screen.getByRole('button', { name: '绑定并鉴权' }))
@@ -62,7 +62,7 @@ describe('ProjectRepositoryAccessPanel', () => {
       />,
     )
     await screen.findByText('尚未绑定代码仓库。系统管理员需要先为仓库创建 Connection。')
-    expect(screen.queryByLabelText('GitLab 仓库地址')).not.toBeInTheDocument()
+	expect(screen.queryByLabelText('代码仓库地址')).not.toBeInTheDocument()
   })
 
   it('does not present a loading failure as an unbound Project', async () => {

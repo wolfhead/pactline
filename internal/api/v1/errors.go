@@ -44,25 +44,25 @@ func ErrorHandler(_ context.Context, w http.ResponseWriter, r *http.Request, err
 		}
 	case errors.Is(err, domain.ErrIntegrationNotConfigured):
 		problem.Status, problem.Title = http.StatusServiceUnavailable, "Integration not configured"
-		problem.Detail = "GitLab credential encryption is not configured."
+		problem.Detail = "The requested repository integration is not configured."
 		problem.Code = "INTEGRATION_NOT_CONFIGURED"
 		retryable := false
 		problem.Retryable = &retryable
 	case errors.Is(err, domain.ErrProviderUnauthorized):
 		problem.Status, problem.Title = http.StatusBadGateway, "Provider authorization failed"
-		problem.Detail = "GitLab rejected the configured credential."
+		problem.Detail = "The repository provider rejected the configured credential."
 		problem.Code = "PROVIDER_UNAUTHORIZED"
 		retryable := false
 		problem.Retryable = &retryable
 	case errors.Is(err, domain.ErrProviderUnavailable):
 		problem.Status, problem.Title = http.StatusServiceUnavailable, "Provider unavailable"
-		problem.Detail = "GitLab is temporarily unavailable."
+		problem.Detail = "The repository provider is temporarily unavailable."
 		problem.Code = "PROVIDER_UNAVAILABLE"
 		retryable := true
 		problem.Retryable = &retryable
 	case errors.Is(err, domain.ErrProviderRejected):
 		problem.Status, problem.Title = http.StatusBadGateway, "Provider rejected request"
-		problem.Detail = "GitLab returned an invalid or rejected response."
+		problem.Detail = "The repository provider returned an invalid or rejected response."
 		problem.Code = "PROVIDER_REJECTED"
 		retryable := false
 		problem.Retryable = &retryable

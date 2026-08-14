@@ -15,7 +15,7 @@ import (
 
 type ProjectRepositoryWithConnection struct {
 	Repository domain.ProjectRepository
-	Connection domain.GitLabConnection
+	Connection domain.RepositoryConnection
 }
 
 type ProjectRepositoryMutation struct {
@@ -37,9 +37,9 @@ func (s *ProjectRepositoryStore) ListActive(
 		SELECT
 			repository.id, repository.project_id, repository.connection_id,
 			repository.bound_by, repository.bound_at, repository.unbound_by, repository.unbound_at,
-			`+prefixedGitLabConnectionColumns("connection")+`
+			`+prefixedRepositoryConnectionColumns("connection")+`
 		FROM project_repositories repository
-		JOIN gitlab_connections connection ON connection.id=repository.connection_id
+		JOIN repository_connections connection ON connection.id=repository.connection_id
 		WHERE repository.project_id=$1 AND repository.unbound_at IS NULL
 		ORDER BY connection.path_lookup_key, repository.id`, projectID)
 	if err != nil {
@@ -60,18 +60,19 @@ func (s *ProjectRepositoryStore) ListActive(
 func (s *ProjectRepositoryStore) FindActiveByReference(
 	ctx context.Context,
 	projectID uuid.UUID,
-	reference domain.GitLabRepositoryReference,
+	reference domain.RepositoryReference,
 ) (ProjectRepositoryWithConnection, error) {
 	item, err := scanProjectRepositoryWithConnection(s.db.Pool.QueryRow(ctx, `
 		SELECT
 			repository.id, repository.project_id, repository.connection_id,
 			repository.bound_by, repository.bound_at, repository.unbound_by, repository.unbound_at,
-			`+prefixedGitLabConnectionColumns("connection")+`
+			`+prefixedRepositoryConnectionColumns("connection")+`
 		FROM project_repositories repository
-		JOIN gitlab_connections connection ON connection.id=repository.connection_id
+		JOIN repository_connections connection ON connection.id=repository.connection_id
 		WHERE repository.project_id=$1 AND repository.unbound_at IS NULL
-		  AND connection.status='active' AND connection.origin=$2 AND connection.path_lookup_key=$3`,
-		projectID, reference.Origin, reference.PathLookupKey,
+		  AND connection.status='active' AND connection.provider=$2
+		  AND connection.origin=$3 AND connection.path_lookup_key=$4`,
+		projectID, reference.Provider, reference.Origin, reference.PathLookupKey,
 	))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ProjectRepositoryWithConnection{}, domain.ErrNotFound
@@ -109,17 +110,17 @@ func (s *ProjectRepositoryStore) Bind(
 	if archivedAt != nil {
 		return ProjectRepositoryMutation{}, fmt.Errorf("%w: archived Projects are read-only", domain.ErrConflict)
 	}
-	connection, err := scanGitLabConnection(tx.QueryRow(ctx, `
-		SELECT `+gitLabConnectionColumns+`
-		FROM gitlab_connections WHERE id=$1 FOR SHARE`, connectionID))
+	connection, err := scanRepositoryConnection(tx.QueryRow(ctx, `
+		SELECT `+repositoryConnectionColumns+`
+		FROM repository_connections WHERE id=$1 FOR SHARE`, connectionID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ProjectRepositoryMutation{}, domain.ErrNotFound
 	}
 	if err != nil {
 		return ProjectRepositoryMutation{}, err
 	}
-	if connection.Status != domain.GitLabConnectionStatusActive {
-		return ProjectRepositoryMutation{}, fmt.Errorf("%w: GitLab Connection is disabled", domain.ErrConflict)
+	if connection.Status != domain.RepositoryConnectionStatusActive {
+		return ProjectRepositoryMutation{}, fmt.Errorf("%w: Repository Connection is disabled", domain.ErrConflict)
 	}
 	repository := domain.ProjectRepository{
 		ID: uuid.New(), ProjectID: projectID, ConnectionID: connectionID,
@@ -198,9 +199,9 @@ func (s *ProjectRepositoryStore) Unbind(
 		SELECT
 			repository.id, repository.project_id, repository.connection_id,
 			repository.bound_by, repository.bound_at, repository.unbound_by, repository.unbound_at,
-			`+prefixedGitLabConnectionColumns("connection")+`
+			`+prefixedRepositoryConnectionColumns("connection")+`
 		FROM project_repositories repository
-		JOIN gitlab_connections connection ON connection.id=repository.connection_id
+		JOIN repository_connections connection ON connection.id=repository.connection_id
 		WHERE repository.id=$1 AND repository.project_id=$2
 		FOR UPDATE OF repository`, repositoryID, projectID))
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -278,19 +279,19 @@ func insertProjectRepositoryActivity(
 
 func projectRepositoryAuditValue(
 	repository domain.ProjectRepository,
-	connection domain.GitLabConnection,
+	connection domain.RepositoryConnection,
 ) map[string]any {
 	return map[string]any{
 		"project_id": repository.ProjectID, "connection_id": repository.ConnectionID,
-		"gitlab_project_id": connection.GitLabProjectID,
+		"provider": connection.Provider, "provider_repository_id": connection.ProviderRepositoryID,
 		"canonical_web_url": connection.CanonicalWebURL,
 		"bound_at":          repository.BoundAt, "unbound_at": repository.UnboundAt,
 	}
 }
 
-func prefixedGitLabConnectionColumns(alias string) string {
+func prefixedRepositoryConnectionColumns(alias string) string {
 	return alias + `.id, ` + alias + `.version, ` + alias + `.label, ` + alias + `.origin, ` +
-		alias + `.gitlab_project_id, ` + alias + `.path_with_namespace, ` +
+		alias + `.provider, ` + alias + `.provider_repository_id, ` + alias + `.path_with_namespace, ` +
 		alias + `.path_lookup_key, ` + alias + `.canonical_web_url, ` +
 		alias + `.default_branch, ` + alias + `.credential_ciphertext, ` +
 		alias + `.encryption_key_id, ` + alias + `.credential_expires_at, ` +
@@ -310,7 +311,7 @@ func scanProjectRepositoryWithConnection(row projectRepositoryScanner) (ProjectR
 		&item.Repository.BoundBy, &item.Repository.BoundAt,
 		&item.Repository.UnboundBy, &item.Repository.UnboundAt,
 		&item.Connection.ID, &item.Connection.Version, &item.Connection.Label,
-		&item.Connection.Origin, &item.Connection.GitLabProjectID,
+		&item.Connection.Origin, &item.Connection.Provider, &item.Connection.ProviderRepositoryID,
 		&item.Connection.PathWithNamespace, &item.Connection.PathLookupKey,
 		&item.Connection.CanonicalWebURL, &item.Connection.DefaultBranch,
 		&item.Connection.CredentialCiphertext, &item.Connection.EncryptionKeyID,

@@ -84,8 +84,10 @@ Every response has an `X-Request-ID`. Bearer responses also include
 
 For external orchestration, prefer the standalone CLI documented in
 `cmd/pactline/README.md`. `pactline capabilities --json` is an offline binary
-contract check. The parent Harness should retain the Token and exact Claim ID;
-a delegated repository worker does not need the Token.
+contract check. Protocol 2 reports `repository_code_change_links` and uses
+`pactline claim change list|link|unlink`; protocol 1 and `claim mr` are not
+compatible aliases. The parent Harness should retain the Token and exact Claim
+ID; a delegated repository worker does not need the Token.
 
 Use one bounded context request before and after Claim creation:
 
@@ -233,7 +235,7 @@ has a passing current-cycle acceptance check.
 
 ## External review workflow
 
-Review remains ordinary claimed work; it is not GitLab Code Review state and it
+Review remains ordinary claimed work; it is not repository-provider review state and it
 is not assigned through the Task assignee. A stateless external Harness should:
 
 1. discover `in_review.available` Tasks with `pactline task list --stage review`;

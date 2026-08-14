@@ -207,11 +207,11 @@ func TestCapabilitiesIsOfflineAndStable(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(stdout.Bytes(), &envelope))
 	require.True(t, envelope.OK)
-	require.Equal(t, 1, envelope.Data.Protocol)
+	require.Equal(t, 2, envelope.Data.Protocol)
 	require.Equal(t, Version, envelope.Data.CLIVersion)
 	require.Equal(t, []string{
 		"bounded_work_packets", "claim_progress", "claim_release", "execution_claims",
-		"execution_completion", "execution_verification", "gitlab_merge_request_links",
+		"execution_completion", "execution_verification", "repository_code_change_links",
 		"issue_resolution", "repeatable_submission", "resolution_request", "review_acceptance",
 		"review_claims", "review_request_changes", "success_metadata", "task_acceptance",
 		"thread_collaboration",
@@ -304,16 +304,16 @@ func TestCompactClaimShowUsesOneBoundedEndpoint(t *testing.T) {
 	require.Contains(t, stdout.String(), "Main Thread: 0/0 items")
 }
 
-func TestClaimMergeRequestLinkUsesExplicitClaimAndVersion(t *testing.T) {
+func TestClaimCodeChangeLinkUsesExplicitClaimAndVersion(t *testing.T) {
 	const claimID = "4e8c59cf-0af4-4af4-a55d-f2d2f930771c"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodPost, r.Method)
-		require.Equal(t, "/api/v1/claims/"+claimID+"/merge-requests", r.URL.Path)
+		require.Equal(t, "/api/v1/claims/"+claimID+"/code-changes", r.URL.Path)
 		require.Equal(t, `"9"`, r.Header.Get("If-Match"))
 		require.NotEmpty(t, r.Header.Get("Idempotency-Key"))
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
-		require.Equal(t, "https://gitlab.example/team/repo/-/merge_requests/42", body["merge_request_url"])
+		require.Equal(t, "https://gitlab.example/team/repo/-/merge_requests/42", body["code_change_url"])
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{}`)
 	}))
@@ -324,14 +324,14 @@ func TestClaimMergeRequestLinkUsesExplicitClaimAndVersion(t *testing.T) {
 	t.Setenv("PACTLINE_SESSION_ID", "session-a")
 	var stdout, stderr bytes.Buffer
 	code := ExecuteArgs(context.Background(), []string{
-		"claim", "mr", "link", claimID,
+		"claim", "change", "link", claimID,
 		"--url", "https://gitlab.example/team/repo/-/merge_requests/42", "--task-version", "9",
 	}, strings.NewReader(""), &stdout, &stderr)
 	require.Zero(t, code, stderr.String())
-	require.Contains(t, stdout.String(), "Merge Request linked")
+	require.Contains(t, stdout.String(), "Code change linked")
 }
 
-func TestClaimMergeRequestListAndUnlinkUseClaimAssociation(t *testing.T) {
+func TestClaimCodeChangeListAndUnlinkUseClaimAssociation(t *testing.T) {
 	const claimID = "4e8c59cf-0af4-4af4-a55d-f2d2f930771c"
 	const linkID = "f2e497d1-c860-482b-918f-c7de8006c788"
 	var paths []string
@@ -341,9 +341,9 @@ func TestClaimMergeRequestListAndUnlinkUseClaimAssociation(t *testing.T) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/claims/"+claimID:
 			_, _ = io.WriteString(w, `{"id":"`+claimID+`","task_number":142,"stage":"execution","status":"active","version":1}`)
-		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/tasks/142/merge-requests":
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/tasks/142/code-changes":
 			_, _ = io.WriteString(w, `{"active_links":[{"id":"`+linkID+`","web_url":"https://gitlab.example/team/repo/-/merge_requests/42","latest_observation":{"state":"opened"}}]}`)
-		case r.Method == http.MethodDelete && r.URL.Path == "/api/v1/claims/"+claimID+"/merge-requests/"+linkID:
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/v1/claims/"+claimID+"/code-changes/"+linkID:
 			require.Equal(t, `"9"`, r.Header.Get("If-Match"))
 			require.NotEmpty(t, r.Header.Get("Idempotency-Key"))
 			_, _ = io.WriteString(w, `{}`)
@@ -358,20 +358,20 @@ func TestClaimMergeRequestListAndUnlinkUseClaimAssociation(t *testing.T) {
 	t.Setenv("PACTLINE_SESSION_ID", "session-a")
 
 	var stdout, stderr bytes.Buffer
-	code := ExecuteArgs(context.Background(), []string{"claim", "mr", "list", claimID}, strings.NewReader(""), &stdout, &stderr)
+	code := ExecuteArgs(context.Background(), []string{"claim", "change", "list", claimID}, strings.NewReader(""), &stdout, &stderr)
 	require.Zero(t, code, stderr.String())
 	require.Contains(t, stdout.String(), linkID)
 	require.Equal(t, []string{
 		"GET /api/v1/claims/" + claimID,
-		"GET /api/v1/tasks/142/merge-requests",
+		"GET /api/v1/tasks/142/code-changes",
 	}, paths)
 
 	paths = nil
 	stdout.Reset()
 	stderr.Reset()
 	code = ExecuteArgs(context.Background(), []string{
-		"claim", "mr", "unlink", claimID, linkID, "--task-version", "9",
+		"claim", "change", "unlink", claimID, linkID, "--task-version", "9",
 	}, strings.NewReader(""), &stdout, &stderr)
 	require.Zero(t, code, stderr.String())
-	require.Equal(t, []string{"DELETE /api/v1/claims/" + claimID + "/merge-requests/" + linkID}, paths)
+	require.Equal(t, []string{"DELETE /api/v1/claims/" + claimID + "/code-changes/" + linkID}, paths)
 }

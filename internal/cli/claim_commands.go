@@ -38,7 +38,7 @@ func (a *App) claimCommand() *cobra.Command {
 		a.claimVerifyCommand(), a.claimBodyCommand("submit"),
 		a.claimBodyCommand("complete"), a.claimBodyCommand("release"),
 		a.claimBodyCommand("request-changes"), a.claimBodyCommand("accept"),
-		a.claimResolutionCommand(), a.claimMergeRequestCommand(),
+		a.claimResolutionCommand(), a.claimCodeChangeCommand(),
 	)
 	return command
 }
@@ -127,19 +127,19 @@ func (a *App) claimShowCommand() *cobra.Command {
 	return command
 }
 
-func (a *App) claimMergeRequestCommand() *cobra.Command {
-	command := &cobra.Command{Use: "mr", Short: "Inspect and change GitLab Merge Request delivery for a Claim"}
+func (a *App) claimCodeChangeCommand() *cobra.Command {
+	command := &cobra.Command{Use: "change", Short: "Inspect and change repository delivery for a Claim"}
 	command.AddCommand(
-		a.claimMergeRequestListCommand(),
-		a.claimMergeRequestLinkCommand(),
-		a.claimMergeRequestUnlinkCommand(),
+		a.claimCodeChangeListCommand(),
+		a.claimCodeChangeLinkCommand(),
+		a.claimCodeChangeUnlinkCommand(),
 	)
 	return command
 }
 
-func (a *App) claimMergeRequestListCommand() *cobra.Command {
+func (a *App) claimCodeChangeListCommand() *cobra.Command {
 	return &cobra.Command{
-		Use: "list <claim-id>", Short: "List current and frozen Merge Request delivery for a Claim",
+		Use: "list <claim-id>", Short: "List current and frozen code-change delivery for a Claim",
 		Args: cobra.ExactArgs(1), RunE: func(command *cobra.Command, args []string) error {
 			claimID, err := parseUUID(args[0], "claim-id")
 			if err != nil {
@@ -153,7 +153,7 @@ func (a *App) claimMergeRequestListCommand() *cobra.Command {
 			if err := json.Unmarshal(body, &claim); err != nil {
 				return err
 			}
-			delivery, _, err := a.client.request(command.Context(), http.MethodGet, fmt.Sprintf("/api/v1/tasks/%d/merge-requests", claim.TaskNumber), nil, 0, "", false)
+			delivery, _, err := a.client.request(command.Context(), http.MethodGet, fmt.Sprintf("/api/v1/tasks/%d/code-changes", claim.TaskNumber), nil, 0, "", false)
 			if err != nil {
 				return err
 			}
@@ -161,16 +161,16 @@ func (a *App) claimMergeRequestListCommand() *cobra.Command {
 			if err := json.Unmarshal(delivery, &value); err != nil {
 				return err
 			}
-			return a.output(value, func(w io.Writer) { printMergeRequestDelivery(w, value) })
+			return a.output(value, func(w io.Writer) { printCodeChangeDelivery(w, value) })
 		},
 	}
 }
 
-func (a *App) claimMergeRequestLinkCommand() *cobra.Command {
-	var mergeRequestURL string
+func (a *App) claimCodeChangeLinkCommand() *cobra.Command {
+	var codeChangeURL string
 	var version int64
 	command := &cobra.Command{
-		Use: "link <claim-id>", Short: "Link one GitLab Merge Request to a Claim",
+		Use: "link <claim-id>", Short: "Link one repository code change to a Claim",
 		Args: cobra.ExactArgs(1), RunE: func(command *cobra.Command, args []string) error {
 			if err := a.requireMutationProvenance(); err != nil {
 				return err
@@ -182,29 +182,29 @@ func (a *App) claimMergeRequestLinkCommand() *cobra.Command {
 			if err := requiredPositive("task-version", version); err != nil {
 				return err
 			}
-			parsed, err := url.Parse(mergeRequestURL)
+			parsed, err := url.Parse(codeChangeURL)
 			if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-				return &APIError{Code: "USAGE", Message: "--url must be an absolute HTTP(S) Merge Request URL"}
+				return &APIError{Code: "USAGE", Message: "--url must be an absolute HTTP(S) code change URL"}
 			}
 			response, _, err := a.client.request(
-				command.Context(), http.MethodPost, "/api/v1/claims/"+claimID+"/merge-requests",
-				map[string]any{"merge_request_url": mergeRequestURL}, version, a.idempotencyKey, true,
+				command.Context(), http.MethodPost, "/api/v1/claims/"+claimID+"/code-changes",
+				map[string]any{"code_change_url": codeChangeURL}, version, a.idempotencyKey, true,
 			)
 			if err != nil {
 				return err
 			}
-			return a.outputRaw(response, "Merge Request linked")
+			return a.outputRaw(response, "Code change linked")
 		},
 	}
-	command.Flags().StringVar(&mergeRequestURL, "url", "", "absolute GitLab Merge Request URL (required)")
+	command.Flags().StringVar(&codeChangeURL, "url", "", "absolute Pull Request or Merge Request URL (required)")
 	command.Flags().Int64Var(&version, "task-version", 0, "Task version previously inspected (required)")
 	return command
 }
 
-func (a *App) claimMergeRequestUnlinkCommand() *cobra.Command {
+func (a *App) claimCodeChangeUnlinkCommand() *cobra.Command {
 	var version int64
 	command := &cobra.Command{
-		Use: "unlink <claim-id> <link-id>", Short: "Unlink one Merge Request by its Pactline link ID",
+		Use: "unlink <claim-id> <link-id>", Short: "Unlink one code change by its Pactline link ID",
 		Args: cobra.ExactArgs(2), RunE: func(command *cobra.Command, args []string) error {
 			if err := a.requireMutationProvenance(); err != nil {
 				return err
@@ -222,13 +222,13 @@ func (a *App) claimMergeRequestUnlinkCommand() *cobra.Command {
 			}
 			response, _, err := a.client.request(
 				command.Context(), http.MethodDelete,
-				"/api/v1/claims/"+claimID+"/merge-requests/"+linkID,
+				"/api/v1/claims/"+claimID+"/code-changes/"+linkID,
 				nil, version, a.idempotencyKey, true,
 			)
 			if err != nil {
 				return err
 			}
-			return a.outputRaw(response, "Merge Request unlinked")
+			return a.outputRaw(response, "Code change unlinked")
 		},
 	}
 	command.Flags().Int64Var(&version, "task-version", 0, "Task version previously inspected (required)")
@@ -421,17 +421,17 @@ func (a *App) outputRaw(body json.RawMessage, message string) error {
 	})
 }
 
-func printMergeRequestDelivery(w io.Writer, delivery map[string]any) {
+func printCodeChangeDelivery(w io.Writer, delivery map[string]any) {
 	links, _ := delivery["active_links"].([]any)
-	fmt.Fprintf(w, "Active Merge Requests: %d\n", len(links))
+	fmt.Fprintf(w, "Active code changes: %d\n", len(links))
 	for _, raw := range links {
 		link, _ := raw.(map[string]any)
 		observation, _ := link["latest_observation"].(map[string]any)
 		fmt.Fprintf(w, "  %v  %v  %v\n", link["id"], observation["state"], link["web_url"])
 	}
 	if review, ok := delivery["review"].(map[string]any); ok {
-		comparisons, _ := review["merge_requests"].([]any)
-		fmt.Fprintf(w, "Frozen review snapshot: cycle %v, %d Merge Requests\n", review["review_cycle"], len(comparisons))
+		comparisons, _ := review["code_changes"].([]any)
+		fmt.Fprintf(w, "Frozen review snapshot: cycle %v, %d code changes\n", review["review_cycle"], len(comparisons))
 	}
 }
 

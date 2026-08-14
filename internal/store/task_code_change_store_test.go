@@ -11,13 +11,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestTaskMergeRequestLinkAndUnlinkPreserveExecutionClaim(t *testing.T) {
+func TestTaskCodeChangeLinkAndUnlinkPreserveExecutionClaim(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 	now := time.Date(2026, 8, 13, 8, 0, 0, 0, time.UTC)
-	connections := store.NewGitLabConnectionStore(db)
-	connection := testGitLabConnection(now)
-	cleanupGitLabConnection(t, db, connection.ID)
+	connections := store.NewRepositoryConnectionStore(db)
+	connection := testRepositoryConnection(now)
+	cleanupRepositoryConnection(t, db, connection.ID)
 	_, err := connections.Create(ctx, connection, domain.SessionOperation(userA, "create-delivery-connection"))
 	require.NoError(t, err)
 
@@ -34,7 +34,7 @@ func TestTaskMergeRequestLinkAndUnlinkPreserveExecutionClaim(t *testing.T) {
 	require.NoError(t, err)
 
 	task := mustCreateTask(t, db, store.NewTaskStore(db), domain.Task{
-		Title: "Link multiple merge requests", CreatorID: userA, ProjectID: project.Project.ID,
+		Title: "Link multiple code changes", CreatorID: userA, ProjectID: project.Project.ID,
 	}, nil)
 	workflow := store.NewTaskWorkflowStore(db)
 	ready, err := workflow.MarkReady(
@@ -49,49 +49,55 @@ func TestTaskMergeRequestLinkAndUnlinkPreserveExecutionClaim(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	mergeRequests := store.NewTaskMergeRequestStore(db)
-	linked, err := mergeRequests.Link(
+	codeChanges := store.NewTaskCodeChangeStore(db)
+	linked, err := codeChanges.Link(
 		ctx, task.Task.Number, claim.ID, working.Version, claim.Version,
-		bound.Repository.Repository.ID, testGitLabMergeRequest(now.Add(4*time.Minute)), actor,
-		domain.SessionOperation(userA, "link-mr"), now.Add(4*time.Minute),
+		bound.Repository.Repository.ID, testCodeChange(now.Add(4*time.Minute)), actor,
+		domain.SessionOperation(userA, "link-code-change"), now.Add(4*time.Minute),
 	)
 	require.NoError(t, err)
 	require.Equal(t, working.Version+1, linked.Task.Version)
 	require.Equal(t, claim.Version, int64(1), "fixture Claim version must remain stable")
 	require.Equal(t, domain.TaskPhaseInProgress, linked.Task.Lifecycle.Phase)
 	require.Equal(t, domain.TaskActivityWorking, linked.Task.Lifecycle.Activity)
+	_, err = codeChanges.Link(
+		ctx, task.Task.Number, claim.ID, linked.Task.Version, claim.Version,
+		bound.Repository.Repository.ID, testCodeChange(now.Add(4*time.Minute)), actor,
+		domain.SessionOperation(userA, "link-duplicate-code-change"), now.Add(4*time.Minute),
+	)
+	require.ErrorIs(t, err, domain.ErrConflict)
 
 	activeClaim, err := store.NewTaskStageClaimStore(db).GetActiveForTaskNumber(ctx, task.Task.Number)
 	require.NoError(t, err)
 	require.Equal(t, claim.ID, activeClaim.ID)
 	require.Equal(t, claim.Version, activeClaim.Version)
 
-	listed, err := mergeRequests.ListActive(ctx, task.Task.ID)
+	listed, err := codeChanges.ListActive(ctx, task.Task.ID)
 	require.NoError(t, err)
 	require.Len(t, listed, 1)
-	require.Equal(t, int64(42), listed[0].MergeRequest.MergeRequestIID)
+	require.Equal(t, int64(42), listed[0].CodeChange.ChangeNumber)
 
-	unlinked, err := mergeRequests.Unlink(
+	unlinked, err := codeChanges.Unlink(
 		ctx, task.Task.Number, claim.ID, linked.Task.Version, claim.Version,
-		linked.MergeRequest.MergeRequest.ID, actor,
-		domain.SessionOperation(userA, "unlink-mr"), now.Add(5*time.Minute),
+		linked.CodeChange.CodeChange.ID, actor,
+		domain.SessionOperation(userA, "unlink-code-change"), now.Add(5*time.Minute),
 	)
 	require.NoError(t, err)
 	require.Equal(t, linked.Task.Version+1, unlinked.Task.Version)
-	require.False(t, unlinked.MergeRequest.MergeRequest.Active())
+	require.False(t, unlinked.CodeChange.CodeChange.Active())
 
-	listed, err = mergeRequests.ListActive(ctx, task.Task.ID)
+	listed, err = codeChanges.ListActive(ctx, task.Task.ID)
 	require.NoError(t, err)
 	require.Empty(t, listed)
 }
 
-func TestTaskMergeRequestRejectsWrongProjectBinding(t *testing.T) {
+func TestTaskCodeChangeRejectsWrongProjectBinding(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 	now := time.Date(2026, 8, 13, 8, 0, 0, 0, time.UTC)
-	connection := testGitLabConnection(now)
-	cleanupGitLabConnection(t, db, connection.ID)
-	_, err := store.NewGitLabConnectionStore(db).Create(
+	connection := testRepositoryConnection(now)
+	cleanupRepositoryConnection(t, db, connection.ID)
+	_, err := store.NewRepositoryConnectionStore(db).Create(
 		ctx, connection, domain.SessionOperation(userA, "create-cross-project-connection"),
 	)
 	require.NoError(t, err)
@@ -125,21 +131,21 @@ func TestTaskMergeRequestRejectsWrongProjectBinding(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	_, err = store.NewTaskMergeRequestStore(db).Link(
+	_, err = store.NewTaskCodeChangeStore(db).Link(
 		ctx, task.Task.Number, claim.ID, working.Version, claim.Version,
-		bound.Repository.Repository.ID, testGitLabMergeRequest(now), actor,
+		bound.Repository.Repository.ID, testCodeChange(now), actor,
 		domain.SessionOperation(userA, "link-cross-project"), now,
 	)
 	require.ErrorIs(t, err, domain.ErrNotFound)
 }
 
-func TestCompleteExecutionFreezesExactMergeRequestSetForReview(t *testing.T) {
+func TestCompleteExecutionFreezesExactCodeChangeSetForReview(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 	now := time.Date(2026, 8, 13, 9, 0, 0, 0, time.UTC)
-	connection := testGitLabConnection(now)
-	cleanupGitLabConnection(t, db, connection.ID)
-	_, err := store.NewGitLabConnectionStore(db).Create(
+	connection := testRepositoryConnection(now)
+	cleanupRepositoryConnection(t, db, connection.ID)
+	_, err := store.NewRepositoryConnectionStore(db).Create(
 		ctx, connection, domain.SessionOperation(userA, "create-snapshot-connection"),
 	)
 	require.NoError(t, err)
@@ -166,21 +172,21 @@ func TestCompleteExecutionFreezesExactMergeRequestSetForReview(t *testing.T) {
 		domain.SessionOperation(userA, "claim-snapshot-task"), "browser", "", now,
 	)
 	require.NoError(t, err)
-	mergeRequests := store.NewTaskMergeRequestStore(db)
-	first, err := mergeRequests.Link(
+	codeChanges := store.NewTaskCodeChangeStore(db)
+	first, err := codeChanges.Link(
 		ctx, task.Task.Number, claim.ID, working.Version, claim.Version,
-		bound.Repository.Repository.ID, testGitLabMergeRequest(now), actor,
+		bound.Repository.Repository.ID, testCodeChange(now), actor,
 		domain.SessionOperation(userA, "link-snapshot-mr-1"), now,
 	)
 	require.NoError(t, err)
-	secondMR := testGitLabMergeRequest(now.Add(time.Minute))
-	secondMR.ID, secondMR.IID = 92, 43
-	secondMR.WebURL = "https://gitlab.example/group/repo/-/merge_requests/43"
-	secondMR.Observation.Title = "Document delivery"
-	secondMR.Observation.HeadSHA = "def456"
-	second, err := mergeRequests.Link(
+	secondChange := testCodeChange(now.Add(time.Minute))
+	secondChange.ProviderChangeID, secondChange.ChangeNumber = "92", 43
+	secondChange.WebURL = "https://gitlab.example/group/repo/-/merge_requests/43"
+	secondChange.Observation.Title = "Document delivery"
+	secondChange.Observation.HeadSHA = "def456"
+	second, err := codeChanges.Link(
 		ctx, task.Task.Number, claim.ID, first.Task.Version, claim.Version,
-		bound.Repository.Repository.ID, secondMR, actor,
+		bound.Repository.Repository.ID, secondChange, actor,
 		domain.SessionOperation(userA, "link-snapshot-mr-2"), now.Add(time.Minute),
 	)
 	require.NoError(t, err)
@@ -192,19 +198,22 @@ func TestCompleteExecutionFreezesExactMergeRequestSetForReview(t *testing.T) {
 	)
 	require.ErrorIs(t, err, domain.ErrConflict)
 
-	links, err := mergeRequests.ListActive(ctx, task.Task.ID)
+	links, err := codeChanges.ListActive(ctx, task.Task.ID)
 	require.NoError(t, err)
-	snapshots := make([]domain.MergeRequestSnapshot, len(links))
+	snapshots := make([]domain.CodeChangeSnapshot, len(links))
 	for index, link := range links {
-		observation := link.MergeRequest.LatestObservation
-		snapshots[index] = domain.MergeRequestSnapshot{
-			TaskMergeRequestID:  link.MergeRequest.ID,
-			ProjectRepositoryID: link.Repository.ID,
-			ConnectionID:        link.Connection.ID,
-			GitLabProjectID:     link.Connection.GitLabProjectID,
-			MergeRequestIID:     link.MergeRequest.MergeRequestIID,
-			WebURL:              link.MergeRequest.WebURL,
-			Title:               observation.Title, State: observation.State, Draft: observation.Draft,
+		observation := link.CodeChange.LatestObservation
+		snapshots[index] = domain.CodeChangeSnapshot{
+			TaskCodeChangeID:     link.CodeChange.ID,
+			ProjectRepositoryID:  link.Repository.ID,
+			ConnectionID:         link.Connection.ID,
+			Provider:             link.Connection.Provider,
+			ProviderRepositoryID: link.Connection.ProviderRepositoryID,
+			Kind:                 link.CodeChange.Kind,
+			ChangeNumber:         link.CodeChange.ChangeNumber,
+			ProviderChangeID:     link.CodeChange.ProviderChangeID,
+			WebURL:               link.CodeChange.WebURL,
+			Title:                observation.Title, State: observation.State, Draft: observation.Draft,
 			SourceBranch: observation.SourceBranch, TargetBranch: observation.TargetBranch,
 			HeadSHA: observation.HeadSHA, MergeCommitSHA: observation.MergeCommitSHA,
 			MergedAt: observation.MergedAt, ObservationStatus: observation.Status,
@@ -221,22 +230,22 @@ func TestCompleteExecutionFreezesExactMergeRequestSetForReview(t *testing.T) {
 	require.Equal(t, domain.TaskActivityAvailable, review.Lifecycle.Activity)
 	require.Equal(t, domain.StageClaimStatusCompleted, completedClaim.Status)
 	require.NotNil(t, completion.ExecutionCompleted)
-	require.Equal(t, snapshots, completion.ExecutionCompleted.MergeRequests)
+	require.Equal(t, snapshots, completion.ExecutionCompleted.CodeChanges)
 
-	moved := links[0].MergeRequest.LatestObservation
+	moved := links[0].CodeChange.LatestObservation
 	moved.HeadSHA = "new-head"
 	moved.ObservedAt = now.Add(4 * time.Minute)
-	require.NoError(t, mergeRequests.UpdateObservation(
-		ctx, links[0].MergeRequest.ID, moved, now.Add(4*time.Minute),
+	require.NoError(t, codeChanges.UpdateObservation(
+		ctx, links[0].CodeChange.ID, moved, now.Add(4*time.Minute),
 	))
-	frozen, err := mergeRequests.GetReviewSnapshot(ctx, task.Task.ID, review.Lifecycle.ReviewCycle)
+	frozen, err := codeChanges.GetReviewSnapshot(ctx, task.Task.ID, review.Lifecycle.ReviewCycle)
 	require.NoError(t, err)
 	require.NotNil(t, frozen)
-	expectedSnapshots := append([]domain.MergeRequestSnapshot(nil), snapshots...)
+	expectedSnapshots := append([]domain.CodeChangeSnapshot(nil), snapshots...)
 	for index := range expectedSnapshots {
 		expectedSnapshots[index].ObservedAt = expectedSnapshots[index].ObservedAt.UTC()
 	}
-	require.Equal(t, expectedSnapshots, frozen.MergeRequests,
+	require.Equal(t, expectedSnapshots, frozen.CodeChanges,
 		"provider refresh must not mutate the frozen review snapshot")
 
 	reviewWorking, reviewClaim, err := workflow.Claim(
@@ -244,21 +253,22 @@ func TestCompleteExecutionFreezesExactMergeRequestSetForReview(t *testing.T) {
 		domain.SessionOperation(userA, "claim-review-task"), "browser", "", now.Add(5*time.Minute),
 	)
 	require.NoError(t, err)
-	_, err = mergeRequests.Link(
+	_, err = codeChanges.Link(
 		ctx, task.Task.Number, reviewClaim.ID, reviewWorking.Version, reviewClaim.Version,
-		bound.Repository.Repository.ID, secondMR, actor,
+		bound.Repository.Repository.ID, secondChange, actor,
 		domain.SessionOperation(userA, "link-during-review"), now.Add(6*time.Minute),
 	)
 	require.ErrorIs(t, err, domain.ErrInvalidTransition)
 }
 
-func testGitLabMergeRequest(now time.Time) domain.GitLabMergeRequest {
-	return domain.GitLabMergeRequest{
-		ID: 91, IID: 42,
+func testCodeChange(now time.Time) domain.CodeChange {
+	return domain.CodeChange{
+		Provider: domain.RepositoryProviderGitLab, Kind: domain.CodeChangeKindMergeRequest,
+		ProviderChangeID: "91", ChangeNumber: 42,
 		WebURL: "https://gitlab.example/group/repo/-/merge_requests/42",
-		Observation: domain.GitLabMergeRequestObservation{
-			Status: domain.GitLabObservationConfirmed, ObservedAt: now,
-			Title: "Implement delivery", State: domain.GitLabMergeRequestOpened,
+		Observation: domain.CodeChangeObservation{
+			Status: domain.CodeChangeObservationConfirmed, ObservedAt: now,
+			Title: "Implement delivery", State: domain.CodeChangeStateOpened,
 			SourceBranch: "feature", TargetBranch: "main", HeadSHA: "abc123",
 			ProviderUpdatedAt: now,
 		},
