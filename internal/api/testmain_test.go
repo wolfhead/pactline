@@ -176,6 +176,11 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 		Cipher:        gitLabCipher,
 		Now:           time.Now,
 	}
+	taskThreadStore := store.NewTaskThreadStore(db)
+	taskWorkPacketService := &application.TaskWorkPacketService{
+		Access: projectAccess, Acceptance: acceptance, Threads: taskThreadStore,
+		Delivery: taskDeliveryService,
+	}
 	agentRuns := store.NewAgentStore(db)
 	agentConversations := store.NewAgentConversationStore(db)
 	agentConversationService := &application.AgentConversationService{
@@ -207,11 +212,12 @@ func newTaskTestServer(t *testing.T) (http.Handler, *store.DB) {
 		},
 		Workflow:            store.NewTaskWorkflowStore(db),
 		StageClaims:         store.NewTaskStageClaimStore(db),
-		Threads:             store.NewTaskThreadStore(db),
+		Threads:             taskThreadStore,
 		Labels:              &application.LabelService{Labels: labels},
 		Projects:            projectService,
 		ProjectRepositories: projectRepositoryService,
 		Delivery:            taskDeliveryService,
+		WorkPackets:         taskWorkPacketService,
 		Access:              projectAccess,
 		Attachments:         attachmentService,
 		AgentConversations:  agentConversationService,

@@ -29,6 +29,17 @@ type client struct {
 	server, token, clientKind, sessionID string
 	httpClient                           *http.Client
 	verbose                              func(string, ...any)
+	lastMeta                             responseMeta
+}
+
+type responseMeta struct {
+	RequestID      string `json:"request_id,omitempty"`
+	ETag           string `json:"etag,omitempty"`
+	IdempotencyKey string `json:"idempotency_key,omitempty"`
+}
+
+func (m responseMeta) empty() bool {
+	return m.RequestID == "" && m.ETag == "" && m.IdempotencyKey == ""
 }
 
 func (c *client) request(
@@ -39,6 +50,7 @@ func (c *client) request(
 	idempotencyKey string,
 	mutation bool,
 ) (json.RawMessage, http.Header, error) {
+	c.lastMeta = responseMeta{}
 	var reader io.Reader
 	if body != nil {
 		encoded, err := json.Marshal(body)
@@ -119,6 +131,10 @@ func (c *client) request(
 			Status: response.StatusCode, Code: problem.Code, Message: message,
 			RequestID: requestID, Key: idempotencyKey,
 		}
+	}
+	c.lastMeta = responseMeta{
+		RequestID: response.Header.Get("X-Request-ID"), ETag: response.Header.Get("ETag"),
+		IdempotencyKey: idempotencyKey,
 	}
 	return json.RawMessage(responseBody), response.Header, nil
 }

@@ -396,6 +396,62 @@ func TestTaskUpdateMissingNumberReturnsNotFound(t *testing.T) {
 	require.ErrorIs(t, err, domain.ErrNotFound)
 }
 
+func TestTaskListClaimableStageUsesLifecycleAvailability(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	tasks := store.NewTaskStore(db)
+	assignee := userA
+
+	create := func(title, phase, activity string, reviewCycle int64) store.TaskWithRelations {
+		t.Helper()
+		created := mustCreateTask(t, db, tasks, domain.Task{
+			Title: title, CreatorID: userA, AssigneeID: &assignee,
+		}, nil)
+		cleanupTask(t, db, created.Task.ID)
+		_, err := db.Pool.Exec(ctx, `
+			UPDATE tasks
+			SET phase=$2,activity_state=NULLIF($3,''),review_cycle=$4
+			WHERE id=$1`, created.Task.ID, phase, activity, reviewCycle)
+		require.NoError(t, err)
+		return created
+	}
+
+	ready := create("Ready", "ready", "", 0)
+	executionAvailable := create("Execution available", "in_progress", "available", 0)
+	reviewAvailable := create("Review available", "in_review", "available", 1)
+	create("Execution working", "in_progress", "working", 0)
+	create("Backlog", "backlog", "", 0)
+
+	execution, err := tasks.List(ctx, store.TaskListFilter{
+		ClaimableStage: domain.TaskClaimStageExecution,
+		AssigneeID:     &assignee,
+		Sort:           "number",
+		Order:          "asc",
+	})
+	require.NoError(t, err)
+	require.Equal(t, []int64{ready.Task.Number, executionAvailable.Task.Number}, taskNumbers(execution.Items))
+
+	review, err := tasks.List(ctx, store.TaskListFilter{
+		ClaimableStage: domain.TaskClaimStageReview,
+		AssigneeID:     &assignee,
+		Sort:           "number",
+		Order:          "asc",
+	})
+	require.NoError(t, err)
+	require.Equal(t, []int64{reviewAvailable.Task.Number}, taskNumbers(review.Items))
+
+	_, err = tasks.List(ctx, store.TaskListFilter{ClaimableStage: "other"})
+	require.ErrorIs(t, err, domain.ErrInvalidInput)
+}
+
+func taskNumbers(items []store.TaskWithRelations) []int64 {
+	numbers := make([]int64, len(items))
+	for index := range items {
+		numbers[index] = items[index].Task.Number
+	}
+	return numbers
+}
+
 func TestTaskUpdateRejectsUnknownStatus(t *testing.T) {
 	db := newTestDB(t)
 	ts := store.NewTaskStore(db)

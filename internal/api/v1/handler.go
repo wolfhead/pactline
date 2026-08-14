@@ -29,6 +29,7 @@ type Handler struct {
 	Projects            *application.ProjectService
 	ProjectRepositories *application.ProjectRepositoryService
 	Delivery            *application.TaskDeliveryService
+	WorkPackets         *application.TaskWorkPacketService
 	Access              *application.ProjectAccessService
 	Attachments         *application.AttachmentService
 	AgentConversations  *application.AgentConversationService

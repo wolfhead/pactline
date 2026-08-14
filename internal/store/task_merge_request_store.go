@@ -89,6 +89,13 @@ func (s *TaskMergeRequestStore) GetReviewSnapshot(
 	if payload.MergeRequests == nil {
 		payload.MergeRequests = []domain.MergeRequestSnapshot{}
 	}
+	for index := range payload.MergeRequests {
+		payload.MergeRequests[index].ObservedAt = payload.MergeRequests[index].ObservedAt.UTC()
+		if payload.MergeRequests[index].MergedAt != nil {
+			mergedAt := payload.MergeRequests[index].MergedAt.UTC()
+			payload.MergeRequests[index].MergedAt = &mergedAt
+		}
+	}
 	return &TaskDeliverySnapshot{
 		ReviewCycle: payload.ReviewCycle, MergeRequests: payload.MergeRequests,
 	}, nil

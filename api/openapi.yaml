@@ -47,6 +47,25 @@ paths:
           $ref: "#/components/responses/TaskStageClaim"
         default:
           $ref: "#/components/responses/Problem"
+  /api/v1/claims/{claim_id}/work-packet:
+    parameters:
+      - $ref: "#/components/parameters/ClaimID"
+    get:
+      operationId: getClaimWorkPacket
+      summary: Get bounded authoritative context for one explicit Claim
+      parameters:
+        - name: thread_items_limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          $ref: "#/components/responses/ClaimWorkPacket"
+        default:
+          $ref: "#/components/responses/Problem"
   /api/v1/claims/{claim_id}/progress:
     parameters:
       - $ref: "#/components/parameters/ClaimID"
@@ -303,6 +322,11 @@ paths:
             type: array
             items:
               $ref: "#/components/schemas/TaskActivityState"
+        - name: claimable_stage
+          in: query
+          description: Return only Tasks currently available for the requested Claim stage.
+          schema:
+            $ref: "#/components/schemas/TaskClaimStage"
         - name: priority
           in: query
           schema:
@@ -494,6 +518,25 @@ paths:
       responses:
         "201":
           $ref: "#/components/responses/TaskStageClaimCommand"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/work-packet:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+    get:
+      operationId: getTaskWorkPacket
+      summary: Get bounded authoritative context for a Task before claiming it
+      parameters:
+        - name: thread_items_limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskWorkPacket"
         default:
           $ref: "#/components/responses/Problem"
   /api/v1/tasks/{number}/merge-requests:
@@ -1724,6 +1767,28 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/TaskDelivery"
+    TaskWorkPacket:
+      description: Bounded authoritative Task context for external work orchestration
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TaskWorkPacket"
+    ClaimWorkPacket:
+      description: Bounded authoritative context for one explicit Claim
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ClaimWorkPacket"
     TaskMergeRequestChanged:
       description: Task merge-request delivery changed
       headers:
@@ -3097,6 +3162,78 @@ components:
             $ref: "#/components/schemas/TaskMergeRequest"
         review:
           $ref: "#/components/schemas/TaskDeliveryReview"
+    CompactThread:
+      type: object
+      additionalProperties: false
+      required: [thread, items, total_count, returned_count, truncated]
+      properties:
+        thread:
+          $ref: "#/components/schemas/TaskThread"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaskThreadItem"
+        total_count:
+          type: integer
+          minimum: 0
+        returned_count:
+          type: integer
+          minimum: 0
+        truncated:
+          type: boolean
+    TaskWorkPacket:
+      type: object
+      additionalProperties: false
+      required:
+        - task
+        - criteria
+        - delivery
+        - main_thread
+        - resolved_issue_thread_count
+      properties:
+        task:
+          $ref: "#/components/schemas/Task"
+        criteria:
+          type: array
+          items:
+            $ref: "#/components/schemas/AcceptanceCriterion"
+        delivery:
+          $ref: "#/components/schemas/TaskDelivery"
+        main_thread:
+          $ref: "#/components/schemas/CompactThread"
+        active_issue_thread:
+          $ref: "#/components/schemas/CompactThread"
+        resolved_issue_thread_count:
+          type: integer
+          minimum: 0
+    ClaimWorkPacket:
+      type: object
+      additionalProperties: false
+      required:
+        - task
+        - claim
+        - criteria
+        - delivery
+        - main_thread
+        - resolved_issue_thread_count
+      properties:
+        task:
+          $ref: "#/components/schemas/Task"
+        claim:
+          $ref: "#/components/schemas/TaskStageClaim"
+        criteria:
+          type: array
+          items:
+            $ref: "#/components/schemas/AcceptanceCriterion"
+        delivery:
+          $ref: "#/components/schemas/TaskDelivery"
+        main_thread:
+          $ref: "#/components/schemas/CompactThread"
+        active_issue_thread:
+          $ref: "#/components/schemas/CompactThread"
+        resolved_issue_thread_count:
+          type: integer
+          minimum: 0
     TaskMergeRequestLink:
       type: object
       additionalProperties: false

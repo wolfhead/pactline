@@ -105,6 +105,10 @@ type GetAgentConversationRes interface {
 	getAgentConversationRes()
 }
 
+type GetClaimWorkPacketRes interface {
+	getClaimWorkPacketRes()
+}
+
 type GetCurrentAgentConversationConfigurationRes interface {
 	getCurrentAgentConversationConfigurationRes()
 }
@@ -131,6 +135,10 @@ type GetTaskRes interface {
 
 type GetTaskStageClaimRes interface {
 	getTaskStageClaimRes()
+}
+
+type GetTaskWorkPacketRes interface {
+	getTaskWorkPacketRes()
 }
 
 type LinkTaskMergeRequestRes interface {

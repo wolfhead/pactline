@@ -38,7 +38,7 @@ func (a *App) claimCommand() *cobra.Command {
 		a.claimListCommand(), a.claimShowCommand(), a.claimProgressCommand(),
 		a.claimVerifyCommand(), a.claimBodyCommand("submit"),
 		a.claimBodyCommand("complete"), a.claimBodyCommand("release"),
-		a.claimResolutionCommand(),
+		a.claimResolutionCommand(), a.claimMergeRequestCommand(),
 	)
 	return command
 }
@@ -80,10 +80,29 @@ func (a *App) claimListCommand() *cobra.Command {
 }
 
 func (a *App) claimShowCommand() *cobra.Command {
-	return &cobra.Command{Use: "show <claim-id>", Short: "Show one Claim and its complete Task work packet", Long: "The Claim ID selects work explicitly. This command never chooses a Claim from Client Session ID.", Args: cobra.ExactArgs(1), RunE: func(command *cobra.Command, args []string) error {
+	var compact bool
+	var threadItemsLimit int
+	command := &cobra.Command{Use: "show <claim-id>", Short: "Show one Claim and its Task work packet", Long: "The Claim ID selects work explicitly. This command never chooses a Claim from Client Session ID. --compact asks the server for bounded recent Thread context and Claim-specific checks.", Args: cobra.ExactArgs(1), RunE: func(command *cobra.Command, args []string) error {
+		if !compact && command.Flags().Changed("thread-items-limit") {
+			return &APIError{Code: "USAGE", Message: "--thread-items-limit requires --compact"}
+		}
+		if threadItemsLimit < 1 || threadItemsLimit > 100 {
+			return &APIError{Code: "USAGE", Message: "--thread-items-limit must be between 1 and 100"}
+		}
 		claimID, err := parseUUID(args[0], "claim-id")
 		if err != nil {
 			return err
+		}
+		if compact {
+			packet, err := a.compactPacket(command, fmt.Sprintf("/api/v1/claims/%s/work-packet?thread_items_limit=%d", claimID, threadItemsLimit))
+			if err != nil {
+				return err
+			}
+			return a.output(packet, func(w io.Writer) {
+				claim, _ := packet["claim"].(map[string]any)
+				fmt.Fprintf(w, "Claim ID: %v\nStage: %v\nStatus: %v\n", claim["id"], claim["stage"], claim["status"])
+				printTaskPacket(w, packet)
+			})
 		}
 		body, _, err := a.client.request(command.Context(), http.MethodGet, "/api/v1/claims/"+claimID, nil, 0, "", false)
 		if err != nil {
@@ -103,6 +122,117 @@ func (a *App) claimShowCommand() *cobra.Command {
 			printTaskPacket(w, packet)
 		})
 	}}
+	command.Flags().BoolVar(&compact, "compact", false, "read a bounded server-aggregated work packet")
+	command.Flags().IntVar(&threadItemsLimit, "thread-items-limit", 20, "recent Items per included Thread (1-100; requires --compact)")
+	return command
+}
+
+func (a *App) claimMergeRequestCommand() *cobra.Command {
+	command := &cobra.Command{Use: "mr", Short: "Inspect and change GitLab Merge Request delivery for a Claim"}
+	command.AddCommand(
+		a.claimMergeRequestListCommand(),
+		a.claimMergeRequestLinkCommand(),
+		a.claimMergeRequestUnlinkCommand(),
+	)
+	return command
+}
+
+func (a *App) claimMergeRequestListCommand() *cobra.Command {
+	return &cobra.Command{
+		Use: "list <claim-id>", Short: "List current and frozen Merge Request delivery for a Claim",
+		Args: cobra.ExactArgs(1), RunE: func(command *cobra.Command, args []string) error {
+			claimID, err := parseUUID(args[0], "claim-id")
+			if err != nil {
+				return err
+			}
+			body, _, err := a.client.request(command.Context(), http.MethodGet, "/api/v1/claims/"+claimID, nil, 0, "", false)
+			if err != nil {
+				return err
+			}
+			var claim claimSummary
+			if err := json.Unmarshal(body, &claim); err != nil {
+				return err
+			}
+			delivery, _, err := a.client.request(command.Context(), http.MethodGet, fmt.Sprintf("/api/v1/tasks/%d/merge-requests", claim.TaskNumber), nil, 0, "", false)
+			if err != nil {
+				return err
+			}
+			var value map[string]any
+			if err := json.Unmarshal(delivery, &value); err != nil {
+				return err
+			}
+			return a.output(value, func(w io.Writer) { printMergeRequestDelivery(w, value) })
+		},
+	}
+}
+
+func (a *App) claimMergeRequestLinkCommand() *cobra.Command {
+	var mergeRequestURL string
+	var version int64
+	command := &cobra.Command{
+		Use: "link <claim-id>", Short: "Link one GitLab Merge Request to a Claim",
+		Args: cobra.ExactArgs(1), RunE: func(command *cobra.Command, args []string) error {
+			if err := a.requireMutationProvenance(); err != nil {
+				return err
+			}
+			claimID, err := parseUUID(args[0], "claim-id")
+			if err != nil {
+				return err
+			}
+			if err := requiredPositive("task-version", version); err != nil {
+				return err
+			}
+			parsed, err := url.Parse(mergeRequestURL)
+			if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+				return &APIError{Code: "USAGE", Message: "--url must be an absolute HTTP(S) Merge Request URL"}
+			}
+			response, _, err := a.client.request(
+				command.Context(), http.MethodPost, "/api/v1/claims/"+claimID+"/merge-requests",
+				map[string]any{"merge_request_url": mergeRequestURL}, version, a.idempotencyKey, true,
+			)
+			if err != nil {
+				return err
+			}
+			return a.outputRaw(response, "Merge Request linked")
+		},
+	}
+	command.Flags().StringVar(&mergeRequestURL, "url", "", "absolute GitLab Merge Request URL (required)")
+	command.Flags().Int64Var(&version, "task-version", 0, "Task version previously inspected (required)")
+	return command
+}
+
+func (a *App) claimMergeRequestUnlinkCommand() *cobra.Command {
+	var version int64
+	command := &cobra.Command{
+		Use: "unlink <claim-id> <link-id>", Short: "Unlink one Merge Request by its Pactline link ID",
+		Args: cobra.ExactArgs(2), RunE: func(command *cobra.Command, args []string) error {
+			if err := a.requireMutationProvenance(); err != nil {
+				return err
+			}
+			claimID, err := parseUUID(args[0], "claim-id")
+			if err != nil {
+				return err
+			}
+			linkID, err := parseUUID(args[1], "link-id")
+			if err != nil {
+				return err
+			}
+			if err := requiredPositive("task-version", version); err != nil {
+				return err
+			}
+			response, _, err := a.client.request(
+				command.Context(), http.MethodDelete,
+				"/api/v1/claims/"+claimID+"/merge-requests/"+linkID,
+				nil, version, a.idempotencyKey, true,
+			)
+			if err != nil {
+				return err
+			}
+			return a.outputRaw(response, "Merge Request unlinked")
+		},
+	}
+	command.Flags().Int64Var(&version, "task-version", 0, "Task version previously inspected (required)")
+	return command
 }
 
 func (a *App) claimProgressCommand() *cobra.Command {
@@ -254,6 +384,21 @@ func (a *App) outputRaw(body json.RawMessage, message string) error {
 		}
 	})
 }
+
+func printMergeRequestDelivery(w io.Writer, delivery map[string]any) {
+	links, _ := delivery["active_links"].([]any)
+	fmt.Fprintf(w, "Active Merge Requests: %d\n", len(links))
+	for _, raw := range links {
+		link, _ := raw.(map[string]any)
+		observation, _ := link["latest_observation"].(map[string]any)
+		fmt.Fprintf(w, "  %v  %v  %v\n", link["id"], observation["state"], link["web_url"])
+	}
+	if review, ok := delivery["review"].(map[string]any); ok {
+		comparisons, _ := review["merge_requests"].([]any)
+		fmt.Fprintf(w, "Frozen review snapshot: cycle %v, %d Merge Requests\n", review["review_cycle"], len(comparisons))
+	}
+}
+
 func parseUUID(value, label string) (string, error) {
 	parsed, err := uuid.Parse(value)
 	if err != nil {

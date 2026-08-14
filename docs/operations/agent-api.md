@@ -82,6 +82,30 @@ curl --fail-with-body \
 Every response has an `X-Request-ID`. Bearer responses also include
 `RateLimit-Limit`, `RateLimit-Remaining`, and `RateLimit-Reset`.
 
+For external orchestration, prefer the standalone CLI documented in
+`cmd/pactline/README.md`. `pactline capabilities --json` is an offline binary
+contract check. The parent Harness should retain the Token and exact Claim ID;
+a delegated repository worker does not need the Token.
+
+Use one bounded context request before and after Claim creation:
+
+```text
+GET /api/v1/tasks/{number}/work-packet?thread_items_limit=20
+GET /api/v1/claims/{claim_id}/work-packet?thread_items_limit=20
+```
+
+The limit defaults to 20 and accepts 1 through 100. Both responses include
+current Task, criteria, delivery, recent Main Thread Items, the active Issue
+Thread when present, and visible truncation metadata. The Claim response also
+includes the exact Claim and only its own current-revision checks. Complete
+historical reads remain available through the normal Task and Thread routes.
+
+Claimable discovery uses `claimable_stage=execution|review` on
+`GET /api/v1/tasks`. Execution discovery may additionally filter by the
+current subject as assignee; review discovery must not treat Task assignee as
+reviewer assignment. Use `sort=number&order=asc` and an explicit limit for
+stable bounded queues.
+
 ## Mutation protocol
 
 Every Bearer-authenticated POST, PATCH, and DELETE requires a unique

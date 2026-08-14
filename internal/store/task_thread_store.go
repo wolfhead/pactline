@@ -18,6 +18,17 @@ type TaskThreadStore struct{ db *DB }
 
 func NewTaskThreadStore(db *DB) *TaskThreadStore { return &TaskThreadStore{db: db} }
 
+type TaskThreadContext struct {
+	Main               domain.Thread
+	ActiveIssue        *domain.Thread
+	ResolvedIssueCount int
+}
+
+type RecentThreadItems struct {
+	Items      []domain.ThreadItem
+	TotalCount int
+}
+
 const taskThreadColumns = `thread.id, thread.task_id, thread.role,
 	thread.issue_type, thread.issue_status, thread.opened_from_phase,
 	thread.opened_by_type, thread.opened_by_user_id, thread.opened_by_ref,
@@ -158,6 +169,52 @@ func (s *TaskThreadStore) ListForTaskNumber(
 	return threads, nil
 }
 
+func (s *TaskThreadStore) GetCompactContextForTaskNumber(
+	ctx context.Context,
+	taskNumber int64,
+) (TaskThreadContext, error) {
+	rows, err := s.db.Pool.Query(ctx, `
+		SELECT `+taskThreadColumns+`
+		FROM task_threads thread
+		JOIN tasks task ON task.id=thread.task_id
+		WHERE task.number=$1
+			AND (thread.role='main' OR (thread.role='issue' AND thread.issue_status='open'))
+		ORDER BY CASE WHEN thread.role='main' THEN 0 ELSE 1 END`, taskNumber)
+	if err != nil {
+		return TaskThreadContext{}, fmt.Errorf("get compact Thread context for Task %d: %w", taskNumber, err)
+	}
+	defer rows.Close()
+	var result TaskThreadContext
+	for rows.Next() {
+		thread, scanErr := scanTaskThread(rows)
+		if scanErr != nil {
+			return TaskThreadContext{}, fmt.Errorf("scan compact Thread context for Task %d: %w", taskNumber, scanErr)
+		}
+		if thread.Role == domain.ThreadRoleMain {
+			result.Main = thread
+		} else {
+			issue := thread
+			result.ActiveIssue = &issue
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return TaskThreadContext{}, fmt.Errorf("iterate compact Thread context for Task %d: %w", taskNumber, err)
+	}
+	if result.Main.ID == uuid.Nil {
+		return TaskThreadContext{}, domain.ErrNotFound
+	}
+	if err := s.db.Pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM task_threads thread
+		JOIN tasks task ON task.id=thread.task_id
+		WHERE task.number=$1 AND thread.role='issue' AND thread.issue_status='resolved'`,
+		taskNumber,
+	).Scan(&result.ResolvedIssueCount); err != nil {
+		return TaskThreadContext{}, fmt.Errorf("count resolved Issue Threads for Task %d: %w", taskNumber, err)
+	}
+	return result, nil
+}
+
 func (s *TaskThreadStore) ListItems(
 	ctx context.Context,
 	threadID uuid.UUID,
@@ -193,6 +250,86 @@ func (s *TaskThreadStore) ListItems(
 		return nil, fmt.Errorf("iterate Thread Items for Thread %s: %w", threadID, err)
 	}
 	return items, nil
+}
+
+func (s *TaskThreadStore) ListRecentItems(
+	ctx context.Context,
+	threadID uuid.UUID,
+	limit int,
+) (RecentThreadItems, error) {
+	if limit < 1 || limit > 100 {
+		return RecentThreadItems{}, fmt.Errorf("%w: Thread Item limit must be between 1 and 100", domain.ErrInvalidInput)
+	}
+	result := RecentThreadItems{Items: []domain.ThreadItem{}}
+	if err := s.db.Pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM task_thread_items WHERE thread_id=$1`, threadID,
+	).Scan(&result.TotalCount); err != nil {
+		return RecentThreadItems{}, fmt.Errorf("count Thread Items for Thread %s: %w", threadID, err)
+	}
+	rows, err := s.db.Pool.Query(ctx, `
+		SELECT item.id,item.thread_id,item.kind,
+			item.author_type,item.author_user_id,item.author_ref,
+			item.body,item.typed_payload,item.task_stage_claim_id,item.task_review_cycle,
+			item.reply_to_item_id,
+			COALESCE(ARRAY(
+				SELECT mention.user_id
+				FROM task_thread_item_mentions mention
+				WHERE mention.item_id=item.id
+				ORDER BY mention.user_id
+			), ARRAY[]::uuid[]),
+			item.version,item.created_at,item.updated_at,item.deleted_at
+		FROM task_thread_items item
+		WHERE item.thread_id=$1
+		ORDER BY item.created_at DESC,item.id DESC
+		LIMIT $2`, threadID, limit)
+	if err != nil {
+		return RecentThreadItems{}, fmt.Errorf("list recent Thread Items for Thread %s: %w", threadID, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		item, scanErr := scanTaskThreadItem(rows)
+		if scanErr != nil {
+			return RecentThreadItems{}, fmt.Errorf("scan recent Thread Item for Thread %s: %w", threadID, scanErr)
+		}
+		result.Items = append(result.Items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return RecentThreadItems{}, fmt.Errorf("iterate recent Thread Items for Thread %s: %w", threadID, err)
+	}
+	for left, right := 0, len(result.Items)-1; left < right; left, right = left+1, right-1 {
+		result.Items[left], result.Items[right] = result.Items[right], result.Items[left]
+	}
+	return result, nil
+}
+
+func (s *TaskThreadStore) GetFirstItemByKind(
+	ctx context.Context,
+	threadID uuid.UUID,
+	kind domain.ThreadItemKind,
+) (domain.ThreadItem, error) {
+	item, err := scanTaskThreadItem(s.db.Pool.QueryRow(ctx, `
+		SELECT item.id,item.thread_id,item.kind,
+			item.author_type,item.author_user_id,item.author_ref,
+			item.body,item.typed_payload,item.task_stage_claim_id,item.task_review_cycle,
+			item.reply_to_item_id,
+			COALESCE(ARRAY(
+				SELECT mention.user_id
+				FROM task_thread_item_mentions mention
+				WHERE mention.item_id=item.id
+				ORDER BY mention.user_id
+			), ARRAY[]::uuid[]),
+			item.version,item.created_at,item.updated_at,item.deleted_at
+		FROM task_thread_items item
+		WHERE item.thread_id=$1 AND item.kind=$2
+		ORDER BY item.created_at,item.id
+		LIMIT 1`, threadID, kind))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.ThreadItem{}, domain.ErrNotFound
+	}
+	if err != nil {
+		return domain.ThreadItem{}, fmt.Errorf("get first %s Item for Thread %s: %w", kind, threadID, err)
+	}
+	return item, nil
 }
 
 func scanTaskThreadItem(row scanner) (domain.ThreadItem, error) {

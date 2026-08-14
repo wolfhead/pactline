@@ -48,21 +48,37 @@ audit provenance, not Claim ownership. The exact Token owns the Claim.
 
 ```bash
 pactline doctor
-pactline task list
-pactline task show 142
+pactline capabilities --json
+pactline task list --stage execution --project 12 --limit 50
+pactline task show 142 --compact
 pactline task claim 142 --task-version 4
-pactline claim show <claim-id>
+pactline claim show <claim-id> --compact
 pactline claim progress <claim-id> --message "Focused tests pass."
 pactline claim verify <claim-id> <criterion-id> \
   --task-version 4 --criterion-revision 2 --outcome passed \
   --evidence "go test ./... passed"
 pactline claim submit <claim-id> --task-version 4 --message "Delivery update"
+pactline claim mr link <claim-id> \
+  --url https://gitlab.example/team/repository/-/merge_requests/42 \
+  --task-version 4
+pactline claim mr list <claim-id>
 pactline claim complete <claim-id> --task-version 4 --message "Ready for review"
 ```
 
 `submit` is repeatable and keeps execution owned. `complete` explicitly ends
 the execution Claim and moves the Task to `in_review.available`. Neither an MR
 state nor a submission changes Task phase implicitly.
+
+`task list` defaults to assigned execution work. `--stage review` lists visible
+`in_review.available` work without treating the Task assignee as a reviewer
+assignment. `--project` and `--limit` are server-side bounds; results are
+ordered by Task number.
+
+`task show --compact` and `claim show --compact` use one bounded server request.
+They include recent Main Thread Items, the active Issue Thread when present,
+acceptance context, and delivery evidence. Use `--thread-items-limit 1..100` to
+change the per-Thread bound. The Claim packet reports checks for that exact
+Claim. Omit `--compact` only when complete historical Thread reads are needed.
 
 Use these built-in explanations without consulting external documentation:
 
@@ -72,6 +88,7 @@ pactline help workflow
 pactline help identity
 pactline help output
 pactline claim complete --help
+pactline claim mr --help
 ```
 
 ## Explicit targeting and concurrency
@@ -82,12 +99,23 @@ searches for a “current Claim” by Session ID. The server derives Task identi
 and current Claim version. Commands making a Task lifecycle decision still
 require `--task-version`, representing the Task version the caller inspected.
 
+An external Harness should retain the Token and Claim ID in its parent
+orchestrator and expose only typed Pactline operations to repository workers.
+The repository worker does not need the Pactline Token. `pactline capabilities
+--json` is offline and reports the stable protocol and features implemented by
+the installed binary.
+
 ## Output and diagnostics
 
 Text output is the default. `--json` emits exactly one JSON document on success
 or failure. `-v`/`--verbose` writes redacted method, route, status, duration,
 request ID, and ETag diagnostics to stderr. It never logs credentials, bodies,
 evidence, raw headers, or response bodies.
+
+Successful JSON output keeps the `ok` and `data` fields. When available it also
+includes `meta.request_id`, `meta.etag`, and the exact caller-provided or
+CLI-generated `meta.idempotency_key`. This is the key to reuse only after an
+uncertain mutation outcome.
 
 Exit codes are: `0` success, `2` usage/configuration, `3` authentication or
 authorization, `4` domain/version conflict, and `5` network/provider/server

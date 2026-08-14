@@ -107,3 +107,32 @@ func TestTaskThreadProgressIsImmutableAndMainOnly(t *testing.T) {
 	)
 	require.ErrorIs(t, err, domain.ErrInvalidInput)
 }
+
+func TestTaskThreadRecentItemsAreBoundedAndChronological(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	now := time.Date(2026, 8, 14, 8, 0, 0, 0, time.UTC)
+	created := mustCreateTask(t, db, store.NewTaskStore(db), domain.Task{
+		Title: "Bounded Thread context", CreatorID: userA,
+	}, nil)
+	cleanupTask(t, db, created.Task.ID)
+	threads := store.NewTaskThreadStore(db)
+	main, err := threads.GetMainByTaskNumber(ctx, created.Task.Number)
+	require.NoError(t, err)
+	author := domain.Actor{Type: domain.ActorTypeUser, UserID: &userA}
+	for index, body := range []string{"one", "two", "three", "four"} {
+		_, err := threads.AddItem(
+			ctx, main.ID, domain.ThreadItemKindMessage, body, nil, nil, author,
+			domain.SessionOperation(userA, "bounded-thread"), now.Add(time.Duration(index)*time.Minute),
+		)
+		require.NoError(t, err)
+	}
+
+	recent, err := threads.ListRecentItems(ctx, main.ID, 2)
+	require.NoError(t, err)
+	require.Equal(t, 4, recent.TotalCount)
+	require.Equal(t, []string{"three", "four"}, []string{recent.Items[0].Body, recent.Items[1].Body})
+
+	_, err = threads.ListRecentItems(ctx, main.ID, 0)
+	require.ErrorIs(t, err, domain.ErrInvalidInput)
+}

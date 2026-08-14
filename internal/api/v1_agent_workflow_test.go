@@ -186,6 +186,21 @@ func TestGeneratedClientAgentWorkflow(t *testing.T) {
 	require.NoError(t, err)
 	taskCriterionCreated, ok := taskCriterionResult.(*generated.CriterionCreatedHeaders)
 	require.True(t, ok, "unexpected task criterion response %T", taskCriterionResult)
+	taskPacketResponse := do(
+		t, handler, http.MethodGet,
+		fmt.Sprintf("/api/v1/tasks/%d/work-packet?thread_items_limit=1", task.Number),
+		userA, nil,
+	)
+	require.Equal(t, http.StatusOK, taskPacketResponse.Code, taskPacketResponse.Body.String())
+	var taskPacket generated.TaskWorkPacket
+	decodeJSON(t, taskPacketResponse, &taskPacket)
+	require.Equal(t, task.Number, taskPacket.Task.Number)
+	require.Len(t, taskPacket.Criteria, 1)
+	require.LessOrEqual(t, taskPacket.MainThread.ReturnedCount, 1)
+	require.Equal(t,
+		taskPacket.MainThread.ReturnedCount < taskPacket.MainThread.TotalCount,
+		taskPacket.MainThread.Truncated,
+	)
 
 	checkResult, err := client.CreateAcceptanceCheck(
 		ctx,
@@ -323,6 +338,25 @@ func TestGeneratedClientAgentWorkflow(t *testing.T) {
 			acceptance, acceptanceOK := acceptanceResult.(*generated.AcceptanceCheckCreatedHeaders)
 			require.True(t, acceptanceOK, "unexpected acceptance response %T", acceptanceResult)
 			require.Equal(t, generated.AcceptanceCheckPurposeAcceptance, acceptance.Response.Purpose.Or(""))
+
+			for _, expected := range []struct {
+				claimID uuid.UUID
+				purpose generated.AcceptanceCheckPurpose
+			}{
+				{execution.Response.Claim.ID, generated.AcceptanceCheckPurposeExecutionVerification},
+				{review.Response.Claim.ID, generated.AcceptanceCheckPurposeAcceptance},
+			} {
+				packetResult, packetErr := client.GetClaimWorkPacket(ctx, generated.GetClaimWorkPacketParams{
+					ClaimID: expected.claimID,
+				})
+				require.NoError(t, packetErr)
+				packet, packetOK := packetResult.(*generated.ClaimWorkPacketHeaders)
+				require.True(t, packetOK, "unexpected Claim packet response %T", packetResult)
+				check, hasCheck := packet.Response.Criteria[0].CurrentCheck.Get()
+				require.True(t, hasCheck)
+				require.Equal(t, expected.claimID, check.TaskClaimID.Or(uuid.Nil))
+				require.Equal(t, expected.purpose, check.Purpose.Or(""))
+			}
 		}
 
 		acceptResult, acceptErr := client.AcceptTask(
@@ -370,7 +404,7 @@ func TestGeneratedClientAgentWorkflow(t *testing.T) {
 	)
 	require.NoError(t, err)
 	archivedProject, ok := archivedProjectResult.(*generated.ProjectHeaders)
-	require.True(t, ok, "unexpected archive Project response %T", archivedProjectResult)
+	require.True(t, ok, "unexpected archive Project response %T: %#v", archivedProjectResult, archivedProjectResult)
 	_, archived := archivedProject.Response.ArchivedAt.Get()
 	require.True(t, archived)
 }

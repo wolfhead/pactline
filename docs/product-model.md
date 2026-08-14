@@ -150,6 +150,14 @@ polling or hidden refresh loop. A merged MR is evidence only: Code Review is
 review work, and current-cycle Acceptance Checks remain the sole authority for
 accepting the Task.
 
+External work orchestration may read a bounded work packet for a Task before
+claiming or for one explicit Claim afterward. The server aggregates the Task,
+current criteria, delivery, recent Main Thread Items, and the active Issue
+Thread. Claim packets select current-revision checks for that exact Claim.
+Resolved Issue history is represented by a count and remains available through
+the complete Thread endpoints. Compact reads query recent Items with an
+explicit bound; they do not load and discard complete Thread history.
+
 ## Acceptance
 
 Milestones and Tasks share two acceptance entities:
@@ -267,6 +275,12 @@ unique Claim ID. The server derives its immutable Task association and current
 Claim version; callers do not send a Task number or Claim version. Task
 `If-Match` remains explicit for lifecycle decisions because the server cannot
 infer which Task definition version the caller evaluated.
+
+Task discovery can ask for currently claimable execution or review work as a
+domain filter. Execution availability means `ready` or
+`in_progress.available`; review availability means `in_review.available`.
+These predicates are evaluated by the server rather than reconstructed from
+independent phase and activity filters by each client.
 
 Claims expire after seven days. Expiry is evaluated while the workflow is
 accessed; there is no periodic Claim poll, heartbeat, or extension command.

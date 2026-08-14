@@ -79,12 +79,14 @@ func requiredScope(operation generated.OperationName) access.Scope {
 		generated.WithdrawTaskReadinessOperation:
 		return access.ScopeWorkExecute
 	case generated.GetCurrentPrincipalOperation,
+		generated.GetClaimWorkPacketOperation,
 		generated.GetTaskStageClaimOperation,
 		generated.GetAgentConversationOperation,
 		generated.GetCurrentAgentConversationConfigurationOperation,
 		generated.GetProjectOperation,
 		generated.GetTaskDeliveryOperation,
 		generated.GetTaskOperation,
+		generated.GetTaskWorkPacketOperation,
 		generated.ListLabelsOperation,
 		generated.ListAgentConversationsOperation,
 		generated.ListMilestoneCriteriaOperation,

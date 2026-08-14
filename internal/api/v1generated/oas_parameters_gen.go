@@ -6059,6 +6059,153 @@ func decodeGetAgentConversationParams(args [1]string, argsEscaped bool, r *http.
 	return params, nil
 }
 
+// GetClaimWorkPacketParams is parameters of getClaimWorkPacket operation.
+type GetClaimWorkPacketParams struct {
+	ThreadItemsLimit OptInt `json:",omitempty,omitzero"`
+	ClaimID          uuid.UUID
+}
+
+func unpackGetClaimWorkPacketParams(packed middleware.Parameters) (params GetClaimWorkPacketParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "thread_items_limit",
+			In:   "query",
+		}
+		if v, ok := packed[key]; ok {
+			params.ThreadItemsLimit = v.(OptInt)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "claim_id",
+			In:   "path",
+		}
+		params.ClaimID = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeGetClaimWorkPacketParams(args [1]string, argsEscaped bool, r *http.Request) (params GetClaimWorkPacketParams, _ error) {
+	q := uri.NewQueryDecoder(r.URL.Query())
+	// Set default value for query: thread_items_limit.
+	{
+		val := int(20)
+		params.ThreadItemsLimit.SetTo(val)
+	}
+	// Decode query: thread_items_limit.
+	if err := func() error {
+		cfg := uri.QueryParameterDecodingConfig{
+			Name:    "thread_items_limit",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.HasParam(cfg); err == nil {
+			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotThreadItemsLimitVal int
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToInt(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotThreadItemsLimitVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.ThreadItemsLimit.SetTo(paramsDotThreadItemsLimitVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.ThreadItemsLimit.Get(); ok {
+					if err := func() error {
+						if err := (validate.Int{
+							MinSet:        true,
+							Min:           1,
+							MaxSet:        true,
+							Max:           100,
+							MinExclusive:  false,
+							MaxExclusive:  false,
+							MultipleOfSet: false,
+							MultipleOf:    0,
+							Pattern:       nil,
+						}).Validate(int64(value)); err != nil {
+							return errors.Wrap(err, "int")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "thread_items_limit",
+			In:   "query",
+			Err:  err,
+		}
+	}
+	// Decode path: claim_id.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "claim_id",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.ClaimID = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "claim_id",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // GetProjectParams is parameters of getProject operation.
 type GetProjectParams struct {
 	Number int64
@@ -6574,6 +6721,171 @@ func decodeGetTaskStageClaimParams(args [1]string, argsEscaped bool, r *http.Req
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "claim_id",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// GetTaskWorkPacketParams is parameters of getTaskWorkPacket operation.
+type GetTaskWorkPacketParams struct {
+	ThreadItemsLimit OptInt `json:",omitempty,omitzero"`
+	Number           int64
+}
+
+func unpackGetTaskWorkPacketParams(packed middleware.Parameters) (params GetTaskWorkPacketParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "thread_items_limit",
+			In:   "query",
+		}
+		if v, ok := packed[key]; ok {
+			params.ThreadItemsLimit = v.(OptInt)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "number",
+			In:   "path",
+		}
+		params.Number = packed[key].(int64)
+	}
+	return params
+}
+
+func decodeGetTaskWorkPacketParams(args [1]string, argsEscaped bool, r *http.Request) (params GetTaskWorkPacketParams, _ error) {
+	q := uri.NewQueryDecoder(r.URL.Query())
+	// Set default value for query: thread_items_limit.
+	{
+		val := int(20)
+		params.ThreadItemsLimit.SetTo(val)
+	}
+	// Decode query: thread_items_limit.
+	if err := func() error {
+		cfg := uri.QueryParameterDecodingConfig{
+			Name:    "thread_items_limit",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.HasParam(cfg); err == nil {
+			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotThreadItemsLimitVal int
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToInt(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotThreadItemsLimitVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.ThreadItemsLimit.SetTo(paramsDotThreadItemsLimitVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.ThreadItemsLimit.Get(); ok {
+					if err := func() error {
+						if err := (validate.Int{
+							MinSet:        true,
+							Min:           1,
+							MaxSet:        true,
+							Max:           100,
+							MinExclusive:  false,
+							MaxExclusive:  false,
+							MultipleOfSet: false,
+							MultipleOf:    0,
+							Pattern:       nil,
+						}).Validate(int64(value)); err != nil {
+							return errors.Wrap(err, "int")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "thread_items_limit",
+			In:   "query",
+			Err:  err,
+		}
+	}
+	// Decode path: number.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "number",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToInt64(val)
+				if err != nil {
+					return err
+				}
+
+				params.Number = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+			if err := func() error {
+				if err := (validate.Int{
+					MinSet:        true,
+					Min:           1,
+					MaxSet:        false,
+					Max:           0,
+					MinExclusive:  false,
+					MaxExclusive:  false,
+					MultipleOfSet: false,
+					MultipleOf:    0,
+					Pattern:       nil,
+				}).Validate(int64(params.Number)); err != nil {
+					return errors.Wrap(err, "int")
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "number",
 			In:   "path",
 			Err:  err,
 		}
@@ -9105,7 +9417,9 @@ type ListTasksParams struct {
 	Q        OptString           `json:",omitempty,omitzero"`
 	Phase    []TaskPhase         `json:",omitempty"`
 	Activity []TaskActivityState `json:",omitempty"`
-	Priority []TaskPriority      `json:",omitempty"`
+	// Return only Tasks currently available for the requested Claim stage.
+	ClaimableStage OptTaskClaimStage `json:",omitempty,omitzero"`
+	Priority       []TaskPriority    `json:",omitempty"`
 	// User UUID or `none`.
 	Assignee      OptString   `json:",omitempty,omitzero"`
 	Label         []uuid.UUID `json:",omitempty"`
@@ -9163,6 +9477,15 @@ func unpackListTasksParams(packed middleware.Parameters) (params ListTasksParams
 		}
 		if v, ok := packed[key]; ok {
 			params.Activity = v.([]TaskActivityState)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "claimable_stage",
+			In:   "query",
+		}
+		if v, ok := packed[key]; ok {
+			params.ClaimableStage = v.(OptTaskClaimStage)
 		}
 	}
 	{
@@ -9593,6 +9916,62 @@ func decodeListTasksParams(args [0]string, argsEscaped bool, r *http.Request) (p
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "activity",
+			In:   "query",
+			Err:  err,
+		}
+	}
+	// Decode query: claimable_stage.
+	if err := func() error {
+		cfg := uri.QueryParameterDecodingConfig{
+			Name:    "claimable_stage",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.HasParam(cfg); err == nil {
+			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotClaimableStageVal TaskClaimStage
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotClaimableStageVal = TaskClaimStage(c)
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.ClaimableStage.SetTo(paramsDotClaimableStageVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.ClaimableStage.Get(); ok {
+					if err := func() error {
+						if err := value.Validate(); err != nil {
+							return err
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "claimable_stage",
 			In:   "query",
 			Err:  err,
 		}

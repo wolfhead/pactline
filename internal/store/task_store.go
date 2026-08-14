@@ -1711,6 +1711,10 @@ func (s *TaskStore) ListActivity(ctx context.Context, taskID uuid.UUID) ([]domai
 type TaskListFilter struct {
 	Phases     []domain.TaskPhase
 	Activities []domain.TaskActivityState
+	// ClaimableStage applies the lifecycle's stage-aware availability rule.
+	// Execution availability cannot be represented by independent phase and
+	// activity predicates because it includes ready Tasks without an activity.
+	ClaimableStage domain.TaskClaimStage
 	// Statuses and ExecutionModes are retained only for pre-migration internal callers.
 	Statuses       []domain.TaskStatus
 	Priorities     []domain.TaskPriority
@@ -1866,6 +1870,17 @@ func (s *TaskStore) List(ctx context.Context, f TaskListFilter) (TaskListResult,
 	}
 	if len(f.Activities) > 0 {
 		where = append(where, "t.activity_state = ANY("+arg(activityStrings(f.Activities))+"::text[])")
+	}
+	switch f.ClaimableStage {
+	case "":
+	case domain.TaskClaimStageExecution:
+		where = append(where, "(t.phase='ready' OR (t.phase='in_progress' AND t.activity_state='available'))")
+	case domain.TaskClaimStageReview:
+		where = append(where, "t.phase='in_review' AND t.activity_state='available'")
+	default:
+		return TaskListResult{}, fmt.Errorf(
+			"%w: invalid claimable Task stage %q", domain.ErrInvalidInput, f.ClaimableStage,
+		)
 	}
 	if len(f.Priorities) > 0 {
 		where = append(where, "t.priority = ANY("+arg(priorityStrings(f.Priorities))+"::text[])")
