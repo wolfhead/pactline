@@ -17,7 +17,7 @@ type RepositoryProviderClient interface {
 		context.Context, domain.RepositoryReference, []byte, string,
 	) (domain.RepositoryIdentity, error)
 	GetCodeChange(
-		context.Context, string, string, domain.CodeChangeKind, int64, []byte, string,
+		context.Context, domain.RepositoryReference, string, domain.CodeChangeKind, int64, []byte, string,
 	) (domain.CodeChange, error)
 }
 
@@ -65,58 +65,52 @@ func (r *RepositoryProviderRegistry) ParseRepositoryURL(
 	return reference, nil
 }
 
-func (r *RepositoryProviderRegistry) MatchRepositoryURL(rawURL string) (domain.RepositoryReference, error) {
+func (r *RepositoryProviderRegistry) RepositoryURLCandidates(rawURL string) ([]domain.RepositoryReference, error) {
 	if r == nil || len(r.providers) == 0 {
-		return domain.RepositoryReference{}, domain.ErrIntegrationNotConfigured
+		return nil, domain.ErrIntegrationNotConfigured
 	}
 	providers := make([]string, 0, len(r.providers))
 	for provider := range r.providers {
 		providers = append(providers, string(provider))
 	}
 	sort.Strings(providers)
-	var match *domain.RepositoryReference
+	matches := make([]domain.RepositoryReference, 0, len(providers))
 	for _, value := range providers {
 		provider := domain.RepositoryProvider(value)
 		reference, err := r.providers[provider].ParseRepositoryURL(rawURL)
 		if err != nil {
 			continue
 		}
-		if match != nil {
-			return domain.RepositoryReference{}, fmt.Errorf("%w: repository URL matches more than one provider", domain.ErrConflict)
-		}
-		match = &reference
+		matches = append(matches, reference)
 	}
-	if match == nil {
-		return domain.RepositoryReference{}, fmt.Errorf("%w: repository URL does not match a configured provider", domain.ErrInvalidInput)
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("%w: repository URL does not match a configured provider", domain.ErrInvalidInput)
 	}
-	return *match, nil
+	return matches, nil
 }
 
-func (r *RepositoryProviderRegistry) MatchCodeChangeURL(rawURL string) (domain.CodeChangeReference, error) {
+func (r *RepositoryProviderRegistry) CodeChangeURLCandidates(rawURL string) ([]domain.CodeChangeReference, error) {
 	if r == nil || len(r.providers) == 0 {
-		return domain.CodeChangeReference{}, domain.ErrIntegrationNotConfigured
+		return nil, domain.ErrIntegrationNotConfigured
 	}
 	providers := make([]string, 0, len(r.providers))
 	for provider := range r.providers {
 		providers = append(providers, string(provider))
 	}
 	sort.Strings(providers)
-	var match *domain.CodeChangeReference
+	matches := make([]domain.CodeChangeReference, 0, len(providers))
 	for _, value := range providers {
 		client := r.providers[domain.RepositoryProvider(value)]
 		reference, err := client.ParseCodeChangeURL(rawURL)
 		if err != nil {
 			continue
 		}
-		if match != nil {
-			return domain.CodeChangeReference{}, fmt.Errorf("%w: code change URL matches more than one provider", domain.ErrConflict)
-		}
-		match = &reference
+		matches = append(matches, reference)
 	}
-	if match == nil {
-		return domain.CodeChangeReference{}, fmt.Errorf("%w: code change URL does not match a configured provider", domain.ErrInvalidInput)
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("%w: code change URL does not match a configured provider", domain.ErrInvalidInput)
 	}
-	return *match, nil
+	return matches, nil
 }
 
 func mapRepositoryProviderError(provider domain.RepositoryProvider, err error) error {

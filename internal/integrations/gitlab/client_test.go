@@ -94,7 +94,7 @@ func TestGetCodeChangeReturnsConfirmedObservation(t *testing.T) {
 	client.now = func() time.Time { return time.Date(2026, 8, 13, 9, 0, 0, 0, time.UTC) }
 
 	codeChange, err := client.GetCodeChange(
-		context.Background(), server.URL, "17", domain.CodeChangeKindMergeRequest,
+		context.Background(), domain.RepositoryReference{Provider: domain.RepositoryProviderGitLab, Origin: server.URL}, "17", domain.CodeChangeKindMergeRequest,
 		42, []byte("secret"), "request-2",
 	)
 	require.NoError(t, err)

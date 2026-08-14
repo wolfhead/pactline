@@ -106,7 +106,7 @@ export default function ProjectRepositoryAccessPanel({
             required
             value={repositoryURL}
             onChange={(event) => setRepositoryURL(event.target.value)}
-            placeholder="https://gitlab.example/group/repository"
+            placeholder="https://github.com/owner/repository 或 GitLab 仓库地址"
             className="h-10 min-w-0 flex-1 rounded-md border border-border-strong bg-surface px-3 text-sm outline-none focus:border-accent focus:ring-3 focus:ring-accent/20"
           />
           <button

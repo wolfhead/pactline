@@ -28,6 +28,7 @@ import (
 	"github.com/wolfhead/pactline/internal/identity"
 	"github.com/wolfhead/pactline/internal/integrations/deepseek"
 	"github.com/wolfhead/pactline/internal/integrations/devauth"
+	githubintegration "github.com/wolfhead/pactline/internal/integrations/github"
 	gitlabintegration "github.com/wolfhead/pactline/internal/integrations/gitlab"
 	"github.com/wolfhead/pactline/internal/integrations/lark"
 	legacyapi "github.com/wolfhead/pactline/internal/legacy/api"
@@ -129,7 +130,8 @@ func main() {
 		}
 	}
 	gitLabProvider := gitlabintegration.NewClient(nil, 10*time.Second)
-	repositoryProviders, err := application.NewRepositoryProviderRegistry(gitLabProvider)
+	gitHubProvider := githubintegration.NewClient(nil, 10*time.Second)
+	repositoryProviders, err := application.NewRepositoryProviderRegistry(gitLabProvider, gitHubProvider)
 	if err != nil {
 		slog.Error("configure repository providers", "error", err)
 		os.Exit(1)

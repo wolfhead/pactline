@@ -60,8 +60,11 @@ pactline claim verify <claim-id> <criterion-id> \
   --evidence "go test ./... passed"
 pactline claim submit <claim-id> --task-version 4 --message "Delivery update"
 pactline claim change link <claim-id> \
-  --url https://gitlab.example/team/repository/-/merge_requests/42 \
+  --url https://github.com/owner/repository/pull/42 \
   --task-version 4
+pactline claim change link <claim-id> \
+  --url https://gitlab.example/team/repository/-/merge_requests/43 \
+  --task-version 5
 pactline claim change list <claim-id>
 pactline claim complete <claim-id> --task-version 4 --message "Ready for review"
 
@@ -79,6 +82,11 @@ pactline claim accept <review-claim-id> \
 `submit` is repeatable and keeps execution owned. `complete` explicitly ends
 the execution Claim and moves the Task to `in_review.available`. Neither a
 code-change state nor a submission changes Task phase implicitly.
+
+The same `claim change` commands handle GitHub Pull Requests and GitLab Merge
+Requests. The server's configured Repository Connections determine which
+providers and repositories are available; the CLI does not infer or store
+provider credentials.
 
 A reviewer claims the same Task with `--stage review`. This flag is a local
 safety assertion: Pactline still derives the actual Claim stage from the Task's

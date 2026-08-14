@@ -120,8 +120,9 @@ exactly one provider, origin, and provider repository ID. Its read credential
 is encrypted at rest and never returned by an API. Pactline uses it only for
 read-only repository and code-change requests; it does not write to the
 provider, merge code, trigger CI, or treat provider state as Task workflow
-authority. The provider-neutral contract admits GitLab and GitHub; the
-available adapter determines which provider can be used at runtime.
+authority. The runtime supports GitLab Merge Requests and GitHub Pull Requests,
+including `github.com` and HTTPS GitHub Enterprise Server. Provider credentials
+remain server-side and are never needed by a CLI or delegated repository worker.
 
 A Project administrator authorizes a repository for one Project by pasting its
 repository URL. Pactline matches an existing active Connection and
