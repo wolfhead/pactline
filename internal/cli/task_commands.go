@@ -29,7 +29,7 @@ type taskPage struct {
 }
 
 func (a *App) taskCommand() *cobra.Command {
-	command := &cobra.Command{Use: "task", Short: "Discover claimable Tasks and start execution"}
+	command := &cobra.Command{Use: "task", Short: "Discover and claim execution or review work"}
 	command.AddCommand(a.taskListCommand(), a.taskShowCommand(), a.taskClaimCommand())
 	return command
 }
@@ -146,16 +146,22 @@ func (a *App) compactPacket(command *cobra.Command, path string) (map[string]any
 
 func (a *App) taskClaimCommand() *cobra.Command {
 	var version int64
+	var stage string
 	command := &cobra.Command{
-		Use: "claim <task-number>", Short: "Claim an available execution Task",
-		Long: `Creates one execution Claim for the Task version you inspected.
+		Use: "claim <task-number>", Short: "Claim an available execution or review Task",
+		Long: `Creates one Claim for the Task version you inspected.
 
 The response Claim ID is the explicit target for every later command. This
-does not submit or complete work. CLI v0.1 refuses review-stage Claims.`,
-		Example: "pactline task claim 142 --task-version 4",
-		Args:    cobra.ExactArgs(1), RunE: func(command *cobra.Command, args []string) error {
+does not submit, review, or complete work. --stage is a local safety assertion;
+the server derives the Claim stage from the authoritative Task state.`,
+		Example: `pactline task claim 142 --stage execution --task-version 4
+pactline task claim 142 --stage review --task-version 8`,
+		Args: cobra.ExactArgs(1), RunE: func(command *cobra.Command, args []string) error {
 			if err := a.requireMutationProvenance(); err != nil {
 				return err
+			}
+			if stage != "execution" && stage != "review" {
+				return &APIError{Code: "USAGE", Message: "--stage must be execution or review"}
 			}
 			number, err := parsePositive(args[0], "task-number")
 			if err != nil {
@@ -173,10 +179,16 @@ does not submit or complete work. CLI v0.1 refuses review-stage Claims.`,
 			if err := json.Unmarshal(inspectedBody, &inspected); err != nil {
 				return err
 			}
-			if inspected.Phase == "in_review" && inspected.Activity == "available" {
+			if stage == "review" && (inspected.Phase != "in_review" || inspected.Activity != "available") {
 				return &APIError{
-					Code: "REVIEW_NOT_SUPPORTED", Message: "CLI v0.1 does not claim Task review work",
-					Hint: "Claim and review this Task in the Web UI.",
+					Code: "USAGE", Message: "--stage review requires in_review.available",
+					Hint: "Inspect the Task again and choose the stage matching its current state.",
+				}
+			}
+			if stage == "execution" && inspected.Phase == "in_review" {
+				return &APIError{
+					Code: "USAGE", Message: "--stage execution does not match an in_review Task",
+					Hint: "Use --stage review only when the Task is in_review.available.",
 				}
 			}
 			body, _, err := a.client.request(command.Context(), http.MethodPost,
@@ -188,14 +200,15 @@ does not submit or complete work. CLI v0.1 refuses review-stage Claims.`,
 			if err := json.Unmarshal(body, &result); err != nil {
 				return err
 			}
-			if result.Claim.Stage != "execution" {
-				return &APIError{Code: "UNEXPECTED_CLAIM_STAGE", Message: "server returned a non-execution Claim", Hint: "Release the Claim in the Web UI and inspect the Task state."}
+			if result.Claim.Stage != stage {
+				return &APIError{Code: "UNEXPECTED_CLAIM_STAGE", Message: fmt.Sprintf("server returned an unexpected %s Claim after --stage %s", result.Claim.Stage, stage), Hint: fmt.Sprintf("Release Claim %s and inspect the Task state.", result.Claim.ID)}
 			}
 			return a.output(result, func(w io.Writer) {
 				fmt.Fprintf(w, "Claim ID: %s\nTask: #%d\nStage: %s\nTask version: %d\n", result.Claim.ID, result.Task.TaskNumber, result.Claim.Stage, result.Task.Version)
 			})
 		},
 	}
+	command.Flags().StringVar(&stage, "stage", "execution", "expected Claim stage: execution or review")
 	command.Flags().Int64Var(&version, "task-version", 0, "Task version previously inspected (required)")
 	return command
 }

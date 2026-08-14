@@ -225,6 +225,36 @@ The request contains criterion revision, outcome, and evidence. The server
 derives Task identity and current Claim version from `claim_id`; the Task
 version evaluated by the caller remains explicit in `If-Match`.
 
+For an execution Claim, the server records the purpose as
+`execution_verification`. For a review Claim, it records `acceptance` and the
+current review cycle. Clients must not supply purpose or review cycle. A Task
+with active criteria can be accepted only when every current criterion revision
+has a passing current-cycle acceptance check.
+
+## External review workflow
+
+Review remains ordinary claimed work; it is not GitLab Code Review state and it
+is not assigned through the Task assignee. A stateless external Harness should:
+
+1. discover `in_review.available` Tasks with `pactline task list --stage review`;
+2. inspect a bounded Task packet and retain its Task version;
+3. claim with `pactline task claim <number> --stage review --task-version <version>`;
+4. inspect the explicit Review Claim packet and frozen delivery snapshot;
+5. perform Code Review, provider inspection, and required verification itself;
+6. record each criterion result with `pactline claim verify`; and
+7. finish with `pactline claim request-changes` or `pactline claim accept`.
+
+`--stage review` is a client-side safety assertion only. The server derives the
+Claim stage from the authoritative Task state and rejects stale or unavailable
+work. `request-changes` ends the Claim and returns the Task to
+`in_progress.available`; `accept` ends the Claim and moves the Task to `done`.
+Neither provider state nor release of a Review Claim implicitly accepts work.
+
+Review work may also use the existing phase-preserving commands. `claim
+release` returns the Task to `in_review.available`. `claim request-resolution`
+ends the Claim and creates a typed Issue Thread; resolving the Issue returns the
+same review phase to `available` without reviving the old Claim.
+
 ## Error handling
 
 `/api/v1` errors use RFC 9457 Problem Details:

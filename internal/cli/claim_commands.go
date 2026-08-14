@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -38,6 +37,7 @@ func (a *App) claimCommand() *cobra.Command {
 		a.claimListCommand(), a.claimShowCommand(), a.claimProgressCommand(),
 		a.claimVerifyCommand(), a.claimBodyCommand("submit"),
 		a.claimBodyCommand("complete"), a.claimBodyCommand("release"),
+		a.claimBodyCommand("request-changes"), a.claimBodyCommand("accept"),
 		a.claimResolutionCommand(), a.claimMergeRequestCommand(),
 	)
 	return command
@@ -245,7 +245,7 @@ func (a *App) claimProgressCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		body, err := content(message, file, a.stdin, "message")
+		body, err := contentWithFlags(message, file, a.stdin, "message", "message", "file")
 		if err != nil {
 			return err
 		}
@@ -263,7 +263,7 @@ func (a *App) claimProgressCommand() *cobra.Command {
 func (a *App) claimVerifyCommand() *cobra.Command {
 	var version, revision int64
 	var outcome, evidence, evidenceFile string
-	command := &cobra.Command{Use: "verify <claim-id> <criterion-id>", Short: "Record Claim-owned criterion evidence", Long: "Records execution verification for an execution Claim. Criterion revision and the Task version you inspected are explicit concurrency inputs.", Args: cobra.ExactArgs(2), RunE: func(command *cobra.Command, args []string) error {
+	command := &cobra.Command{Use: "verify <claim-id> <criterion-id>", Short: "Record Claim-owned criterion evidence", Long: "Records execution verification for an execution Claim or acceptance evidence for a review Claim. The server derives purpose and review cycle from the explicit Claim. Criterion revision and the Task version you inspected are explicit concurrency inputs.", Args: cobra.ExactArgs(2), RunE: func(command *cobra.Command, args []string) error {
 		if err := a.requireMutationProvenance(); err != nil {
 			return err
 		}
@@ -292,7 +292,15 @@ func (a *App) claimVerifyCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		return a.outputRaw(response, "Verification recorded")
+		var check map[string]any
+		if err := json.Unmarshal(response, &check); err != nil {
+			return err
+		}
+		message := "Execution verification recorded"
+		if check["purpose"] == "acceptance" {
+			message = "Acceptance evidence recorded"
+		}
+		return a.output(check, func(w io.Writer) { fmt.Fprintln(w, message) })
 	}}
 	command.Flags().Int64Var(&version, "task-version", 0, "Task version previously inspected (required)")
 	command.Flags().Int64Var(&revision, "criterion-revision", 0, "criterion revision verified (required)")
@@ -305,8 +313,36 @@ func (a *App) claimVerifyCommand() *cobra.Command {
 func (a *App) claimBodyCommand(name string) *cobra.Command {
 	var version int64
 	var message, file string
-	settings := map[string]struct{ short, path, effect string }{"submit": {"Record a repeatable work submission", "submissions", "keeps the Claim active"}, "complete": {"Complete execution and enter Task review", "complete-execution", "ends execution and moves the Task to in_review.available"}, "release": {"Release the Claim with a durable handoff", "release", "ends the Claim and keeps the Task phase available"}}[name]
-	command := &cobra.Command{Use: name + " <claim-id>", Short: settings.short, Long: fmt.Sprintf("Targets exactly one Claim ID and %s. It never infers a Claim from Client Session ID. Reuse --idempotency-key only after an uncertain network outcome.", settings.effect), Args: cobra.ExactArgs(1), RunE: func(command *cobra.Command, args []string) error {
+	settings := map[string]struct {
+		short, path, effect, detail, success, example, messageHelp string
+	}{
+		"submit": {
+			"Record a repeatable work submission", "submissions", "keeps the execution Claim active",
+			"This is an execution-only delivery update. It does not complete execution or release the Claim.",
+			"Submission succeeded", `pactline claim submit <claim-id> --task-version 4 --message "Delivery update"`, "inline delivery summary",
+		},
+		"complete": {
+			"Complete execution and enter Task review", "complete-execution", "ends execution and moves the Task to in_review.available",
+			"This freezes the current delivery snapshot for the next review cycle. It does not accept the Task.",
+			"Complete succeeded", `pactline claim complete <claim-id> --task-version 4 --message "Ready for review"`, "inline execution completion summary",
+		},
+		"release": {
+			"Release the Claim with a durable handoff", "release", "ends the Claim and keeps the Task phase available",
+			"Release works in execution or review. It does not complete execution, request changes, or accept the Task.",
+			"Release succeeded", `pactline claim release <claim-id> --task-version 4 --message "Handoff for the next worker"`, "inline handoff",
+		},
+		"request-changes": {
+			"Return reviewed work to execution", "request-changes", "ends review and moves the Task to in_progress.available",
+			"This requires an active Review Claim. The message becomes the durable review outcome; this command does not open an Issue Thread.",
+			"Changes requested", `pactline claim request-changes <claim-id> --task-version 9 --message "The error path still lacks coverage"`, "inline change request",
+		},
+		"accept": {
+			"Accept the reviewed Task as done", "accept", "ends review and moves the Task to done",
+			"This requires an active Review Claim and passing current-cycle acceptance evidence for every active criterion.",
+			"Task accepted", `pactline claim accept <claim-id> --task-version 9 --message "Acceptance contract satisfied"`, "inline acceptance summary",
+		},
+	}[name]
+	command := &cobra.Command{Use: name + " <claim-id>", Short: settings.short, Long: fmt.Sprintf("Targets exactly one Claim ID and %s. It never infers a Claim from Client Session ID. %s Reuse --idempotency-key only after an uncertain network outcome.", settings.effect, settings.detail), Example: settings.example, Args: cobra.ExactArgs(1), RunE: func(command *cobra.Command, args []string) error {
 		if err := a.requireMutationProvenance(); err != nil {
 			return err
 		}
@@ -317,7 +353,7 @@ func (a *App) claimBodyCommand(name string) *cobra.Command {
 		if err := requiredPositive("task-version", version); err != nil {
 			return err
 		}
-		body, err := content(message, file, a.stdin, "message")
+		body, err := contentWithFlags(message, file, a.stdin, "message", "message", "file")
 		if err != nil {
 			return err
 		}
@@ -325,10 +361,10 @@ func (a *App) claimBodyCommand(name string) *cobra.Command {
 		if err != nil {
 			return err
 		}
-		return a.outputRaw(response, strings.ToUpper(name[:1])+name[1:]+" succeeded")
+		return a.outputRaw(response, settings.success)
 	}}
 	command.Flags().Int64Var(&version, "task-version", 0, "Task version previously inspected (required)")
-	command.Flags().StringVar(&message, "message", "", "inline summary or handoff")
+	command.Flags().StringVar(&message, "message", "", settings.messageHelp)
 	command.Flags().StringVar(&file, "file", "", "read text from file; use - for stdin")
 	return command
 }
@@ -350,7 +386,7 @@ func (a *App) claimResolutionCommand() *cobra.Command {
 		if issueType != "decision_required" && issueType != "dependency_required" {
 			return &APIError{Code: "USAGE", Message: "--issue-type must be decision_required or dependency_required"}
 		}
-		request, err := content(message, file, a.stdin, "message")
+		request, err := contentWithFlags(message, file, a.stdin, "message", "message", "file")
 		if err != nil {
 			return err
 		}

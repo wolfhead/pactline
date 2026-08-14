@@ -1,9 +1,9 @@
-# Pactline CLI v0.1
+# Pactline CLI
 
-`pactline` is a single, CGO-free executable for people and Agents executing
-Pactline Tasks. It has no Python, Node.js, Docker, or repository dependency.
-CLI v0.1 covers execution from assigned Task discovery through
-`in_review.available`; Code Review and final acceptance remain in the Web UI.
+`pactline` is a single, CGO-free executable for people and Agents executing and
+reviewing Pactline Tasks. It has no Python, Node.js, Docker, or repository
+dependency. The CLI covers the complete Claim workflow from assigned execution
+discovery through review acceptance or a request for changes.
 
 ## Install
 
@@ -63,11 +63,40 @@ pactline claim mr link <claim-id> \
   --task-version 4
 pactline claim mr list <claim-id>
 pactline claim complete <claim-id> --task-version 4 --message "Ready for review"
+
+pactline task list --stage review --project 12 --limit 50
+pactline task show 142 --compact
+pactline task claim 142 --stage review --task-version 5
+pactline claim show <review-claim-id> --compact
+pactline claim verify <review-claim-id> <criterion-id> \
+  --task-version 6 --criterion-revision 2 --outcome passed \
+  --evidence "Reviewed the frozen MR and reran the acceptance checks"
+pactline claim accept <review-claim-id> \
+  --task-version 6 --message "Acceptance contract satisfied"
 ```
 
 `submit` is repeatable and keeps execution owned. `complete` explicitly ends
 the execution Claim and moves the Task to `in_review.available`. Neither an MR
 state nor a submission changes Task phase implicitly.
+
+A reviewer claims the same Task with `--stage review`. This flag is a local
+safety assertion: Pactline still derives the actual Claim stage from the Task's
+authoritative phase. `claim verify` records `acceptance` evidence for a Review
+Claim because the server derives purpose and review cycle; the caller never
+supplies either value. After review, use exactly one explicit outcome:
+
+```bash
+pactline claim request-changes <review-claim-id> \
+  --task-version 6 --message "The error path still lacks coverage"
+pactline claim accept <review-claim-id> \
+  --task-version 6 --message "Acceptance contract satisfied"
+```
+
+`request-changes` ends the Review Claim and returns the Task to
+`in_progress.available`. `accept` ends the Review Claim and moves the Task to
+`done`. A reviewer may instead use `claim release` to leave the Task in
+`in_review.available`, or `claim request-resolution` to open a blocking Issue
+Thread while preserving the review phase.
 
 `task list` defaults to assigned execution work. `--stage review` lists visible
 `in_review.available` work without treating the Task assignee as a reviewer
@@ -88,6 +117,8 @@ pactline help workflow
 pactline help identity
 pactline help output
 pactline claim complete --help
+pactline claim request-changes --help
+pactline claim accept --help
 pactline claim mr --help
 ```
 
