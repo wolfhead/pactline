@@ -31,6 +31,7 @@ import { ProblemError } from '@/api/v1/client'
 import AcceptanceChecklist from '@/components/projects/AcceptanceChecklist'
 import ProjectMembersPanel from '@/components/projects/ProjectMembersPanel'
 import ProjectAgentConversationsPanel from '@/components/projects/ProjectAgentConversationsPanel'
+import ProjectRepositoryAccessPanel from '@/components/projects/ProjectRepositoryAccessPanel'
 import TaskCollection from '@/components/tasks/TaskCollection'
 import TaskInspector from '@/components/tasks/TaskInspector'
 import { useTaskCollection } from '@/components/tasks/useTaskCollection'
@@ -264,6 +265,13 @@ export default function ProjectDetailPage({ view = 'overview' }: { view?: Projec
               ))}
             />
             <ProjectAgentConversationsPanel projectNumber={project.number} />
+            <ProjectRepositoryAccessPanel
+              projectNumber={project.number}
+              projectVersion={project.version}
+              canManage={canManageProject}
+              archived={Boolean(project.archived_at)}
+              onChanged={reload}
+            />
           </div>
         )}
         {error && <p role="alert" className="border-t border-border py-2 text-sm text-danger">操作失败：{error}</p>}

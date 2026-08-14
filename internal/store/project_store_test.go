@@ -19,6 +19,14 @@ func cleanupProject(t *testing.T, db *store.DB, projectID uuid.UUID) {
 		ctx := context.Background()
 		statements := []string{
 			`DELETE FROM business_audit_events
+			WHERE entity_type='project_repository' AND entity_id IN (
+				SELECT id FROM project_repositories WHERE project_id=$1
+			)`,
+			`DELETE FROM business_audit_events
+			WHERE entity_type='task_merge_request' AND entity_id IN (
+				SELECT id FROM task_merge_requests WHERE project_id=$1
+			)`,
+			`DELETE FROM business_audit_events
 			WHERE entity_type='project_membership' AND entity_id IN (
 				SELECT id FROM project_memberships WHERE project_id=$1
 			)`,
@@ -48,6 +56,8 @@ func cleanupProject(t *testing.T, db *store.DB, projectID uuid.UUID) {
 			`DELETE FROM task_labels WHERE task_id IN (SELECT id FROM tasks WHERE project_id=$1)`,
 			`DELETE FROM task_comments WHERE task_id IN (SELECT id FROM tasks WHERE project_id=$1)`,
 			`DELETE FROM task_activity WHERE task_id IN (SELECT id FROM tasks WHERE project_id=$1)`,
+			`DELETE FROM task_merge_requests WHERE project_id=$1`,
+			`DELETE FROM project_repositories WHERE project_id=$1`,
 			`DELETE FROM project_activity WHERE project_id=$1`,
 			`DELETE FROM tasks WHERE project_id=$1`,
 			`DELETE FROM milestones WHERE project_id=$1`,

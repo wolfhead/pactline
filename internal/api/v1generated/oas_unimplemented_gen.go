@@ -58,6 +58,15 @@ func (UnimplementedHandler) ArchiveTask(ctx context.Context, params ArchiveTaskP
 	return r, ht.ErrNotImplemented
 }
 
+// BindProjectRepository implements bindProjectRepository operation.
+//
+// Bind a GitLab repository to a Project by URL.
+//
+// POST /api/v1/projects/{number}/repositories
+func (UnimplementedHandler) BindProjectRepository(ctx context.Context, req *ProjectRepositoryBind, params BindProjectRepositoryParams) (r BindProjectRepositoryRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // CancelMilestone implements cancelMilestone operation.
 //
 // Cancel a milestone.
@@ -292,6 +301,24 @@ func (UnimplementedHandler) GetTaskAttachmentContent(ctx context.Context, params
 	return r, ht.ErrNotImplemented
 }
 
+// GetTaskDelivery implements getTaskDelivery operation.
+//
+// Get active and frozen Task merge-request delivery state.
+//
+// GET /api/v1/tasks/{number}/merge-requests
+func (UnimplementedHandler) GetTaskDelivery(ctx context.Context, params GetTaskDeliveryParams) (r GetTaskDeliveryRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// LinkTaskMergeRequest implements linkTaskMergeRequest operation.
+//
+// Link a GitLab merge request during claimed execution.
+//
+// POST /api/v1/tasks/{number}/claims/{id}/merge-requests
+func (UnimplementedHandler) LinkTaskMergeRequest(ctx context.Context, req *TaskMergeRequestLink, params LinkTaskMergeRequestParams) (r LinkTaskMergeRequestRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // ListAgentConversations implements listAgentConversations operation.
 //
 // List visible Agent conversation configurations.
@@ -325,6 +352,15 @@ func (UnimplementedHandler) ListMilestoneCriteria(ctx context.Context, params Li
 //
 // GET /api/v1/projects/{number}/members
 func (UnimplementedHandler) ListProjectMembers(ctx context.Context, params ListProjectMembersParams) (r ListProjectMembersRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListProjectRepositories implements listProjectRepositories operation.
+//
+// List repositories authorized for a Project.
+//
+// GET /api/v1/projects/{number}/repositories
+func (UnimplementedHandler) ListProjectRepositories(ctx context.Context, params ListProjectRepositoriesParams) (r ListProjectRepositoriesRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -505,6 +541,24 @@ func (UnimplementedHandler) RestoreProject(ctx context.Context, params RestorePr
 //
 // POST /api/v1/tasks/{number}/restore
 func (UnimplementedHandler) RestoreTask(ctx context.Context, params RestoreTaskParams) (r RestoreTaskRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UnbindProjectRepository implements unbindProjectRepository operation.
+//
+// Unbind a GitLab repository from a Project.
+//
+// DELETE /api/v1/projects/{number}/repositories/{repository_id}
+func (UnimplementedHandler) UnbindProjectRepository(ctx context.Context, params UnbindProjectRepositoryParams) (r UnbindProjectRepositoryRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UnlinkTaskMergeRequest implements unlinkTaskMergeRequest operation.
+//
+// Unlink a GitLab merge request during claimed execution.
+//
+// DELETE /api/v1/tasks/{number}/claims/{id}/merge-requests/{link_id}
+func (UnimplementedHandler) UnlinkTaskMergeRequest(ctx context.Context, req *TaskMergeRequestUnlink, params UnlinkTaskMergeRequestParams) (r UnlinkTaskMergeRequestRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

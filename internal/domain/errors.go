@@ -29,11 +29,15 @@ var ErrConflict = errors.New("conflict")
 // Workflow conflict categories remain compatible with ErrConflict while
 // giving transports stable machine-readable rejection codes.
 var (
-	ErrInvalidTransition = fmt.Errorf("%w: invalid Task transition", ErrConflict)
-	ErrActiveClaim       = fmt.Errorf("%w: Task already has an active Claim", ErrConflict)
-	ErrActiveIssue       = fmt.Errorf("%w: Task already has an active Issue", ErrConflict)
-	ErrMigrationRequired = fmt.Errorf("%w: Task lifecycle migration is required", ErrConflict)
-	ErrWrongIssueType    = fmt.Errorf("%w: unsupported Issue type", ErrInvalidInput)
+	ErrInvalidTransition        = fmt.Errorf("%w: invalid Task transition", ErrConflict)
+	ErrActiveClaim              = fmt.Errorf("%w: Task already has an active Claim", ErrConflict)
+	ErrActiveIssue              = fmt.Errorf("%w: Task already has an active Issue", ErrConflict)
+	ErrMigrationRequired        = fmt.Errorf("%w: Task lifecycle migration is required", ErrConflict)
+	ErrWrongIssueType           = fmt.Errorf("%w: unsupported Issue type", ErrInvalidInput)
+	ErrIntegrationNotConfigured = errors.New("integration not configured")
+	ErrProviderUnauthorized     = errors.New("provider unauthorized")
+	ErrProviderUnavailable      = errors.New("provider unavailable")
+	ErrProviderRejected         = errors.New("provider rejected")
 )
 
 // ErrVersionConflict identifies an optimistic-concurrency failure.

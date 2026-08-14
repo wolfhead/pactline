@@ -65,8 +65,8 @@ test('workflow commands claim, block, resolve, and resume Task execution', async
   const reloadedWorkflow = page.getByRole('region', { name: '任务工作流' })
   await expect(reloadedWorkflow.getByText('执行中 · 正在处理', { exact: true })).toBeVisible()
 
-  await reloadedWorkflow.getByRole('button', { name: '提交验收' }).click()
-  await reloadedWorkflow.getByLabel('提交验收').fill('The resumed execution produced the requested outcome')
+  await reloadedWorkflow.getByRole('button', { name: '完成执行，进入验收' }).click()
+  await reloadedWorkflow.getByLabel('完成执行').fill('The resumed execution produced the requested outcome')
   await reloadedWorkflow.getByRole('button', { name: '确认' }).click()
   await expect(reloadedWorkflow.getByText('验收中 · 等待领取', { exact: true })).toBeVisible()
 

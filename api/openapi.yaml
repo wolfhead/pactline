@@ -324,6 +324,65 @@ paths:
           $ref: "#/components/responses/TaskExecutionCompletionCommand"
         default:
           $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/merge-requests:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+    get:
+      operationId: getTaskDelivery
+      summary: Get active and frozen Task merge-request delivery state
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskDelivery"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/claims/{id}/merge-requests:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+      - $ref: "#/components/parameters/ResourceID"
+    post:
+      operationId: linkTaskMergeRequest
+      summary: Link a GitLab merge request during claimed execution
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskMergeRequestLink"
+      responses:
+        "201":
+          $ref: "#/components/responses/TaskMergeRequestChanged"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/tasks/{number}/claims/{id}/merge-requests/{link_id}:
+    parameters:
+      - $ref: "#/components/parameters/TaskNumber"
+      - $ref: "#/components/parameters/ResourceID"
+      - name: link_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      operationId: unlinkTaskMergeRequest
+      summary: Unlink a GitLab merge request during claimed execution
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskMergeRequestUnlink"
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskMergeRequestChanged"
+        default:
+          $ref: "#/components/responses/Problem"
   /api/v1/tasks/{number}/claims/{id}/request-resolution:
     parameters:
       - $ref: "#/components/parameters/TaskNumber"
@@ -769,6 +828,58 @@ paths:
     $ref: "#/components/pathItems/ProjectArchive"
   /api/v1/projects/{number}/restore:
     $ref: "#/components/pathItems/ProjectRestore"
+  /api/v1/projects/{number}/repositories:
+    parameters:
+      - $ref: "#/components/parameters/ProjectNumber"
+    get:
+      operationId: listProjectRepositories
+      summary: List repositories authorized for a Project
+      responses:
+        "200":
+          $ref: "#/components/responses/ProjectRepositoryList"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      operationId: bindProjectRepository
+      summary: Bind a GitLab repository to a Project by URL
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectRepositoryBind"
+      responses:
+        "201":
+          $ref: "#/components/responses/ProjectRepositoryChanged"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/projects/{number}/repositories/{repository_id}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectNumber"
+      - name: repository_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      operationId: unbindProjectRepository
+      summary: Unbind a GitLab repository from a Project
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          $ref: "#/components/responses/ProjectRepositoryChanged"
+        default:
+          $ref: "#/components/responses/Problem"
   /api/v1/projects/{number}/members:
     parameters:
       - $ref: "#/components/parameters/ProjectNumber"
@@ -1548,6 +1659,28 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/TaskThreadItem"
+    TaskDelivery:
+      description: Current and frozen Task merge-request delivery state
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TaskDelivery"
+    TaskMergeRequestChanged:
+      description: Task merge-request delivery changed
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TaskMergeRequestMutation"
     TaskAttachmentList:
       description: Active Task attachment collection
       headers:
@@ -1771,6 +1904,28 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ProjectMembershipMutation"
+    ProjectRepositoryList:
+      description: Active Project repository bindings
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProjectRepositoryList"
+    ProjectRepositoryChanged:
+      description: Project repository binding changed
+      headers:
+        Etag:
+          $ref: "#/components/headers/Etag"
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProjectRepositoryMutation"
     ProjectMembershipMutation:
       description: Project membership removed
       headers:
@@ -2676,7 +2831,7 @@ components:
     ExecutionCompletedPayload:
       type: object
       additionalProperties: false
-      required: [review_cycle, submission_item_ids, execution_check_ids, criterion_revisions]
+      required: [review_cycle, submission_item_ids, execution_check_ids, criterion_revisions, merge_requests]
       properties:
         review_cycle:
           type: integer
@@ -2696,6 +2851,228 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/CriterionRevisionSnapshot"
+        merge_requests:
+          type: array
+          items:
+            $ref: "#/components/schemas/MergeRequestSnapshot"
+    GitLabObservationStatus:
+      type: string
+      enum: [confirmed, missing, unauthorized, unreachable, disconnected]
+    GitLabMergeRequestState:
+      type: string
+      enum: [opened, closed, merged, locked]
+    GitLabMergeRequestObservation:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - observed_at
+        - title
+        - state
+        - draft
+        - source_branch
+        - target_branch
+        - head_sha
+        - provider_updated_at
+      properties:
+        status:
+          $ref: "#/components/schemas/GitLabObservationStatus"
+        observed_at:
+          type: string
+          format: date-time
+        title:
+          type: string
+        state:
+          $ref: "#/components/schemas/GitLabMergeRequestState"
+        draft:
+          type: boolean
+        source_branch:
+          type: string
+        target_branch:
+          type: string
+        head_sha:
+          type: string
+        merge_commit_sha:
+          type: string
+        merged_at:
+          type: string
+          format: date-time
+        provider_updated_at:
+          type: string
+          format: date-time
+    TaskMergeRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - project_repository_id
+        - repository_url
+        - merge_request_iid
+        - gitlab_merge_request_id
+        - web_url
+        - linked_by
+        - linked_through_claim_id
+        - linked_at
+        - latest_observation
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_repository_id:
+          type: string
+          format: uuid
+        repository_url:
+          type: string
+          format: uri
+        merge_request_iid:
+          type: integer
+          format: int64
+          minimum: 1
+        gitlab_merge_request_id:
+          type: integer
+          format: int64
+          minimum: 1
+        web_url:
+          type: string
+          format: uri
+        linked_by:
+          $ref: "#/components/schemas/Actor"
+        linked_through_claim_id:
+          type: string
+          format: uuid
+        linked_at:
+          type: string
+          format: date-time
+        latest_observation:
+          $ref: "#/components/schemas/GitLabMergeRequestObservation"
+    MergeRequestSnapshot:
+      type: object
+      additionalProperties: false
+      required:
+        - task_merge_request_id
+        - project_repository_id
+        - connection_id
+        - gitlab_project_id
+        - merge_request_iid
+        - web_url
+        - title
+        - state
+        - draft
+        - source_branch
+        - target_branch
+        - head_sha
+        - observation_status
+        - observed_at
+      properties:
+        task_merge_request_id:
+          type: string
+          format: uuid
+        project_repository_id:
+          type: string
+          format: uuid
+        connection_id:
+          type: string
+          format: uuid
+        gitlab_project_id:
+          type: integer
+          format: int64
+          minimum: 1
+        merge_request_iid:
+          type: integer
+          format: int64
+          minimum: 1
+        web_url:
+          type: string
+          format: uri
+        title:
+          type: string
+        state:
+          $ref: "#/components/schemas/GitLabMergeRequestState"
+        draft:
+          type: boolean
+        source_branch:
+          type: string
+        target_branch:
+          type: string
+        head_sha:
+          type: string
+        merge_commit_sha:
+          type: string
+        merged_at:
+          type: string
+          format: date-time
+        observation_status:
+          $ref: "#/components/schemas/GitLabObservationStatus"
+        observed_at:
+          type: string
+          format: date-time
+    TaskDeliveryComparison:
+      type: object
+      additionalProperties: false
+      required: [snapshot, comparison]
+      properties:
+        snapshot:
+          $ref: "#/components/schemas/MergeRequestSnapshot"
+        current:
+          $ref: "#/components/schemas/TaskMergeRequest"
+        comparison:
+          type: string
+          enum: [unchanged, moved, merged, missing, unauthorized, unreachable, disconnected]
+    TaskDeliveryReview:
+      type: object
+      additionalProperties: false
+      required: [review_cycle, merge_requests]
+      properties:
+        review_cycle:
+          type: integer
+          format: int64
+          minimum: 1
+        merge_requests:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaskDeliveryComparison"
+    TaskDelivery:
+      type: object
+      additionalProperties: false
+      required: [active_links]
+      properties:
+        active_links:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaskMergeRequest"
+        review:
+          $ref: "#/components/schemas/TaskDeliveryReview"
+    TaskMergeRequestLink:
+      type: object
+      additionalProperties: false
+      required: [claim_version, merge_request_url]
+      properties:
+        claim_version:
+          type: integer
+          format: int64
+          minimum: 1
+        merge_request_url:
+          type: string
+          format: uri
+          maxLength: 2048
+    TaskMergeRequestUnlink:
+      type: object
+      additionalProperties: false
+      required: [claim_version]
+      properties:
+        claim_version:
+          type: integer
+          format: int64
+          minimum: 1
+    TaskMergeRequestMutation:
+      type: object
+      additionalProperties: false
+      required: [task, merge_request]
+      properties:
+        task:
+          $ref: "#/components/schemas/TaskWorkflow"
+        merge_request:
+          $ref: "#/components/schemas/TaskMergeRequest"
     TaskThreadItem:
       type: object
       additionalProperties: false
@@ -3132,6 +3509,71 @@ components:
     ProjectRole:
       type: string
       enum: [admin, member]
+    ProjectRepositoryBind:
+      type: object
+      additionalProperties: false
+      required: [repository_url]
+      properties:
+        repository_url:
+          type: string
+          format: uri
+          minLength: 1
+          maxLength: 2048
+    ProjectRepository:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - canonical_web_url
+        - label
+        - origin
+        - gitlab_project_id
+        - path_with_namespace
+        - default_branch
+        - bound_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        canonical_web_url:
+          type: string
+          format: uri
+        label:
+          type: string
+        origin:
+          type: string
+          format: uri
+        gitlab_project_id:
+          type: integer
+          format: int64
+          minimum: 1
+        path_with_namespace:
+          type: string
+        default_branch:
+          type: string
+        bound_at:
+          type: string
+          format: date-time
+    ProjectRepositoryList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectRepository"
+    ProjectRepositoryMutation:
+      type: object
+      additionalProperties: false
+      required: [project_version, repository]
+      properties:
+        project_version:
+          type: integer
+          format: int64
+          minimum: 1
+        repository:
+          $ref: "#/components/schemas/ProjectRepository"
     ProjectMembershipCreate:
       type: object
       additionalProperties: false
@@ -3522,6 +3964,10 @@ components:
         - IDEMPOTENCY_KEY_REQUIRED
         - IDEMPOTENCY_KEY_REUSED
         - IDEMPOTENCY_IN_PROGRESS
+        - INTEGRATION_NOT_CONFIGURED
+        - PROVIDER_UNAUTHORIZED
+        - PROVIDER_UNAVAILABLE
+        - PROVIDER_REJECTED
         - INTERNAL_ERROR
     Problem:
       type: object

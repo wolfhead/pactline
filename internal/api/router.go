@@ -6,6 +6,7 @@ import (
 
 	"github.com/wolfhead/pactline/internal/access"
 	"github.com/wolfhead/pactline/internal/agent/channel"
+	"github.com/wolfhead/pactline/internal/application"
 	"github.com/wolfhead/pactline/internal/identity"
 	"github.com/wolfhead/pactline/internal/notification"
 )
@@ -24,11 +25,12 @@ type AuthSurface struct {
 }
 
 type RouterOptions struct {
-	Auth        AuthSurface
-	V1          http.Handler
-	OpenAPI     http.Handler
-	AgentStatus channel.StatusProvider
-	AdminTools  *notification.TestService
+	Auth                   AuthSurface
+	V1                     http.Handler
+	OpenAPI                http.Handler
+	AgentStatus            channel.StatusProvider
+	AdminTools             *notification.TestService
+	AdminGitLabConnections *application.GitLabConnectionService
 }
 
 type accessAuditStore interface {
@@ -88,6 +90,14 @@ func NewRouter(
 		adminTools := &adminToolsHandler{notifications: options.AdminTools}
 		protected.HandleFunc("GET /api/admin/tools/notifications/recipients", adminTools.listNotificationRecipients)
 		protected.HandleFunc("POST /api/admin/tools/notifications/test", adminTools.requestDMTest)
+	}
+	if options.AdminGitLabConnections != nil {
+		adminGitLab := &adminGitLabHandler{connections: options.AdminGitLabConnections}
+		protected.HandleFunc("GET /api/admin/gitlab-connections", adminGitLab.list)
+		protected.HandleFunc("POST /api/admin/gitlab-connections", adminGitLab.create)
+		protected.HandleFunc("PATCH /api/admin/gitlab-connections/{id}/credential", adminGitLab.rotateCredential)
+		protected.HandleFunc("POST /api/admin/gitlab-connections/{id}/validate", adminGitLab.validate)
+		protected.HandleFunc("POST /api/admin/gitlab-connections/{id}/disable", adminGitLab.disable)
 	}
 
 	root := http.NewServeMux()

@@ -14,6 +14,7 @@ import APITokensPage from './pages/account/APITokensPage'
 import AgentConversationsPage from './pages/agent/AgentConversationsPage'
 import AdminAPIAuditPage from './pages/admin/AdminAPIAuditPage'
 import AdminToolsPage from './pages/admin/AdminToolsPage'
+import AdminConnectionsPage from './pages/admin/AdminConnectionsPage'
 import { useIdentity } from './identity'
 
 const APIDocsPage = lazy(() => import('./pages/APIDocsPage'))
@@ -70,6 +71,7 @@ function ProtectedApplication() {
           <Route path="/admin/users" element={adminVisible ? <AdminUsersPage /> : <Navigate to="/" replace />} />
           <Route path="/admin/api-audit" element={adminVisible ? <AdminAPIAuditPage /> : <Navigate to="/" replace />} />
           <Route path="/admin/tools" element={adminVisible ? <AdminToolsPage /> : <Navigate to="/" replace />} />
+          <Route path="/admin/connections" element={adminVisible ? <AdminConnectionsPage /> : <Navigate to="/" replace />} />
           <Route path="/" element={<Navigate to="/tasks" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

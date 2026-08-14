@@ -42,6 +42,30 @@ func ErrorHandler(_ context.Context, w http.ResponseWriter, r *http.Request, err
 		if errors.As(err, &conflict) {
 			problem.CurrentVersion = &conflict.CurrentVersion
 		}
+	case errors.Is(err, domain.ErrIntegrationNotConfigured):
+		problem.Status, problem.Title = http.StatusServiceUnavailable, "Integration not configured"
+		problem.Detail = "GitLab credential encryption is not configured."
+		problem.Code = "INTEGRATION_NOT_CONFIGURED"
+		retryable := false
+		problem.Retryable = &retryable
+	case errors.Is(err, domain.ErrProviderUnauthorized):
+		problem.Status, problem.Title = http.StatusBadGateway, "Provider authorization failed"
+		problem.Detail = "GitLab rejected the configured credential."
+		problem.Code = "PROVIDER_UNAUTHORIZED"
+		retryable := false
+		problem.Retryable = &retryable
+	case errors.Is(err, domain.ErrProviderUnavailable):
+		problem.Status, problem.Title = http.StatusServiceUnavailable, "Provider unavailable"
+		problem.Detail = "GitLab is temporarily unavailable."
+		problem.Code = "PROVIDER_UNAVAILABLE"
+		retryable := true
+		problem.Retryable = &retryable
+	case errors.Is(err, domain.ErrProviderRejected):
+		problem.Status, problem.Title = http.StatusBadGateway, "Provider rejected request"
+		problem.Detail = "GitLab returned an invalid or rejected response."
+		problem.Code = "PROVIDER_REJECTED"
+		retryable := false
+		problem.Retryable = &retryable
 	case errors.Is(err, domain.ErrNotFound):
 		problem.Status, problem.Title = http.StatusNotFound, "Not found"
 		problem.Detail, problem.Code = "The requested resource was not found.", "NOT_FOUND"

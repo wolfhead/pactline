@@ -10,6 +10,7 @@ import {
   FlaskConical,
   FolderKanban,
   KeyRound,
+  PlugZap,
   MessageSquareText,
   Plus,
   ShieldCheck,
@@ -42,6 +43,7 @@ const AGENT_ITEMS: NavigationItem[] = [
 
 const ADMIN_ITEMS: NavigationItem[] = [
   { to: '/admin/users', label: '用户', icon: Users },
+  { to: '/admin/connections', label: '代码仓库连接', icon: PlugZap },
   { to: '/admin/api-audit', label: 'API 审计', icon: FileClock },
   { to: '/admin/tools', label: '测试工具', icon: FlaskConical },
 ]
