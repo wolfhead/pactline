@@ -22,9 +22,9 @@ func (s *AccessAuditStore) RecordAccessAudit(
 			id, occurred_at, request_id, auth_method, auth_outcome, user_id,
 			token_id, token_name, method, route_pattern, status_code, problem_code,
 			duration_ms, response_bytes, idempotency_replayed, user_agent,
-			network_address, agent_run_id
+			network_address, agent_run_id, client_kind, client_session_id
 		) VALUES (
-			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18
+			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20
 		)`,
 		event.ID, event.OccurredAt, event.RequestID, event.AuthMethod,
 		event.AuthOutcome, event.UserID, event.TokenID, nullIfEmpty(event.TokenName),
@@ -32,6 +32,7 @@ func (s *AccessAuditStore) RecordAccessAudit(
 		nullIfEmpty(event.ProblemCode), event.DurationMS, event.ResponseBytes,
 		event.IdempotencyReplayed, event.UserAgent,
 		nullIfEmpty(event.NetworkAddress), event.AgentRunID,
+		nullIfEmpty(event.ClientKind), nullIfEmpty(event.ClientSessionID),
 	)
 	if err != nil {
 		return fmt.Errorf("insert API access audit: %w", err)
@@ -92,7 +93,8 @@ func (s *AccessAuditStore) ListAccessAudit(
 		SELECT id, occurred_at, request_id, auth_method, auth_outcome, user_id,
 		       token_id, token_name, method, route_pattern, status_code,
 		       problem_code, duration_ms, response_bytes, idempotency_replayed,
-		       user_agent, host(network_address), agent_run_id
+		       user_agent, host(network_address), agent_run_id,
+		       client_kind, client_session_id
 		FROM api_request_audit_events
 		WHERE true`)
 	args := make([]any, 0, 10)
@@ -149,14 +151,14 @@ func (s *AccessAuditStore) ListAccessAudit(
 	var events []access.RequestAuditEvent
 	for rows.Next() {
 		var event access.RequestAuditEvent
-		var tokenName, problemCode, networkAddress *string
+		var tokenName, problemCode, networkAddress, clientKind, clientSessionID *string
 		if err := rows.Scan(
 			&event.ID, &event.OccurredAt, &event.RequestID, &event.AuthMethod,
 			&event.AuthOutcome, &event.UserID, &event.TokenID, &tokenName,
 			&event.Method, &event.RoutePattern, &event.StatusCode, &problemCode,
 			&event.DurationMS, &event.ResponseBytes, &event.IdempotencyReplayed,
 			&event.UserAgent, &networkAddress,
-			&event.AgentRunID,
+			&event.AgentRunID, &clientKind, &clientSessionID,
 		); err != nil {
 			return nil, fmt.Errorf("scan API access audit: %w", err)
 		}
@@ -168,6 +170,12 @@ func (s *AccessAuditStore) ListAccessAudit(
 		}
 		if networkAddress != nil {
 			event.NetworkAddress = *networkAddress
+		}
+		if clientKind != nil {
+			event.ClientKind = *clientKind
+		}
+		if clientSessionID != nil {
+			event.ClientSessionID = *clientSessionID
 		}
 		events = append(events, event)
 	}

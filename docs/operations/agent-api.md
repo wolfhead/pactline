@@ -34,7 +34,10 @@ display-safe prefix.
 Available scopes:
 
 - `work:read`: GET and HEAD under `/api/v1`;
-- `work:write`: mutations and all `work:read` access.
+- `work:execute`: Claim-owned execution/review mutations and all `work:read`
+  access; and
+- `work:write`: all work-API mutations, including Task-definition and Project
+  changes, plus read access.
 
 Tokens expire after 30, 90, or 365 days. Ninety days is the UI default. Token
 authority never exceeds the current authority of its owner; deactivating the
@@ -84,6 +87,19 @@ Every response has an `X-Request-ID`. Bearer responses also include
 Every Bearer-authenticated POST, PATCH, and DELETE requires a unique
 `Idempotency-Key`. Keys are retained for 24 hours and may contain 1–128 visible
 ASCII characters.
+
+Agent Claim creation and Claim mutations additionally send both bounded audit
+provenance headers:
+
+```http
+Pactline-Client-Kind: pactline-cli
+Pactline-Client-Session-ID: <opaque caller session>
+```
+
+They are recorded in request audit and never grant access. Claim ownership is
+the exact personal Token or delegated Agent Run. A new process may continue an
+active Claim only by explicitly supplying its Claim ID with the same logical
+principal; the server never selects a Claim from Session ID.
 
 Create a task:
 
@@ -163,7 +179,7 @@ Recovery procedure:
 
 Milestones and tasks use the same revisioned acceptance criterion and immutable
 acceptance check model. Projects are long-lived workspaces and intentionally
-do not own acceptance criteria. An Agent should:
+do not own acceptance criteria. For a Milestone criterion, an Agent should:
 
 1. list or create the criterion under its owning resource;
 2. execute `verification_instructions`;
@@ -174,6 +190,16 @@ do not own acceptance criteria. An Agent should:
 An Agent check is recorded with checker type `agent`, the owning user, and the
 token-name snapshot. Do not report `passed` without executing the described
 verification.
+
+Task criteria are the exception: their checks are Claim-owned and use:
+
+```text
+POST /api/v1/claims/{claim_id}/criteria/{criterion_id}/checks
+```
+
+The request contains criterion revision, outcome, and evidence. The server
+derives Task identity and current Claim version from `claim_id`; the Task
+version evaluated by the caller remains explicit in `If-Match`.
 
 ## Error handling
 

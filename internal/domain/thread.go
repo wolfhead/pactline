@@ -274,8 +274,12 @@ func (i ThreadItem) Validate() error {
 		if i.ExecutionCompleted != nil && i.ExecutionCompleted.ReviewCycle != *i.TaskReviewCycle {
 			return fmt.Errorf("%w: execution completion review cycle does not match Item context", ErrInvalidInput)
 		}
+	} else if i.Kind == ThreadItemKindProgress && i.TaskStageClaimID != nil {
+		if *i.TaskStageClaimID == uuid.Nil || i.TaskReviewCycle == nil || *i.TaskReviewCycle < 1 {
+			return fmt.Errorf("%w: claimed progress requires Claim and review-cycle context", ErrInvalidInput)
+		}
 	} else if i.TaskStageClaimID != nil || i.TaskReviewCycle != nil {
-		return fmt.Errorf("%w: only delivery Items accept Claim and review-cycle context", ErrInvalidInput)
+		return fmt.Errorf("%w: only claimed progress and delivery Items accept Claim and review-cycle context", ErrInvalidInput)
 	}
 	if i.DeletedAt != nil {
 		if i.Kind != ThreadItemKindMessage {

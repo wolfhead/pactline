@@ -66,6 +66,7 @@ func requiredScope(operation generated.OperationName) access.Scope {
 		generated.DeleteTaskThreadMessageOperation,
 		generated.MarkTaskReadyOperation,
 		generated.LinkTaskMergeRequestOperation,
+		generated.RecordTaskClaimProgressOperation,
 		generated.RecordTaskStageAcceptanceCheckOperation,
 		generated.RecordTaskWorkSubmissionOperation,
 		generated.ReleaseTaskStageClaimOperation,
@@ -78,7 +79,7 @@ func requiredScope(operation generated.OperationName) access.Scope {
 		generated.WithdrawTaskReadinessOperation:
 		return access.ScopeWorkExecute
 	case generated.GetCurrentPrincipalOperation,
-		generated.GetCurrentTaskStageClaimOperation,
+		generated.GetTaskStageClaimOperation,
 		generated.GetAgentConversationOperation,
 		generated.GetCurrentAgentConversationConfigurationOperation,
 		generated.GetProjectOperation,
@@ -95,6 +96,7 @@ func requiredScope(operation generated.OperationName) access.Scope {
 		generated.GetTaskAttachmentContentOperation,
 		generated.ListTaskCriteriaOperation,
 		generated.ListTaskStageClaimsOperation,
+		generated.ListOwnedTaskStageClaimsOperation,
 		generated.ListTaskThreadItemsOperation,
 		generated.ListTaskThreadsOperation,
 		generated.ListTasksOperation,

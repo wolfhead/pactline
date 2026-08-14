@@ -996,6 +996,21 @@ func (s *BearerAuth) SetRoles(val []string) {
 	s.Roles = val
 }
 
+// Ref: #/components/schemas/BodyWrite
+type BodyWrite struct {
+	Body string `json:"body"`
+}
+
+// GetBody returns the value of Body.
+func (s *BodyWrite) GetBody() string {
+	return s.Body
+}
+
+// SetBody sets the value of Body.
+func (s *BodyWrite) SetBody(val string) {
+	s.Body = val
+}
+
 // Ref: #/components/schemas/CriterionCreate
 type CriterionCreate struct {
 	Criterion                string `json:"criterion"`
@@ -4831,6 +4846,52 @@ func (o OptTaskActivityState) Or(d TaskActivityState) TaskActivityState {
 	return d
 }
 
+// NewOptTaskClaimStage returns new OptTaskClaimStage with value set to v.
+func NewOptTaskClaimStage(v TaskClaimStage) OptTaskClaimStage {
+	return OptTaskClaimStage{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptTaskClaimStage is optional TaskClaimStage.
+type OptTaskClaimStage struct {
+	Value TaskClaimStage
+	Set   bool
+}
+
+// IsSet returns true if OptTaskClaimStage was set.
+func (o OptTaskClaimStage) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptTaskClaimStage) Reset() {
+	var v TaskClaimStage
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptTaskClaimStage) SetTo(v TaskClaimStage) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptTaskClaimStage) Get() (v TaskClaimStage, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptTaskClaimStage) Or(d TaskClaimStage) TaskClaimStage {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptTaskDeliveryReview returns new OptTaskDeliveryReview with value set to v.
 func NewOptTaskDeliveryReview(v TaskDeliveryReview) OptTaskDeliveryReview {
 	return OptTaskDeliveryReview{
@@ -5147,6 +5208,52 @@ func (o OptTaskStageClaimOutcome) Get() (v TaskStageClaimOutcome, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptTaskStageClaimOutcome) Or(d TaskStageClaimOutcome) TaskStageClaimOutcome {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptTaskStageClaimStatus returns new OptTaskStageClaimStatus with value set to v.
+func NewOptTaskStageClaimStatus(v TaskStageClaimStatus) OptTaskStageClaimStatus {
+	return OptTaskStageClaimStatus{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptTaskStageClaimStatus is optional TaskStageClaimStatus.
+type OptTaskStageClaimStatus struct {
+	Value TaskStageClaimStatus
+	Set   bool
+}
+
+// IsSet returns true if OptTaskStageClaimStatus was set.
+func (o OptTaskStageClaimStatus) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptTaskStageClaimStatus) Reset() {
+	var v TaskStageClaimStatus
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptTaskStageClaimStatus) SetTo(v TaskStageClaimStatus) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptTaskStageClaimStatus) Get() (v TaskStageClaimStatus, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptTaskStageClaimStatus) Or(d TaskStageClaimStatus) TaskStageClaimStatus {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -5742,15 +5849,16 @@ func (*ProblemStatusCodeWithHeaders) deleteTaskThreadMessageRes()               
 func (*ProblemStatusCodeWithHeaders) getAgentConversationRes()                        {}
 func (*ProblemStatusCodeWithHeaders) getCurrentAgentConversationConfigurationRes()    {}
 func (*ProblemStatusCodeWithHeaders) getCurrentPrincipalRes()                         {}
-func (*ProblemStatusCodeWithHeaders) getCurrentTaskStageClaimRes()                    {}
 func (*ProblemStatusCodeWithHeaders) getProjectRes()                                  {}
 func (*ProblemStatusCodeWithHeaders) getTaskAttachmentContentRes()                    {}
 func (*ProblemStatusCodeWithHeaders) getTaskDeliveryRes()                             {}
 func (*ProblemStatusCodeWithHeaders) getTaskRes()                                     {}
+func (*ProblemStatusCodeWithHeaders) getTaskStageClaimRes()                           {}
 func (*ProblemStatusCodeWithHeaders) linkTaskMergeRequestRes()                        {}
 func (*ProblemStatusCodeWithHeaders) listAgentConversationsRes()                      {}
 func (*ProblemStatusCodeWithHeaders) listLabelsRes()                                  {}
 func (*ProblemStatusCodeWithHeaders) listMilestoneCriteriaRes()                       {}
+func (*ProblemStatusCodeWithHeaders) listOwnedTaskStageClaimsRes()                    {}
 func (*ProblemStatusCodeWithHeaders) listProjectMembersRes()                          {}
 func (*ProblemStatusCodeWithHeaders) listProjectRepositoriesRes()                     {}
 func (*ProblemStatusCodeWithHeaders) listProjectsRes()                                {}
@@ -5763,6 +5871,7 @@ func (*ProblemStatusCodeWithHeaders) listTaskThreadsRes()                       
 func (*ProblemStatusCodeWithHeaders) listTasksRes()                                   {}
 func (*ProblemStatusCodeWithHeaders) listUsersRes()                                   {}
 func (*ProblemStatusCodeWithHeaders) markTaskReadyRes()                               {}
+func (*ProblemStatusCodeWithHeaders) recordTaskClaimProgressRes()                     {}
 func (*ProblemStatusCodeWithHeaders) recordTaskStageAcceptanceCheckRes()              {}
 func (*ProblemStatusCodeWithHeaders) recordTaskWorkSubmissionRes()                    {}
 func (*ProblemStatusCodeWithHeaders) releaseTaskStageClaimRes()                       {}
@@ -9427,23 +9536,12 @@ func (*TaskMergeRequestChangedHeaders) unlinkTaskMergeRequestRes() {}
 
 // Ref: #/components/schemas/TaskMergeRequestLink
 type TaskMergeRequestLink struct {
-	ClaimVersion    int64   `json:"claim_version"`
 	MergeRequestURL url.URL `json:"merge_request_url"`
-}
-
-// GetClaimVersion returns the value of ClaimVersion.
-func (s *TaskMergeRequestLink) GetClaimVersion() int64 {
-	return s.ClaimVersion
 }
 
 // GetMergeRequestURL returns the value of MergeRequestURL.
 func (s *TaskMergeRequestLink) GetMergeRequestURL() url.URL {
 	return s.MergeRequestURL
-}
-
-// SetClaimVersion sets the value of ClaimVersion.
-func (s *TaskMergeRequestLink) SetClaimVersion(val int64) {
-	s.ClaimVersion = val
 }
 
 // SetMergeRequestURL sets the value of MergeRequestURL.
@@ -9475,21 +9573,6 @@ func (s *TaskMergeRequestMutation) SetTask(val TaskWorkflow) {
 // SetMergeRequest sets the value of MergeRequest.
 func (s *TaskMergeRequestMutation) SetMergeRequest(val TaskMergeRequest) {
 	s.MergeRequest = val
-}
-
-// Ref: #/components/schemas/TaskMergeRequestUnlink
-type TaskMergeRequestUnlink struct {
-	ClaimVersion int64 `json:"claim_version"`
-}
-
-// GetClaimVersion returns the value of ClaimVersion.
-func (s *TaskMergeRequestUnlink) GetClaimVersion() int64 {
-	return s.ClaimVersion
-}
-
-// SetClaimVersion sets the value of ClaimVersion.
-func (s *TaskMergeRequestUnlink) SetClaimVersion(val int64) {
-	s.ClaimVersion = val
 }
 
 // Ref: #/components/schemas/TaskPatch
@@ -9779,6 +9862,82 @@ func (s *TaskPriority) UnmarshalText(data []byte) error {
 	}
 }
 
+// Ref: #/components/schemas/TaskProgressCommand
+type TaskProgressCommand struct {
+	Task     TaskWorkflow   `json:"task"`
+	Claim    TaskStageClaim `json:"claim"`
+	Progress TaskThreadItem `json:"progress"`
+}
+
+// GetTask returns the value of Task.
+func (s *TaskProgressCommand) GetTask() TaskWorkflow {
+	return s.Task
+}
+
+// GetClaim returns the value of Claim.
+func (s *TaskProgressCommand) GetClaim() TaskStageClaim {
+	return s.Claim
+}
+
+// GetProgress returns the value of Progress.
+func (s *TaskProgressCommand) GetProgress() TaskThreadItem {
+	return s.Progress
+}
+
+// SetTask sets the value of Task.
+func (s *TaskProgressCommand) SetTask(val TaskWorkflow) {
+	s.Task = val
+}
+
+// SetClaim sets the value of Claim.
+func (s *TaskProgressCommand) SetClaim(val TaskStageClaim) {
+	s.Claim = val
+}
+
+// SetProgress sets the value of Progress.
+func (s *TaskProgressCommand) SetProgress(val TaskThreadItem) {
+	s.Progress = val
+}
+
+// TaskProgressCommandHeaders wraps TaskProgressCommand with response headers.
+type TaskProgressCommandHeaders struct {
+	IdempotencyReplayed OptBool
+	XRequestID          OptString
+	Response            TaskProgressCommand
+}
+
+// GetIdempotencyReplayed returns the value of IdempotencyReplayed.
+func (s *TaskProgressCommandHeaders) GetIdempotencyReplayed() OptBool {
+	return s.IdempotencyReplayed
+}
+
+// GetXRequestID returns the value of XRequestID.
+func (s *TaskProgressCommandHeaders) GetXRequestID() OptString {
+	return s.XRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *TaskProgressCommandHeaders) GetResponse() TaskProgressCommand {
+	return s.Response
+}
+
+// SetIdempotencyReplayed sets the value of IdempotencyReplayed.
+func (s *TaskProgressCommandHeaders) SetIdempotencyReplayed(val OptBool) {
+	s.IdempotencyReplayed = val
+}
+
+// SetXRequestID sets the value of XRequestID.
+func (s *TaskProgressCommandHeaders) SetXRequestID(val OptString) {
+	s.XRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *TaskProgressCommandHeaders) SetResponse(val TaskProgressCommand) {
+	s.Response = val
+}
+
+func (*TaskProgressCommandHeaders) recordTaskClaimProgressRes() {}
+
 // Ref: #/components/schemas/TaskRelationRef
 type TaskRelationRef struct {
 	ID        uuid.UUID       `json:"id"`
@@ -9851,14 +10010,8 @@ func (s *TaskRelationRef) SetMilestone(val OptMilestoneRef) {
 
 // Ref: #/components/schemas/TaskResolutionRequest
 type TaskResolutionRequest struct {
-	ClaimVersion int64           `json:"claim_version"`
-	IssueType    IssueThreadType `json:"issue_type"`
-	Request      string          `json:"request"`
-}
-
-// GetClaimVersion returns the value of ClaimVersion.
-func (s *TaskResolutionRequest) GetClaimVersion() int64 {
-	return s.ClaimVersion
+	IssueType IssueThreadType `json:"issue_type"`
+	Request   string          `json:"request"`
 }
 
 // GetIssueType returns the value of IssueType.
@@ -9869,11 +10022,6 @@ func (s *TaskResolutionRequest) GetIssueType() IssueThreadType {
 // GetRequest returns the value of Request.
 func (s *TaskResolutionRequest) GetRequest() string {
 	return s.Request
-}
-
-// SetClaimVersion sets the value of ClaimVersion.
-func (s *TaskResolutionRequest) SetClaimVersion(val int64) {
-	s.ClaimVersion = val
 }
 
 // SetIssueType sets the value of IssueType.
@@ -9964,15 +10112,9 @@ func (*TaskResolutionRequestedHeaders) requestTaskResolutionRes() {}
 
 // Ref: #/components/schemas/TaskStageAcceptanceCheckWrite
 type TaskStageAcceptanceCheckWrite struct {
-	ClaimVersion      int64             `json:"claim_version"`
 	CriterionRevision int               `json:"criterion_revision"`
 	Outcome           AcceptanceOutcome `json:"outcome"`
 	Evidence          string            `json:"evidence"`
-}
-
-// GetClaimVersion returns the value of ClaimVersion.
-func (s *TaskStageAcceptanceCheckWrite) GetClaimVersion() int64 {
-	return s.ClaimVersion
 }
 
 // GetCriterionRevision returns the value of CriterionRevision.
@@ -9988,11 +10130,6 @@ func (s *TaskStageAcceptanceCheckWrite) GetOutcome() AcceptanceOutcome {
 // GetEvidence returns the value of Evidence.
 func (s *TaskStageAcceptanceCheckWrite) GetEvidence() string {
 	return s.Evidence
-}
-
-// SetClaimVersion sets the value of ClaimVersion.
-func (s *TaskStageAcceptanceCheckWrite) SetClaimVersion(val int64) {
-	s.ClaimVersion = val
 }
 
 // SetCriterionRevision sets the value of CriterionRevision.
@@ -10317,51 +10454,14 @@ func (*TaskStageClaimCommandHeaders) createTaskStageClaimRes()  {}
 func (*TaskStageClaimCommandHeaders) releaseTaskStageClaimRes() {}
 func (*TaskStageClaimCommandHeaders) requestTaskChangesRes()    {}
 
-// Ref: #/components/schemas/TaskStageClaimCreate
-type TaskStageClaimCreate struct {
-	ClientKind      OptString `json:"client_kind"`
-	ClientSessionID OptString `json:"client_session_id"`
-}
-
-// GetClientKind returns the value of ClientKind.
-func (s *TaskStageClaimCreate) GetClientKind() OptString {
-	return s.ClientKind
-}
-
-// GetClientSessionID returns the value of ClientSessionID.
-func (s *TaskStageClaimCreate) GetClientSessionID() OptString {
-	return s.ClientSessionID
-}
-
-// SetClientKind sets the value of ClientKind.
-func (s *TaskStageClaimCreate) SetClientKind(val OptString) {
-	s.ClientKind = val
-}
-
-// SetClientSessionID sets the value of ClientSessionID.
-func (s *TaskStageClaimCreate) SetClientSessionID(val OptString) {
-	s.ClientSessionID = val
-}
-
 // Ref: #/components/schemas/TaskStageClaimFinish
 type TaskStageClaimFinish struct {
-	ClaimVersion int64  `json:"claim_version"`
-	Body         string `json:"body"`
-}
-
-// GetClaimVersion returns the value of ClaimVersion.
-func (s *TaskStageClaimFinish) GetClaimVersion() int64 {
-	return s.ClaimVersion
+	Body string `json:"body"`
 }
 
 // GetBody returns the value of Body.
 func (s *TaskStageClaimFinish) GetBody() string {
 	return s.Body
-}
-
-// SetClaimVersion sets the value of ClaimVersion.
-func (s *TaskStageClaimFinish) SetClaimVersion(val int64) {
-	s.ClaimVersion = val
 }
 
 // SetBody sets the value of Body.
@@ -10406,11 +10506,12 @@ func (s *TaskStageClaimHeaders) SetResponse(val TaskStageClaim) {
 	s.Response = val
 }
 
-func (*TaskStageClaimHeaders) getCurrentTaskStageClaimRes() {}
+func (*TaskStageClaimHeaders) getTaskStageClaimRes() {}
 
 // Ref: #/components/schemas/TaskStageClaimList
 type TaskStageClaimList struct {
-	Items []TaskStageClaim `json:"items"`
+	Items      []TaskStageClaim `json:"items"`
+	NextCursor OptString        `json:"next_cursor"`
 }
 
 // GetItems returns the value of Items.
@@ -10418,9 +10519,19 @@ func (s *TaskStageClaimList) GetItems() []TaskStageClaim {
 	return s.Items
 }
 
+// GetNextCursor returns the value of NextCursor.
+func (s *TaskStageClaimList) GetNextCursor() OptString {
+	return s.NextCursor
+}
+
 // SetItems sets the value of Items.
 func (s *TaskStageClaimList) SetItems(val []TaskStageClaim) {
 	s.Items = val
+}
+
+// SetNextCursor sets the value of NextCursor.
+func (s *TaskStageClaimList) SetNextCursor(val OptString) {
+	s.NextCursor = val
 }
 
 // TaskStageClaimListHeaders wraps TaskStageClaimList with response headers.
@@ -10449,7 +10560,8 @@ func (s *TaskStageClaimListHeaders) SetResponse(val TaskStageClaimList) {
 	s.Response = val
 }
 
-func (*TaskStageClaimListHeaders) listTaskStageClaimsRes() {}
+func (*TaskStageClaimListHeaders) listOwnedTaskStageClaimsRes() {}
+func (*TaskStageClaimListHeaders) listTaskStageClaimsRes()      {}
 
 // Ref: #/components/schemas/TaskStageClaimOutcome
 type TaskStageClaimOutcome string

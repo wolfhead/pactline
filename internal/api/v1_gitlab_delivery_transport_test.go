@@ -109,8 +109,7 @@ func TestV1GitLabDeliveryConnectsProjectAgentExecutionAndReviewSnapshot(t *testi
 	require.Equal(t, http.StatusOK, ready.Code, ready.Body.String())
 	claimed := doBearerMutation(
 		t, handler, http.MethodPost, taskPath+"/claims", issued.Token,
-		http.Header{"If-Match": {`"2"`}},
-		map[string]any{"client_kind": "codex", "client_session_id": "delivery-" + uuid.NewString()},
+		http.Header{"If-Match": {`"2"`}}, nil,
 	)
 	require.Equal(t, http.StatusCreated, claimed.Code, claimed.Body.String())
 	var execution stageClaimCommandJSON
@@ -119,9 +118,9 @@ func TestV1GitLabDeliveryConnectsProjectAgentExecutionAndReviewSnapshot(t *testi
 	mergeRequestURL := repositoryURL + "/-/merge_requests/42"
 	linked := doBearerMutation(
 		t, handler, http.MethodPost,
-		fmt.Sprintf("%s/claims/%s/merge-requests", taskPath, execution.Claim.ID),
+		fmt.Sprintf("/api/v1/claims/%s/merge-requests", execution.Claim.ID),
 		issued.Token, http.Header{"If-Match": {`"3"`}},
-		map[string]any{"claim_version": execution.Claim.Version, "merge_request_url": mergeRequestURL},
+		map[string]any{"merge_request_url": mergeRequestURL},
 	)
 	require.Equal(t, http.StatusCreated, linked.Code, linked.Body.String())
 	var linkMutation struct {
@@ -139,12 +138,9 @@ func TestV1GitLabDeliveryConnectsProjectAgentExecutionAndReviewSnapshot(t *testi
 	outageMergeRequestURL := repositoryURL + "/-/merge_requests/503"
 	linkedDuringOutage := doBearerMutation(
 		t, handler, http.MethodPost,
-		fmt.Sprintf("%s/claims/%s/merge-requests", taskPath, execution.Claim.ID),
+		fmt.Sprintf("/api/v1/claims/%s/merge-requests", execution.Claim.ID),
 		issued.Token, http.Header{"If-Match": {`"4"`}},
-		map[string]any{
-			"claim_version":     execution.Claim.Version,
-			"merge_request_url": outageMergeRequestURL,
-		},
+		map[string]any{"merge_request_url": outageMergeRequestURL},
 	)
 	require.Equal(t, http.StatusCreated, linkedDuringOutage.Code, linkedDuringOutage.Body.String())
 
@@ -162,9 +158,9 @@ func TestV1GitLabDeliveryConnectsProjectAgentExecutionAndReviewSnapshot(t *testi
 
 	completed := doBearerMutation(
 		t, handler, http.MethodPost,
-		fmt.Sprintf("%s/claims/%s/complete-execution", taskPath, execution.Claim.ID),
+		fmt.Sprintf("/api/v1/claims/%s/complete-execution", execution.Claim.ID),
 		issued.Token, http.Header{"If-Match": {`"5"`}},
-		map[string]any{"claim_version": execution.Claim.Version, "body": "MR delivery is ready for review."},
+		map[string]any{"body": "MR delivery is ready for review."},
 	)
 	require.Equal(t, http.StatusOK, completed.Code, completed.Body.String())
 	var completion struct {
@@ -222,9 +218,9 @@ func TestV1GitLabDeliveryConnectsProjectAgentExecutionAndReviewSnapshot(t *testi
 	require.Equal(t, "review", reviewClaim.Claim.Stage)
 	reviewLink := doWithHeaders(
 		t, handler, http.MethodPost,
-		fmt.Sprintf("%s/claims/%s/merge-requests", taskPath, reviewClaim.Claim.ID),
+		fmt.Sprintf("/api/v1/claims/%s/merge-requests", reviewClaim.Claim.ID),
 		userA, http.Header{"If-Match": {`"7"`}},
-		map[string]any{"claim_version": reviewClaim.Claim.Version, "merge_request_url": mergeRequestURL},
+		map[string]any{"merge_request_url": mergeRequestURL},
 	)
 	require.Equal(t, http.StatusConflict, reviewLink.Code, reviewLink.Body.String())
 	var reviewProblem struct {

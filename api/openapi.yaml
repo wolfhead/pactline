@@ -16,16 +16,255 @@ paths:
           $ref: "#/components/responses/CurrentPrincipal"
         default:
           $ref: "#/components/responses/Problem"
-  /api/v1/claims/current:
+  /api/v1/claims:
     get:
-      operationId: getCurrentTaskStageClaim
-      summary: Get the active Claim owned by this authenticated client session
+      operationId: listOwnedTaskStageClaims
+      summary: List Claims owned by the authenticated logical principal
       parameters:
-        - $ref: "#/components/parameters/ClientKind"
-        - $ref: "#/components/parameters/ClientSessionID"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/TaskStageClaimStatus"
+        - name: stage
+          in: query
+          schema:
+            $ref: "#/components/schemas/TaskClaimStage"
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskStageClaimList"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/claims/{claim_id}:
+    parameters:
+      - $ref: "#/components/parameters/ClaimID"
+    get:
+      operationId: getTaskStageClaim
+      summary: Get one Claim by its globally unique ID
       responses:
         "200":
           $ref: "#/components/responses/TaskStageClaim"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/claims/{claim_id}/progress:
+    parameters:
+      - $ref: "#/components/parameters/ClaimID"
+    post:
+      operationId: recordTaskClaimProgress
+      summary: Append immutable progress to the Claim's Main Thread
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/ClientKindHeader"
+        - $ref: "#/components/parameters/ClientSessionIDHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BodyWrite"
+      responses:
+        "201":
+          $ref: "#/components/responses/TaskProgressCommand"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/claims/{claim_id}/submissions:
+    parameters:
+      - $ref: "#/components/parameters/ClaimID"
+    post:
+      operationId: recordTaskWorkSubmission
+      summary: Record an immutable work submission without ending execution
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/ClientKindHeader"
+        - $ref: "#/components/parameters/ClientSessionIDHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskStageClaimFinish"
+      responses:
+        "201":
+          $ref: "#/components/responses/TaskWorkSubmissionCommand"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/claims/{claim_id}/complete-execution:
+    parameters:
+      - $ref: "#/components/parameters/ClaimID"
+    post:
+      operationId: completeTaskExecution
+      summary: End execution and make the frozen delivery available for review
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/ClientKindHeader"
+        - $ref: "#/components/parameters/ClientSessionIDHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskStageClaimFinish"
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskExecutionCompletionCommand"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/claims/{claim_id}/release:
+    parameters:
+      - $ref: "#/components/parameters/ClaimID"
+    post:
+      operationId: releaseTaskStageClaim
+      summary: Release the active Claim with a durable handoff
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/ClientKindHeader"
+        - $ref: "#/components/parameters/ClientSessionIDHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskStageClaimFinish"
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskStageClaimCommand"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/claims/{claim_id}/request-resolution:
+    parameters:
+      - $ref: "#/components/parameters/ClaimID"
+    post:
+      operationId: requestTaskResolution
+      summary: End the Claim and open one typed blocking Issue Thread
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/ClientKindHeader"
+        - $ref: "#/components/parameters/ClientSessionIDHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskResolutionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskResolutionRequested"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/claims/{claim_id}/request-changes:
+    parameters:
+      - $ref: "#/components/parameters/ClaimID"
+    post:
+      operationId: requestTaskChanges
+      summary: Return acceptance review to execution
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/ClientKindHeader"
+        - $ref: "#/components/parameters/ClientSessionIDHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskStageClaimFinish"
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskStageClaimCommand"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/claims/{claim_id}/accept:
+    parameters:
+      - $ref: "#/components/parameters/ClaimID"
+    post:
+      operationId: acceptTask
+      summary: Accept the Task outcome and complete the Task
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/ClientKindHeader"
+        - $ref: "#/components/parameters/ClientSessionIDHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskStageClaimFinish"
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskStageClaimCommand"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/claims/{claim_id}/criteria/{criterion_id}/checks:
+    parameters:
+      - $ref: "#/components/parameters/ClaimID"
+      - $ref: "#/components/parameters/ClaimCriterionID"
+    post:
+      operationId: recordTaskStageAcceptanceCheck
+      summary: Record execution verification or acceptance through the active Claim
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/ClientKindHeader"
+        - $ref: "#/components/parameters/ClientSessionIDHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskStageAcceptanceCheckWrite"
+      responses:
+        "201":
+          $ref: "#/components/responses/AcceptanceCheckCreated"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/claims/{claim_id}/merge-requests:
+    parameters:
+      - $ref: "#/components/parameters/ClaimID"
+    post:
+      operationId: linkTaskMergeRequest
+      summary: Link a GitLab merge request during claimed execution
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/ClientKindHeader"
+        - $ref: "#/components/parameters/ClientSessionIDHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskMergeRequestLink"
+      responses:
+        "201":
+          $ref: "#/components/responses/TaskMergeRequestChanged"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1/claims/{claim_id}/merge-requests/{link_id}:
+    parameters:
+      - $ref: "#/components/parameters/ClaimID"
+      - name: link_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      operationId: unlinkTaskMergeRequest
+      summary: Unlink a GitLab merge request during claimed execution
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/ClientKindHeader"
+        - $ref: "#/components/parameters/ClientSessionIDHeader"
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskMergeRequestChanged"
         default:
           $ref: "#/components/responses/Problem"
   /api/v1/users:
@@ -250,78 +489,11 @@ paths:
       parameters:
         - $ref: "#/components/parameters/IfMatch"
         - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TaskStageClaimCreate"
+        - $ref: "#/components/parameters/ClientKindHeader"
+        - $ref: "#/components/parameters/ClientSessionIDHeader"
       responses:
         "201":
           $ref: "#/components/responses/TaskStageClaimCommand"
-        default:
-          $ref: "#/components/responses/Problem"
-  /api/v1/tasks/{number}/claims/{id}/release:
-    parameters:
-      - $ref: "#/components/parameters/TaskNumber"
-      - $ref: "#/components/parameters/ResourceID"
-    post:
-      operationId: releaseTaskStageClaim
-      summary: Release the active Claim with a durable handoff
-      parameters:
-        - $ref: "#/components/parameters/IfMatch"
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TaskStageClaimFinish"
-      responses:
-        "200":
-          $ref: "#/components/responses/TaskStageClaimCommand"
-        default:
-          $ref: "#/components/responses/Problem"
-  /api/v1/tasks/{number}/claims/{id}/submissions:
-    parameters:
-      - $ref: "#/components/parameters/TaskNumber"
-      - $ref: "#/components/parameters/ResourceID"
-    post:
-      operationId: recordTaskWorkSubmission
-      summary: Record an immutable work submission without ending execution
-      parameters:
-        - $ref: "#/components/parameters/IfMatch"
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TaskStageClaimFinish"
-      responses:
-        "201":
-          $ref: "#/components/responses/TaskWorkSubmissionCommand"
-        default:
-          $ref: "#/components/responses/Problem"
-  /api/v1/tasks/{number}/claims/{id}/complete-execution:
-    parameters:
-      - $ref: "#/components/parameters/TaskNumber"
-      - $ref: "#/components/parameters/ResourceID"
-    post:
-      operationId: completeTaskExecution
-      summary: End execution and make the frozen delivery available for review
-      parameters:
-        - $ref: "#/components/parameters/IfMatch"
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TaskStageClaimFinish"
-      responses:
-        "200":
-          $ref: "#/components/responses/TaskExecutionCompletionCommand"
         default:
           $ref: "#/components/responses/Problem"
   /api/v1/tasks/{number}/merge-requests:
@@ -333,139 +505,6 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/TaskDelivery"
-        default:
-          $ref: "#/components/responses/Problem"
-  /api/v1/tasks/{number}/claims/{id}/merge-requests:
-    parameters:
-      - $ref: "#/components/parameters/TaskNumber"
-      - $ref: "#/components/parameters/ResourceID"
-    post:
-      operationId: linkTaskMergeRequest
-      summary: Link a GitLab merge request during claimed execution
-      parameters:
-        - $ref: "#/components/parameters/IfMatch"
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TaskMergeRequestLink"
-      responses:
-        "201":
-          $ref: "#/components/responses/TaskMergeRequestChanged"
-        default:
-          $ref: "#/components/responses/Problem"
-  /api/v1/tasks/{number}/claims/{id}/merge-requests/{link_id}:
-    parameters:
-      - $ref: "#/components/parameters/TaskNumber"
-      - $ref: "#/components/parameters/ResourceID"
-      - name: link_id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-    delete:
-      operationId: unlinkTaskMergeRequest
-      summary: Unlink a GitLab merge request during claimed execution
-      parameters:
-        - $ref: "#/components/parameters/IfMatch"
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TaskMergeRequestUnlink"
-      responses:
-        "200":
-          $ref: "#/components/responses/TaskMergeRequestChanged"
-        default:
-          $ref: "#/components/responses/Problem"
-  /api/v1/tasks/{number}/claims/{id}/request-resolution:
-    parameters:
-      - $ref: "#/components/parameters/TaskNumber"
-      - $ref: "#/components/parameters/ResourceID"
-    post:
-      operationId: requestTaskResolution
-      summary: End the Claim and open one typed blocking Issue Thread
-      parameters:
-        - $ref: "#/components/parameters/IfMatch"
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TaskResolutionRequest"
-      responses:
-        "200":
-          $ref: "#/components/responses/TaskResolutionRequested"
-        default:
-          $ref: "#/components/responses/Problem"
-  /api/v1/tasks/{number}/claims/{id}/request-changes:
-    parameters:
-      - $ref: "#/components/parameters/TaskNumber"
-      - $ref: "#/components/parameters/ResourceID"
-    post:
-      operationId: requestTaskChanges
-      summary: Return acceptance review to execution
-      parameters:
-        - $ref: "#/components/parameters/IfMatch"
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TaskStageClaimFinish"
-      responses:
-        "200":
-          $ref: "#/components/responses/TaskStageClaimCommand"
-        default:
-          $ref: "#/components/responses/Problem"
-  /api/v1/tasks/{number}/claims/{id}/accept:
-    parameters:
-      - $ref: "#/components/parameters/TaskNumber"
-      - $ref: "#/components/parameters/ResourceID"
-    post:
-      operationId: acceptTask
-      summary: Accept the Task outcome and complete the Task
-      parameters:
-        - $ref: "#/components/parameters/IfMatch"
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TaskStageClaimFinish"
-      responses:
-        "200":
-          $ref: "#/components/responses/TaskStageClaimCommand"
-        default:
-          $ref: "#/components/responses/Problem"
-  /api/v1/tasks/{number}/claims/{id}/criteria/{criterion_id}/checks:
-    parameters:
-      - $ref: "#/components/parameters/TaskNumber"
-      - $ref: "#/components/parameters/ResourceID"
-      - $ref: "#/components/parameters/ClaimCriterionID"
-    post:
-      operationId: recordTaskStageAcceptanceCheck
-      summary: Record execution verification or acceptance through the active Claim
-      parameters:
-        - $ref: "#/components/parameters/IfMatch"
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TaskStageAcceptanceCheckWrite"
-      responses:
-        "201":
-          $ref: "#/components/responses/AcceptanceCheckCreated"
         default:
           $ref: "#/components/responses/Problem"
   /api/v1/tasks/{number}/issues/{id}/resolve:
@@ -1231,19 +1270,25 @@ components:
       schema:
         type: string
         format: uuid
-    ClientKind:
-      name: client_kind
-      in: query
+    ClaimID:
+      name: claim_id
+      in: path
       required: true
+      schema:
+        type: string
+        format: uuid
+    ClientKindHeader:
+      name: Pactline-Client-Kind
+      in: header
+      description: Required with Pactline-Client-Session-ID for Agent Claim writes.
       schema:
         type: string
         minLength: 1
         maxLength: 100
-    ClientSessionID:
-      name: client_session_id
-      in: query
-      required: true
-      description: Opaque stable ID of the current Codex task, such as CODEX_THREAD_ID.
+    ClientSessionIDHeader:
+      name: Pactline-Client-Session-ID
+      in: header
+      description: Caller-reported audit provenance; it is not Claim ownership.
       schema:
         type: string
         minLength: 1
@@ -1564,6 +1609,17 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/TaskWorkSubmissionCommand"
+    TaskProgressCommand:
+      description: Claim-owned progress recorded without changing Task or Claim state
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/RequestID"
+        Idempotency-Replayed:
+          $ref: "#/components/headers/IdempotencyReplayed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TaskProgressCommand"
     TaskExecutionCompletionCommand:
       description: Execution completed and delivery frozen for review
       headers:
@@ -1578,7 +1634,7 @@ components:
           schema:
             $ref: "#/components/schemas/TaskExecutionCompletionCommand"
     TaskStageClaim:
-      description: Active Claim owned by the authenticated client session
+      description: Claim addressed by its globally unique ID
       headers:
         Etag:
           $ref: "#/components/headers/Etag"
@@ -1622,7 +1678,7 @@ components:
           schema:
             $ref: "#/components/schemas/TaskCancelResult"
     TaskStageClaimList:
-      description: Task Claim history
+      description: Task Claim collection
       headers:
         X-Request-Id:
           $ref: "#/components/headers/RequestID"
@@ -2582,6 +2638,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TaskStageClaim"
+        next_cursor:
+          type: string
     TaskStageClaimCommand:
       type: object
       additionalProperties: false
@@ -2602,6 +2660,17 @@ components:
           $ref: "#/components/schemas/TaskStageClaim"
         submission:
           $ref: "#/components/schemas/TaskThreadItem"
+    TaskProgressCommand:
+      type: object
+      additionalProperties: false
+      required: [task, claim, progress]
+      properties:
+        task:
+          $ref: "#/components/schemas/TaskWorkflow"
+        claim:
+          $ref: "#/components/schemas/TaskStageClaim"
+        progress:
+          $ref: "#/components/schemas/TaskThreadItem"
     TaskExecutionCompletionCommand:
       type: object
       additionalProperties: false
@@ -2613,25 +2682,19 @@ components:
           $ref: "#/components/schemas/TaskStageClaim"
         completion:
           $ref: "#/components/schemas/TaskThreadItem"
-    TaskStageClaimCreate:
+    BodyWrite:
       type: object
       additionalProperties: false
+      required: [body]
       properties:
-        client_kind:
+        body:
           type: string
-          maxLength: 100
-        client_session_id:
-          type: string
-          maxLength: 255
+          minLength: 1
     TaskStageClaimFinish:
       type: object
       additionalProperties: false
-      required: [claim_version, body]
+      required: [body]
       properties:
-        claim_version:
-          type: integer
-          format: int64
-          minimum: 1
         body:
           type: string
           minLength: 1
@@ -2700,12 +2763,8 @@ components:
     TaskResolutionRequest:
       type: object
       additionalProperties: false
-      required: [claim_version, issue_type, request]
+      required: [issue_type, request]
       properties:
-        claim_version:
-          type: integer
-          format: int64
-          minimum: 1
         issue_type:
           $ref: "#/components/schemas/IssueThreadType"
         request:
@@ -2757,12 +2816,8 @@ components:
     TaskStageAcceptanceCheckWrite:
       type: object
       additionalProperties: false
-      required: [claim_version, criterion_revision, outcome, evidence]
+      required: [criterion_revision, outcome, evidence]
       properties:
-        claim_version:
-          type: integer
-          format: int64
-          minimum: 1
         criterion_revision:
           type: integer
           minimum: 1
@@ -3045,25 +3100,12 @@ components:
     TaskMergeRequestLink:
       type: object
       additionalProperties: false
-      required: [claim_version, merge_request_url]
+      required: [merge_request_url]
       properties:
-        claim_version:
-          type: integer
-          format: int64
-          minimum: 1
         merge_request_url:
           type: string
           format: uri
           maxLength: 2048
-    TaskMergeRequestUnlink:
-      type: object
-      additionalProperties: false
-      required: [claim_version]
-      properties:
-        claim_version:
-          type: integer
-          format: int64
-          minimum: 1
     TaskMergeRequestMutation:
       type: object
       additionalProperties: false

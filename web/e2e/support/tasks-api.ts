@@ -254,10 +254,10 @@ export async function markTaskReady(userId: string, number: number): Promise<Tas
 
 export async function claimTaskStage(userId: string, number: number): Promise<TaskStageClaimCommand> {
   const current = await getTask(userId, number)
-  return call<TaskStageClaimCommand>(userId, 'POST', `/api/v1/tasks/${number}/claims`, {
-    client_kind: 'playwright',
-    client_session_id: `playwright/${crypto.randomUUID()}`,
-  }, { 'If-Match': `"${current.version}"` })
+  return call<TaskStageClaimCommand>(
+    userId, 'POST', `/api/v1/tasks/${number}/claims`, undefined,
+    { 'If-Match': `"${current.version}"` },
+  )
 }
 
 async function finishTaskStage(
@@ -271,8 +271,8 @@ async function finishTaskStage(
   return call<TaskStageClaimCommand>(
     userId,
     'POST',
-    `/api/v1/tasks/${number}/claims/${claim.id}/${command}`,
-    { claim_version: claim.version, body },
+    `/api/v1/claims/${claim.id}/${command}`,
+    { body },
     { 'If-Match': `"${current.version}"` },
   )
 }
@@ -306,9 +306,8 @@ export async function recordTaskStageCheck(
   await call(
     userId,
     'POST',
-    `/api/v1/tasks/${number}/claims/${claim.id}/criteria/${criterion.id}/checks`,
+    `/api/v1/claims/${claim.id}/criteria/${criterion.id}/checks`,
     {
-      claim_version: claim.version,
       criterion_revision: criterion.revision,
       outcome: 'passed',
       evidence,

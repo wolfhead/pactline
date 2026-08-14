@@ -9,10 +9,16 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/wolfhead/pactline/internal/access"
 
 	"github.com/google/uuid"
+)
+
+const (
+	clientKindHeader      = "Pactline-Client-Kind"
+	clientSessionIDHeader = "Pactline-Client-Session-ID"
 )
 
 type accessAuditWriter interface {
@@ -75,12 +81,14 @@ func (m apiAccessAudit) wrap(next http.Handler) http.Handler {
 				route = stripMethodPattern(pattern)
 			}
 		}
+		clientKind, clientSessionID := requestClientProvenance(r)
 		event := access.RequestAuditEvent{
 			ID: uuid.New(), OccurredAt: started, RequestID: requestID(auditedRequest),
 			AuthMethod: state.authMethod, AuthOutcome: state.authOutcome,
 			UserID: state.userID, TokenID: state.tokenID, TokenName: state.tokenName,
 			AgentRunID: state.agentRunID,
-			Method:     r.Method, RoutePattern: route, StatusCode: statusCode,
+			ClientKind: clientKind, ClientSessionID: clientSessionID,
+			Method: r.Method, RoutePattern: route, StatusCode: statusCode,
 			ProblemCode:   state.problemCode,
 			DurationMS:    max(0, now().UTC().Sub(started).Milliseconds()),
 			ResponseBytes: recorder.bytes, IdempotencyReplayed: state.idempotencyReplayed,
@@ -98,6 +106,23 @@ func (m apiAccessAudit) wrap(next http.Handler) http.Handler {
 				"route", event.RoutePattern, "status", event.StatusCode, "error", err)
 		}
 	})
+}
+
+func requestClientProvenance(r *http.Request) (string, string) {
+	kind := boundedClientProvenance(r.Header.Get(clientKindHeader), 100)
+	sessionID := boundedClientProvenance(r.Header.Get(clientSessionIDHeader), 255)
+	if kind == "" || sessionID == "" {
+		return "", ""
+	}
+	return kind, sessionID
+}
+
+func boundedClientProvenance(value string, maximum int) string {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > maximum || strings.ContainsFunc(value, unicode.IsControl) {
+		return ""
+	}
+	return value
 }
 
 func markAccessAuthentication(

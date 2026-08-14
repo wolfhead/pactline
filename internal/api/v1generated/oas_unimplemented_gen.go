@@ -17,7 +17,7 @@ var _ Handler = UnimplementedHandler{}
 //
 // Accept the Task outcome and complete the Task.
 //
-// POST /api/v1/tasks/{number}/claims/{id}/accept
+// POST /api/v1/claims/{claim_id}/accept
 func (UnimplementedHandler) AcceptTask(ctx context.Context, req *TaskStageClaimFinish, params AcceptTaskParams) (r AcceptTaskRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
@@ -107,7 +107,7 @@ func (UnimplementedHandler) CompleteTaskAttachmentUpload(ctx context.Context, pa
 //
 // End execution and make the frozen delivery available for review.
 //
-// POST /api/v1/tasks/{number}/claims/{id}/complete-execution
+// POST /api/v1/claims/{claim_id}/complete-execution
 func (UnimplementedHandler) CompleteTaskExecution(ctx context.Context, req *TaskStageClaimFinish, params CompleteTaskExecutionParams) (r CompleteTaskExecutionRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
@@ -189,7 +189,7 @@ func (UnimplementedHandler) CreateTaskCriterion(ctx context.Context, req *Criter
 // Claim the Task's currently available execution or review stage.
 //
 // POST /api/v1/tasks/{number}/claims
-func (UnimplementedHandler) CreateTaskStageClaim(ctx context.Context, req *TaskStageClaimCreate, params CreateTaskStageClaimParams) (r CreateTaskStageClaimRes, _ error) {
+func (UnimplementedHandler) CreateTaskStageClaim(ctx context.Context, params CreateTaskStageClaimParams) (r CreateTaskStageClaimRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -265,15 +265,6 @@ func (UnimplementedHandler) GetCurrentPrincipal(ctx context.Context) (r GetCurre
 	return r, ht.ErrNotImplemented
 }
 
-// GetCurrentTaskStageClaim implements getCurrentTaskStageClaim operation.
-//
-// Get the active Claim owned by this authenticated client session.
-//
-// GET /api/v1/claims/current
-func (UnimplementedHandler) GetCurrentTaskStageClaim(ctx context.Context, params GetCurrentTaskStageClaimParams) (r GetCurrentTaskStageClaimRes, _ error) {
-	return r, ht.ErrNotImplemented
-}
-
 // GetProject implements getProject operation.
 //
 // Get a project and its work aggregate.
@@ -310,11 +301,20 @@ func (UnimplementedHandler) GetTaskDelivery(ctx context.Context, params GetTaskD
 	return r, ht.ErrNotImplemented
 }
 
+// GetTaskStageClaim implements getTaskStageClaim operation.
+//
+// Get one Claim by its globally unique ID.
+//
+// GET /api/v1/claims/{claim_id}
+func (UnimplementedHandler) GetTaskStageClaim(ctx context.Context, params GetTaskStageClaimParams) (r GetTaskStageClaimRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // LinkTaskMergeRequest implements linkTaskMergeRequest operation.
 //
 // Link a GitLab merge request during claimed execution.
 //
-// POST /api/v1/tasks/{number}/claims/{id}/merge-requests
+// POST /api/v1/claims/{claim_id}/merge-requests
 func (UnimplementedHandler) LinkTaskMergeRequest(ctx context.Context, req *TaskMergeRequestLink, params LinkTaskMergeRequestParams) (r LinkTaskMergeRequestRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
@@ -343,6 +343,15 @@ func (UnimplementedHandler) ListLabels(ctx context.Context, params ListLabelsPar
 //
 // GET /api/v1/projects/{number}/milestones/{id}/criteria
 func (UnimplementedHandler) ListMilestoneCriteria(ctx context.Context, params ListMilestoneCriteriaParams) (r ListMilestoneCriteriaRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListOwnedTaskStageClaims implements listOwnedTaskStageClaims operation.
+//
+// List Claims owned by the authenticated logical principal.
+//
+// GET /api/v1/claims
+func (UnimplementedHandler) ListOwnedTaskStageClaims(ctx context.Context, params ListOwnedTaskStageClaimsParams) (r ListOwnedTaskStageClaimsRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -454,11 +463,20 @@ func (UnimplementedHandler) MarkTaskReady(ctx context.Context, params MarkTaskRe
 	return r, ht.ErrNotImplemented
 }
 
+// RecordTaskClaimProgress implements recordTaskClaimProgress operation.
+//
+// Append immutable progress to the Claim's Main Thread.
+//
+// POST /api/v1/claims/{claim_id}/progress
+func (UnimplementedHandler) RecordTaskClaimProgress(ctx context.Context, req *BodyWrite, params RecordTaskClaimProgressParams) (r RecordTaskClaimProgressRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // RecordTaskStageAcceptanceCheck implements recordTaskStageAcceptanceCheck operation.
 //
 // Record execution verification or acceptance through the active Claim.
 //
-// POST /api/v1/tasks/{number}/claims/{id}/criteria/{criterion_id}/checks
+// POST /api/v1/claims/{claim_id}/criteria/{criterion_id}/checks
 func (UnimplementedHandler) RecordTaskStageAcceptanceCheck(ctx context.Context, req *TaskStageAcceptanceCheckWrite, params RecordTaskStageAcceptanceCheckParams) (r RecordTaskStageAcceptanceCheckRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
@@ -467,7 +485,7 @@ func (UnimplementedHandler) RecordTaskStageAcceptanceCheck(ctx context.Context, 
 //
 // Record an immutable work submission without ending execution.
 //
-// POST /api/v1/tasks/{number}/claims/{id}/submissions
+// POST /api/v1/claims/{claim_id}/submissions
 func (UnimplementedHandler) RecordTaskWorkSubmission(ctx context.Context, req *TaskStageClaimFinish, params RecordTaskWorkSubmissionParams) (r RecordTaskWorkSubmissionRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
@@ -476,7 +494,7 @@ func (UnimplementedHandler) RecordTaskWorkSubmission(ctx context.Context, req *T
 //
 // Release the active Claim with a durable handoff.
 //
-// POST /api/v1/tasks/{number}/claims/{id}/release
+// POST /api/v1/claims/{claim_id}/release
 func (UnimplementedHandler) ReleaseTaskStageClaim(ctx context.Context, req *TaskStageClaimFinish, params ReleaseTaskStageClaimParams) (r ReleaseTaskStageClaimRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
@@ -503,7 +521,7 @@ func (UnimplementedHandler) ReopenMilestone(ctx context.Context, req *LifecycleR
 //
 // Return acceptance review to execution.
 //
-// POST /api/v1/tasks/{number}/claims/{id}/request-changes
+// POST /api/v1/claims/{claim_id}/request-changes
 func (UnimplementedHandler) RequestTaskChanges(ctx context.Context, req *TaskStageClaimFinish, params RequestTaskChangesParams) (r RequestTaskChangesRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
@@ -512,7 +530,7 @@ func (UnimplementedHandler) RequestTaskChanges(ctx context.Context, req *TaskSta
 //
 // End the Claim and open one typed blocking Issue Thread.
 //
-// POST /api/v1/tasks/{number}/claims/{id}/request-resolution
+// POST /api/v1/claims/{claim_id}/request-resolution
 func (UnimplementedHandler) RequestTaskResolution(ctx context.Context, req *TaskResolutionRequest, params RequestTaskResolutionParams) (r RequestTaskResolutionRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
@@ -557,8 +575,8 @@ func (UnimplementedHandler) UnbindProjectRepository(ctx context.Context, params 
 //
 // Unlink a GitLab merge request during claimed execution.
 //
-// DELETE /api/v1/tasks/{number}/claims/{id}/merge-requests/{link_id}
-func (UnimplementedHandler) UnlinkTaskMergeRequest(ctx context.Context, req *TaskMergeRequestUnlink, params UnlinkTaskMergeRequestParams) (r UnlinkTaskMergeRequestRes, _ error) {
+// DELETE /api/v1/claims/{claim_id}/merge-requests/{link_id}
+func (UnimplementedHandler) UnlinkTaskMergeRequest(ctx context.Context, params UnlinkTaskMergeRequestParams) (r UnlinkTaskMergeRequestRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

@@ -85,11 +85,10 @@ export function checkTaskCriterionThroughClaim(
   evidence: string,
 ): Promise<AcceptanceCheck> {
   return v1Post<AcceptanceCheck>(
-    `/api/v1/tasks/${taskNumber}/claims/${claim.id}/criteria/${criterion.id}/checks`,
+    `/api/v1/claims/${claim.id}/criteria/${criterion.id}/checks`,
     {
       ifMatch: etagForVersion(taskVersion),
       body: {
-        claim_version: claim.version,
         criterion_revision: criterion.revision,
         outcome,
         evidence,

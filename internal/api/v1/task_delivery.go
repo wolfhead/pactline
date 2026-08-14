@@ -83,10 +83,11 @@ func (h *Handler) LinkTaskMergeRequest(
 	req *generated.TaskMergeRequestLink,
 	params generated.LinkTaskMergeRequestParams,
 ) (generated.LinkTaskMergeRequestRes, error) {
-	expectedVersion, operation, actor, err := h.workflowTaskCommandContext(
-		ctx, params.Number, params.IfMatch,
-	)
+	expectedVersion, operation, actor, claim, err := h.claimCommandContext(ctx, params.ClaimID, params.IfMatch)
 	if err != nil {
+		return nil, err
+	}
+	if _, _, err := claimClientProvenance(actor, params.PactlineClientKind.Or(""), params.PactlineClientSessionID.Or("")); err != nil {
 		return nil, err
 	}
 	subject, err := accessSubject(ctx)
@@ -94,7 +95,7 @@ func (h *Handler) LinkTaskMergeRequest(
 		return nil, err
 	}
 	mutation, err := h.Delivery.LinkMergeRequest(
-		ctx, params.Number, params.ID, expectedVersion, req.ClaimVersion,
+		ctx, claim.TaskNumber, params.ClaimID, expectedVersion, claim.Version,
 		req.MergeRequestURL.String(), subject, actor, operation,
 	)
 	if err != nil {
@@ -105,13 +106,13 @@ func (h *Handler) LinkTaskMergeRequest(
 
 func (h *Handler) UnlinkTaskMergeRequest(
 	ctx context.Context,
-	req *generated.TaskMergeRequestUnlink,
 	params generated.UnlinkTaskMergeRequestParams,
 ) (generated.UnlinkTaskMergeRequestRes, error) {
-	expectedVersion, operation, actor, err := h.workflowTaskCommandContext(
-		ctx, params.Number, params.IfMatch,
-	)
+	expectedVersion, operation, actor, claim, err := h.claimCommandContext(ctx, params.ClaimID, params.IfMatch)
 	if err != nil {
+		return nil, err
+	}
+	if _, _, err := claimClientProvenance(actor, params.PactlineClientKind.Or(""), params.PactlineClientSessionID.Or("")); err != nil {
 		return nil, err
 	}
 	subject, err := accessSubject(ctx)
@@ -119,7 +120,7 @@ func (h *Handler) UnlinkTaskMergeRequest(
 		return nil, err
 	}
 	mutation, err := h.Delivery.UnlinkMergeRequest(
-		ctx, params.Number, params.ID, expectedVersion, req.ClaimVersion, params.LinkID,
+		ctx, claim.TaskNumber, params.ClaimID, expectedVersion, claim.Version, params.LinkID,
 		subject, actor, operation,
 	)
 	if err != nil {

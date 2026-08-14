@@ -46,6 +46,14 @@ openapi-check:
 	go generate ./api
 	git diff --exit-code -- api/openapi.yaml internal/api/v1generated
 
+pactline-cli:
+	CGO_ENABLED=0 go build -trimpath \
+		-ldflags="-X github.com/wolfhead/pactline/internal/cli.Version=0.1.0-dev" \
+		-o bin/pactline ./cmd/pactline
+
+pactline-release:
+	sh scripts/build-pactline-release.sh
+
 # e2e drives a real browser against the whole stack. Playwright's own
 # webServer config brings up Postgres (via docker compose), the Go backend
 # and the Vite dev server as needed, and reuses them if a developer already
@@ -59,4 +67,4 @@ agent-api-e2e:
 agent-eval:
 	go run ./cmd/agent-eval --scenario all --judge=true --format markdown
 
-.PHONY: up down test run web-install web-dev web-test web-build stack-up stack-down stack-logs openapi-generate openapi-check e2e agent-api-e2e agent-eval
+.PHONY: up down test run web-install web-dev web-test web-build stack-up stack-down stack-logs openapi-generate openapi-check pactline-cli pactline-release e2e agent-api-e2e agent-eval

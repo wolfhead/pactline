@@ -25,6 +25,8 @@ type RequestAuditEvent struct {
 	TokenID             *uuid.UUID           `json:"token_id,omitempty"`
 	TokenName           string               `json:"token_name,omitempty"`
 	AgentRunID          *uuid.UUID           `json:"agent_run_id,omitempty"`
+	ClientKind          string               `json:"client_kind,omitempty"`
+	ClientSessionID     string               `json:"client_session_id,omitempty"`
 	Method              string               `json:"method"`
 	RoutePattern        string               `json:"route_pattern"`
 	StatusCode          int                  `json:"status_code"`

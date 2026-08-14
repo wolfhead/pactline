@@ -88,54 +88,75 @@ func (s *TaskStageClaimStore) GetActiveForTaskNumber(
 	return claim, nil
 }
 
-func (s *TaskStageClaimStore) GetCurrentForClient(
+// ListOwned returns Claims created by the same authenticated logical principal.
+// Client kind and session ID are deliberately excluded: they are provenance,
+// not Claim ownership or continuation credentials.
+func (s *TaskStageClaimStore) ListOwned(
 	ctx context.Context,
 	operation domain.OperationActor,
-	clientKind, clientSessionID string,
-) (domain.TaskStageClaim, error) {
+	status domain.StageClaimStatus,
+	stage domain.TaskClaimStage,
+) ([]domain.TaskStageClaim, error) {
+	claims, _, err := s.ListOwnedPage(ctx, operation, status, stage, 0, 10_000)
+	return claims, err
+}
+
+// ListOwnedPage bounds the database read and reports whether another page is
+// available. The API uses offset cursors today; Claim history ordering remains
+// stable because Claim creation timestamps and IDs are immutable.
+func (s *TaskStageClaimStore) ListOwnedPage(
+	ctx context.Context,
+	operation domain.OperationActor,
+	status domain.StageClaimStatus,
+	stage domain.TaskClaimStage,
+	offset, limit int,
+) ([]domain.TaskStageClaim, bool, error) {
 	if err := operation.Validate(); err != nil {
-		return domain.TaskStageClaim{}, err
+		return nil, false, err
+	}
+	if status != "" && !status.Valid() {
+		return nil, false, fmt.Errorf("%w: invalid Claim status %q", domain.ErrInvalidInput, status)
+	}
+	if stage != "" && !stage.Valid() {
+		return nil, false, fmt.Errorf("%w: invalid Claim stage %q", domain.ErrInvalidInput, stage)
+	}
+	if offset < 0 || limit < 1 || limit > 10_000 {
+		return nil, false, fmt.Errorf("%w: invalid Claim page", domain.ErrInvalidInput)
 	}
 	rows, err := s.db.Pool.Query(ctx, `
 		SELECT `+taskStageClaimColumns+`
 		FROM task_stage_claims claim
-		WHERE claim.status='active'
-		  AND claim.subject_user_id=$1
+		WHERE claim.subject_user_id=$1
 		  AND claim.auth_method=$2
 		  AND claim.api_token_id IS NOT DISTINCT FROM $3
 		  AND claim.agent_run_id IS NOT DISTINCT FROM $4
-		  AND claim.client_kind=$5
-		  AND claim.client_session_id=$6
-		ORDER BY claim.created_at,claim.id
-		LIMIT 2`,
+		  AND ($5='' OR claim.status=$5)
+		  AND ($6='' OR claim.stage=$6)
+		ORDER BY claim.created_at DESC,claim.id DESC
+		OFFSET $7 LIMIT $8`,
 		operation.UserID, operation.AuthMethod, operation.TokenID,
-		operation.AgentRunID, clientKind, clientSessionID,
+		operation.AgentRunID, status, stage, offset, limit+1,
 	)
 	if err != nil {
-		return domain.TaskStageClaim{}, fmt.Errorf("query current Task Claim: %w", err)
+		return nil, false, fmt.Errorf("list owned Task Claims: %w", err)
 	}
 	defer rows.Close()
-	claims := make([]domain.TaskStageClaim, 0, 2)
+	claims := []domain.TaskStageClaim{}
 	for rows.Next() {
 		claim, scanErr := scanTaskStageClaim(rows)
 		if scanErr != nil {
-			return domain.TaskStageClaim{}, fmt.Errorf("scan current Task Claim: %w", scanErr)
+			return nil, false, fmt.Errorf("scan owned Task Claim: %w", scanErr)
 		}
 		claims = append(claims, claim)
 	}
 	if err := rows.Err(); err != nil {
-		return domain.TaskStageClaim{}, fmt.Errorf("iterate current Task Claims: %w", err)
+		return nil, false, fmt.Errorf("iterate owned Task Claims: %w", err)
 	}
-	if len(claims) == 0 {
-		return domain.TaskStageClaim{}, domain.ErrNotFound
+	hasMore := len(claims) > limit
+	if hasMore {
+		claims = claims[:limit]
 	}
-	if len(claims) > 1 {
-		return domain.TaskStageClaim{}, fmt.Errorf(
-			"%w: client session owns more than one active Task Claim",
-			domain.ErrConflict,
-		)
-	}
-	return claims[0], nil
+	return claims, hasMore, nil
 }
 
 func (s *TaskStageClaimStore) ListForTaskNumber(

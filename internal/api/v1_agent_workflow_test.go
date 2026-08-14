@@ -217,23 +217,19 @@ func TestGeneratedClientAgentWorkflow(t *testing.T) {
 		executionSessionID := "execution-" + uuid.NewString()
 		claimResult, claimErr := client.CreateTaskStageClaim(
 			ctx,
-			&generated.TaskStageClaimCreate{
-				ClientKind:      generated.NewOptString("generated-client"),
-				ClientSessionID: generated.NewOptString(executionSessionID),
-			},
 			generated.CreateTaskStageClaimParams{
 				Number: number, IfMatch: fmt.Sprintf(`"%d"`, ready.Response.Version),
-				IdempotencyKey: generated.NewOptString("claim-execution-" + uuid.NewString()),
+				IdempotencyKey:          generated.NewOptString("claim-execution-" + uuid.NewString()),
+				PactlineClientKind:      generated.NewOptString("generated-client"),
+				PactlineClientSessionID: generated.NewOptString(executionSessionID),
 			},
 		)
 		require.NoError(t, claimErr)
 		execution, executionOK := claimResult.(*generated.TaskStageClaimCommandHeaders)
 		require.True(t, executionOK, "unexpected execution Claim response %T", claimResult)
-		currentResult, currentErr := client.GetCurrentTaskStageClaim(
+		currentResult, currentErr := client.GetTaskStageClaim(
 			ctx,
-			generated.GetCurrentTaskStageClaimParams{
-				ClientKind: "generated-client", ClientSessionID: executionSessionID,
-			},
+			generated.GetTaskStageClaimParams{ClaimID: execution.Response.Claim.ID},
 		)
 		require.NoError(t, currentErr)
 		current, currentOK := currentResult.(*generated.TaskStageClaimHeaders)
@@ -244,15 +240,16 @@ func TestGeneratedClientAgentWorkflow(t *testing.T) {
 			verificationResult, verificationErr := client.RecordTaskStageAcceptanceCheck(
 				ctx,
 				&generated.TaskStageAcceptanceCheckWrite{
-					ClaimVersion:      execution.Response.Claim.Version,
 					CriterionRevision: criterion.Revision,
 					Outcome:           generated.AcceptanceOutcomePassed,
 					Evidence:          "Execution verification passed.",
 				},
 				generated.RecordTaskStageAcceptanceCheckParams{
-					Number: number, ID: execution.Response.Claim.ID, CriterionID: criterion.ID,
-					IfMatch:        fmt.Sprintf(`"%d"`, execution.Response.Task.Version),
-					IdempotencyKey: generated.NewOptString("verify-" + uuid.NewString()),
+					ClaimID: execution.Response.Claim.ID, CriterionID: criterion.ID,
+					IfMatch:                 fmt.Sprintf(`"%d"`, execution.Response.Task.Version),
+					IdempotencyKey:          generated.NewOptString("verify-" + uuid.NewString()),
+					PactlineClientKind:      generated.NewOptString("generated-client"),
+					PactlineClientSessionID: generated.NewOptString(executionSessionID),
 				},
 			)
 			require.NoError(t, verificationErr)
@@ -263,11 +260,13 @@ func TestGeneratedClientAgentWorkflow(t *testing.T) {
 
 		submitResult, submitErr := client.RecordTaskWorkSubmission(
 			ctx,
-			&generated.TaskStageClaimFinish{ClaimVersion: execution.Response.Claim.Version, Body: "Work is ready for acceptance."},
+			&generated.TaskStageClaimFinish{Body: "Work is ready for acceptance."},
 			generated.RecordTaskWorkSubmissionParams{
-				Number: number, ID: execution.Response.Claim.ID,
-				IfMatch:        fmt.Sprintf(`"%d"`, execution.Response.Task.Version),
-				IdempotencyKey: generated.NewOptString("submit-" + uuid.NewString()),
+				ClaimID:                 execution.Response.Claim.ID,
+				IfMatch:                 fmt.Sprintf(`"%d"`, execution.Response.Task.Version),
+				IdempotencyKey:          generated.NewOptString("submit-" + uuid.NewString()),
+				PactlineClientKind:      generated.NewOptString("generated-client"),
+				PactlineClientSessionID: generated.NewOptString("session-b-" + uuid.NewString()),
 			},
 		)
 		require.NoError(t, submitErr)
@@ -278,11 +277,13 @@ func TestGeneratedClientAgentWorkflow(t *testing.T) {
 
 		completionResult, completionErr := client.CompleteTaskExecution(
 			ctx,
-			&generated.TaskStageClaimFinish{ClaimVersion: execution.Response.Claim.Version, Body: "Execution is complete."},
+			&generated.TaskStageClaimFinish{Body: "Execution is complete."},
 			generated.CompleteTaskExecutionParams{
-				Number: number, ID: execution.Response.Claim.ID,
-				IfMatch:        fmt.Sprintf(`"%d"`, execution.Response.Task.Version),
-				IdempotencyKey: generated.NewOptString("complete-" + uuid.NewString()),
+				ClaimID:                 execution.Response.Claim.ID,
+				IfMatch:                 fmt.Sprintf(`"%d"`, execution.Response.Task.Version),
+				IdempotencyKey:          generated.NewOptString("complete-" + uuid.NewString()),
+				PactlineClientKind:      generated.NewOptString("generated-client"),
+				PactlineClientSessionID: generated.NewOptString("session-c-" + uuid.NewString()),
 			},
 		)
 		require.NoError(t, completionErr)
@@ -291,13 +292,11 @@ func TestGeneratedClientAgentWorkflow(t *testing.T) {
 
 		reviewClaimResult, reviewClaimErr := client.CreateTaskStageClaim(
 			ctx,
-			&generated.TaskStageClaimCreate{
-				ClientKind:      generated.NewOptString("generated-client"),
-				ClientSessionID: generated.NewOptString("review-" + uuid.NewString()),
-			},
 			generated.CreateTaskStageClaimParams{
 				Number: number, IfMatch: fmt.Sprintf(`"%d"`, completed.Response.Task.Version),
-				IdempotencyKey: generated.NewOptString("claim-review-" + uuid.NewString()),
+				IdempotencyKey:          generated.NewOptString("claim-review-" + uuid.NewString()),
+				PactlineClientKind:      generated.NewOptString("generated-client"),
+				PactlineClientSessionID: generated.NewOptString("review-" + uuid.NewString()),
 			},
 		)
 		require.NoError(t, reviewClaimErr)
@@ -308,15 +307,16 @@ func TestGeneratedClientAgentWorkflow(t *testing.T) {
 			acceptanceResult, acceptanceErr := client.RecordTaskStageAcceptanceCheck(
 				ctx,
 				&generated.TaskStageAcceptanceCheckWrite{
-					ClaimVersion:      review.Response.Claim.Version,
 					CriterionRevision: criterion.Revision,
 					Outcome:           generated.AcceptanceOutcomePassed,
 					Evidence:          "Acceptance review passed.",
 				},
 				generated.RecordTaskStageAcceptanceCheckParams{
-					Number: number, ID: review.Response.Claim.ID, CriterionID: criterion.ID,
-					IfMatch:        fmt.Sprintf(`"%d"`, review.Response.Task.Version),
-					IdempotencyKey: generated.NewOptString("acceptance-" + uuid.NewString()),
+					ClaimID: review.Response.Claim.ID, CriterionID: criterion.ID,
+					IfMatch:                 fmt.Sprintf(`"%d"`, review.Response.Task.Version),
+					IdempotencyKey:          generated.NewOptString("acceptance-" + uuid.NewString()),
+					PactlineClientKind:      generated.NewOptString("generated-client"),
+					PactlineClientSessionID: generated.NewOptString("review-check-" + uuid.NewString()),
 				},
 			)
 			require.NoError(t, acceptanceErr)
@@ -327,11 +327,13 @@ func TestGeneratedClientAgentWorkflow(t *testing.T) {
 
 		acceptResult, acceptErr := client.AcceptTask(
 			ctx,
-			&generated.TaskStageClaimFinish{ClaimVersion: review.Response.Claim.Version, Body: "Accepted."},
+			&generated.TaskStageClaimFinish{Body: "Accepted."},
 			generated.AcceptTaskParams{
-				Number: number, ID: review.Response.Claim.ID,
-				IfMatch:        fmt.Sprintf(`"%d"`, review.Response.Task.Version),
-				IdempotencyKey: generated.NewOptString("accept-" + uuid.NewString()),
+				ClaimID:                 review.Response.Claim.ID,
+				IfMatch:                 fmt.Sprintf(`"%d"`, review.Response.Task.Version),
+				IdempotencyKey:          generated.NewOptString("accept-" + uuid.NewString()),
+				PactlineClientKind:      generated.NewOptString("generated-client"),
+				PactlineClientSessionID: generated.NewOptString("review-accept-" + uuid.NewString()),
 			},
 		)
 		require.NoError(t, acceptErr)

@@ -28,6 +28,12 @@ func doBearerMutation(
 		headers = make(http.Header)
 	}
 	headers.Set("Idempotency-Key", uuid.NewString())
+	if headers.Get("Pactline-Client-Kind") == "" {
+		headers.Set("Pactline-Client-Kind", "api-test")
+	}
+	if headers.Get("Pactline-Client-Session-ID") == "" {
+		headers.Set("Pactline-Client-Session-ID", "test-"+uuid.NewString())
+	}
 	return doBearerRequest(t, h, method, path, token, headers, body)
 }
 

@@ -1,0 +1,28 @@
+name: Release Pactline CLI
+
+on:
+  push:
+    tags:
+      - "pactline-cli-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build four CGO-free release archives
+        run: |
+          version="${GITHUB_REF_NAME#pactline-cli-v}"
+          sh scripts/build-pactline-release.sh "$version" dist/pactline
+      - name: Publish release artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/pactline/*
+          generate_release_notes: true

@@ -36,7 +36,6 @@ export function listTaskStageClaims(number: number): Promise<TaskStageClaim[]> {
 export function claimTaskStage(number: number, version: number): Promise<ClaimCommandResult> {
   return v1Post<ClaimCommandResult>(`/api/v1/tasks/${number}/claims`, {
     ifMatch: etagForVersion(version),
-    body: { client_kind: 'web', client_session_id: `web/${crypto.randomUUID()}` },
   }).then(({ value }) => value)
 }
 
@@ -48,8 +47,8 @@ function finishClaim(
   body: string,
 ): Promise<ClaimCommandResult> {
   return v1Post<ClaimCommandResult>(
-    `/api/v1/tasks/${number}/claims/${claim.id}/${command}`,
-    { ifMatch: etagForVersion(taskVersion), body: { claim_version: claim.version, body } },
+    `/api/v1/claims/${claim.id}/${command}`,
+    { ifMatch: etagForVersion(taskVersion), body: { body } },
   ).then(({ value }) => value)
 }
 
@@ -64,8 +63,8 @@ export function recordTaskWorkSubmission(
   body: string,
 ): Promise<ClaimCommandResult & { submission: TaskThreadItem }> {
   return v1Post<ClaimCommandResult & { submission: TaskThreadItem }>(
-    `/api/v1/tasks/${number}/claims/${claim.id}/submissions`,
-    { ifMatch: etagForVersion(taskVersion), body: { claim_version: claim.version, body } },
+    `/api/v1/claims/${claim.id}/submissions`,
+    { ifMatch: etagForVersion(taskVersion), body: { body } },
   ).then(({ value }) => value)
 }
 
@@ -76,8 +75,8 @@ export function completeTaskExecution(
   body: string,
 ): Promise<ClaimCommandResult & { completion: TaskThreadItem }> {
   return v1Post<ClaimCommandResult & { completion: TaskThreadItem }>(
-    `/api/v1/tasks/${number}/claims/${claim.id}/complete-execution`,
-    { ifMatch: etagForVersion(taskVersion), body: { claim_version: claim.version, body } },
+    `/api/v1/claims/${claim.id}/complete-execution`,
+    { ifMatch: etagForVersion(taskVersion), body: { body } },
   ).then(({ value }) => value)
 }
 
@@ -96,9 +95,9 @@ export function requestTaskResolution(
   issueType: IssueThreadType,
   request: string,
 ): Promise<{ task: TaskWorkflow; claim: TaskStageClaim; issue: TaskThread }> {
-  return v1Post(`/api/v1/tasks/${number}/claims/${claim.id}/request-resolution`, {
+  return v1Post(`/api/v1/claims/${claim.id}/request-resolution`, {
     ifMatch: etagForVersion(taskVersion),
-    body: { claim_version: claim.version, issue_type: issueType, request },
+    body: { issue_type: issueType, request },
   }).then(({ value }) => value as { task: TaskWorkflow; claim: TaskStageClaim; issue: TaskThread })
 }
 

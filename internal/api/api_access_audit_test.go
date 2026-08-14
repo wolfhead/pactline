@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -60,6 +61,8 @@ func TestAccessAuditRecordsMetadataWithoutRequestSecrets(t *testing.T) {
 	request.Header.Set("Authorization", "Bearer must-not-be-persisted")
 	request.Header.Set("Cookie", "bb_session=must-not-be-persisted")
 	request.Header.Set("X-CSRF-Token", "must-not-be-persisted")
+	request.Header.Set("Pactline-Client-Kind", "pactline-cli")
+	request.Header.Set("Pactline-Client-Session-ID", "session-a")
 	request.Header.Set("User-Agent", "audit-test")
 	request.RemoteAddr = "192.0.2.10:4567"
 	response := httptest.NewRecorder()
@@ -73,6 +76,8 @@ func TestAccessAuditRecordsMetadataWithoutRequestSecrets(t *testing.T) {
 	require.Equal(t, userID, *audits.event.UserID)
 	require.Equal(t, tokenID, *audits.event.TokenID)
 	require.Equal(t, "Audited agent", audits.event.TokenName)
+	require.Equal(t, "pactline-cli", audits.event.ClientKind)
+	require.Equal(t, "session-a", audits.event.ClientSessionID)
 	require.Equal(t, http.MethodPost, audits.event.Method)
 	require.Equal(t, "/api/v1/tasks/{number}", audits.event.RoutePattern)
 	require.Equal(t, http.StatusCreated, audits.event.StatusCode)
@@ -84,6 +89,21 @@ func TestAccessAuditRecordsMetadataWithoutRequestSecrets(t *testing.T) {
 	serialized, err := json.Marshal(audits.event)
 	require.NoError(t, err)
 	require.NotContains(t, string(serialized), "must-not-be-persisted")
+}
+
+func TestAccessAuditDropsPartialOrOversizedClientProvenance(t *testing.T) {
+	audits := &recordingAccessAuditStore{}
+	handler := apiAccessAudit{store: audits, now: time.Now}.wrap(http.HandlerFunc(
+		func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) },
+	))
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/claims/id/progress", nil)
+	request.Header.Set("Pactline-Client-Kind", "pactline-cli")
+	request.Header.Set("Pactline-Client-Session-ID", strings.Repeat("x", 256))
+
+	handler.ServeHTTP(httptest.NewRecorder(), request)
+
+	require.Empty(t, audits.event.ClientKind)
+	require.Empty(t, audits.event.ClientSessionID)
 }
 
 func TestAccessAuditSurvivesClientCancellationAfterResponse(t *testing.T) {
