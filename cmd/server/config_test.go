@@ -40,6 +40,17 @@ func TestProductionRequiresHTTPSAndSecrets(t *testing.T) {
 	require.ErrorContains(t, cfg.Validate(), "exactly 32 bytes")
 }
 
+func TestRepositoryProviderFixturesAreRejectedInProduction(t *testing.T) {
+	cfg := validProductionConfig()
+	cfg.RepositoryProviderFixtures = true
+	require.EqualError(t, cfg.Validate(), "repository provider fixtures are not allowed in production")
+
+	cfg.AppEnv = EnvironmentDevelopment
+	require.NoError(t, cfg.Validate())
+	cfg.AppEnv = EnvironmentTest
+	require.NoError(t, cfg.Validate())
+}
+
 func TestLarkConfigurationRequiresValuesAndMatchingOrigin(t *testing.T) {
 	cfg := validProductionConfig()
 	cfg.BootstrapAdminEmail = ""
@@ -110,6 +121,22 @@ func TestLoadConfigDecodesEncryptionKey(t *testing.T) {
 	t.Setenv("OAUTH_TOKEN_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(make([]byte, 31)))
 	_, err = LoadConfig()
 	require.ErrorContains(t, err, "exactly 32 bytes")
+}
+
+func TestLoadConfigParsesRepositoryProviderFixtures(t *testing.T) {
+	t.Setenv("APP_ENV", EnvironmentDevelopment)
+	t.Setenv("AUTH_PROVIDER", AuthProviderDevelopment)
+	t.Setenv("APP_BASE_URL", "http://localhost:5173")
+	t.Setenv("SESSION_SECRET", base64.StdEncoding.EncodeToString(make([]byte, 32)))
+	t.Setenv("REPOSITORY_PROVIDER_FIXTURES_ENABLED", "true")
+
+	cfg, err := LoadConfig()
+	require.NoError(t, err)
+	require.True(t, cfg.RepositoryProviderFixtures)
+
+	t.Setenv("REPOSITORY_PROVIDER_FIXTURES_ENABLED", "sometimes")
+	_, err = LoadConfig()
+	require.ErrorContains(t, err, "REPOSITORY_PROVIDER_FIXTURES_ENABLED must be a boolean")
 }
 
 func TestDevelopmentAndTestRequireDecoded32ByteSessionSecret(t *testing.T) {

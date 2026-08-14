@@ -47,6 +47,7 @@ type Config struct {
 	AgentCheckpointEncryptionKeyID string
 	AgentWorkerConcurrency         int
 	AgentTenantTimezone            string
+	RepositoryProviderFixtures     bool
 	AttachmentStorageProvider      string
 	AttachmentLocalRoot            string
 	AttachmentOSSRegion            string
@@ -117,6 +118,12 @@ func LoadConfig() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	repositoryProviderFixtures, err := parseOptionalBool(
+		"REPOSITORY_PROVIDER_FIXTURES_ENABLED", os.Getenv("REPOSITORY_PROVIDER_FIXTURES_ENABLED"),
+	)
+	if err != nil {
+		return Config{}, err
+	}
 	cfg := Config{
 		AppEnv:                         strings.TrimSpace(os.Getenv("APP_ENV")),
 		AuthProvider:                   strings.TrimSpace(os.Getenv("AUTH_PROVIDER")),
@@ -135,6 +142,7 @@ func LoadConfig() (Config, error) {
 		AgentCheckpointEncryptionKeyID: strings.TrimSpace(os.Getenv("AGENT_CHECKPOINT_ENCRYPTION_KEY_ID")),
 		AgentWorkerConcurrency:         agentConcurrency,
 		AgentTenantTimezone:            strings.TrimSpace(os.Getenv("AGENT_TENANT_TIMEZONE")),
+		RepositoryProviderFixtures:     repositoryProviderFixtures,
 		AttachmentStorageProvider:      strings.ToLower(strings.TrimSpace(os.Getenv("ATTACHMENT_STORAGE_PROVIDER"))),
 		AttachmentLocalRoot:            strings.TrimSpace(os.Getenv("ATTACHMENT_LOCAL_ROOT")),
 		AttachmentOSSRegion:            strings.TrimSpace(os.Getenv("ATTACHMENT_OSS_REGION")),
@@ -252,6 +260,9 @@ func (c Config) Validate() error {
 		}
 		if c.AppBaseURL.Scheme != "https" {
 			return errors.New("APP_BASE_URL must use HTTPS in production")
+		}
+		if c.RepositoryProviderFixtures {
+			return errors.New("repository provider fixtures are not allowed in production")
 		}
 	}
 	if c.AuthProvider == AuthProviderLark {
