@@ -120,20 +120,30 @@ Do not edit `internal/api/v1generated` manually.
 
 ### External Codex worker
 
-Create an executor-scoped personal Token in the account UI, then install or
-create a `pactline-work` Codex skill. Keep developer-specific configuration
-outside this repository:
+Pactline ships a standalone CGO-free CLI for the execution flow from Task
+discovery through `in_review`. Its independent installation and command guide
+is [`cmd/pactline/README.md`](cmd/pactline/README.md).
+
+Create an executor-scoped personal Token in the account UI, install the CLI or
+the `pactline-work` Codex skill, and keep developer-specific Project/repository
+mapping outside this repository.
+
+The standalone CLI uses `~/.pactline/config.json` with mode `0600`; configure it
+with `pactline config set --server ... --token-stdin`. The Codex skill retains
+its own helper configuration and optional workspace guidance:
 
 ```text
 ~/.pactline/
-├── .env          # mode 0600; base URL and personal Token
+├── config.json   # mode 0600; standalone CLI configuration
+├── .env          # mode 0600; Codex skill helper configuration
 ├── pactline.md   # optional personal Agent instructions
 └── projects.md   # optional free-form local Project/repository mapping
 ```
 
-The skill must bind Claims to the real `CODEX_THREAD_ID`; it must not invent a
-transferable worker identity. Local repository layouts remain user-owned and
-are intentionally not part of the Pactline domain.
+Claim ID is the explicit continuation handle. `CODEX_THREAD_ID` is sent as
+request provenance and may change when another authorized subagent continues
+the same Claim with the exact same Token. Local repository layouts remain
+user-owned and are intentionally not part of the Pactline domain.
 
 ## Repository guidance
 

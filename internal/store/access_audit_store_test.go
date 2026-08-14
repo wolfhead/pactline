@@ -30,7 +30,8 @@ func TestAccessAuditStorePersistsSafeFieldsAndAppliesRetention(t *testing.T) {
 		AuthOutcome: access.AuthOutcomeAuthenticated, UserID: pointerUUID(userA),
 		Method: httpMethodGet, RoutePattern: "/api/v1/tasks", StatusCode: 200,
 		DurationMS: 12, ResponseBytes: 34, UserAgent: "store-test",
-		NetworkAddress: "192.0.2.20",
+		NetworkAddress: "192.0.2.20", ClientKind: "pactline-cli",
+		ClientSessionID: "session-a",
 	}
 	recent := base
 	recent.ID, recent.OccurredAt = recentID, now.Add(-89*24*time.Hour)
@@ -56,6 +57,13 @@ func TestAccessAuditStorePersistsSafeFieldsAndAppliesRetention(t *testing.T) {
 	}
 	require.NoError(t, rows.Err())
 	require.Equal(t, []uuid.UUID{recentID}, remaining)
+	events, err := repository.ListAccessAudit(ctx, access.RequestAuditFilter{
+		RequestID: "audit-request", Limit: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	require.Equal(t, "pactline-cli", events[0].ClientKind)
+	require.Equal(t, "session-a", events[0].ClientSessionID)
 }
 
 func TestAccessAuditImportantFilterExcludesOnlySuccessfulReads(t *testing.T) {

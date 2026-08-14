@@ -111,12 +111,24 @@ func TestV1TaskWorkflowUsesCommandsForAgentAndHumanActors(t *testing.T) {
 	decodeJSON(t, invalidTransition, &transitionProblem)
 	require.Equal(t, "INVALID_TRANSITION", transitionProblem.Code)
 
+	missingProvenance := doBearerRequest(
+		t, handler, http.MethodPost,
+		fmt.Sprintf("/api/v1/tasks/%d/claims", task.Number), issued.Token,
+		http.Header{
+			"If-Match":        {`"3"`},
+			"Idempotency-Key": {uuid.NewString()},
+		}, nil,
+	)
+	require.Equal(t, http.StatusBadRequest, missingProvenance.Code, missingProvenance.Body.String())
+
 	sessionID := "thread-" + uuid.NewString()
 	claimed := doBearerMutation(
 		t, handler, http.MethodPost,
 		fmt.Sprintf("/api/v1/tasks/%d/claims", task.Number), issued.Token,
-		http.Header{"If-Match": {`"3"`}},
-		map[string]any{"client_kind": "codex", "client_session_id": sessionID},
+		http.Header{
+			"If-Match": {`"3"`}, "Pactline-Client-Kind": {"codex"},
+			"Pactline-Client-Session-ID": {sessionID},
+		}, nil,
 	)
 	require.Equal(t, http.StatusCreated, claimed.Code, claimed.Body.String())
 	var execution stageClaimCommandJSON
@@ -141,27 +153,26 @@ func TestV1TaskWorkflowUsesCommandsForAgentAndHumanActors(t *testing.T) {
 
 	progress := doBearerMutation(
 		t, handler, http.MethodPost,
-		fmt.Sprintf("/api/v1/threads/%s/items", task.MainThreadID), issued.Token,
+		fmt.Sprintf("/api/v1/claims/%s/progress", execution.Claim.ID), issued.Token,
 		nil,
-		map[string]any{"kind": "progress", "body": "Focused execution checks are green."},
+		map[string]any{"body": "Focused execution checks are green."},
 	)
 	require.Equal(t, http.StatusCreated, progress.Code, progress.Body.String())
 	var progressItem struct {
-		Kind   string `json:"kind"`
-		Author struct {
-			Type string `json:"type"`
-		} `json:"author"`
+		Progress struct {
+			Kind   string `json:"kind"`
+			Author struct {
+				Type string `json:"type"`
+			} `json:"author"`
+		} `json:"progress"`
 	}
 	decodeJSON(t, progress, &progressItem)
-	require.Equal(t, "progress", progressItem.Kind)
-	require.Equal(t, "agent", progressItem.Author.Type)
+	require.Equal(t, "progress", progressItem.Progress.Kind)
+	require.Equal(t, "agent", progressItem.Progress.Author.Type)
 
 	current := doBearerRequest(
 		t, handler, http.MethodGet,
-		fmt.Sprintf(
-			"/api/v1/claims/current?client_kind=codex&client_session_id=%s",
-			sessionID,
-		),
+		fmt.Sprintf("/api/v1/claims/%s", execution.Claim.ID),
 		issued.Token, nil, nil,
 	)
 	require.Equal(t, http.StatusOK, current.Code, current.Body.String())
@@ -169,17 +180,19 @@ func TestV1TaskWorkflowUsesCommandsForAgentAndHumanActors(t *testing.T) {
 	decodeJSON(t, current, &currentClaim)
 	require.Equal(t, execution.Claim.ID, currentClaim.ID)
 
+	removedCurrentRoute := doBearerRequest(
+		t, handler, http.MethodGet, "/api/v1/claims/current", issued.Token, nil, nil,
+	)
+	require.Equal(t, http.StatusBadRequest, removedCurrentRoute.Code, removedCurrentRoute.Body.String())
+	require.Contains(t, removedCurrentRoute.Body.String(), "VALIDATION_FAILED")
+
 	resolutionRequested := doBearerMutation(
 		t, handler, http.MethodPost,
-		fmt.Sprintf(
-			"/api/v1/tasks/%d/claims/%s/request-resolution",
-			task.Number, execution.Claim.ID,
-		),
+		fmt.Sprintf("/api/v1/claims/%s/request-resolution", execution.Claim.ID),
 		issued.Token, http.Header{"If-Match": {`"4"`}},
 		map[string]any{
-			"claim_version": execution.Claim.Version,
-			"issue_type":    "decision_required",
-			"request":       "Choose whether the continuation should retain compatibility behavior.",
+			"issue_type": "decision_required",
+			"request":    "Choose whether the continuation should retain compatibility behavior.",
 		},
 	)
 	require.Equal(t, http.StatusOK, resolutionRequested.Code, resolutionRequested.Body.String())
@@ -208,22 +221,20 @@ func TestV1TaskWorkflowUsesCommandsForAgentAndHumanActors(t *testing.T) {
 
 	endedCurrent := doBearerRequest(
 		t, handler, http.MethodGet,
-		fmt.Sprintf(
-			"/api/v1/claims/current?client_kind=codex&client_session_id=%s",
-			sessionID,
-		),
+		"/api/v1/claims?status=active",
 		issued.Token, nil, nil,
 	)
-	require.Equal(t, http.StatusNotFound, endedCurrent.Code, endedCurrent.Body.String())
+	require.Equal(t, http.StatusOK, endedCurrent.Code, endedCurrent.Body.String())
+	require.NotContains(t, endedCurrent.Body.String(), execution.Claim.ID.String())
 
 	continuationSessionID := "thread-continuation-" + uuid.NewString()
 	continued := doBearerMutation(
 		t, handler, http.MethodPost,
 		fmt.Sprintf("/api/v1/tasks/%d/claims", task.Number), issued.Token,
-		http.Header{"If-Match": {`"6"`}},
-		map[string]any{
-			"client_kind": "codex", "client_session_id": continuationSessionID,
-		},
+		http.Header{
+			"If-Match": {`"6"`}, "Pactline-Client-Kind": {"codex"},
+			"Pactline-Client-Session-ID": {continuationSessionID},
+		}, nil,
 	)
 	require.Equal(t, http.StatusCreated, continued.Code, continued.Body.String())
 	decodeJSON(t, continued, &execution)
@@ -240,13 +251,9 @@ func TestV1TaskWorkflowUsesCommandsForAgentAndHumanActors(t *testing.T) {
 
 	checkedExecution := doBearerMutation(
 		t, handler, http.MethodPost,
-		fmt.Sprintf(
-			"/api/v1/tasks/%d/claims/%s/criteria/%s/checks",
-			task.Number, execution.Claim.ID, criterion.ID,
-		),
+		fmt.Sprintf("/api/v1/claims/%s/criteria/%s/checks", execution.Claim.ID, criterion.ID),
 		issued.Token, http.Header{"If-Match": {`"7"`}},
 		map[string]any{
-			"claim_version":      execution.Claim.Version,
 			"criterion_revision": criterion.Revision,
 			"outcome":            "passed", "evidence": "Focused command test passed.",
 		},
@@ -255,12 +262,9 @@ func TestV1TaskWorkflowUsesCommandsForAgentAndHumanActors(t *testing.T) {
 
 	submitted := doBearerMutation(
 		t, handler, http.MethodPost,
-		fmt.Sprintf("/api/v1/tasks/%d/claims/%s/submissions", task.Number, execution.Claim.ID),
+		fmt.Sprintf("/api/v1/claims/%s/submissions", execution.Claim.ID),
 		issued.Token, http.Header{"If-Match": {`"7"`}},
-		map[string]any{
-			"claim_version": execution.Claim.Version,
-			"body":          "Execution is complete and verified.",
-		},
+		map[string]any{"body": "Execution is complete and verified."},
 	)
 	require.Equal(t, http.StatusCreated, submitted.Code, submitted.Body.String())
 	var workSubmission struct {
@@ -274,12 +278,9 @@ func TestV1TaskWorkflowUsesCommandsForAgentAndHumanActors(t *testing.T) {
 
 	completed := doBearerMutation(
 		t, handler, http.MethodPost,
-		fmt.Sprintf("/api/v1/tasks/%d/claims/%s/complete-execution", task.Number, execution.Claim.ID),
+		fmt.Sprintf("/api/v1/claims/%s/complete-execution", execution.Claim.ID),
 		issued.Token, http.Header{"If-Match": {`"7"`}},
-		map[string]any{
-			"claim_version": execution.Claim.Version,
-			"body":          "Execution is complete and verified.",
-		},
+		map[string]any{"body": "Execution is complete and verified."},
 	)
 	require.Equal(t, http.StatusOK, completed.Code, completed.Body.String())
 	var submission stageClaimCommandJSON
@@ -301,12 +302,9 @@ func TestV1TaskWorkflowUsesCommandsForAgentAndHumanActors(t *testing.T) {
 
 	reviewCheck := doWithHeaders(
 		t, handler, http.MethodPost,
-		fmt.Sprintf(
-			"/api/v1/tasks/%d/claims/%s/criteria/%s/checks",
-			task.Number, review.Claim.ID, criterion.ID,
-		), userA, http.Header{"If-Match": {`"9"`}},
+		fmt.Sprintf("/api/v1/claims/%s/criteria/%s/checks", review.Claim.ID, criterion.ID),
+		userA, http.Header{"If-Match": {`"9"`}},
 		map[string]any{
-			"claim_version":      review.Claim.Version,
 			"criterion_revision": criterion.Revision,
 			"outcome":            "passed", "evidence": "Acceptance independently confirmed.",
 		},
@@ -315,12 +313,9 @@ func TestV1TaskWorkflowUsesCommandsForAgentAndHumanActors(t *testing.T) {
 
 	accepted := doWithHeaders(
 		t, handler, http.MethodPost,
-		fmt.Sprintf("/api/v1/tasks/%d/claims/%s/accept", task.Number, review.Claim.ID),
+		fmt.Sprintf("/api/v1/claims/%s/accept", review.Claim.ID),
 		userA, http.Header{"If-Match": {`"9"`}},
-		map[string]any{
-			"claim_version": review.Claim.Version,
-			"body":          "The Task acceptance contract is satisfied.",
-		},
+		map[string]any{"body": "The Task acceptance contract is satisfied."},
 	)
 	require.Equal(t, http.StatusOK, accepted.Code, accepted.Body.String())
 	var acceptance stageClaimCommandJSON

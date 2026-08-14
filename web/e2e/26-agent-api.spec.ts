@@ -280,10 +280,7 @@ test('a human can provision, inspect, and revoke an Agent that completes version
       {
         ifMatch: readyTask.etag,
         idempotencyKey: `execution-claim-${runTag}`,
-        data: {
-          client_kind: 'playwright',
-          client_session_id: `playwright/${runTag}/execution`,
-        },
+        clientSessionID: `playwright/${runTag}/execution`,
       },
     )
     expect(executionClaimResponse.status()).toBe(201)
@@ -293,13 +290,13 @@ test('a human can provision, inspect, and revoke an Agent that completes version
     const executionCheck = await agentRequest(
       request,
       'POST',
-      `/api/v1/tasks/${task.number}/claims/${executionClaim.claim.id}/criteria/${taskCriterion.id}/checks`,
+      `/api/v1/claims/${executionClaim.claim.id}/criteria/${taskCriterion.id}/checks`,
       writeToken.token,
       {
         ifMatch: `"${executionClaim.task.version}"`,
         idempotencyKey: `execution-check-${runTag}`,
+        clientSessionID: `playwright/${runTag}/execution-check`,
         data: {
-          claim_version: executionClaim.claim.version,
           criterion_revision: taskCriterion.revision,
           outcome: 'passed',
           evidence: 'The Agent completed self-verification before review.',
@@ -323,13 +320,13 @@ test('a human can provision, inspect, and revoke an Agent that completes version
     const staleAgentSubmit = await agentRequest(
       request,
       'POST',
-      `/api/v1/tasks/${task.number}/claims/${executionClaim.claim.id}/complete-execution`,
+      `/api/v1/claims/${executionClaim.claim.id}/complete-execution`,
       writeToken.token,
       {
         ifMatch: taskETag,
         idempotencyKey: `stale-submit-${runTag}`,
+        clientSessionID: `playwright/${runTag}/stale-submit`,
         data: {
-          claim_version: executionClaim.claim.version,
           body: 'Submit verified work for acceptance.',
         },
       },
@@ -343,14 +340,14 @@ test('a human can provision, inspect, and revoke an Agent that completes version
     const recoveredSubmit = await agentRequest(
       request,
       'POST',
-      `/api/v1/tasks/${task.number}/claims/${executionClaim.claim.id}/complete-execution`,
+      `/api/v1/claims/${executionClaim.claim.id}/complete-execution`,
       writeToken.token,
       {
         ifMatch: latestTask.etag,
         idempotencyKey: `recover-submit-${runTag}`,
         requestID: auditRequestID,
+        clientSessionID: `playwright/${runTag}/recovered-submit`,
         data: {
-          claim_version: executionClaim.claim.version,
           body: 'Recovered from VERSION_CONFLICT and submitted verified work.',
         },
       },
@@ -367,10 +364,7 @@ test('a human can provision, inspect, and revoke an Agent that completes version
       {
         ifMatch: reviewTask.etag,
         idempotencyKey: `review-claim-${runTag}`,
-        data: {
-          client_kind: 'playwright',
-          client_session_id: `playwright/${runTag}/review`,
-        },
+        clientSessionID: `playwright/${runTag}/review`,
       },
     )
     expect(reviewClaimResponse.status()).toBe(201)
@@ -380,13 +374,13 @@ test('a human can provision, inspect, and revoke an Agent that completes version
     const acceptanceCheck = await agentRequest(
       request,
       'POST',
-      `/api/v1/tasks/${task.number}/claims/${reviewClaim.claim.id}/criteria/${taskCriterion.id}/checks`,
+      `/api/v1/claims/${reviewClaim.claim.id}/criteria/${taskCriterion.id}/checks`,
       writeToken.token,
       {
         ifMatch: `"${reviewClaim.task.version}"`,
         idempotencyKey: `acceptance-check-${runTag}`,
+        clientSessionID: `playwright/${runTag}/review-check`,
         data: {
-          claim_version: reviewClaim.claim.version,
           criterion_revision: taskCriterion.revision,
           outcome: 'passed',
           evidence: 'The Agent observed and recovered from VERSION_CONFLICT.',
@@ -398,13 +392,13 @@ test('a human can provision, inspect, and revoke an Agent that completes version
     const acceptedTask = await agentRequest(
       request,
       'POST',
-      `/api/v1/tasks/${task.number}/claims/${reviewClaim.claim.id}/accept`,
+      `/api/v1/claims/${reviewClaim.claim.id}/accept`,
       writeToken.token,
       {
         ifMatch: `"${reviewClaim.task.version}"`,
         idempotencyKey: `accept-task-${runTag}`,
+        clientSessionID: `playwright/${runTag}/accept`,
         data: {
-          claim_version: reviewClaim.claim.version,
           body: 'Current-cycle acceptance evidence passed.',
         },
       },
@@ -449,12 +443,12 @@ test('a human can provision, inspect, and revoke an Agent that completes version
       await page.getByLabel('用户').selectOption(adminID)
       await page.getByLabel('Token').selectOption({ label: `${adminName} · ${writeTokenName}` })
       await page.getByLabel('方法').selectOption('POST')
-      await page.getByLabel('路由').fill('/api/v1/tasks/{number}/claims/{id}/complete-execution')
+      await page.getByLabel('路由').fill('/api/v1/claims/{claim_id}/complete-execution')
       await page.getByLabel('状态码').fill('200')
       await page.getByLabel('Request ID').fill(auditRequestID)
       await page.getByRole('button', { name: '筛选' }).click()
       await expect(page.getByText(auditRequestID, { exact: true })).toBeVisible()
-      await expect(page.getByText('POST /api/v1/tasks/{number}/claims/{id}/complete-execution', { exact: true })).toBeVisible()
+      await expect(page.getByText('POST /api/v1/claims/{claim_id}/complete-execution', { exact: true })).toBeVisible()
     })
 
     await revokeToken(page, writeTokenName)
@@ -538,6 +532,7 @@ async function agentRequest(
     projectIfMatch?: string
     idempotencyKey?: string
     requestID?: string
+    clientSessionID?: string
   } = {},
 ): Promise<APIResponse> {
   const headers: Record<string, string> = {
@@ -548,6 +543,10 @@ async function agentRequest(
   if (options.projectIfMatch) headers['X-Project-If-Match'] = options.projectIfMatch
   if (options.idempotencyKey) headers['Idempotency-Key'] = options.idempotencyKey
   if (options.requestID) headers['X-Request-ID'] = options.requestID
+  if (options.clientSessionID) {
+    headers['Pactline-Client-Kind'] = 'playwright'
+    headers['Pactline-Client-Session-ID'] = options.clientSessionID
+  }
   return request.fetch(path, { method, headers, data: options.data })
 }
 

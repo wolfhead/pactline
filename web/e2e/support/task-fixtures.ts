@@ -189,11 +189,15 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     await use({
       ...tasksApi,
       createTask: async (userId, input) => {
+        const usesDefaultProject = input.project_number === undefined
         const task = await tasksApi.createTask(userId, {
           ...input,
           project_number: input.project_number ?? Number(defaultProject.number),
         })
-        trackTask(task.id)
+        // The default Project fixture owns and deletes its Tasks. Tracking the
+        // same Task separately makes teardown order-dependent because sibling
+        // fixtures may tear down in either order.
+        if (!usesDefaultProject) trackTask(task.id)
         return task
       },
       createLabel: async (userId, name) => {

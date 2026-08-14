@@ -111,11 +111,12 @@ func TestTaskWorkflowSupportsHumanExecutionAndAgentAcceptance(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, domain.TaskClaimStageReview, reviewClaim.Stage)
 	require.Equal(t, domain.TaskActivityWorking, reviewWorking.Lifecycle.Activity)
-	currentClaim, err := claims.GetCurrentForClient(
-		ctx, agentOperation, "codex", "review-thread",
+	ownedClaims, err := claims.ListOwned(
+		ctx, agentOperation, domain.StageClaimStatusActive, domain.TaskClaimStageReview,
 	)
 	require.NoError(t, err)
-	require.Equal(t, reviewClaim.ID, currentClaim.ID)
+	require.Len(t, ownedClaims, 1)
+	require.Equal(t, reviewClaim.ID, ownedClaims[0].ID)
 
 	agentOperation.RequestID = "agent-premature-accept"
 	_, _, err = workflow.AcceptTask(
@@ -154,8 +155,11 @@ func TestTaskWorkflowSupportsHumanExecutionAndAgentAcceptance(t *testing.T) {
 	require.Equal(t, domain.TaskPhaseDone, done.Lifecycle.Phase)
 	require.Empty(t, done.Lifecycle.Activity)
 	require.Equal(t, domain.TaskClaimOutcomeTaskAccepted, acceptedClaim.Outcome)
-	_, err = claims.GetCurrentForClient(ctx, agentOperation, "codex", "review-thread")
-	require.ErrorIs(t, err, domain.ErrNotFound)
+	ownedClaims, err = claims.ListOwned(
+		ctx, agentOperation, domain.StageClaimStatusActive, domain.TaskClaimStageReview,
+	)
+	require.NoError(t, err)
+	require.Empty(t, ownedClaims)
 
 	claimHistory, err := claims.ListForTaskNumber(ctx, created.Task.Number)
 	require.NoError(t, err)
@@ -176,6 +180,109 @@ func TestTaskWorkflowSupportsHumanExecutionAndAgentAcceptance(t *testing.T) {
 		domain.ThreadItemKindSystemEvent,
 		domain.ThreadItemKindReviewOutcome,
 	}, threadItemKinds(items))
+}
+
+func TestClaimCentricProgressUsesLogicalPrincipalNotClientSession(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	now := time.Date(2026, 8, 14, 2, 0, 0, 0, time.UTC)
+	tasks := store.NewTaskStore(db)
+	workflow := store.NewTaskWorkflowStore(db)
+	claims := store.NewTaskStageClaimStore(db)
+	token := createTaskClaimToken(t, db, userA, now)
+	created := mustCreateTask(t, db, tasks, domain.Task{
+		Title: "Continue Claim from another client session", CreatorID: userA,
+	}, nil)
+	cleanupTask(t, db, created.Task.ID)
+	ready, err := workflow.MarkReady(
+		ctx, created.Task.Number, created.Task.Version,
+		domain.SessionOperation(userA, "claim-centric-ready"), now,
+	)
+	require.NoError(t, err)
+	operation := taskClaimActor(userA, token, "session-a-claim")
+	actor := domain.Actor{Type: domain.ActorTypeAgent, Ref: "api-token/claim-centric"}
+	working, claim, err := workflow.Claim(
+		ctx, created.Task.Number, ready.Version, actor, operation,
+		"pactline-cli", "session-a", now.Add(time.Minute),
+	)
+	require.NoError(t, err)
+
+	operation.RequestID = "session-b-progress"
+	progressTask, activeClaim, progress, err := workflow.RecordClaimProgress(
+		ctx, claim.ID, "Session B continued the same logical Claim.",
+		actor, operation, now.Add(2*time.Minute),
+	)
+	require.NoError(t, err)
+	require.Equal(t, working.Version, progressTask.Version)
+	require.Equal(t, claim.Version, activeClaim.Version)
+	require.Equal(t, claim.ID, *progress.TaskStageClaimID)
+	require.EqualValues(t, 1, *progress.TaskReviewCycle)
+
+	owned, err := claims.ListOwned(
+		ctx, operation, domain.StageClaimStatusActive, domain.TaskClaimStageExecution,
+	)
+	require.NoError(t, err)
+	require.Contains(t, claimIDs(owned), claim.ID)
+
+	otherToken := createTaskClaimToken(t, db, userA, now.Add(time.Second))
+	otherOperation := taskClaimActor(userA, otherToken, "other-token")
+	otherOwned, err := claims.ListOwned(
+		ctx, otherOperation, domain.StageClaimStatusActive, domain.TaskClaimStageExecution,
+	)
+	require.NoError(t, err)
+	require.NotContains(t, claimIDs(otherOwned), claim.ID)
+	_, _, _, err = workflow.RecordClaimProgress(
+		ctx, claim.ID, "A different token must not continue this Claim.",
+		actor, otherOperation, now.Add(3*time.Minute),
+	)
+	require.ErrorIs(t, err, domain.ErrForbidden)
+}
+
+func TestClaimCentricCommandLazilyExpiresDueClaim(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	now := time.Date(2026, 8, 14, 2, 30, 0, 0, time.UTC)
+	workflow := store.NewTaskWorkflowStore(db)
+	claimStore := store.NewTaskStageClaimStore(db)
+	created := mustCreateTask(t, db, store.NewTaskStore(db), domain.Task{
+		Title: "Expire Claim before command", CreatorID: userA,
+	}, nil)
+	cleanupTask(t, db, created.Task.ID)
+	ready, err := workflow.MarkReady(
+		ctx, created.Task.Number, created.Task.Version,
+		domain.SessionOperation(userA, "claim-command-expiry-ready"), now,
+	)
+	require.NoError(t, err)
+	actor := domain.Actor{Type: domain.ActorTypeUser, UserID: &userA}
+	working, claim, err := workflow.Claim(
+		ctx, created.Task.Number, ready.Version, actor,
+		domain.SessionOperation(userA, "claim-command-expiry-claim"), "browser", "", now,
+	)
+	require.NoError(t, err)
+
+	_, _, _, err = workflow.RecordClaimProgress(
+		ctx, claim.ID, "This must not be recorded after expiry.", actor,
+		domain.SessionOperation(userA, "claim-command-expiry-progress"),
+		now.Add(domain.TaskClaimActiveLifetime+time.Minute),
+	)
+	require.ErrorIs(t, err, domain.ErrConflict)
+
+	expired, err := claimStore.Get(ctx, claim.ID)
+	require.NoError(t, err)
+	require.Equal(t, domain.StageClaimStatusExpired, expired.Status)
+	require.Equal(t, domain.TaskClaimOutcomeDeadlineElapsed, expired.Outcome)
+	available, err := workflow.Get(ctx, created.Task.Number)
+	require.NoError(t, err)
+	require.Equal(t, working.Version+1, available.Version)
+	require.Equal(t, domain.TaskActivityAvailable, available.Lifecycle.Activity)
+}
+
+func claimIDs(claims []domain.TaskStageClaim) []uuid.UUID {
+	ids := make([]uuid.UUID, len(claims))
+	for index := range claims {
+		ids[index] = claims[index].ID
+	}
+	return ids
 }
 
 func TestTaskWorkflowAcceptanceRequiresCurrentReviewCycleEvidence(t *testing.T) {

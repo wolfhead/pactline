@@ -37,14 +37,14 @@ func (c *codeRecorder) Unwrap() http.ResponseWriter {
 //
 // Accept the Task outcome and complete the Task.
 //
-// POST /api/v1/tasks/{number}/claims/{id}/accept
-func (s *Server) handleAcceptTaskRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
+// POST /api/v1/claims/{claim_id}/accept
+func (s *Server) handleAcceptTaskRequest(args [1]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
 	statusWriter := &codeRecorder{ResponseWriter: w}
 	w = statusWriter
 	otelAttrs := []attribute.KeyValue{
 		otelogen.OperationID("acceptTask"),
 		semconv.HTTPRequestMethodKey.String("POST"),
-		semconv.HTTPRouteKey.String("/api/v1/tasks/{number}/claims/{id}/accept"),
+		semconv.HTTPRouteKey.String("/api/v1/claims/{claim_id}/accept"),
 	}
 	// Add attributes from config.
 	otelAttrs = append(otelAttrs, s.cfg.Attributes...)
@@ -218,13 +218,17 @@ func (s *Server) handleAcceptTaskRequest(args [2]string, argsEscaped bool, w htt
 					In:   "header",
 				}: params.IdempotencyKey,
 				{
-					Name: "number",
-					In:   "path",
-				}: params.Number,
+					Name: "Pactline-Client-Kind",
+					In:   "header",
+				}: params.PactlineClientKind,
 				{
-					Name: "id",
+					Name: "Pactline-Client-Session-ID",
+					In:   "header",
+				}: params.PactlineClientSessionID,
+				{
+					Name: "claim_id",
 					In:   "path",
-				}: params.ID,
+				}: params.ClaimID,
 			},
 			Raw: r,
 		}
@@ -2271,14 +2275,14 @@ func (s *Server) handleCompleteTaskAttachmentUploadRequest(args [2]string, argsE
 //
 // End execution and make the frozen delivery available for review.
 //
-// POST /api/v1/tasks/{number}/claims/{id}/complete-execution
-func (s *Server) handleCompleteTaskExecutionRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
+// POST /api/v1/claims/{claim_id}/complete-execution
+func (s *Server) handleCompleteTaskExecutionRequest(args [1]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
 	statusWriter := &codeRecorder{ResponseWriter: w}
 	w = statusWriter
 	otelAttrs := []attribute.KeyValue{
 		otelogen.OperationID("completeTaskExecution"),
 		semconv.HTTPRequestMethodKey.String("POST"),
-		semconv.HTTPRouteKey.String("/api/v1/tasks/{number}/claims/{id}/complete-execution"),
+		semconv.HTTPRouteKey.String("/api/v1/claims/{claim_id}/complete-execution"),
 	}
 	// Add attributes from config.
 	otelAttrs = append(otelAttrs, s.cfg.Attributes...)
@@ -2452,13 +2456,17 @@ func (s *Server) handleCompleteTaskExecutionRequest(args [2]string, argsEscaped 
 					In:   "header",
 				}: params.IdempotencyKey,
 				{
-					Name: "number",
-					In:   "path",
-				}: params.Number,
+					Name: "Pactline-Client-Kind",
+					In:   "header",
+				}: params.PactlineClientKind,
 				{
-					Name: "id",
+					Name: "Pactline-Client-Session-ID",
+					In:   "header",
+				}: params.PactlineClientSessionID,
+				{
+					Name: "claim_id",
 					In:   "path",
-				}: params.ID,
+				}: params.ClaimID,
 			},
 			Raw: r,
 		}
@@ -4453,21 +4461,6 @@ func (s *Server) handleCreateTaskStageClaimRequest(args [1]string, argsEscaped b
 	}
 
 	var rawBody []byte
-	request, rawBody, close, err := s.decodeCreateTaskStageClaimRequest(r)
-	if err != nil {
-		err = &ogenerrors.DecodeRequestError{
-			OperationContext: opErrContext,
-			Err:              err,
-		}
-		defer recordError("DecodeRequest", err)
-		s.cfg.ErrorHandler(ctx, w, r, err)
-		return
-	}
-	defer func() {
-		if err := close(); err != nil {
-			recordError("CloseRequest", err)
-		}
-	}()
 
 	var response CreateTaskStageClaimRes
 	if m := s.cfg.Middleware; m != nil {
@@ -4476,7 +4469,7 @@ func (s *Server) handleCreateTaskStageClaimRequest(args [1]string, argsEscaped b
 			OperationName:    CreateTaskStageClaimOperation,
 			OperationSummary: "Claim the Task's currently available execution or review stage",
 			OperationID:      "createTaskStageClaim",
-			Body:             request,
+			Body:             nil,
 			RawBody:          rawBody,
 			Params: middleware.Parameters{
 				{
@@ -4488,6 +4481,14 @@ func (s *Server) handleCreateTaskStageClaimRequest(args [1]string, argsEscaped b
 					In:   "header",
 				}: params.IdempotencyKey,
 				{
+					Name: "Pactline-Client-Kind",
+					In:   "header",
+				}: params.PactlineClientKind,
+				{
+					Name: "Pactline-Client-Session-ID",
+					In:   "header",
+				}: params.PactlineClientSessionID,
+				{
 					Name: "number",
 					In:   "path",
 				}: params.Number,
@@ -4496,7 +4497,7 @@ func (s *Server) handleCreateTaskStageClaimRequest(args [1]string, argsEscaped b
 		}
 
 		type (
-			Request  = *TaskStageClaimCreate
+			Request  = struct{}
 			Params   = CreateTaskStageClaimParams
 			Response = CreateTaskStageClaimRes
 		)
@@ -4509,12 +4510,12 @@ func (s *Server) handleCreateTaskStageClaimRequest(args [1]string, argsEscaped b
 			mreq,
 			unpackCreateTaskStageClaimParams,
 			func(ctx context.Context, request Request, params Params) (response Response, err error) {
-				response, err = s.h.CreateTaskStageClaim(ctx, request, params)
+				response, err = s.h.CreateTaskStageClaim(ctx, params)
 				return response, err
 			},
 		)
 	} else {
-		response, err = s.h.CreateTaskStageClaim(ctx, request, params)
+		response, err = s.h.CreateTaskStageClaim(ctx, params)
 	}
 	if err != nil {
 		defer recordError("Internal", err)
@@ -6193,215 +6194,6 @@ func (s *Server) handleGetCurrentPrincipalRequest(args [0]string, argsEscaped bo
 	}
 }
 
-// handleGetCurrentTaskStageClaimRequest handles getCurrentTaskStageClaim operation.
-//
-// Get the active Claim owned by this authenticated client session.
-//
-// GET /api/v1/claims/current
-func (s *Server) handleGetCurrentTaskStageClaimRequest(args [0]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
-	statusWriter := &codeRecorder{ResponseWriter: w}
-	w = statusWriter
-	otelAttrs := []attribute.KeyValue{
-		otelogen.OperationID("getCurrentTaskStageClaim"),
-		semconv.HTTPRequestMethodKey.String("GET"),
-		semconv.HTTPRouteKey.String("/api/v1/claims/current"),
-	}
-	// Add attributes from config.
-	otelAttrs = append(otelAttrs, s.cfg.Attributes...)
-
-	// Start a span for this request.
-	ctx, span := s.cfg.Tracer.Start(r.Context(), GetCurrentTaskStageClaimOperation,
-		trace.WithAttributes(otelAttrs...),
-		serverSpanKind,
-	)
-	defer span.End()
-
-	// Add Labeler to context.
-	labeler := &Labeler{attrs: otelAttrs}
-	ctx = contextWithLabeler(ctx, labeler)
-
-	// Run stopwatch.
-	startTime := time.Now()
-	defer func() {
-		elapsedDuration := time.Since(startTime)
-
-		attrSet := labeler.AttributeSet()
-		attrs := attrSet.ToSlice()
-		code := statusWriter.status
-		if code != 0 {
-			codeAttr := semconv.HTTPResponseStatusCode(code)
-			attrs = append(attrs, codeAttr)
-			span.SetAttributes(codeAttr)
-		}
-		attrOpt := metric.WithAttributes(attrs...)
-
-		// Increment request counter.
-		s.requests.Add(ctx, 1, attrOpt)
-
-		// Use floating point division here for higher precision (instead of Millisecond method).
-		s.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), attrOpt)
-	}()
-
-	var (
-		recordError = func(stage string, err error) {
-			span.RecordError(err)
-
-			// https://opentelemetry.io/docs/specs/semconv/http/http-spans/#status
-			// Span Status MUST be left unset if HTTP status code was in the 1xx, 2xx or 3xx ranges,
-			// unless there was another error (e.g., network error receiving the response body; or 3xx codes with
-			// max redirects exceeded), in which case status MUST be set to Error.
-			code := statusWriter.status
-			if code < 100 || code >= 500 {
-				span.SetStatus(codes.Error, stage)
-			}
-
-			attrSet := labeler.AttributeSet()
-			attrs := attrSet.ToSlice()
-			if code != 0 {
-				attrs = append(attrs, semconv.HTTPResponseStatusCode(code))
-			}
-
-			s.errors.Add(ctx, 1, metric.WithAttributes(attrs...))
-		}
-		err          error
-		opErrContext = ogenerrors.OperationContext{
-			Name: GetCurrentTaskStageClaimOperation,
-			ID:   "getCurrentTaskStageClaim",
-		}
-	)
-	{
-		type bitset = [1]uint8
-		var satisfied bitset
-		{
-			sctx, ok, err := s.securityBearerAuth(ctx, GetCurrentTaskStageClaimOperation, r)
-			if err != nil {
-				err = &ogenerrors.SecurityError{
-					OperationContext: opErrContext,
-					Security:         "BearerAuth",
-					Err:              err,
-				}
-				defer recordError("Security:BearerAuth", err)
-				s.cfg.ErrorHandler(ctx, w, r, err)
-				return
-			}
-			if ok {
-				satisfied[0] |= 1 << 0
-				ctx = sctx
-			}
-		}
-		{
-			sctx, ok, err := s.securitySessionCookie(ctx, GetCurrentTaskStageClaimOperation, r)
-			if err != nil {
-				err = &ogenerrors.SecurityError{
-					OperationContext: opErrContext,
-					Security:         "SessionCookie",
-					Err:              err,
-				}
-				defer recordError("Security:SessionCookie", err)
-				s.cfg.ErrorHandler(ctx, w, r, err)
-				return
-			}
-			if ok {
-				satisfied[0] |= 1 << 1
-				ctx = sctx
-			}
-		}
-
-		if ok := func() bool {
-		nextRequirement:
-			for _, requirement := range []bitset{
-				{0b00000001},
-				{0b00000010},
-			} {
-				for i, mask := range requirement {
-					if satisfied[i]&mask != mask {
-						continue nextRequirement
-					}
-				}
-				return true
-			}
-			return false
-		}(); !ok {
-			err = &ogenerrors.SecurityError{
-				OperationContext: opErrContext,
-				Err:              ogenerrors.ErrSecurityRequirementIsNotSatisfied,
-			}
-			defer recordError("Security", err)
-			s.cfg.ErrorHandler(ctx, w, r, err)
-			return
-		}
-	}
-	params, err := decodeGetCurrentTaskStageClaimParams(args, argsEscaped, r)
-	if err != nil {
-		err = &ogenerrors.DecodeParamsError{
-			OperationContext: opErrContext,
-			Err:              err,
-		}
-		defer recordError("DecodeParams", err)
-		s.cfg.ErrorHandler(ctx, w, r, err)
-		return
-	}
-
-	var rawBody []byte
-
-	var response GetCurrentTaskStageClaimRes
-	if m := s.cfg.Middleware; m != nil {
-		mreq := middleware.Request{
-			Context:          ctx,
-			OperationName:    GetCurrentTaskStageClaimOperation,
-			OperationSummary: "Get the active Claim owned by this authenticated client session",
-			OperationID:      "getCurrentTaskStageClaim",
-			Body:             nil,
-			RawBody:          rawBody,
-			Params: middleware.Parameters{
-				{
-					Name: "client_kind",
-					In:   "query",
-				}: params.ClientKind,
-				{
-					Name: "client_session_id",
-					In:   "query",
-				}: params.ClientSessionID,
-			},
-			Raw: r,
-		}
-
-		type (
-			Request  = struct{}
-			Params   = GetCurrentTaskStageClaimParams
-			Response = GetCurrentTaskStageClaimRes
-		)
-		response, err = middleware.HookMiddleware[
-			Request,
-			Params,
-			Response,
-		](
-			m,
-			mreq,
-			unpackGetCurrentTaskStageClaimParams,
-			func(ctx context.Context, request Request, params Params) (response Response, err error) {
-				response, err = s.h.GetCurrentTaskStageClaim(ctx, params)
-				return response, err
-			},
-		)
-	} else {
-		response, err = s.h.GetCurrentTaskStageClaim(ctx, params)
-	}
-	if err != nil {
-		defer recordError("Internal", err)
-		s.cfg.ErrorHandler(ctx, w, r, err)
-		return
-	}
-
-	if err := encodeGetCurrentTaskStageClaimResponse(response, w, span); err != nil {
-		defer recordError("EncodeResponse", err)
-		if !errors.Is(err, ht.ErrInternalServerErrorResponse) {
-			s.cfg.ErrorHandler(ctx, w, r, err)
-		}
-		return
-	}
-}
-
 // handleGetProjectRequest handles getProject operation.
 //
 // Get a project and its work aggregate.
@@ -7230,18 +7022,223 @@ func (s *Server) handleGetTaskDeliveryRequest(args [1]string, argsEscaped bool, 
 	}
 }
 
+// handleGetTaskStageClaimRequest handles getTaskStageClaim operation.
+//
+// Get one Claim by its globally unique ID.
+//
+// GET /api/v1/claims/{claim_id}
+func (s *Server) handleGetTaskStageClaimRequest(args [1]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
+	statusWriter := &codeRecorder{ResponseWriter: w}
+	w = statusWriter
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("getTaskStageClaim"),
+		semconv.HTTPRequestMethodKey.String("GET"),
+		semconv.HTTPRouteKey.String("/api/v1/claims/{claim_id}"),
+	}
+	// Add attributes from config.
+	otelAttrs = append(otelAttrs, s.cfg.Attributes...)
+
+	// Start a span for this request.
+	ctx, span := s.cfg.Tracer.Start(r.Context(), GetTaskStageClaimOperation,
+		trace.WithAttributes(otelAttrs...),
+		serverSpanKind,
+	)
+	defer span.End()
+
+	// Add Labeler to context.
+	labeler := &Labeler{attrs: otelAttrs}
+	ctx = contextWithLabeler(ctx, labeler)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		elapsedDuration := time.Since(startTime)
+
+		attrSet := labeler.AttributeSet()
+		attrs := attrSet.ToSlice()
+		code := statusWriter.status
+		if code != 0 {
+			codeAttr := semconv.HTTPResponseStatusCode(code)
+			attrs = append(attrs, codeAttr)
+			span.SetAttributes(codeAttr)
+		}
+		attrOpt := metric.WithAttributes(attrs...)
+
+		// Increment request counter.
+		s.requests.Add(ctx, 1, attrOpt)
+
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		s.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), attrOpt)
+	}()
+
+	var (
+		recordError = func(stage string, err error) {
+			span.RecordError(err)
+
+			// https://opentelemetry.io/docs/specs/semconv/http/http-spans/#status
+			// Span Status MUST be left unset if HTTP status code was in the 1xx, 2xx or 3xx ranges,
+			// unless there was another error (e.g., network error receiving the response body; or 3xx codes with
+			// max redirects exceeded), in which case status MUST be set to Error.
+			code := statusWriter.status
+			if code < 100 || code >= 500 {
+				span.SetStatus(codes.Error, stage)
+			}
+
+			attrSet := labeler.AttributeSet()
+			attrs := attrSet.ToSlice()
+			if code != 0 {
+				attrs = append(attrs, semconv.HTTPResponseStatusCode(code))
+			}
+
+			s.errors.Add(ctx, 1, metric.WithAttributes(attrs...))
+		}
+		err          error
+		opErrContext = ogenerrors.OperationContext{
+			Name: GetTaskStageClaimOperation,
+			ID:   "getTaskStageClaim",
+		}
+	)
+	{
+		type bitset = [1]uint8
+		var satisfied bitset
+		{
+			sctx, ok, err := s.securityBearerAuth(ctx, GetTaskStageClaimOperation, r)
+			if err != nil {
+				err = &ogenerrors.SecurityError{
+					OperationContext: opErrContext,
+					Security:         "BearerAuth",
+					Err:              err,
+				}
+				defer recordError("Security:BearerAuth", err)
+				s.cfg.ErrorHandler(ctx, w, r, err)
+				return
+			}
+			if ok {
+				satisfied[0] |= 1 << 0
+				ctx = sctx
+			}
+		}
+		{
+			sctx, ok, err := s.securitySessionCookie(ctx, GetTaskStageClaimOperation, r)
+			if err != nil {
+				err = &ogenerrors.SecurityError{
+					OperationContext: opErrContext,
+					Security:         "SessionCookie",
+					Err:              err,
+				}
+				defer recordError("Security:SessionCookie", err)
+				s.cfg.ErrorHandler(ctx, w, r, err)
+				return
+			}
+			if ok {
+				satisfied[0] |= 1 << 1
+				ctx = sctx
+			}
+		}
+
+		if ok := func() bool {
+		nextRequirement:
+			for _, requirement := range []bitset{
+				{0b00000001},
+				{0b00000010},
+			} {
+				for i, mask := range requirement {
+					if satisfied[i]&mask != mask {
+						continue nextRequirement
+					}
+				}
+				return true
+			}
+			return false
+		}(); !ok {
+			err = &ogenerrors.SecurityError{
+				OperationContext: opErrContext,
+				Err:              ogenerrors.ErrSecurityRequirementIsNotSatisfied,
+			}
+			defer recordError("Security", err)
+			s.cfg.ErrorHandler(ctx, w, r, err)
+			return
+		}
+	}
+	params, err := decodeGetTaskStageClaimParams(args, argsEscaped, r)
+	if err != nil {
+		err = &ogenerrors.DecodeParamsError{
+			OperationContext: opErrContext,
+			Err:              err,
+		}
+		defer recordError("DecodeParams", err)
+		s.cfg.ErrorHandler(ctx, w, r, err)
+		return
+	}
+
+	var rawBody []byte
+
+	var response GetTaskStageClaimRes
+	if m := s.cfg.Middleware; m != nil {
+		mreq := middleware.Request{
+			Context:          ctx,
+			OperationName:    GetTaskStageClaimOperation,
+			OperationSummary: "Get one Claim by its globally unique ID",
+			OperationID:      "getTaskStageClaim",
+			Body:             nil,
+			RawBody:          rawBody,
+			Params: middleware.Parameters{
+				{
+					Name: "claim_id",
+					In:   "path",
+				}: params.ClaimID,
+			},
+			Raw: r,
+		}
+
+		type (
+			Request  = struct{}
+			Params   = GetTaskStageClaimParams
+			Response = GetTaskStageClaimRes
+		)
+		response, err = middleware.HookMiddleware[
+			Request,
+			Params,
+			Response,
+		](
+			m,
+			mreq,
+			unpackGetTaskStageClaimParams,
+			func(ctx context.Context, request Request, params Params) (response Response, err error) {
+				response, err = s.h.GetTaskStageClaim(ctx, params)
+				return response, err
+			},
+		)
+	} else {
+		response, err = s.h.GetTaskStageClaim(ctx, params)
+	}
+	if err != nil {
+		defer recordError("Internal", err)
+		s.cfg.ErrorHandler(ctx, w, r, err)
+		return
+	}
+
+	if err := encodeGetTaskStageClaimResponse(response, w, span); err != nil {
+		defer recordError("EncodeResponse", err)
+		if !errors.Is(err, ht.ErrInternalServerErrorResponse) {
+			s.cfg.ErrorHandler(ctx, w, r, err)
+		}
+		return
+	}
+}
+
 // handleLinkTaskMergeRequestRequest handles linkTaskMergeRequest operation.
 //
 // Link a GitLab merge request during claimed execution.
 //
-// POST /api/v1/tasks/{number}/claims/{id}/merge-requests
-func (s *Server) handleLinkTaskMergeRequestRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
+// POST /api/v1/claims/{claim_id}/merge-requests
+func (s *Server) handleLinkTaskMergeRequestRequest(args [1]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
 	statusWriter := &codeRecorder{ResponseWriter: w}
 	w = statusWriter
 	otelAttrs := []attribute.KeyValue{
 		otelogen.OperationID("linkTaskMergeRequest"),
 		semconv.HTTPRequestMethodKey.String("POST"),
-		semconv.HTTPRouteKey.String("/api/v1/tasks/{number}/claims/{id}/merge-requests"),
+		semconv.HTTPRouteKey.String("/api/v1/claims/{claim_id}/merge-requests"),
 	}
 	// Add attributes from config.
 	otelAttrs = append(otelAttrs, s.cfg.Attributes...)
@@ -7415,13 +7412,17 @@ func (s *Server) handleLinkTaskMergeRequestRequest(args [2]string, argsEscaped b
 					In:   "header",
 				}: params.IdempotencyKey,
 				{
-					Name: "number",
-					In:   "path",
-				}: params.Number,
+					Name: "Pactline-Client-Kind",
+					In:   "header",
+				}: params.PactlineClientKind,
 				{
-					Name: "id",
+					Name: "Pactline-Client-Session-ID",
+					In:   "header",
+				}: params.PactlineClientSessionID,
+				{
+					Name: "claim_id",
 					In:   "path",
-				}: params.ID,
+				}: params.ClaimID,
 			},
 			Raw: r,
 		}
@@ -8070,6 +8071,223 @@ func (s *Server) handleListMilestoneCriteriaRequest(args [2]string, argsEscaped 
 	}
 
 	if err := encodeListMilestoneCriteriaResponse(response, w, span); err != nil {
+		defer recordError("EncodeResponse", err)
+		if !errors.Is(err, ht.ErrInternalServerErrorResponse) {
+			s.cfg.ErrorHandler(ctx, w, r, err)
+		}
+		return
+	}
+}
+
+// handleListOwnedTaskStageClaimsRequest handles listOwnedTaskStageClaims operation.
+//
+// List Claims owned by the authenticated logical principal.
+//
+// GET /api/v1/claims
+func (s *Server) handleListOwnedTaskStageClaimsRequest(args [0]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
+	statusWriter := &codeRecorder{ResponseWriter: w}
+	w = statusWriter
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("listOwnedTaskStageClaims"),
+		semconv.HTTPRequestMethodKey.String("GET"),
+		semconv.HTTPRouteKey.String("/api/v1/claims"),
+	}
+	// Add attributes from config.
+	otelAttrs = append(otelAttrs, s.cfg.Attributes...)
+
+	// Start a span for this request.
+	ctx, span := s.cfg.Tracer.Start(r.Context(), ListOwnedTaskStageClaimsOperation,
+		trace.WithAttributes(otelAttrs...),
+		serverSpanKind,
+	)
+	defer span.End()
+
+	// Add Labeler to context.
+	labeler := &Labeler{attrs: otelAttrs}
+	ctx = contextWithLabeler(ctx, labeler)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		elapsedDuration := time.Since(startTime)
+
+		attrSet := labeler.AttributeSet()
+		attrs := attrSet.ToSlice()
+		code := statusWriter.status
+		if code != 0 {
+			codeAttr := semconv.HTTPResponseStatusCode(code)
+			attrs = append(attrs, codeAttr)
+			span.SetAttributes(codeAttr)
+		}
+		attrOpt := metric.WithAttributes(attrs...)
+
+		// Increment request counter.
+		s.requests.Add(ctx, 1, attrOpt)
+
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		s.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), attrOpt)
+	}()
+
+	var (
+		recordError = func(stage string, err error) {
+			span.RecordError(err)
+
+			// https://opentelemetry.io/docs/specs/semconv/http/http-spans/#status
+			// Span Status MUST be left unset if HTTP status code was in the 1xx, 2xx or 3xx ranges,
+			// unless there was another error (e.g., network error receiving the response body; or 3xx codes with
+			// max redirects exceeded), in which case status MUST be set to Error.
+			code := statusWriter.status
+			if code < 100 || code >= 500 {
+				span.SetStatus(codes.Error, stage)
+			}
+
+			attrSet := labeler.AttributeSet()
+			attrs := attrSet.ToSlice()
+			if code != 0 {
+				attrs = append(attrs, semconv.HTTPResponseStatusCode(code))
+			}
+
+			s.errors.Add(ctx, 1, metric.WithAttributes(attrs...))
+		}
+		err          error
+		opErrContext = ogenerrors.OperationContext{
+			Name: ListOwnedTaskStageClaimsOperation,
+			ID:   "listOwnedTaskStageClaims",
+		}
+	)
+	{
+		type bitset = [1]uint8
+		var satisfied bitset
+		{
+			sctx, ok, err := s.securityBearerAuth(ctx, ListOwnedTaskStageClaimsOperation, r)
+			if err != nil {
+				err = &ogenerrors.SecurityError{
+					OperationContext: opErrContext,
+					Security:         "BearerAuth",
+					Err:              err,
+				}
+				defer recordError("Security:BearerAuth", err)
+				s.cfg.ErrorHandler(ctx, w, r, err)
+				return
+			}
+			if ok {
+				satisfied[0] |= 1 << 0
+				ctx = sctx
+			}
+		}
+		{
+			sctx, ok, err := s.securitySessionCookie(ctx, ListOwnedTaskStageClaimsOperation, r)
+			if err != nil {
+				err = &ogenerrors.SecurityError{
+					OperationContext: opErrContext,
+					Security:         "SessionCookie",
+					Err:              err,
+				}
+				defer recordError("Security:SessionCookie", err)
+				s.cfg.ErrorHandler(ctx, w, r, err)
+				return
+			}
+			if ok {
+				satisfied[0] |= 1 << 1
+				ctx = sctx
+			}
+		}
+
+		if ok := func() bool {
+		nextRequirement:
+			for _, requirement := range []bitset{
+				{0b00000001},
+				{0b00000010},
+			} {
+				for i, mask := range requirement {
+					if satisfied[i]&mask != mask {
+						continue nextRequirement
+					}
+				}
+				return true
+			}
+			return false
+		}(); !ok {
+			err = &ogenerrors.SecurityError{
+				OperationContext: opErrContext,
+				Err:              ogenerrors.ErrSecurityRequirementIsNotSatisfied,
+			}
+			defer recordError("Security", err)
+			s.cfg.ErrorHandler(ctx, w, r, err)
+			return
+		}
+	}
+	params, err := decodeListOwnedTaskStageClaimsParams(args, argsEscaped, r)
+	if err != nil {
+		err = &ogenerrors.DecodeParamsError{
+			OperationContext: opErrContext,
+			Err:              err,
+		}
+		defer recordError("DecodeParams", err)
+		s.cfg.ErrorHandler(ctx, w, r, err)
+		return
+	}
+
+	var rawBody []byte
+
+	var response ListOwnedTaskStageClaimsRes
+	if m := s.cfg.Middleware; m != nil {
+		mreq := middleware.Request{
+			Context:          ctx,
+			OperationName:    ListOwnedTaskStageClaimsOperation,
+			OperationSummary: "List Claims owned by the authenticated logical principal",
+			OperationID:      "listOwnedTaskStageClaims",
+			Body:             nil,
+			RawBody:          rawBody,
+			Params: middleware.Parameters{
+				{
+					Name: "cursor",
+					In:   "query",
+				}: params.Cursor,
+				{
+					Name: "limit",
+					In:   "query",
+				}: params.Limit,
+				{
+					Name: "status",
+					In:   "query",
+				}: params.Status,
+				{
+					Name: "stage",
+					In:   "query",
+				}: params.Stage,
+			},
+			Raw: r,
+		}
+
+		type (
+			Request  = struct{}
+			Params   = ListOwnedTaskStageClaimsParams
+			Response = ListOwnedTaskStageClaimsRes
+		)
+		response, err = middleware.HookMiddleware[
+			Request,
+			Params,
+			Response,
+		](
+			m,
+			mreq,
+			unpackListOwnedTaskStageClaimsParams,
+			func(ctx context.Context, request Request, params Params) (response Response, err error) {
+				response, err = s.h.ListOwnedTaskStageClaims(ctx, params)
+				return response, err
+			},
+		)
+	} else {
+		response, err = s.h.ListOwnedTaskStageClaims(ctx, params)
+	}
+	if err != nil {
+		defer recordError("Internal", err)
+		s.cfg.ErrorHandler(ctx, w, r, err)
+		return
+	}
+
+	if err := encodeListOwnedTaskStageClaimsResponse(response, w, span); err != nil {
 		defer recordError("EncodeResponse", err)
 		if !errors.Is(err, ht.ErrInternalServerErrorResponse) {
 			s.cfg.ErrorHandler(ctx, w, r, err)
@@ -10638,18 +10856,250 @@ func (s *Server) handleMarkTaskReadyRequest(args [1]string, argsEscaped bool, w 
 	}
 }
 
+// handleRecordTaskClaimProgressRequest handles recordTaskClaimProgress operation.
+//
+// Append immutable progress to the Claim's Main Thread.
+//
+// POST /api/v1/claims/{claim_id}/progress
+func (s *Server) handleRecordTaskClaimProgressRequest(args [1]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
+	statusWriter := &codeRecorder{ResponseWriter: w}
+	w = statusWriter
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("recordTaskClaimProgress"),
+		semconv.HTTPRequestMethodKey.String("POST"),
+		semconv.HTTPRouteKey.String("/api/v1/claims/{claim_id}/progress"),
+	}
+	// Add attributes from config.
+	otelAttrs = append(otelAttrs, s.cfg.Attributes...)
+
+	// Start a span for this request.
+	ctx, span := s.cfg.Tracer.Start(r.Context(), RecordTaskClaimProgressOperation,
+		trace.WithAttributes(otelAttrs...),
+		serverSpanKind,
+	)
+	defer span.End()
+
+	// Add Labeler to context.
+	labeler := &Labeler{attrs: otelAttrs}
+	ctx = contextWithLabeler(ctx, labeler)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		elapsedDuration := time.Since(startTime)
+
+		attrSet := labeler.AttributeSet()
+		attrs := attrSet.ToSlice()
+		code := statusWriter.status
+		if code != 0 {
+			codeAttr := semconv.HTTPResponseStatusCode(code)
+			attrs = append(attrs, codeAttr)
+			span.SetAttributes(codeAttr)
+		}
+		attrOpt := metric.WithAttributes(attrs...)
+
+		// Increment request counter.
+		s.requests.Add(ctx, 1, attrOpt)
+
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		s.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), attrOpt)
+	}()
+
+	var (
+		recordError = func(stage string, err error) {
+			span.RecordError(err)
+
+			// https://opentelemetry.io/docs/specs/semconv/http/http-spans/#status
+			// Span Status MUST be left unset if HTTP status code was in the 1xx, 2xx or 3xx ranges,
+			// unless there was another error (e.g., network error receiving the response body; or 3xx codes with
+			// max redirects exceeded), in which case status MUST be set to Error.
+			code := statusWriter.status
+			if code < 100 || code >= 500 {
+				span.SetStatus(codes.Error, stage)
+			}
+
+			attrSet := labeler.AttributeSet()
+			attrs := attrSet.ToSlice()
+			if code != 0 {
+				attrs = append(attrs, semconv.HTTPResponseStatusCode(code))
+			}
+
+			s.errors.Add(ctx, 1, metric.WithAttributes(attrs...))
+		}
+		err          error
+		opErrContext = ogenerrors.OperationContext{
+			Name: RecordTaskClaimProgressOperation,
+			ID:   "recordTaskClaimProgress",
+		}
+	)
+	{
+		type bitset = [1]uint8
+		var satisfied bitset
+		{
+			sctx, ok, err := s.securityBearerAuth(ctx, RecordTaskClaimProgressOperation, r)
+			if err != nil {
+				err = &ogenerrors.SecurityError{
+					OperationContext: opErrContext,
+					Security:         "BearerAuth",
+					Err:              err,
+				}
+				defer recordError("Security:BearerAuth", err)
+				s.cfg.ErrorHandler(ctx, w, r, err)
+				return
+			}
+			if ok {
+				satisfied[0] |= 1 << 0
+				ctx = sctx
+			}
+		}
+		{
+			sctx, ok, err := s.securitySessionCookie(ctx, RecordTaskClaimProgressOperation, r)
+			if err != nil {
+				err = &ogenerrors.SecurityError{
+					OperationContext: opErrContext,
+					Security:         "SessionCookie",
+					Err:              err,
+				}
+				defer recordError("Security:SessionCookie", err)
+				s.cfg.ErrorHandler(ctx, w, r, err)
+				return
+			}
+			if ok {
+				satisfied[0] |= 1 << 1
+				ctx = sctx
+			}
+		}
+
+		if ok := func() bool {
+		nextRequirement:
+			for _, requirement := range []bitset{
+				{0b00000001},
+				{0b00000010},
+			} {
+				for i, mask := range requirement {
+					if satisfied[i]&mask != mask {
+						continue nextRequirement
+					}
+				}
+				return true
+			}
+			return false
+		}(); !ok {
+			err = &ogenerrors.SecurityError{
+				OperationContext: opErrContext,
+				Err:              ogenerrors.ErrSecurityRequirementIsNotSatisfied,
+			}
+			defer recordError("Security", err)
+			s.cfg.ErrorHandler(ctx, w, r, err)
+			return
+		}
+	}
+	params, err := decodeRecordTaskClaimProgressParams(args, argsEscaped, r)
+	if err != nil {
+		err = &ogenerrors.DecodeParamsError{
+			OperationContext: opErrContext,
+			Err:              err,
+		}
+		defer recordError("DecodeParams", err)
+		s.cfg.ErrorHandler(ctx, w, r, err)
+		return
+	}
+
+	var rawBody []byte
+	request, rawBody, close, err := s.decodeRecordTaskClaimProgressRequest(r)
+	if err != nil {
+		err = &ogenerrors.DecodeRequestError{
+			OperationContext: opErrContext,
+			Err:              err,
+		}
+		defer recordError("DecodeRequest", err)
+		s.cfg.ErrorHandler(ctx, w, r, err)
+		return
+	}
+	defer func() {
+		if err := close(); err != nil {
+			recordError("CloseRequest", err)
+		}
+	}()
+
+	var response RecordTaskClaimProgressRes
+	if m := s.cfg.Middleware; m != nil {
+		mreq := middleware.Request{
+			Context:          ctx,
+			OperationName:    RecordTaskClaimProgressOperation,
+			OperationSummary: "Append immutable progress to the Claim's Main Thread",
+			OperationID:      "recordTaskClaimProgress",
+			Body:             request,
+			RawBody:          rawBody,
+			Params: middleware.Parameters{
+				{
+					Name: "Idempotency-Key",
+					In:   "header",
+				}: params.IdempotencyKey,
+				{
+					Name: "Pactline-Client-Kind",
+					In:   "header",
+				}: params.PactlineClientKind,
+				{
+					Name: "Pactline-Client-Session-ID",
+					In:   "header",
+				}: params.PactlineClientSessionID,
+				{
+					Name: "claim_id",
+					In:   "path",
+				}: params.ClaimID,
+			},
+			Raw: r,
+		}
+
+		type (
+			Request  = *BodyWrite
+			Params   = RecordTaskClaimProgressParams
+			Response = RecordTaskClaimProgressRes
+		)
+		response, err = middleware.HookMiddleware[
+			Request,
+			Params,
+			Response,
+		](
+			m,
+			mreq,
+			unpackRecordTaskClaimProgressParams,
+			func(ctx context.Context, request Request, params Params) (response Response, err error) {
+				response, err = s.h.RecordTaskClaimProgress(ctx, request, params)
+				return response, err
+			},
+		)
+	} else {
+		response, err = s.h.RecordTaskClaimProgress(ctx, request, params)
+	}
+	if err != nil {
+		defer recordError("Internal", err)
+		s.cfg.ErrorHandler(ctx, w, r, err)
+		return
+	}
+
+	if err := encodeRecordTaskClaimProgressResponse(response, w, span); err != nil {
+		defer recordError("EncodeResponse", err)
+		if !errors.Is(err, ht.ErrInternalServerErrorResponse) {
+			s.cfg.ErrorHandler(ctx, w, r, err)
+		}
+		return
+	}
+}
+
 // handleRecordTaskStageAcceptanceCheckRequest handles recordTaskStageAcceptanceCheck operation.
 //
 // Record execution verification or acceptance through the active Claim.
 //
-// POST /api/v1/tasks/{number}/claims/{id}/criteria/{criterion_id}/checks
-func (s *Server) handleRecordTaskStageAcceptanceCheckRequest(args [3]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
+// POST /api/v1/claims/{claim_id}/criteria/{criterion_id}/checks
+func (s *Server) handleRecordTaskStageAcceptanceCheckRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
 	statusWriter := &codeRecorder{ResponseWriter: w}
 	w = statusWriter
 	otelAttrs := []attribute.KeyValue{
 		otelogen.OperationID("recordTaskStageAcceptanceCheck"),
 		semconv.HTTPRequestMethodKey.String("POST"),
-		semconv.HTTPRouteKey.String("/api/v1/tasks/{number}/claims/{id}/criteria/{criterion_id}/checks"),
+		semconv.HTTPRouteKey.String("/api/v1/claims/{claim_id}/criteria/{criterion_id}/checks"),
 	}
 	// Add attributes from config.
 	otelAttrs = append(otelAttrs, s.cfg.Attributes...)
@@ -10823,13 +11273,17 @@ func (s *Server) handleRecordTaskStageAcceptanceCheckRequest(args [3]string, arg
 					In:   "header",
 				}: params.IdempotencyKey,
 				{
-					Name: "number",
-					In:   "path",
-				}: params.Number,
+					Name: "Pactline-Client-Kind",
+					In:   "header",
+				}: params.PactlineClientKind,
 				{
-					Name: "id",
+					Name: "Pactline-Client-Session-ID",
+					In:   "header",
+				}: params.PactlineClientSessionID,
+				{
+					Name: "claim_id",
 					In:   "path",
-				}: params.ID,
+				}: params.ClaimID,
 				{
 					Name: "criterion_id",
 					In:   "path",
@@ -10878,14 +11332,14 @@ func (s *Server) handleRecordTaskStageAcceptanceCheckRequest(args [3]string, arg
 //
 // Record an immutable work submission without ending execution.
 //
-// POST /api/v1/tasks/{number}/claims/{id}/submissions
-func (s *Server) handleRecordTaskWorkSubmissionRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
+// POST /api/v1/claims/{claim_id}/submissions
+func (s *Server) handleRecordTaskWorkSubmissionRequest(args [1]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
 	statusWriter := &codeRecorder{ResponseWriter: w}
 	w = statusWriter
 	otelAttrs := []attribute.KeyValue{
 		otelogen.OperationID("recordTaskWorkSubmission"),
 		semconv.HTTPRequestMethodKey.String("POST"),
-		semconv.HTTPRouteKey.String("/api/v1/tasks/{number}/claims/{id}/submissions"),
+		semconv.HTTPRouteKey.String("/api/v1/claims/{claim_id}/submissions"),
 	}
 	// Add attributes from config.
 	otelAttrs = append(otelAttrs, s.cfg.Attributes...)
@@ -11059,13 +11513,17 @@ func (s *Server) handleRecordTaskWorkSubmissionRequest(args [2]string, argsEscap
 					In:   "header",
 				}: params.IdempotencyKey,
 				{
-					Name: "number",
-					In:   "path",
-				}: params.Number,
+					Name: "Pactline-Client-Kind",
+					In:   "header",
+				}: params.PactlineClientKind,
 				{
-					Name: "id",
+					Name: "Pactline-Client-Session-ID",
+					In:   "header",
+				}: params.PactlineClientSessionID,
+				{
+					Name: "claim_id",
 					In:   "path",
-				}: params.ID,
+				}: params.ClaimID,
 			},
 			Raw: r,
 		}
@@ -11110,14 +11568,14 @@ func (s *Server) handleRecordTaskWorkSubmissionRequest(args [2]string, argsEscap
 //
 // Release the active Claim with a durable handoff.
 //
-// POST /api/v1/tasks/{number}/claims/{id}/release
-func (s *Server) handleReleaseTaskStageClaimRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
+// POST /api/v1/claims/{claim_id}/release
+func (s *Server) handleReleaseTaskStageClaimRequest(args [1]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
 	statusWriter := &codeRecorder{ResponseWriter: w}
 	w = statusWriter
 	otelAttrs := []attribute.KeyValue{
 		otelogen.OperationID("releaseTaskStageClaim"),
 		semconv.HTTPRequestMethodKey.String("POST"),
-		semconv.HTTPRouteKey.String("/api/v1/tasks/{number}/claims/{id}/release"),
+		semconv.HTTPRouteKey.String("/api/v1/claims/{claim_id}/release"),
 	}
 	// Add attributes from config.
 	otelAttrs = append(otelAttrs, s.cfg.Attributes...)
@@ -11291,13 +11749,17 @@ func (s *Server) handleReleaseTaskStageClaimRequest(args [2]string, argsEscaped 
 					In:   "header",
 				}: params.IdempotencyKey,
 				{
-					Name: "number",
-					In:   "path",
-				}: params.Number,
+					Name: "Pactline-Client-Kind",
+					In:   "header",
+				}: params.PactlineClientKind,
 				{
-					Name: "id",
+					Name: "Pactline-Client-Session-ID",
+					In:   "header",
+				}: params.PactlineClientSessionID,
+				{
+					Name: "claim_id",
 					In:   "path",
-				}: params.ID,
+				}: params.ClaimID,
 			},
 			Raw: r,
 		}
@@ -11795,14 +12257,14 @@ func (s *Server) handleReopenMilestoneRequest(args [2]string, argsEscaped bool, 
 //
 // Return acceptance review to execution.
 //
-// POST /api/v1/tasks/{number}/claims/{id}/request-changes
-func (s *Server) handleRequestTaskChangesRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
+// POST /api/v1/claims/{claim_id}/request-changes
+func (s *Server) handleRequestTaskChangesRequest(args [1]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
 	statusWriter := &codeRecorder{ResponseWriter: w}
 	w = statusWriter
 	otelAttrs := []attribute.KeyValue{
 		otelogen.OperationID("requestTaskChanges"),
 		semconv.HTTPRequestMethodKey.String("POST"),
-		semconv.HTTPRouteKey.String("/api/v1/tasks/{number}/claims/{id}/request-changes"),
+		semconv.HTTPRouteKey.String("/api/v1/claims/{claim_id}/request-changes"),
 	}
 	// Add attributes from config.
 	otelAttrs = append(otelAttrs, s.cfg.Attributes...)
@@ -11976,13 +12438,17 @@ func (s *Server) handleRequestTaskChangesRequest(args [2]string, argsEscaped boo
 					In:   "header",
 				}: params.IdempotencyKey,
 				{
-					Name: "number",
-					In:   "path",
-				}: params.Number,
+					Name: "Pactline-Client-Kind",
+					In:   "header",
+				}: params.PactlineClientKind,
 				{
-					Name: "id",
+					Name: "Pactline-Client-Session-ID",
+					In:   "header",
+				}: params.PactlineClientSessionID,
+				{
+					Name: "claim_id",
 					In:   "path",
-				}: params.ID,
+				}: params.ClaimID,
 			},
 			Raw: r,
 		}
@@ -12027,14 +12493,14 @@ func (s *Server) handleRequestTaskChangesRequest(args [2]string, argsEscaped boo
 //
 // End the Claim and open one typed blocking Issue Thread.
 //
-// POST /api/v1/tasks/{number}/claims/{id}/request-resolution
-func (s *Server) handleRequestTaskResolutionRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
+// POST /api/v1/claims/{claim_id}/request-resolution
+func (s *Server) handleRequestTaskResolutionRequest(args [1]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
 	statusWriter := &codeRecorder{ResponseWriter: w}
 	w = statusWriter
 	otelAttrs := []attribute.KeyValue{
 		otelogen.OperationID("requestTaskResolution"),
 		semconv.HTTPRequestMethodKey.String("POST"),
-		semconv.HTTPRouteKey.String("/api/v1/tasks/{number}/claims/{id}/request-resolution"),
+		semconv.HTTPRouteKey.String("/api/v1/claims/{claim_id}/request-resolution"),
 	}
 	// Add attributes from config.
 	otelAttrs = append(otelAttrs, s.cfg.Attributes...)
@@ -12208,13 +12674,17 @@ func (s *Server) handleRequestTaskResolutionRequest(args [2]string, argsEscaped 
 					In:   "header",
 				}: params.IdempotencyKey,
 				{
-					Name: "number",
-					In:   "path",
-				}: params.Number,
+					Name: "Pactline-Client-Kind",
+					In:   "header",
+				}: params.PactlineClientKind,
 				{
-					Name: "id",
+					Name: "Pactline-Client-Session-ID",
+					In:   "header",
+				}: params.PactlineClientSessionID,
+				{
+					Name: "claim_id",
 					In:   "path",
-				}: params.ID,
+				}: params.ClaimID,
 			},
 			Raw: r,
 		}
@@ -13116,14 +13586,14 @@ func (s *Server) handleUnbindProjectRepositoryRequest(args [2]string, argsEscape
 //
 // Unlink a GitLab merge request during claimed execution.
 //
-// DELETE /api/v1/tasks/{number}/claims/{id}/merge-requests/{link_id}
-func (s *Server) handleUnlinkTaskMergeRequestRequest(args [3]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
+// DELETE /api/v1/claims/{claim_id}/merge-requests/{link_id}
+func (s *Server) handleUnlinkTaskMergeRequestRequest(args [2]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
 	statusWriter := &codeRecorder{ResponseWriter: w}
 	w = statusWriter
 	otelAttrs := []attribute.KeyValue{
 		otelogen.OperationID("unlinkTaskMergeRequest"),
 		semconv.HTTPRequestMethodKey.String("DELETE"),
-		semconv.HTTPRouteKey.String("/api/v1/tasks/{number}/claims/{id}/merge-requests/{link_id}"),
+		semconv.HTTPRouteKey.String("/api/v1/claims/{claim_id}/merge-requests/{link_id}"),
 	}
 	// Add attributes from config.
 	otelAttrs = append(otelAttrs, s.cfg.Attributes...)
@@ -13262,21 +13732,6 @@ func (s *Server) handleUnlinkTaskMergeRequestRequest(args [3]string, argsEscaped
 	}
 
 	var rawBody []byte
-	request, rawBody, close, err := s.decodeUnlinkTaskMergeRequestRequest(r)
-	if err != nil {
-		err = &ogenerrors.DecodeRequestError{
-			OperationContext: opErrContext,
-			Err:              err,
-		}
-		defer recordError("DecodeRequest", err)
-		s.cfg.ErrorHandler(ctx, w, r, err)
-		return
-	}
-	defer func() {
-		if err := close(); err != nil {
-			recordError("CloseRequest", err)
-		}
-	}()
 
 	var response UnlinkTaskMergeRequestRes
 	if m := s.cfg.Middleware; m != nil {
@@ -13285,7 +13740,7 @@ func (s *Server) handleUnlinkTaskMergeRequestRequest(args [3]string, argsEscaped
 			OperationName:    UnlinkTaskMergeRequestOperation,
 			OperationSummary: "Unlink a GitLab merge request during claimed execution",
 			OperationID:      "unlinkTaskMergeRequest",
-			Body:             request,
+			Body:             nil,
 			RawBody:          rawBody,
 			Params: middleware.Parameters{
 				{
@@ -13297,13 +13752,17 @@ func (s *Server) handleUnlinkTaskMergeRequestRequest(args [3]string, argsEscaped
 					In:   "header",
 				}: params.IdempotencyKey,
 				{
-					Name: "number",
-					In:   "path",
-				}: params.Number,
+					Name: "Pactline-Client-Kind",
+					In:   "header",
+				}: params.PactlineClientKind,
 				{
-					Name: "id",
+					Name: "Pactline-Client-Session-ID",
+					In:   "header",
+				}: params.PactlineClientSessionID,
+				{
+					Name: "claim_id",
 					In:   "path",
-				}: params.ID,
+				}: params.ClaimID,
 				{
 					Name: "link_id",
 					In:   "path",
@@ -13313,7 +13772,7 @@ func (s *Server) handleUnlinkTaskMergeRequestRequest(args [3]string, argsEscaped
 		}
 
 		type (
-			Request  = *TaskMergeRequestUnlink
+			Request  = struct{}
 			Params   = UnlinkTaskMergeRequestParams
 			Response = UnlinkTaskMergeRequestRes
 		)
@@ -13326,12 +13785,12 @@ func (s *Server) handleUnlinkTaskMergeRequestRequest(args [3]string, argsEscaped
 			mreq,
 			unpackUnlinkTaskMergeRequestParams,
 			func(ctx context.Context, request Request, params Params) (response Response, err error) {
-				response, err = s.h.UnlinkTaskMergeRequest(ctx, request, params)
+				response, err = s.h.UnlinkTaskMergeRequest(ctx, params)
 				return response, err
 			},
 		)
 	} else {
-		response, err = s.h.UnlinkTaskMergeRequest(ctx, request, params)
+		response, err = s.h.UnlinkTaskMergeRequest(ctx, params)
 	}
 	if err != nil {
 		defer recordError("Internal", err)

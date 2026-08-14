@@ -22,8 +22,11 @@ type AcceptTaskParams struct {
 	IfMatch string
 	// Required for bearer-authenticated mutations; optional for browser sessions.
 	IdempotencyKey OptString `json:",omitempty,omitzero"`
-	Number         int64
-	ID             uuid.UUID
+	// Required with Pactline-Client-Session-ID for Agent Claim writes.
+	PactlineClientKind OptString `json:",omitempty,omitzero"`
+	// Caller-reported audit provenance; it is not Claim ownership.
+	PactlineClientSessionID OptString `json:",omitempty,omitzero"`
+	ClaimID                 uuid.UUID
 }
 
 func unpackAcceptTaskParams(packed middleware.Parameters) (params AcceptTaskParams) {
@@ -45,22 +48,33 @@ func unpackAcceptTaskParams(packed middleware.Parameters) (params AcceptTaskPara
 	}
 	{
 		key := middleware.ParameterKey{
-			Name: "number",
-			In:   "path",
+			Name: "Pactline-Client-Kind",
+			In:   "header",
 		}
-		params.Number = packed[key].(int64)
+		if v, ok := packed[key]; ok {
+			params.PactlineClientKind = v.(OptString)
+		}
 	}
 	{
 		key := middleware.ParameterKey{
-			Name: "id",
+			Name: "Pactline-Client-Session-ID",
+			In:   "header",
+		}
+		if v, ok := packed[key]; ok {
+			params.PactlineClientSessionID = v.(OptString)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "claim_id",
 			In:   "path",
 		}
-		params.ID = packed[key].(uuid.UUID)
+		params.ClaimID = packed[key].(uuid.UUID)
 	}
 	return params
 }
 
-func decodeAcceptTaskParams(args [2]string, argsEscaped bool, r *http.Request) (params AcceptTaskParams, _ error) {
+func decodeAcceptTaskParams(args [1]string, argsEscaped bool, r *http.Request) (params AcceptTaskParams, _ error) {
 	h := uri.NewHeaderDecoder(r.Header)
 	// Decode header: If-Match.
 	if err := func() error {
@@ -182,7 +196,139 @@ func decodeAcceptTaskParams(args [2]string, argsEscaped bool, r *http.Request) (
 			Err:  err,
 		}
 	}
-	// Decode path: number.
+	// Decode header: Pactline-Client-Kind.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Pactline-Client-Kind",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotPactlineClientKindVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotPactlineClientKindVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.PactlineClientKind.SetTo(paramsDotPactlineClientKindVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.PactlineClientKind.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     1,
+							MinLengthSet:  true,
+							MaxLength:     100,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         nil,
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Pactline-Client-Kind",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	// Decode header: Pactline-Client-Session-ID.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Pactline-Client-Session-ID",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotPactlineClientSessionIDVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotPactlineClientSessionIDVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.PactlineClientSessionID.SetTo(paramsDotPactlineClientSessionIDVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.PactlineClientSessionID.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     1,
+							MinLengthSet:  true,
+							MaxLength:     255,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         nil,
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Pactline-Client-Session-ID",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	// Decode path: claim_id.
 	if err := func() error {
 		param := args[0]
 		if argsEscaped {
@@ -194,70 +340,7 @@ func decodeAcceptTaskParams(args [2]string, argsEscaped bool, r *http.Request) (
 		}
 		if len(param) > 0 {
 			d := uri.NewPathDecoder(uri.PathDecoderConfig{
-				Param:   "number",
-				Value:   param,
-				Style:   uri.PathStyleSimple,
-				Explode: false,
-			})
-
-			if err := func() error {
-				val, err := d.DecodeValue()
-				if err != nil {
-					return err
-				}
-
-				c, err := conv.ToInt64(val)
-				if err != nil {
-					return err
-				}
-
-				params.Number = c
-				return nil
-			}(); err != nil {
-				return err
-			}
-			if err := func() error {
-				if err := (validate.Int{
-					MinSet:        true,
-					Min:           1,
-					MaxSet:        false,
-					Max:           0,
-					MinExclusive:  false,
-					MaxExclusive:  false,
-					MultipleOfSet: false,
-					MultipleOf:    0,
-					Pattern:       nil,
-				}).Validate(int64(params.Number)); err != nil {
-					return errors.Wrap(err, "int")
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		} else {
-			return validate.ErrFieldRequired
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "number",
-			In:   "path",
-			Err:  err,
-		}
-	}
-	// Decode path: id.
-	if err := func() error {
-		param := args[1]
-		if argsEscaped {
-			unescaped, err := url.PathUnescape(args[1])
-			if err != nil {
-				return errors.Wrap(err, "unescape path")
-			}
-			param = unescaped
-		}
-		if len(param) > 0 {
-			d := uri.NewPathDecoder(uri.PathDecoderConfig{
-				Param:   "id",
+				Param:   "claim_id",
 				Value:   param,
 				Style:   uri.PathStyleSimple,
 				Explode: false,
@@ -274,7 +357,7 @@ func decodeAcceptTaskParams(args [2]string, argsEscaped bool, r *http.Request) (
 					return err
 				}
 
-				params.ID = c
+				params.ClaimID = c
 				return nil
 			}(); err != nil {
 				return err
@@ -285,7 +368,7 @@ func decodeAcceptTaskParams(args [2]string, argsEscaped bool, r *http.Request) (
 		return nil
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
-			Name: "id",
+			Name: "claim_id",
 			In:   "path",
 			Err:  err,
 		}
@@ -2716,8 +2799,11 @@ type CompleteTaskExecutionParams struct {
 	IfMatch string
 	// Required for bearer-authenticated mutations; optional for browser sessions.
 	IdempotencyKey OptString `json:",omitempty,omitzero"`
-	Number         int64
-	ID             uuid.UUID
+	// Required with Pactline-Client-Session-ID for Agent Claim writes.
+	PactlineClientKind OptString `json:",omitempty,omitzero"`
+	// Caller-reported audit provenance; it is not Claim ownership.
+	PactlineClientSessionID OptString `json:",omitempty,omitzero"`
+	ClaimID                 uuid.UUID
 }
 
 func unpackCompleteTaskExecutionParams(packed middleware.Parameters) (params CompleteTaskExecutionParams) {
@@ -2739,22 +2825,33 @@ func unpackCompleteTaskExecutionParams(packed middleware.Parameters) (params Com
 	}
 	{
 		key := middleware.ParameterKey{
-			Name: "number",
-			In:   "path",
+			Name: "Pactline-Client-Kind",
+			In:   "header",
 		}
-		params.Number = packed[key].(int64)
+		if v, ok := packed[key]; ok {
+			params.PactlineClientKind = v.(OptString)
+		}
 	}
 	{
 		key := middleware.ParameterKey{
-			Name: "id",
+			Name: "Pactline-Client-Session-ID",
+			In:   "header",
+		}
+		if v, ok := packed[key]; ok {
+			params.PactlineClientSessionID = v.(OptString)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "claim_id",
 			In:   "path",
 		}
-		params.ID = packed[key].(uuid.UUID)
+		params.ClaimID = packed[key].(uuid.UUID)
 	}
 	return params
 }
 
-func decodeCompleteTaskExecutionParams(args [2]string, argsEscaped bool, r *http.Request) (params CompleteTaskExecutionParams, _ error) {
+func decodeCompleteTaskExecutionParams(args [1]string, argsEscaped bool, r *http.Request) (params CompleteTaskExecutionParams, _ error) {
 	h := uri.NewHeaderDecoder(r.Header)
 	// Decode header: If-Match.
 	if err := func() error {
@@ -2876,7 +2973,139 @@ func decodeCompleteTaskExecutionParams(args [2]string, argsEscaped bool, r *http
 			Err:  err,
 		}
 	}
-	// Decode path: number.
+	// Decode header: Pactline-Client-Kind.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Pactline-Client-Kind",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotPactlineClientKindVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotPactlineClientKindVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.PactlineClientKind.SetTo(paramsDotPactlineClientKindVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.PactlineClientKind.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     1,
+							MinLengthSet:  true,
+							MaxLength:     100,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         nil,
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Pactline-Client-Kind",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	// Decode header: Pactline-Client-Session-ID.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Pactline-Client-Session-ID",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotPactlineClientSessionIDVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotPactlineClientSessionIDVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.PactlineClientSessionID.SetTo(paramsDotPactlineClientSessionIDVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.PactlineClientSessionID.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     1,
+							MinLengthSet:  true,
+							MaxLength:     255,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         nil,
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Pactline-Client-Session-ID",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	// Decode path: claim_id.
 	if err := func() error {
 		param := args[0]
 		if argsEscaped {
@@ -2888,70 +3117,7 @@ func decodeCompleteTaskExecutionParams(args [2]string, argsEscaped bool, r *http
 		}
 		if len(param) > 0 {
 			d := uri.NewPathDecoder(uri.PathDecoderConfig{
-				Param:   "number",
-				Value:   param,
-				Style:   uri.PathStyleSimple,
-				Explode: false,
-			})
-
-			if err := func() error {
-				val, err := d.DecodeValue()
-				if err != nil {
-					return err
-				}
-
-				c, err := conv.ToInt64(val)
-				if err != nil {
-					return err
-				}
-
-				params.Number = c
-				return nil
-			}(); err != nil {
-				return err
-			}
-			if err := func() error {
-				if err := (validate.Int{
-					MinSet:        true,
-					Min:           1,
-					MaxSet:        false,
-					Max:           0,
-					MinExclusive:  false,
-					MaxExclusive:  false,
-					MultipleOfSet: false,
-					MultipleOf:    0,
-					Pattern:       nil,
-				}).Validate(int64(params.Number)); err != nil {
-					return errors.Wrap(err, "int")
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		} else {
-			return validate.ErrFieldRequired
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "number",
-			In:   "path",
-			Err:  err,
-		}
-	}
-	// Decode path: id.
-	if err := func() error {
-		param := args[1]
-		if argsEscaped {
-			unescaped, err := url.PathUnescape(args[1])
-			if err != nil {
-				return errors.Wrap(err, "unescape path")
-			}
-			param = unescaped
-		}
-		if len(param) > 0 {
-			d := uri.NewPathDecoder(uri.PathDecoderConfig{
-				Param:   "id",
+				Param:   "claim_id",
 				Value:   param,
 				Style:   uri.PathStyleSimple,
 				Explode: false,
@@ -2968,7 +3134,7 @@ func decodeCompleteTaskExecutionParams(args [2]string, argsEscaped bool, r *http
 					return err
 				}
 
-				params.ID = c
+				params.ClaimID = c
 				return nil
 			}(); err != nil {
 				return err
@@ -2979,7 +3145,7 @@ func decodeCompleteTaskExecutionParams(args [2]string, argsEscaped bool, r *http
 		return nil
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
-			Name: "id",
+			Name: "claim_id",
 			In:   "path",
 			Err:  err,
 		}
@@ -4418,7 +4584,11 @@ type CreateTaskStageClaimParams struct {
 	IfMatch string
 	// Required for bearer-authenticated mutations; optional for browser sessions.
 	IdempotencyKey OptString `json:",omitempty,omitzero"`
-	Number         int64
+	// Required with Pactline-Client-Session-ID for Agent Claim writes.
+	PactlineClientKind OptString `json:",omitempty,omitzero"`
+	// Caller-reported audit provenance; it is not Claim ownership.
+	PactlineClientSessionID OptString `json:",omitempty,omitzero"`
+	Number                  int64
 }
 
 func unpackCreateTaskStageClaimParams(packed middleware.Parameters) (params CreateTaskStageClaimParams) {
@@ -4436,6 +4606,24 @@ func unpackCreateTaskStageClaimParams(packed middleware.Parameters) (params Crea
 		}
 		if v, ok := packed[key]; ok {
 			params.IdempotencyKey = v.(OptString)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "Pactline-Client-Kind",
+			In:   "header",
+		}
+		if v, ok := packed[key]; ok {
+			params.PactlineClientKind = v.(OptString)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "Pactline-Client-Session-ID",
+			In:   "header",
+		}
+		if v, ok := packed[key]; ok {
+			params.PactlineClientSessionID = v.(OptString)
 		}
 	}
 	{
@@ -4566,6 +4754,138 @@ func decodeCreateTaskStageClaimParams(args [1]string, argsEscaped bool, r *http.
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "Idempotency-Key",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	// Decode header: Pactline-Client-Kind.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Pactline-Client-Kind",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotPactlineClientKindVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotPactlineClientKindVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.PactlineClientKind.SetTo(paramsDotPactlineClientKindVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.PactlineClientKind.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     1,
+							MinLengthSet:  true,
+							MaxLength:     100,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         nil,
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Pactline-Client-Kind",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	// Decode header: Pactline-Client-Session-ID.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Pactline-Client-Session-ID",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotPactlineClientSessionIDVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotPactlineClientSessionIDVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.PactlineClientSessionID.SetTo(paramsDotPactlineClientSessionIDVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.PactlineClientSessionID.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     1,
+							MinLengthSet:  true,
+							MaxLength:     255,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         nil,
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Pactline-Client-Session-ID",
 			In:   "header",
 			Err:  err,
 		}
@@ -5739,148 +6059,6 @@ func decodeGetAgentConversationParams(args [1]string, argsEscaped bool, r *http.
 	return params, nil
 }
 
-// GetCurrentTaskStageClaimParams is parameters of getCurrentTaskStageClaim operation.
-type GetCurrentTaskStageClaimParams struct {
-	ClientKind string
-	// Opaque stable ID of the current Codex task, such as CODEX_THREAD_ID.
-	ClientSessionID string
-}
-
-func unpackGetCurrentTaskStageClaimParams(packed middleware.Parameters) (params GetCurrentTaskStageClaimParams) {
-	{
-		key := middleware.ParameterKey{
-			Name: "client_kind",
-			In:   "query",
-		}
-		params.ClientKind = packed[key].(string)
-	}
-	{
-		key := middleware.ParameterKey{
-			Name: "client_session_id",
-			In:   "query",
-		}
-		params.ClientSessionID = packed[key].(string)
-	}
-	return params
-}
-
-func decodeGetCurrentTaskStageClaimParams(args [0]string, argsEscaped bool, r *http.Request) (params GetCurrentTaskStageClaimParams, _ error) {
-	q := uri.NewQueryDecoder(r.URL.Query())
-	// Decode query: client_kind.
-	if err := func() error {
-		cfg := uri.QueryParameterDecodingConfig{
-			Name:    "client_kind",
-			Style:   uri.QueryStyleForm,
-			Explode: true,
-		}
-
-		if err := q.HasParam(cfg); err == nil {
-			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
-				val, err := d.DecodeValue()
-				if err != nil {
-					return err
-				}
-
-				c, err := conv.ToString(val)
-				if err != nil {
-					return err
-				}
-
-				params.ClientKind = c
-				return nil
-			}); err != nil {
-				return err
-			}
-			if err := func() error {
-				if err := (validate.String{
-					MinLength:     1,
-					MinLengthSet:  true,
-					MaxLength:     100,
-					MaxLengthSet:  true,
-					Email:         false,
-					Hostname:      false,
-					Regex:         nil,
-					MinNumeric:    0,
-					MinNumericSet: false,
-					MaxNumeric:    0,
-					MaxNumericSet: false,
-				}).Validate(string(params.ClientKind)); err != nil {
-					return errors.Wrap(err, "string")
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		} else {
-			return err
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "client_kind",
-			In:   "query",
-			Err:  err,
-		}
-	}
-	// Decode query: client_session_id.
-	if err := func() error {
-		cfg := uri.QueryParameterDecodingConfig{
-			Name:    "client_session_id",
-			Style:   uri.QueryStyleForm,
-			Explode: true,
-		}
-
-		if err := q.HasParam(cfg); err == nil {
-			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
-				val, err := d.DecodeValue()
-				if err != nil {
-					return err
-				}
-
-				c, err := conv.ToString(val)
-				if err != nil {
-					return err
-				}
-
-				params.ClientSessionID = c
-				return nil
-			}); err != nil {
-				return err
-			}
-			if err := func() error {
-				if err := (validate.String{
-					MinLength:     1,
-					MinLengthSet:  true,
-					MaxLength:     255,
-					MaxLengthSet:  true,
-					Email:         false,
-					Hostname:      false,
-					Regex:         nil,
-					MinNumeric:    0,
-					MinNumericSet: false,
-					MaxNumeric:    0,
-					MaxNumericSet: false,
-				}).Validate(string(params.ClientSessionID)); err != nil {
-					return errors.Wrap(err, "string")
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		} else {
-			return err
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "client_session_id",
-			In:   "query",
-			Err:  err,
-		}
-	}
-	return params, nil
-}
-
 // GetProjectParams is parameters of getProject operation.
 type GetProjectParams struct {
 	Number int64
@@ -6338,14 +6516,82 @@ func decodeGetTaskDeliveryParams(args [1]string, argsEscaped bool, r *http.Reque
 	return params, nil
 }
 
+// GetTaskStageClaimParams is parameters of getTaskStageClaim operation.
+type GetTaskStageClaimParams struct {
+	ClaimID uuid.UUID
+}
+
+func unpackGetTaskStageClaimParams(packed middleware.Parameters) (params GetTaskStageClaimParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "claim_id",
+			In:   "path",
+		}
+		params.ClaimID = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeGetTaskStageClaimParams(args [1]string, argsEscaped bool, r *http.Request) (params GetTaskStageClaimParams, _ error) {
+	// Decode path: claim_id.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "claim_id",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.ClaimID = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "claim_id",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // LinkTaskMergeRequestParams is parameters of linkTaskMergeRequest operation.
 type LinkTaskMergeRequestParams struct {
 	// One quoted positive integer resource version, for example `"3"`.
 	IfMatch string
 	// Required for bearer-authenticated mutations; optional for browser sessions.
 	IdempotencyKey OptString `json:",omitempty,omitzero"`
-	Number         int64
-	ID             uuid.UUID
+	// Required with Pactline-Client-Session-ID for Agent Claim writes.
+	PactlineClientKind OptString `json:",omitempty,omitzero"`
+	// Caller-reported audit provenance; it is not Claim ownership.
+	PactlineClientSessionID OptString `json:",omitempty,omitzero"`
+	ClaimID                 uuid.UUID
 }
 
 func unpackLinkTaskMergeRequestParams(packed middleware.Parameters) (params LinkTaskMergeRequestParams) {
@@ -6367,22 +6613,33 @@ func unpackLinkTaskMergeRequestParams(packed middleware.Parameters) (params Link
 	}
 	{
 		key := middleware.ParameterKey{
-			Name: "number",
-			In:   "path",
+			Name: "Pactline-Client-Kind",
+			In:   "header",
 		}
-		params.Number = packed[key].(int64)
+		if v, ok := packed[key]; ok {
+			params.PactlineClientKind = v.(OptString)
+		}
 	}
 	{
 		key := middleware.ParameterKey{
-			Name: "id",
+			Name: "Pactline-Client-Session-ID",
+			In:   "header",
+		}
+		if v, ok := packed[key]; ok {
+			params.PactlineClientSessionID = v.(OptString)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "claim_id",
 			In:   "path",
 		}
-		params.ID = packed[key].(uuid.UUID)
+		params.ClaimID = packed[key].(uuid.UUID)
 	}
 	return params
 }
 
-func decodeLinkTaskMergeRequestParams(args [2]string, argsEscaped bool, r *http.Request) (params LinkTaskMergeRequestParams, _ error) {
+func decodeLinkTaskMergeRequestParams(args [1]string, argsEscaped bool, r *http.Request) (params LinkTaskMergeRequestParams, _ error) {
 	h := uri.NewHeaderDecoder(r.Header)
 	// Decode header: If-Match.
 	if err := func() error {
@@ -6504,7 +6761,139 @@ func decodeLinkTaskMergeRequestParams(args [2]string, argsEscaped bool, r *http.
 			Err:  err,
 		}
 	}
-	// Decode path: number.
+	// Decode header: Pactline-Client-Kind.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Pactline-Client-Kind",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotPactlineClientKindVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotPactlineClientKindVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.PactlineClientKind.SetTo(paramsDotPactlineClientKindVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.PactlineClientKind.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     1,
+							MinLengthSet:  true,
+							MaxLength:     100,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         nil,
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Pactline-Client-Kind",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	// Decode header: Pactline-Client-Session-ID.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Pactline-Client-Session-ID",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotPactlineClientSessionIDVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotPactlineClientSessionIDVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.PactlineClientSessionID.SetTo(paramsDotPactlineClientSessionIDVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.PactlineClientSessionID.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     1,
+							MinLengthSet:  true,
+							MaxLength:     255,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         nil,
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Pactline-Client-Session-ID",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	// Decode path: claim_id.
 	if err := func() error {
 		param := args[0]
 		if argsEscaped {
@@ -6516,70 +6905,7 @@ func decodeLinkTaskMergeRequestParams(args [2]string, argsEscaped bool, r *http.
 		}
 		if len(param) > 0 {
 			d := uri.NewPathDecoder(uri.PathDecoderConfig{
-				Param:   "number",
-				Value:   param,
-				Style:   uri.PathStyleSimple,
-				Explode: false,
-			})
-
-			if err := func() error {
-				val, err := d.DecodeValue()
-				if err != nil {
-					return err
-				}
-
-				c, err := conv.ToInt64(val)
-				if err != nil {
-					return err
-				}
-
-				params.Number = c
-				return nil
-			}(); err != nil {
-				return err
-			}
-			if err := func() error {
-				if err := (validate.Int{
-					MinSet:        true,
-					Min:           1,
-					MaxSet:        false,
-					Max:           0,
-					MinExclusive:  false,
-					MaxExclusive:  false,
-					MultipleOfSet: false,
-					MultipleOf:    0,
-					Pattern:       nil,
-				}).Validate(int64(params.Number)); err != nil {
-					return errors.Wrap(err, "int")
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		} else {
-			return validate.ErrFieldRequired
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "number",
-			In:   "path",
-			Err:  err,
-		}
-	}
-	// Decode path: id.
-	if err := func() error {
-		param := args[1]
-		if argsEscaped {
-			unescaped, err := url.PathUnescape(args[1])
-			if err != nil {
-				return errors.Wrap(err, "unescape path")
-			}
-			param = unescaped
-		}
-		if len(param) > 0 {
-			d := uri.NewPathDecoder(uri.PathDecoderConfig{
-				Param:   "id",
+				Param:   "claim_id",
 				Value:   param,
 				Style:   uri.PathStyleSimple,
 				Explode: false,
@@ -6596,7 +6922,7 @@ func decodeLinkTaskMergeRequestParams(args [2]string, argsEscaped bool, r *http.
 					return err
 				}
 
-				params.ID = c
+				params.ClaimID = c
 				return nil
 			}(); err != nil {
 				return err
@@ -6607,7 +6933,7 @@ func decodeLinkTaskMergeRequestParams(args [2]string, argsEscaped bool, r *http.
 		return nil
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
-			Name: "id",
+			Name: "claim_id",
 			In:   "path",
 			Err:  err,
 		}
@@ -7081,6 +7407,312 @@ func decodeListMilestoneCriteriaParams(args [2]string, argsEscaped bool, r *http
 		return params, &ogenerrors.DecodeParamError{
 			Name: "id",
 			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// ListOwnedTaskStageClaimsParams is parameters of listOwnedTaskStageClaims operation.
+type ListOwnedTaskStageClaimsParams struct {
+	// Opaque cursor returned by the previous page.
+	Cursor OptString `json:",omitempty,omitzero"`
+	// Page size. Defaults to 50 and is capped at 200.
+	Limit  OptInt                  `json:",omitempty,omitzero"`
+	Status OptTaskStageClaimStatus `json:",omitempty,omitzero"`
+	Stage  OptTaskClaimStage       `json:",omitempty,omitzero"`
+}
+
+func unpackListOwnedTaskStageClaimsParams(packed middleware.Parameters) (params ListOwnedTaskStageClaimsParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "cursor",
+			In:   "query",
+		}
+		if v, ok := packed[key]; ok {
+			params.Cursor = v.(OptString)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "limit",
+			In:   "query",
+		}
+		if v, ok := packed[key]; ok {
+			params.Limit = v.(OptInt)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "status",
+			In:   "query",
+		}
+		if v, ok := packed[key]; ok {
+			params.Status = v.(OptTaskStageClaimStatus)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "stage",
+			In:   "query",
+		}
+		if v, ok := packed[key]; ok {
+			params.Stage = v.(OptTaskClaimStage)
+		}
+	}
+	return params
+}
+
+func decodeListOwnedTaskStageClaimsParams(args [0]string, argsEscaped bool, r *http.Request) (params ListOwnedTaskStageClaimsParams, _ error) {
+	q := uri.NewQueryDecoder(r.URL.Query())
+	// Decode query: cursor.
+	if err := func() error {
+		cfg := uri.QueryParameterDecodingConfig{
+			Name:    "cursor",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.HasParam(cfg); err == nil {
+			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotCursorVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotCursorVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.Cursor.SetTo(paramsDotCursorVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.Cursor.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     0,
+							MinLengthSet:  false,
+							MaxLength:     2048,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         nil,
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "cursor",
+			In:   "query",
+			Err:  err,
+		}
+	}
+	// Set default value for query: limit.
+	{
+		val := int(50)
+		params.Limit.SetTo(val)
+	}
+	// Decode query: limit.
+	if err := func() error {
+		cfg := uri.QueryParameterDecodingConfig{
+			Name:    "limit",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.HasParam(cfg); err == nil {
+			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotLimitVal int
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToInt(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotLimitVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.Limit.SetTo(paramsDotLimitVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.Limit.Get(); ok {
+					if err := func() error {
+						if err := (validate.Int{
+							MinSet:        true,
+							Min:           1,
+							MaxSet:        true,
+							Max:           200,
+							MinExclusive:  false,
+							MaxExclusive:  false,
+							MultipleOfSet: false,
+							MultipleOf:    0,
+							Pattern:       nil,
+						}).Validate(int64(value)); err != nil {
+							return errors.Wrap(err, "int")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "limit",
+			In:   "query",
+			Err:  err,
+		}
+	}
+	// Decode query: status.
+	if err := func() error {
+		cfg := uri.QueryParameterDecodingConfig{
+			Name:    "status",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.HasParam(cfg); err == nil {
+			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotStatusVal TaskStageClaimStatus
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotStatusVal = TaskStageClaimStatus(c)
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.Status.SetTo(paramsDotStatusVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.Status.Get(); ok {
+					if err := func() error {
+						if err := value.Validate(); err != nil {
+							return err
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "status",
+			In:   "query",
+			Err:  err,
+		}
+	}
+	// Decode query: stage.
+	if err := func() error {
+		cfg := uri.QueryParameterDecodingConfig{
+			Name:    "stage",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.HasParam(cfg); err == nil {
+			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotStageVal TaskClaimStage
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotStageVal = TaskClaimStage(c)
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.Stage.SetTo(paramsDotStageVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.Stage.Get(); ok {
+					if err := func() error {
+						if err := value.Validate(); err != nil {
+							return err
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "stage",
+			In:   "query",
 			Err:  err,
 		}
 	}
@@ -9892,15 +10524,315 @@ func decodeMarkTaskReadyParams(args [1]string, argsEscaped bool, r *http.Request
 	return params, nil
 }
 
+// RecordTaskClaimProgressParams is parameters of recordTaskClaimProgress operation.
+type RecordTaskClaimProgressParams struct {
+	// Required for bearer-authenticated mutations; optional for browser sessions.
+	IdempotencyKey OptString `json:",omitempty,omitzero"`
+	// Required with Pactline-Client-Session-ID for Agent Claim writes.
+	PactlineClientKind OptString `json:",omitempty,omitzero"`
+	// Caller-reported audit provenance; it is not Claim ownership.
+	PactlineClientSessionID OptString `json:",omitempty,omitzero"`
+	ClaimID                 uuid.UUID
+}
+
+func unpackRecordTaskClaimProgressParams(packed middleware.Parameters) (params RecordTaskClaimProgressParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "Idempotency-Key",
+			In:   "header",
+		}
+		if v, ok := packed[key]; ok {
+			params.IdempotencyKey = v.(OptString)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "Pactline-Client-Kind",
+			In:   "header",
+		}
+		if v, ok := packed[key]; ok {
+			params.PactlineClientKind = v.(OptString)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "Pactline-Client-Session-ID",
+			In:   "header",
+		}
+		if v, ok := packed[key]; ok {
+			params.PactlineClientSessionID = v.(OptString)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "claim_id",
+			In:   "path",
+		}
+		params.ClaimID = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeRecordTaskClaimProgressParams(args [1]string, argsEscaped bool, r *http.Request) (params RecordTaskClaimProgressParams, _ error) {
+	h := uri.NewHeaderDecoder(r.Header)
+	// Decode header: Idempotency-Key.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Idempotency-Key",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotIdempotencyKeyVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotIdempotencyKeyVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.IdempotencyKey.SetTo(paramsDotIdempotencyKeyVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.IdempotencyKey.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     1,
+							MinLengthSet:  true,
+							MaxLength:     128,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         regexMap["^[\\x21-\\x7E]+$"],
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Idempotency-Key",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	// Decode header: Pactline-Client-Kind.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Pactline-Client-Kind",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotPactlineClientKindVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotPactlineClientKindVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.PactlineClientKind.SetTo(paramsDotPactlineClientKindVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.PactlineClientKind.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     1,
+							MinLengthSet:  true,
+							MaxLength:     100,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         nil,
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Pactline-Client-Kind",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	// Decode header: Pactline-Client-Session-ID.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Pactline-Client-Session-ID",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotPactlineClientSessionIDVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotPactlineClientSessionIDVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.PactlineClientSessionID.SetTo(paramsDotPactlineClientSessionIDVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.PactlineClientSessionID.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     1,
+							MinLengthSet:  true,
+							MaxLength:     255,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         nil,
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Pactline-Client-Session-ID",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	// Decode path: claim_id.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "claim_id",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.ClaimID = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "claim_id",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // RecordTaskStageAcceptanceCheckParams is parameters of recordTaskStageAcceptanceCheck operation.
 type RecordTaskStageAcceptanceCheckParams struct {
 	// One quoted positive integer resource version, for example `"3"`.
 	IfMatch string
 	// Required for bearer-authenticated mutations; optional for browser sessions.
 	IdempotencyKey OptString `json:",omitempty,omitzero"`
-	Number         int64
-	ID             uuid.UUID
-	CriterionID    uuid.UUID
+	// Required with Pactline-Client-Session-ID for Agent Claim writes.
+	PactlineClientKind OptString `json:",omitempty,omitzero"`
+	// Caller-reported audit provenance; it is not Claim ownership.
+	PactlineClientSessionID OptString `json:",omitempty,omitzero"`
+	ClaimID                 uuid.UUID
+	CriterionID             uuid.UUID
 }
 
 func unpackRecordTaskStageAcceptanceCheckParams(packed middleware.Parameters) (params RecordTaskStageAcceptanceCheckParams) {
@@ -9922,17 +10854,28 @@ func unpackRecordTaskStageAcceptanceCheckParams(packed middleware.Parameters) (p
 	}
 	{
 		key := middleware.ParameterKey{
-			Name: "number",
-			In:   "path",
+			Name: "Pactline-Client-Kind",
+			In:   "header",
 		}
-		params.Number = packed[key].(int64)
+		if v, ok := packed[key]; ok {
+			params.PactlineClientKind = v.(OptString)
+		}
 	}
 	{
 		key := middleware.ParameterKey{
-			Name: "id",
+			Name: "Pactline-Client-Session-ID",
+			In:   "header",
+		}
+		if v, ok := packed[key]; ok {
+			params.PactlineClientSessionID = v.(OptString)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "claim_id",
 			In:   "path",
 		}
-		params.ID = packed[key].(uuid.UUID)
+		params.ClaimID = packed[key].(uuid.UUID)
 	}
 	{
 		key := middleware.ParameterKey{
@@ -9944,7 +10887,7 @@ func unpackRecordTaskStageAcceptanceCheckParams(packed middleware.Parameters) (p
 	return params
 }
 
-func decodeRecordTaskStageAcceptanceCheckParams(args [3]string, argsEscaped bool, r *http.Request) (params RecordTaskStageAcceptanceCheckParams, _ error) {
+func decodeRecordTaskStageAcceptanceCheckParams(args [2]string, argsEscaped bool, r *http.Request) (params RecordTaskStageAcceptanceCheckParams, _ error) {
 	h := uri.NewHeaderDecoder(r.Header)
 	// Decode header: If-Match.
 	if err := func() error {
@@ -10066,7 +11009,139 @@ func decodeRecordTaskStageAcceptanceCheckParams(args [3]string, argsEscaped bool
 			Err:  err,
 		}
 	}
-	// Decode path: number.
+	// Decode header: Pactline-Client-Kind.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Pactline-Client-Kind",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotPactlineClientKindVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotPactlineClientKindVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.PactlineClientKind.SetTo(paramsDotPactlineClientKindVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.PactlineClientKind.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     1,
+							MinLengthSet:  true,
+							MaxLength:     100,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         nil,
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Pactline-Client-Kind",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	// Decode header: Pactline-Client-Session-ID.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Pactline-Client-Session-ID",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotPactlineClientSessionIDVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotPactlineClientSessionIDVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.PactlineClientSessionID.SetTo(paramsDotPactlineClientSessionIDVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.PactlineClientSessionID.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     1,
+							MinLengthSet:  true,
+							MaxLength:     255,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         nil,
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Pactline-Client-Session-ID",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	// Decode path: claim_id.
 	if err := func() error {
 		param := args[0]
 		if argsEscaped {
@@ -10078,70 +11153,7 @@ func decodeRecordTaskStageAcceptanceCheckParams(args [3]string, argsEscaped bool
 		}
 		if len(param) > 0 {
 			d := uri.NewPathDecoder(uri.PathDecoderConfig{
-				Param:   "number",
-				Value:   param,
-				Style:   uri.PathStyleSimple,
-				Explode: false,
-			})
-
-			if err := func() error {
-				val, err := d.DecodeValue()
-				if err != nil {
-					return err
-				}
-
-				c, err := conv.ToInt64(val)
-				if err != nil {
-					return err
-				}
-
-				params.Number = c
-				return nil
-			}(); err != nil {
-				return err
-			}
-			if err := func() error {
-				if err := (validate.Int{
-					MinSet:        true,
-					Min:           1,
-					MaxSet:        false,
-					Max:           0,
-					MinExclusive:  false,
-					MaxExclusive:  false,
-					MultipleOfSet: false,
-					MultipleOf:    0,
-					Pattern:       nil,
-				}).Validate(int64(params.Number)); err != nil {
-					return errors.Wrap(err, "int")
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		} else {
-			return validate.ErrFieldRequired
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "number",
-			In:   "path",
-			Err:  err,
-		}
-	}
-	// Decode path: id.
-	if err := func() error {
-		param := args[1]
-		if argsEscaped {
-			unescaped, err := url.PathUnescape(args[1])
-			if err != nil {
-				return errors.Wrap(err, "unescape path")
-			}
-			param = unescaped
-		}
-		if len(param) > 0 {
-			d := uri.NewPathDecoder(uri.PathDecoderConfig{
-				Param:   "id",
+				Param:   "claim_id",
 				Value:   param,
 				Style:   uri.PathStyleSimple,
 				Explode: false,
@@ -10158,7 +11170,7 @@ func decodeRecordTaskStageAcceptanceCheckParams(args [3]string, argsEscaped bool
 					return err
 				}
 
-				params.ID = c
+				params.ClaimID = c
 				return nil
 			}(); err != nil {
 				return err
@@ -10169,16 +11181,16 @@ func decodeRecordTaskStageAcceptanceCheckParams(args [3]string, argsEscaped bool
 		return nil
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
-			Name: "id",
+			Name: "claim_id",
 			In:   "path",
 			Err:  err,
 		}
 	}
 	// Decode path: criterion_id.
 	if err := func() error {
-		param := args[2]
+		param := args[1]
 		if argsEscaped {
-			unescaped, err := url.PathUnescape(args[2])
+			unescaped, err := url.PathUnescape(args[1])
 			if err != nil {
 				return errors.Wrap(err, "unescape path")
 			}
@@ -10228,8 +11240,11 @@ type RecordTaskWorkSubmissionParams struct {
 	IfMatch string
 	// Required for bearer-authenticated mutations; optional for browser sessions.
 	IdempotencyKey OptString `json:",omitempty,omitzero"`
-	Number         int64
-	ID             uuid.UUID
+	// Required with Pactline-Client-Session-ID for Agent Claim writes.
+	PactlineClientKind OptString `json:",omitempty,omitzero"`
+	// Caller-reported audit provenance; it is not Claim ownership.
+	PactlineClientSessionID OptString `json:",omitempty,omitzero"`
+	ClaimID                 uuid.UUID
 }
 
 func unpackRecordTaskWorkSubmissionParams(packed middleware.Parameters) (params RecordTaskWorkSubmissionParams) {
@@ -10251,22 +11266,33 @@ func unpackRecordTaskWorkSubmissionParams(packed middleware.Parameters) (params 
 	}
 	{
 		key := middleware.ParameterKey{
-			Name: "number",
-			In:   "path",
+			Name: "Pactline-Client-Kind",
+			In:   "header",
 		}
-		params.Number = packed[key].(int64)
+		if v, ok := packed[key]; ok {
+			params.PactlineClientKind = v.(OptString)
+		}
 	}
 	{
 		key := middleware.ParameterKey{
-			Name: "id",
+			Name: "Pactline-Client-Session-ID",
+			In:   "header",
+		}
+		if v, ok := packed[key]; ok {
+			params.PactlineClientSessionID = v.(OptString)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "claim_id",
 			In:   "path",
 		}
-		params.ID = packed[key].(uuid.UUID)
+		params.ClaimID = packed[key].(uuid.UUID)
 	}
 	return params
 }
 
-func decodeRecordTaskWorkSubmissionParams(args [2]string, argsEscaped bool, r *http.Request) (params RecordTaskWorkSubmissionParams, _ error) {
+func decodeRecordTaskWorkSubmissionParams(args [1]string, argsEscaped bool, r *http.Request) (params RecordTaskWorkSubmissionParams, _ error) {
 	h := uri.NewHeaderDecoder(r.Header)
 	// Decode header: If-Match.
 	if err := func() error {
@@ -10388,7 +11414,139 @@ func decodeRecordTaskWorkSubmissionParams(args [2]string, argsEscaped bool, r *h
 			Err:  err,
 		}
 	}
-	// Decode path: number.
+	// Decode header: Pactline-Client-Kind.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Pactline-Client-Kind",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotPactlineClientKindVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotPactlineClientKindVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.PactlineClientKind.SetTo(paramsDotPactlineClientKindVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.PactlineClientKind.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     1,
+							MinLengthSet:  true,
+							MaxLength:     100,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         nil,
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Pactline-Client-Kind",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	// Decode header: Pactline-Client-Session-ID.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Pactline-Client-Session-ID",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotPactlineClientSessionIDVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotPactlineClientSessionIDVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.PactlineClientSessionID.SetTo(paramsDotPactlineClientSessionIDVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.PactlineClientSessionID.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     1,
+							MinLengthSet:  true,
+							MaxLength:     255,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         nil,
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Pactline-Client-Session-ID",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	// Decode path: claim_id.
 	if err := func() error {
 		param := args[0]
 		if argsEscaped {
@@ -10400,70 +11558,7 @@ func decodeRecordTaskWorkSubmissionParams(args [2]string, argsEscaped bool, r *h
 		}
 		if len(param) > 0 {
 			d := uri.NewPathDecoder(uri.PathDecoderConfig{
-				Param:   "number",
-				Value:   param,
-				Style:   uri.PathStyleSimple,
-				Explode: false,
-			})
-
-			if err := func() error {
-				val, err := d.DecodeValue()
-				if err != nil {
-					return err
-				}
-
-				c, err := conv.ToInt64(val)
-				if err != nil {
-					return err
-				}
-
-				params.Number = c
-				return nil
-			}(); err != nil {
-				return err
-			}
-			if err := func() error {
-				if err := (validate.Int{
-					MinSet:        true,
-					Min:           1,
-					MaxSet:        false,
-					Max:           0,
-					MinExclusive:  false,
-					MaxExclusive:  false,
-					MultipleOfSet: false,
-					MultipleOf:    0,
-					Pattern:       nil,
-				}).Validate(int64(params.Number)); err != nil {
-					return errors.Wrap(err, "int")
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		} else {
-			return validate.ErrFieldRequired
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "number",
-			In:   "path",
-			Err:  err,
-		}
-	}
-	// Decode path: id.
-	if err := func() error {
-		param := args[1]
-		if argsEscaped {
-			unescaped, err := url.PathUnescape(args[1])
-			if err != nil {
-				return errors.Wrap(err, "unescape path")
-			}
-			param = unescaped
-		}
-		if len(param) > 0 {
-			d := uri.NewPathDecoder(uri.PathDecoderConfig{
-				Param:   "id",
+				Param:   "claim_id",
 				Value:   param,
 				Style:   uri.PathStyleSimple,
 				Explode: false,
@@ -10480,7 +11575,7 @@ func decodeRecordTaskWorkSubmissionParams(args [2]string, argsEscaped bool, r *h
 					return err
 				}
 
-				params.ID = c
+				params.ClaimID = c
 				return nil
 			}(); err != nil {
 				return err
@@ -10491,7 +11586,7 @@ func decodeRecordTaskWorkSubmissionParams(args [2]string, argsEscaped bool, r *h
 		return nil
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
-			Name: "id",
+			Name: "claim_id",
 			In:   "path",
 			Err:  err,
 		}
@@ -10505,8 +11600,11 @@ type ReleaseTaskStageClaimParams struct {
 	IfMatch string
 	// Required for bearer-authenticated mutations; optional for browser sessions.
 	IdempotencyKey OptString `json:",omitempty,omitzero"`
-	Number         int64
-	ID             uuid.UUID
+	// Required with Pactline-Client-Session-ID for Agent Claim writes.
+	PactlineClientKind OptString `json:",omitempty,omitzero"`
+	// Caller-reported audit provenance; it is not Claim ownership.
+	PactlineClientSessionID OptString `json:",omitempty,omitzero"`
+	ClaimID                 uuid.UUID
 }
 
 func unpackReleaseTaskStageClaimParams(packed middleware.Parameters) (params ReleaseTaskStageClaimParams) {
@@ -10528,22 +11626,33 @@ func unpackReleaseTaskStageClaimParams(packed middleware.Parameters) (params Rel
 	}
 	{
 		key := middleware.ParameterKey{
-			Name: "number",
-			In:   "path",
+			Name: "Pactline-Client-Kind",
+			In:   "header",
 		}
-		params.Number = packed[key].(int64)
+		if v, ok := packed[key]; ok {
+			params.PactlineClientKind = v.(OptString)
+		}
 	}
 	{
 		key := middleware.ParameterKey{
-			Name: "id",
+			Name: "Pactline-Client-Session-ID",
+			In:   "header",
+		}
+		if v, ok := packed[key]; ok {
+			params.PactlineClientSessionID = v.(OptString)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "claim_id",
 			In:   "path",
 		}
-		params.ID = packed[key].(uuid.UUID)
+		params.ClaimID = packed[key].(uuid.UUID)
 	}
 	return params
 }
 
-func decodeReleaseTaskStageClaimParams(args [2]string, argsEscaped bool, r *http.Request) (params ReleaseTaskStageClaimParams, _ error) {
+func decodeReleaseTaskStageClaimParams(args [1]string, argsEscaped bool, r *http.Request) (params ReleaseTaskStageClaimParams, _ error) {
 	h := uri.NewHeaderDecoder(r.Header)
 	// Decode header: If-Match.
 	if err := func() error {
@@ -10665,7 +11774,139 @@ func decodeReleaseTaskStageClaimParams(args [2]string, argsEscaped bool, r *http
 			Err:  err,
 		}
 	}
-	// Decode path: number.
+	// Decode header: Pactline-Client-Kind.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Pactline-Client-Kind",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotPactlineClientKindVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotPactlineClientKindVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.PactlineClientKind.SetTo(paramsDotPactlineClientKindVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.PactlineClientKind.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     1,
+							MinLengthSet:  true,
+							MaxLength:     100,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         nil,
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Pactline-Client-Kind",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	// Decode header: Pactline-Client-Session-ID.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Pactline-Client-Session-ID",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotPactlineClientSessionIDVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotPactlineClientSessionIDVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.PactlineClientSessionID.SetTo(paramsDotPactlineClientSessionIDVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.PactlineClientSessionID.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     1,
+							MinLengthSet:  true,
+							MaxLength:     255,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         nil,
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Pactline-Client-Session-ID",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	// Decode path: claim_id.
 	if err := func() error {
 		param := args[0]
 		if argsEscaped {
@@ -10677,70 +11918,7 @@ func decodeReleaseTaskStageClaimParams(args [2]string, argsEscaped bool, r *http
 		}
 		if len(param) > 0 {
 			d := uri.NewPathDecoder(uri.PathDecoderConfig{
-				Param:   "number",
-				Value:   param,
-				Style:   uri.PathStyleSimple,
-				Explode: false,
-			})
-
-			if err := func() error {
-				val, err := d.DecodeValue()
-				if err != nil {
-					return err
-				}
-
-				c, err := conv.ToInt64(val)
-				if err != nil {
-					return err
-				}
-
-				params.Number = c
-				return nil
-			}(); err != nil {
-				return err
-			}
-			if err := func() error {
-				if err := (validate.Int{
-					MinSet:        true,
-					Min:           1,
-					MaxSet:        false,
-					Max:           0,
-					MinExclusive:  false,
-					MaxExclusive:  false,
-					MultipleOfSet: false,
-					MultipleOf:    0,
-					Pattern:       nil,
-				}).Validate(int64(params.Number)); err != nil {
-					return errors.Wrap(err, "int")
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		} else {
-			return validate.ErrFieldRequired
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "number",
-			In:   "path",
-			Err:  err,
-		}
-	}
-	// Decode path: id.
-	if err := func() error {
-		param := args[1]
-		if argsEscaped {
-			unescaped, err := url.PathUnescape(args[1])
-			if err != nil {
-				return errors.Wrap(err, "unescape path")
-			}
-			param = unescaped
-		}
-		if len(param) > 0 {
-			d := uri.NewPathDecoder(uri.PathDecoderConfig{
-				Param:   "id",
+				Param:   "claim_id",
 				Value:   param,
 				Style:   uri.PathStyleSimple,
 				Explode: false,
@@ -10757,7 +11935,7 @@ func decodeReleaseTaskStageClaimParams(args [2]string, argsEscaped bool, r *http
 					return err
 				}
 
-				params.ID = c
+				params.ClaimID = c
 				return nil
 			}(); err != nil {
 				return err
@@ -10768,7 +11946,7 @@ func decodeReleaseTaskStageClaimParams(args [2]string, argsEscaped bool, r *http
 		return nil
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
-			Name: "id",
+			Name: "claim_id",
 			In:   "path",
 			Err:  err,
 		}
@@ -11399,8 +12577,11 @@ type RequestTaskChangesParams struct {
 	IfMatch string
 	// Required for bearer-authenticated mutations; optional for browser sessions.
 	IdempotencyKey OptString `json:",omitempty,omitzero"`
-	Number         int64
-	ID             uuid.UUID
+	// Required with Pactline-Client-Session-ID for Agent Claim writes.
+	PactlineClientKind OptString `json:",omitempty,omitzero"`
+	// Caller-reported audit provenance; it is not Claim ownership.
+	PactlineClientSessionID OptString `json:",omitempty,omitzero"`
+	ClaimID                 uuid.UUID
 }
 
 func unpackRequestTaskChangesParams(packed middleware.Parameters) (params RequestTaskChangesParams) {
@@ -11422,22 +12603,33 @@ func unpackRequestTaskChangesParams(packed middleware.Parameters) (params Reques
 	}
 	{
 		key := middleware.ParameterKey{
-			Name: "number",
-			In:   "path",
+			Name: "Pactline-Client-Kind",
+			In:   "header",
 		}
-		params.Number = packed[key].(int64)
+		if v, ok := packed[key]; ok {
+			params.PactlineClientKind = v.(OptString)
+		}
 	}
 	{
 		key := middleware.ParameterKey{
-			Name: "id",
+			Name: "Pactline-Client-Session-ID",
+			In:   "header",
+		}
+		if v, ok := packed[key]; ok {
+			params.PactlineClientSessionID = v.(OptString)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "claim_id",
 			In:   "path",
 		}
-		params.ID = packed[key].(uuid.UUID)
+		params.ClaimID = packed[key].(uuid.UUID)
 	}
 	return params
 }
 
-func decodeRequestTaskChangesParams(args [2]string, argsEscaped bool, r *http.Request) (params RequestTaskChangesParams, _ error) {
+func decodeRequestTaskChangesParams(args [1]string, argsEscaped bool, r *http.Request) (params RequestTaskChangesParams, _ error) {
 	h := uri.NewHeaderDecoder(r.Header)
 	// Decode header: If-Match.
 	if err := func() error {
@@ -11559,7 +12751,139 @@ func decodeRequestTaskChangesParams(args [2]string, argsEscaped bool, r *http.Re
 			Err:  err,
 		}
 	}
-	// Decode path: number.
+	// Decode header: Pactline-Client-Kind.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Pactline-Client-Kind",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotPactlineClientKindVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotPactlineClientKindVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.PactlineClientKind.SetTo(paramsDotPactlineClientKindVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.PactlineClientKind.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     1,
+							MinLengthSet:  true,
+							MaxLength:     100,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         nil,
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Pactline-Client-Kind",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	// Decode header: Pactline-Client-Session-ID.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Pactline-Client-Session-ID",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotPactlineClientSessionIDVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotPactlineClientSessionIDVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.PactlineClientSessionID.SetTo(paramsDotPactlineClientSessionIDVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.PactlineClientSessionID.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     1,
+							MinLengthSet:  true,
+							MaxLength:     255,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         nil,
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Pactline-Client-Session-ID",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	// Decode path: claim_id.
 	if err := func() error {
 		param := args[0]
 		if argsEscaped {
@@ -11571,70 +12895,7 @@ func decodeRequestTaskChangesParams(args [2]string, argsEscaped bool, r *http.Re
 		}
 		if len(param) > 0 {
 			d := uri.NewPathDecoder(uri.PathDecoderConfig{
-				Param:   "number",
-				Value:   param,
-				Style:   uri.PathStyleSimple,
-				Explode: false,
-			})
-
-			if err := func() error {
-				val, err := d.DecodeValue()
-				if err != nil {
-					return err
-				}
-
-				c, err := conv.ToInt64(val)
-				if err != nil {
-					return err
-				}
-
-				params.Number = c
-				return nil
-			}(); err != nil {
-				return err
-			}
-			if err := func() error {
-				if err := (validate.Int{
-					MinSet:        true,
-					Min:           1,
-					MaxSet:        false,
-					Max:           0,
-					MinExclusive:  false,
-					MaxExclusive:  false,
-					MultipleOfSet: false,
-					MultipleOf:    0,
-					Pattern:       nil,
-				}).Validate(int64(params.Number)); err != nil {
-					return errors.Wrap(err, "int")
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		} else {
-			return validate.ErrFieldRequired
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "number",
-			In:   "path",
-			Err:  err,
-		}
-	}
-	// Decode path: id.
-	if err := func() error {
-		param := args[1]
-		if argsEscaped {
-			unescaped, err := url.PathUnescape(args[1])
-			if err != nil {
-				return errors.Wrap(err, "unescape path")
-			}
-			param = unescaped
-		}
-		if len(param) > 0 {
-			d := uri.NewPathDecoder(uri.PathDecoderConfig{
-				Param:   "id",
+				Param:   "claim_id",
 				Value:   param,
 				Style:   uri.PathStyleSimple,
 				Explode: false,
@@ -11651,7 +12912,7 @@ func decodeRequestTaskChangesParams(args [2]string, argsEscaped bool, r *http.Re
 					return err
 				}
 
-				params.ID = c
+				params.ClaimID = c
 				return nil
 			}(); err != nil {
 				return err
@@ -11662,7 +12923,7 @@ func decodeRequestTaskChangesParams(args [2]string, argsEscaped bool, r *http.Re
 		return nil
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
-			Name: "id",
+			Name: "claim_id",
 			In:   "path",
 			Err:  err,
 		}
@@ -11676,8 +12937,11 @@ type RequestTaskResolutionParams struct {
 	IfMatch string
 	// Required for bearer-authenticated mutations; optional for browser sessions.
 	IdempotencyKey OptString `json:",omitempty,omitzero"`
-	Number         int64
-	ID             uuid.UUID
+	// Required with Pactline-Client-Session-ID for Agent Claim writes.
+	PactlineClientKind OptString `json:",omitempty,omitzero"`
+	// Caller-reported audit provenance; it is not Claim ownership.
+	PactlineClientSessionID OptString `json:",omitempty,omitzero"`
+	ClaimID                 uuid.UUID
 }
 
 func unpackRequestTaskResolutionParams(packed middleware.Parameters) (params RequestTaskResolutionParams) {
@@ -11699,22 +12963,33 @@ func unpackRequestTaskResolutionParams(packed middleware.Parameters) (params Req
 	}
 	{
 		key := middleware.ParameterKey{
-			Name: "number",
-			In:   "path",
+			Name: "Pactline-Client-Kind",
+			In:   "header",
 		}
-		params.Number = packed[key].(int64)
+		if v, ok := packed[key]; ok {
+			params.PactlineClientKind = v.(OptString)
+		}
 	}
 	{
 		key := middleware.ParameterKey{
-			Name: "id",
+			Name: "Pactline-Client-Session-ID",
+			In:   "header",
+		}
+		if v, ok := packed[key]; ok {
+			params.PactlineClientSessionID = v.(OptString)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "claim_id",
 			In:   "path",
 		}
-		params.ID = packed[key].(uuid.UUID)
+		params.ClaimID = packed[key].(uuid.UUID)
 	}
 	return params
 }
 
-func decodeRequestTaskResolutionParams(args [2]string, argsEscaped bool, r *http.Request) (params RequestTaskResolutionParams, _ error) {
+func decodeRequestTaskResolutionParams(args [1]string, argsEscaped bool, r *http.Request) (params RequestTaskResolutionParams, _ error) {
 	h := uri.NewHeaderDecoder(r.Header)
 	// Decode header: If-Match.
 	if err := func() error {
@@ -11836,7 +13111,139 @@ func decodeRequestTaskResolutionParams(args [2]string, argsEscaped bool, r *http
 			Err:  err,
 		}
 	}
-	// Decode path: number.
+	// Decode header: Pactline-Client-Kind.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Pactline-Client-Kind",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotPactlineClientKindVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotPactlineClientKindVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.PactlineClientKind.SetTo(paramsDotPactlineClientKindVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.PactlineClientKind.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     1,
+							MinLengthSet:  true,
+							MaxLength:     100,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         nil,
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Pactline-Client-Kind",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	// Decode header: Pactline-Client-Session-ID.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Pactline-Client-Session-ID",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotPactlineClientSessionIDVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotPactlineClientSessionIDVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.PactlineClientSessionID.SetTo(paramsDotPactlineClientSessionIDVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.PactlineClientSessionID.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     1,
+							MinLengthSet:  true,
+							MaxLength:     255,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         nil,
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Pactline-Client-Session-ID",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	// Decode path: claim_id.
 	if err := func() error {
 		param := args[0]
 		if argsEscaped {
@@ -11848,70 +13255,7 @@ func decodeRequestTaskResolutionParams(args [2]string, argsEscaped bool, r *http
 		}
 		if len(param) > 0 {
 			d := uri.NewPathDecoder(uri.PathDecoderConfig{
-				Param:   "number",
-				Value:   param,
-				Style:   uri.PathStyleSimple,
-				Explode: false,
-			})
-
-			if err := func() error {
-				val, err := d.DecodeValue()
-				if err != nil {
-					return err
-				}
-
-				c, err := conv.ToInt64(val)
-				if err != nil {
-					return err
-				}
-
-				params.Number = c
-				return nil
-			}(); err != nil {
-				return err
-			}
-			if err := func() error {
-				if err := (validate.Int{
-					MinSet:        true,
-					Min:           1,
-					MaxSet:        false,
-					Max:           0,
-					MinExclusive:  false,
-					MaxExclusive:  false,
-					MultipleOfSet: false,
-					MultipleOf:    0,
-					Pattern:       nil,
-				}).Validate(int64(params.Number)); err != nil {
-					return errors.Wrap(err, "int")
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		} else {
-			return validate.ErrFieldRequired
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "number",
-			In:   "path",
-			Err:  err,
-		}
-	}
-	// Decode path: id.
-	if err := func() error {
-		param := args[1]
-		if argsEscaped {
-			unescaped, err := url.PathUnescape(args[1])
-			if err != nil {
-				return errors.Wrap(err, "unescape path")
-			}
-			param = unescaped
-		}
-		if len(param) > 0 {
-			d := uri.NewPathDecoder(uri.PathDecoderConfig{
-				Param:   "id",
+				Param:   "claim_id",
 				Value:   param,
 				Style:   uri.PathStyleSimple,
 				Explode: false,
@@ -11928,7 +13272,7 @@ func decodeRequestTaskResolutionParams(args [2]string, argsEscaped bool, r *http
 					return err
 				}
 
-				params.ID = c
+				params.ClaimID = c
 				return nil
 			}(); err != nil {
 				return err
@@ -11939,7 +13283,7 @@ func decodeRequestTaskResolutionParams(args [2]string, argsEscaped bool, r *http
 		return nil
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
-			Name: "id",
+			Name: "claim_id",
 			In:   "path",
 			Err:  err,
 		}
@@ -12955,9 +14299,12 @@ type UnlinkTaskMergeRequestParams struct {
 	IfMatch string
 	// Required for bearer-authenticated mutations; optional for browser sessions.
 	IdempotencyKey OptString `json:",omitempty,omitzero"`
-	Number         int64
-	ID             uuid.UUID
-	LinkID         uuid.UUID
+	// Required with Pactline-Client-Session-ID for Agent Claim writes.
+	PactlineClientKind OptString `json:",omitempty,omitzero"`
+	// Caller-reported audit provenance; it is not Claim ownership.
+	PactlineClientSessionID OptString `json:",omitempty,omitzero"`
+	ClaimID                 uuid.UUID
+	LinkID                  uuid.UUID
 }
 
 func unpackUnlinkTaskMergeRequestParams(packed middleware.Parameters) (params UnlinkTaskMergeRequestParams) {
@@ -12979,17 +14326,28 @@ func unpackUnlinkTaskMergeRequestParams(packed middleware.Parameters) (params Un
 	}
 	{
 		key := middleware.ParameterKey{
-			Name: "number",
-			In:   "path",
+			Name: "Pactline-Client-Kind",
+			In:   "header",
 		}
-		params.Number = packed[key].(int64)
+		if v, ok := packed[key]; ok {
+			params.PactlineClientKind = v.(OptString)
+		}
 	}
 	{
 		key := middleware.ParameterKey{
-			Name: "id",
+			Name: "Pactline-Client-Session-ID",
+			In:   "header",
+		}
+		if v, ok := packed[key]; ok {
+			params.PactlineClientSessionID = v.(OptString)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "claim_id",
 			In:   "path",
 		}
-		params.ID = packed[key].(uuid.UUID)
+		params.ClaimID = packed[key].(uuid.UUID)
 	}
 	{
 		key := middleware.ParameterKey{
@@ -13001,7 +14359,7 @@ func unpackUnlinkTaskMergeRequestParams(packed middleware.Parameters) (params Un
 	return params
 }
 
-func decodeUnlinkTaskMergeRequestParams(args [3]string, argsEscaped bool, r *http.Request) (params UnlinkTaskMergeRequestParams, _ error) {
+func decodeUnlinkTaskMergeRequestParams(args [2]string, argsEscaped bool, r *http.Request) (params UnlinkTaskMergeRequestParams, _ error) {
 	h := uri.NewHeaderDecoder(r.Header)
 	// Decode header: If-Match.
 	if err := func() error {
@@ -13123,7 +14481,139 @@ func decodeUnlinkTaskMergeRequestParams(args [3]string, argsEscaped bool, r *htt
 			Err:  err,
 		}
 	}
-	// Decode path: number.
+	// Decode header: Pactline-Client-Kind.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Pactline-Client-Kind",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotPactlineClientKindVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotPactlineClientKindVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.PactlineClientKind.SetTo(paramsDotPactlineClientKindVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.PactlineClientKind.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     1,
+							MinLengthSet:  true,
+							MaxLength:     100,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         nil,
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Pactline-Client-Kind",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	// Decode header: Pactline-Client-Session-ID.
+	if err := func() error {
+		cfg := uri.HeaderParameterDecodingConfig{
+			Name:    "Pactline-Client-Session-ID",
+			Explode: false,
+		}
+		if err := h.HasParam(cfg); err == nil {
+			if err := h.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotPactlineClientSessionIDVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotPactlineClientSessionIDVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.PactlineClientSessionID.SetTo(paramsDotPactlineClientSessionIDVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.PactlineClientSessionID.Get(); ok {
+					if err := func() error {
+						if err := (validate.String{
+							MinLength:     1,
+							MinLengthSet:  true,
+							MaxLength:     255,
+							MaxLengthSet:  true,
+							Email:         false,
+							Hostname:      false,
+							Regex:         nil,
+							MinNumeric:    0,
+							MinNumericSet: false,
+							MaxNumeric:    0,
+							MaxNumericSet: false,
+						}).Validate(string(value)); err != nil {
+							return errors.Wrap(err, "string")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "Pactline-Client-Session-ID",
+			In:   "header",
+			Err:  err,
+		}
+	}
+	// Decode path: claim_id.
 	if err := func() error {
 		param := args[0]
 		if argsEscaped {
@@ -13135,70 +14625,7 @@ func decodeUnlinkTaskMergeRequestParams(args [3]string, argsEscaped bool, r *htt
 		}
 		if len(param) > 0 {
 			d := uri.NewPathDecoder(uri.PathDecoderConfig{
-				Param:   "number",
-				Value:   param,
-				Style:   uri.PathStyleSimple,
-				Explode: false,
-			})
-
-			if err := func() error {
-				val, err := d.DecodeValue()
-				if err != nil {
-					return err
-				}
-
-				c, err := conv.ToInt64(val)
-				if err != nil {
-					return err
-				}
-
-				params.Number = c
-				return nil
-			}(); err != nil {
-				return err
-			}
-			if err := func() error {
-				if err := (validate.Int{
-					MinSet:        true,
-					Min:           1,
-					MaxSet:        false,
-					Max:           0,
-					MinExclusive:  false,
-					MaxExclusive:  false,
-					MultipleOfSet: false,
-					MultipleOf:    0,
-					Pattern:       nil,
-				}).Validate(int64(params.Number)); err != nil {
-					return errors.Wrap(err, "int")
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		} else {
-			return validate.ErrFieldRequired
-		}
-		return nil
-	}(); err != nil {
-		return params, &ogenerrors.DecodeParamError{
-			Name: "number",
-			In:   "path",
-			Err:  err,
-		}
-	}
-	// Decode path: id.
-	if err := func() error {
-		param := args[1]
-		if argsEscaped {
-			unescaped, err := url.PathUnescape(args[1])
-			if err != nil {
-				return errors.Wrap(err, "unescape path")
-			}
-			param = unescaped
-		}
-		if len(param) > 0 {
-			d := uri.NewPathDecoder(uri.PathDecoderConfig{
-				Param:   "id",
+				Param:   "claim_id",
 				Value:   param,
 				Style:   uri.PathStyleSimple,
 				Explode: false,
@@ -13215,7 +14642,7 @@ func decodeUnlinkTaskMergeRequestParams(args [3]string, argsEscaped bool, r *htt
 					return err
 				}
 
-				params.ID = c
+				params.ClaimID = c
 				return nil
 			}(); err != nil {
 				return err
@@ -13226,16 +14653,16 @@ func decodeUnlinkTaskMergeRequestParams(args [3]string, argsEscaped bool, r *htt
 		return nil
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
-			Name: "id",
+			Name: "claim_id",
 			In:   "path",
 			Err:  err,
 		}
 	}
 	// Decode path: link_id.
 	if err := func() error {
-		param := args[2]
+		param := args[1]
 		if argsEscaped {
-			unescaped, err := url.PathUnescape(args[2])
+			unescaped, err := url.PathUnescape(args[1])
 			if err != nil {
 				return errors.Wrap(err, "unescape path")
 			}

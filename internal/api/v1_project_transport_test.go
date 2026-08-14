@@ -228,13 +228,10 @@ func TestV1ProjectMilestoneAndAcceptanceVersions(t *testing.T) {
 
 	createdCheck := doWithHeaders(
 		t, handler, http.MethodPost,
-		fmt.Sprintf(
-			"%s/claims/%s/criteria/%s/checks",
-			taskPath, execution.Claim.ID, taskCriterion.ID,
-		), userA,
+		fmt.Sprintf("/api/v1/claims/%s/criteria/%s/checks", execution.Claim.ID, taskCriterion.ID),
+		userA,
 		http.Header{"If-Match": {`"4"`}},
 		map[string]any{
-			"claim_version":      execution.Claim.Version,
 			"criterion_revision": 1, "outcome": "passed",
 			"evidence": "The transport test passed.",
 		},

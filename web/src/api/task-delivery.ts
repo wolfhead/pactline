@@ -92,10 +92,10 @@ export function linkTaskMergeRequest(
   mergeRequestURL: string,
 ): Promise<TaskMergeRequestMutation> {
   return v1Post<TaskMergeRequestMutation>(
-    `/api/v1/tasks/${taskNumber}/claims/${claim.id}/merge-requests`,
+    `/api/v1/claims/${claim.id}/merge-requests`,
     {
       ifMatch: etagForVersion(taskVersion),
-      body: { claim_version: claim.version, merge_request_url: mergeRequestURL },
+      body: { merge_request_url: mergeRequestURL },
     },
   ).then((response) => requireVersioned(response).value)
 }
@@ -107,10 +107,9 @@ export function unlinkTaskMergeRequest(
   linkID: string,
 ): Promise<TaskMergeRequestMutation> {
   return v1Delete<TaskMergeRequestMutation>(
-    `/api/v1/tasks/${taskNumber}/claims/${claim.id}/merge-requests/${linkID}`,
+    `/api/v1/claims/${claim.id}/merge-requests/${linkID}`,
     {
       ifMatch: etagForVersion(taskVersion),
-      body: { claim_version: claim.version },
     },
   ).then((response) => requireVersioned(response).value)
 }

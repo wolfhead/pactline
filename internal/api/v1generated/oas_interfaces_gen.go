@@ -113,10 +113,6 @@ type GetCurrentPrincipalRes interface {
 	getCurrentPrincipalRes()
 }
 
-type GetCurrentTaskStageClaimRes interface {
-	getCurrentTaskStageClaimRes()
-}
-
 type GetProjectRes interface {
 	getProjectRes()
 }
@@ -133,6 +129,10 @@ type GetTaskRes interface {
 	getTaskRes()
 }
 
+type GetTaskStageClaimRes interface {
+	getTaskStageClaimRes()
+}
+
 type LinkTaskMergeRequestRes interface {
 	linkTaskMergeRequestRes()
 }
@@ -147,6 +147,10 @@ type ListLabelsRes interface {
 
 type ListMilestoneCriteriaRes interface {
 	listMilestoneCriteriaRes()
+}
+
+type ListOwnedTaskStageClaimsRes interface {
+	listOwnedTaskStageClaimsRes()
 }
 
 type ListProjectMembersRes interface {
@@ -195,6 +199,10 @@ type ListUsersRes interface {
 
 type MarkTaskReadyRes interface {
 	markTaskReadyRes()
+}
+
+type RecordTaskClaimProgressRes interface {
+	recordTaskClaimProgressRes()
 }
 
 type RecordTaskStageAcceptanceCheckRes interface {

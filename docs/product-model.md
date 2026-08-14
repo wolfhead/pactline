@@ -241,8 +241,10 @@ Authentication method and actor type are provenance, not workflow policy. A
 `TaskStageClaim` represents exclusive, temporary ownership of either execution
 or review. Claim stage is inferred from Task phase and cannot be chosen by the
 caller. One Task has at most one active Claim; the Claim is bound to its actor,
-effective user, authentication provenance, and optional client context. It is
-never transferred or implicitly resumed.
+effective user, and authentication provenance. It is never transferred or
+implicitly resumed. Client kind and Client Session ID are audit provenance,
+not ownership: another process using the exact same personal Token or delegated
+Agent Run may continue an explicitly identified Claim from another Session ID.
 
 - Claiming `ready` or `in_progress.available` creates an execution Claim and
   produces `in_progress.working`.
@@ -258,6 +260,13 @@ never transferred or implicitly resumed.
 - Requesting changes ends a review Claim and produces
   `in_progress.available`.
 - Accepting through a review Claim ends it and produces `done`.
+
+Claim creation and history are Task-scoped because a Claim does not exist
+before it is created. Every later Claim-owned command targets the globally
+unique Claim ID. The server derives its immutable Task association and current
+Claim version; callers do not send a Task number or Claim version. Task
+`If-Match` remains explicit for lifecycle decisions because the server cannot
+infer which Task definition version the caller evaluated.
 
 Claims expire after seven days. Expiry is evaluated while the workflow is
 accessed; there is no periodic Claim poll, heartbeat, or extension command.

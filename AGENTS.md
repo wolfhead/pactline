@@ -113,7 +113,10 @@ production `X-User-Id` fallback.
   capability distinction. Self-review is allowed.
 - One Task has at most one active Claim. `working` has exactly one Claim of the
   phase's inferred stage; `available` has none. Claims are never transferred or
-  resumed. Release and lazy expiry preserve phase and return to `available`.
+  resumed after termination. An active Claim is continued by explicit Claim ID
+  and the same authenticated logical principal; Client Session ID is audit
+  provenance, not ownership. Release and lazy expiry preserve phase and return
+  to `available`.
 - Every Task has one Main Thread. A Task in `needs_resolution` has no active
   Claim and exactly one open typed Issue Thread. Requesting resolution ends the
   Claim atomically; resolving merges request plus conclusion to Main and makes

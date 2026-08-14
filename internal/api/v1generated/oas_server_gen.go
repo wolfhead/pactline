@@ -12,7 +12,7 @@ type Handler interface {
 	//
 	// Accept the Task outcome and complete the Task.
 	//
-	// POST /api/v1/tasks/{number}/claims/{id}/accept
+	// POST /api/v1/claims/{claim_id}/accept
 	AcceptTask(ctx context.Context, req *TaskStageClaimFinish, params AcceptTaskParams) (AcceptTaskRes, error)
 	// ActivateMilestone implements activateMilestone operation.
 	//
@@ -72,7 +72,7 @@ type Handler interface {
 	//
 	// End execution and make the frozen delivery available for review.
 	//
-	// POST /api/v1/tasks/{number}/claims/{id}/complete-execution
+	// POST /api/v1/claims/{claim_id}/complete-execution
 	CompleteTaskExecution(ctx context.Context, req *TaskStageClaimFinish, params CompleteTaskExecutionParams) (CompleteTaskExecutionRes, error)
 	// CreateAcceptanceCheck implements createAcceptanceCheck operation.
 	//
@@ -127,7 +127,7 @@ type Handler interface {
 	// Claim the Task's currently available execution or review stage.
 	//
 	// POST /api/v1/tasks/{number}/claims
-	CreateTaskStageClaim(ctx context.Context, req *TaskStageClaimCreate, params CreateTaskStageClaimParams) (CreateTaskStageClaimRes, error)
+	CreateTaskStageClaim(ctx context.Context, params CreateTaskStageClaimParams) (CreateTaskStageClaimRes, error)
 	// CreateTaskThreadMessage implements createTaskThreadMessage operation.
 	//
 	// Add an ordinary message or immutable progress update to one Task Thread.
@@ -176,12 +176,6 @@ type Handler interface {
 	//
 	// GET /api/v1/me
 	GetCurrentPrincipal(ctx context.Context) (GetCurrentPrincipalRes, error)
-	// GetCurrentTaskStageClaim implements getCurrentTaskStageClaim operation.
-	//
-	// Get the active Claim owned by this authenticated client session.
-	//
-	// GET /api/v1/claims/current
-	GetCurrentTaskStageClaim(ctx context.Context, params GetCurrentTaskStageClaimParams) (GetCurrentTaskStageClaimRes, error)
 	// GetProject implements getProject operation.
 	//
 	// Get a project and its work aggregate.
@@ -206,11 +200,17 @@ type Handler interface {
 	//
 	// GET /api/v1/tasks/{number}/merge-requests
 	GetTaskDelivery(ctx context.Context, params GetTaskDeliveryParams) (GetTaskDeliveryRes, error)
+	// GetTaskStageClaim implements getTaskStageClaim operation.
+	//
+	// Get one Claim by its globally unique ID.
+	//
+	// GET /api/v1/claims/{claim_id}
+	GetTaskStageClaim(ctx context.Context, params GetTaskStageClaimParams) (GetTaskStageClaimRes, error)
 	// LinkTaskMergeRequest implements linkTaskMergeRequest operation.
 	//
 	// Link a GitLab merge request during claimed execution.
 	//
-	// POST /api/v1/tasks/{number}/claims/{id}/merge-requests
+	// POST /api/v1/claims/{claim_id}/merge-requests
 	LinkTaskMergeRequest(ctx context.Context, req *TaskMergeRequestLink, params LinkTaskMergeRequestParams) (LinkTaskMergeRequestRes, error)
 	// ListAgentConversations implements listAgentConversations operation.
 	//
@@ -230,6 +230,12 @@ type Handler interface {
 	//
 	// GET /api/v1/projects/{number}/milestones/{id}/criteria
 	ListMilestoneCriteria(ctx context.Context, params ListMilestoneCriteriaParams) (ListMilestoneCriteriaRes, error)
+	// ListOwnedTaskStageClaims implements listOwnedTaskStageClaims operation.
+	//
+	// List Claims owned by the authenticated logical principal.
+	//
+	// GET /api/v1/claims
+	ListOwnedTaskStageClaims(ctx context.Context, params ListOwnedTaskStageClaimsParams) (ListOwnedTaskStageClaimsRes, error)
 	// ListProjectMembers implements listProjectMembers operation.
 	//
 	// List Project members.
@@ -302,23 +308,29 @@ type Handler interface {
 	//
 	// POST /api/v1/tasks/{number}/commands/mark-ready
 	MarkTaskReady(ctx context.Context, params MarkTaskReadyParams) (MarkTaskReadyRes, error)
+	// RecordTaskClaimProgress implements recordTaskClaimProgress operation.
+	//
+	// Append immutable progress to the Claim's Main Thread.
+	//
+	// POST /api/v1/claims/{claim_id}/progress
+	RecordTaskClaimProgress(ctx context.Context, req *BodyWrite, params RecordTaskClaimProgressParams) (RecordTaskClaimProgressRes, error)
 	// RecordTaskStageAcceptanceCheck implements recordTaskStageAcceptanceCheck operation.
 	//
 	// Record execution verification or acceptance through the active Claim.
 	//
-	// POST /api/v1/tasks/{number}/claims/{id}/criteria/{criterion_id}/checks
+	// POST /api/v1/claims/{claim_id}/criteria/{criterion_id}/checks
 	RecordTaskStageAcceptanceCheck(ctx context.Context, req *TaskStageAcceptanceCheckWrite, params RecordTaskStageAcceptanceCheckParams) (RecordTaskStageAcceptanceCheckRes, error)
 	// RecordTaskWorkSubmission implements recordTaskWorkSubmission operation.
 	//
 	// Record an immutable work submission without ending execution.
 	//
-	// POST /api/v1/tasks/{number}/claims/{id}/submissions
+	// POST /api/v1/claims/{claim_id}/submissions
 	RecordTaskWorkSubmission(ctx context.Context, req *TaskStageClaimFinish, params RecordTaskWorkSubmissionParams) (RecordTaskWorkSubmissionRes, error)
 	// ReleaseTaskStageClaim implements releaseTaskStageClaim operation.
 	//
 	// Release the active Claim with a durable handoff.
 	//
-	// POST /api/v1/tasks/{number}/claims/{id}/release
+	// POST /api/v1/claims/{claim_id}/release
 	ReleaseTaskStageClaim(ctx context.Context, req *TaskStageClaimFinish, params ReleaseTaskStageClaimParams) (ReleaseTaskStageClaimRes, error)
 	// RemoveProjectMember implements removeProjectMember operation.
 	//
@@ -336,13 +348,13 @@ type Handler interface {
 	//
 	// Return acceptance review to execution.
 	//
-	// POST /api/v1/tasks/{number}/claims/{id}/request-changes
+	// POST /api/v1/claims/{claim_id}/request-changes
 	RequestTaskChanges(ctx context.Context, req *TaskStageClaimFinish, params RequestTaskChangesParams) (RequestTaskChangesRes, error)
 	// RequestTaskResolution implements requestTaskResolution operation.
 	//
 	// End the Claim and open one typed blocking Issue Thread.
 	//
-	// POST /api/v1/tasks/{number}/claims/{id}/request-resolution
+	// POST /api/v1/claims/{claim_id}/request-resolution
 	RequestTaskResolution(ctx context.Context, req *TaskResolutionRequest, params RequestTaskResolutionParams) (RequestTaskResolutionRes, error)
 	// ResolveTaskIssue implements resolveTaskIssue operation.
 	//
@@ -372,8 +384,8 @@ type Handler interface {
 	//
 	// Unlink a GitLab merge request during claimed execution.
 	//
-	// DELETE /api/v1/tasks/{number}/claims/{id}/merge-requests/{link_id}
-	UnlinkTaskMergeRequest(ctx context.Context, req *TaskMergeRequestUnlink, params UnlinkTaskMergeRequestParams) (UnlinkTaskMergeRequestRes, error)
+	// DELETE /api/v1/claims/{claim_id}/merge-requests/{link_id}
+	UnlinkTaskMergeRequest(ctx context.Context, params UnlinkTaskMergeRequestParams) (UnlinkTaskMergeRequestRes, error)
 	// UpdateAgentConversation implements updateAgentConversation operation.
 	//
 	// Update an Agent conversation configuration.

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/wolfhead/pactline/internal/access"
 	baseapi "github.com/wolfhead/pactline/internal/api"
@@ -57,9 +58,21 @@ func (h *Handler) ListTaskStageClaims(
 	if err := h.requireTaskNumberAccess(ctx, params.Number, application.ProjectPermissionRead); err != nil {
 		return nil, err
 	}
+	operation, _, err := operationContext(ctx)
+	if err != nil {
+		return nil, err
+	}
 	claims, err := h.StageClaims.ListForTaskNumber(ctx, params.Number)
 	if err != nil {
 		return nil, err
+	}
+	if expired, err := h.expireDueClaims(ctx, claims, operation, time.Now().UTC()); err != nil {
+		return nil, err
+	} else if expired {
+		claims, err = h.StageClaims.ListForTaskNumber(ctx, params.Number)
+		if err != nil {
+			return nil, err
+		}
 	}
 	items := make([]generated.TaskStageClaim, len(claims))
 	for index := range claims {
@@ -71,31 +84,87 @@ func (h *Handler) ListTaskStageClaims(
 	}, nil
 }
 
-func (h *Handler) GetCurrentTaskStageClaim(
+func (h *Handler) ListOwnedTaskStageClaims(
 	ctx context.Context,
-	params generated.GetCurrentTaskStageClaimParams,
-) (generated.GetCurrentTaskStageClaimRes, error) {
+	params generated.ListOwnedTaskStageClaimsParams,
+) (generated.ListOwnedTaskStageClaimsRes, error) {
 	operation, _, err := operationContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	claim, err := h.StageClaims.GetCurrentForClient(
-		ctx, operation, params.ClientKind, params.ClientSessionID,
-	)
+	var status domain.StageClaimStatus
+	if value, ok := params.Status.Get(); ok {
+		status = domain.StageClaimStatus(value)
+	}
+	var stage domain.TaskClaimStage
+	if value, ok := params.Stage.Get(); ok {
+		stage = domain.TaskClaimStage(value)
+	}
+	offset, err := decodeCursor(params.Cursor)
+	if err != nil {
+		return nil, ErrInvalidRequest
+	}
+	limit := 50
+	if value, ok := params.Limit.Get(); ok {
+		limit = value
+	}
+	claims, hasMore, err := h.StageClaims.ListOwnedPage(ctx, operation, status, stage, offset, limit)
 	if err != nil {
 		return nil, err
 	}
-	if err := h.requireTaskNumberAccess(
-		ctx, claim.TaskNumber, application.ProjectPermissionRead,
-	); err != nil {
-		return nil, err
-	}
-	now := time.Now().UTC()
-	if !claim.ExpiresAt.After(now) {
-		if _, err := h.Workflow.ExpireDueClaim(ctx, claim.TaskNumber, operation, now); err != nil {
+	for index := range claims {
+		if err := h.requireTaskNumberAccess(ctx, claims[index].TaskNumber, application.ProjectPermissionRead); err != nil {
 			return nil, err
 		}
-		return nil, domain.ErrNotFound
+	}
+	if expired, err := h.expireDueClaims(ctx, claims, operation, time.Now().UTC()); err != nil {
+		return nil, err
+	} else if expired {
+		claims, hasMore, err = h.StageClaims.ListOwnedPage(ctx, operation, status, stage, offset, limit)
+		if err != nil {
+			return nil, err
+		}
+	}
+	items := make([]generated.TaskStageClaim, 0, len(claims))
+	for index := range claims {
+		claim := claims[index]
+		if err := h.requireTaskNumberAccess(ctx, claim.TaskNumber, application.ProjectPermissionRead); err != nil {
+			return nil, err
+		}
+		items = append(items, taskStageClaimFromDomain(claim))
+	}
+	response := generated.TaskStageClaimList{Items: items}
+	if hasMore {
+		response.NextCursor = generated.NewOptString(encodeCursor(offset + len(claims)))
+	}
+	return &generated.TaskStageClaimListHeaders{
+		XRequestID: generated.NewOptString(baseapi.RequestIDFromContext(ctx)),
+		Response:   response,
+	}, nil
+}
+
+func (h *Handler) GetTaskStageClaim(
+	ctx context.Context,
+	params generated.GetTaskStageClaimParams,
+) (generated.GetTaskStageClaimRes, error) {
+	claim, err := h.StageClaims.Get(ctx, params.ClaimID)
+	if err != nil {
+		return nil, err
+	}
+	if err := h.requireTaskNumberAccess(ctx, claim.TaskNumber, application.ProjectPermissionRead); err != nil {
+		return nil, err
+	}
+	operation, _, err := operationContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if expired, err := h.expireDueClaims(ctx, []domain.TaskStageClaim{claim}, operation, time.Now().UTC()); err != nil {
+		return nil, err
+	} else if expired {
+		claim, err = h.StageClaims.Get(ctx, params.ClaimID)
+		if err != nil {
+			return nil, err
+		}
 	}
 	response := taskStageClaimFromDomain(claim)
 	return &generated.TaskStageClaimHeaders{
@@ -105,23 +174,40 @@ func (h *Handler) GetCurrentTaskStageClaim(
 	}, nil
 }
 
+func (h *Handler) expireDueClaims(
+	ctx context.Context,
+	claims []domain.TaskStageClaim,
+	operation domain.OperationActor,
+	now time.Time,
+) (bool, error) {
+	expiredAny := false
+	for index := range claims {
+		claim := claims[index]
+		if claim.Status != domain.StageClaimStatusActive || claim.ExpiresAt.After(now) {
+			continue
+		}
+		expired, err := h.Workflow.ExpireDueClaim(ctx, claim.TaskNumber, operation, now)
+		if err != nil {
+			return false, err
+		}
+		expiredAny = expiredAny || expired
+	}
+	return expiredAny, nil
+}
+
 func (h *Handler) CreateTaskStageClaim(
 	ctx context.Context,
-	req *generated.TaskStageClaimCreate,
 	params generated.CreateTaskStageClaimParams,
 ) (generated.CreateTaskStageClaimRes, error) {
 	expectedVersion, operation, claimedBy, err := h.workflowTaskCommandContext(ctx, params.Number, params.IfMatch)
 	if err != nil {
 		return nil, err
 	}
-	clientKind := req.ClientKind.Or("")
-	clientSessionID := req.ClientSessionID.Or("")
-	if claimedBy.Type == domain.ActorTypeAgent &&
-		(strings.TrimSpace(clientKind) == "" || strings.TrimSpace(clientSessionID) == "") {
-		return nil, fmt.Errorf(
-			"%w: Agent Claims require client_kind and client_session_id",
-			domain.ErrInvalidInput,
-		)
+	clientKind, clientSessionID, err := claimClientProvenance(
+		claimedBy, params.PactlineClientKind.Or(""), params.PactlineClientSessionID.Or(""),
+	)
+	if err != nil {
+		return nil, err
 	}
 	task, claim, err := h.Workflow.Claim(
 		ctx, params.Number, expectedVersion, claimedBy, operation,
@@ -138,13 +224,15 @@ func (h *Handler) ReleaseTaskStageClaim(
 	req *generated.TaskStageClaimFinish,
 	params generated.ReleaseTaskStageClaimParams,
 ) (generated.ReleaseTaskStageClaimRes, error) {
-	expectedVersion, operation, actor, err := h.workflowTaskCommandContext(ctx, params.Number, params.IfMatch)
+	expectedVersion, operation, actor, _, err := h.claimCommandContext(ctx, params.ClaimID, params.IfMatch)
 	if err != nil {
 		return nil, err
 	}
-	task, claim, err := h.Workflow.ReleaseClaim(
-		ctx, params.Number, params.ID, expectedVersion, req.ClaimVersion,
-		req.Body, actor, operation, time.Now().UTC(),
+	if _, _, err := claimClientProvenance(actor, params.PactlineClientKind.Or(""), params.PactlineClientSessionID.Or("")); err != nil {
+		return nil, err
+	}
+	task, claim, err := h.Workflow.ReleaseClaimByID(
+		ctx, params.ClaimID, expectedVersion, req.Body, actor, operation, time.Now().UTC(),
 	)
 	if err != nil {
 		return nil, err
@@ -157,13 +245,15 @@ func (h *Handler) RecordTaskWorkSubmission(
 	req *generated.TaskStageClaimFinish,
 	params generated.RecordTaskWorkSubmissionParams,
 ) (generated.RecordTaskWorkSubmissionRes, error) {
-	expectedVersion, operation, actor, err := h.workflowTaskCommandContext(ctx, params.Number, params.IfMatch)
+	expectedVersion, operation, actor, _, err := h.claimCommandContext(ctx, params.ClaimID, params.IfMatch)
 	if err != nil {
 		return nil, err
 	}
-	task, claim, submission, err := h.Workflow.RecordWorkSubmission(
-		ctx, params.Number, params.ID, expectedVersion, req.ClaimVersion,
-		req.Body, actor, operation, time.Now().UTC(),
+	if _, _, err := claimClientProvenance(actor, params.PactlineClientKind.Or(""), params.PactlineClientSessionID.Or("")); err != nil {
+		return nil, err
+	}
+	task, claim, submission, err := h.Workflow.RecordWorkSubmissionByID(
+		ctx, params.ClaimID, expectedVersion, req.Body, actor, operation, time.Now().UTC(),
 	)
 	if err != nil {
 		return nil, err
@@ -178,13 +268,43 @@ func (h *Handler) RecordTaskWorkSubmission(
 	}, nil
 }
 
+func (h *Handler) RecordTaskClaimProgress(
+	ctx context.Context,
+	req *generated.BodyWrite,
+	params generated.RecordTaskClaimProgressParams,
+) (generated.RecordTaskClaimProgressRes, error) {
+	_, operation, actor, _, err := h.claimCommandContext(ctx, params.ClaimID, "")
+	if err != nil {
+		return nil, err
+	}
+	if _, _, err := claimClientProvenance(actor, params.PactlineClientKind.Or(""), params.PactlineClientSessionID.Or("")); err != nil {
+		return nil, err
+	}
+	task, claim, progress, err := h.Workflow.RecordClaimProgress(
+		ctx, params.ClaimID, req.Body, actor, operation, time.Now().UTC(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &generated.TaskProgressCommandHeaders{
+		XRequestID: generated.NewOptString(baseapi.RequestIDFromContext(ctx)),
+		Response: generated.TaskProgressCommand{
+			Task: taskWorkflowFromDomain(task), Claim: taskStageClaimFromDomain(claim),
+			Progress: taskThreadItemFromDomain(progress),
+		},
+	}, nil
+}
+
 func (h *Handler) CompleteTaskExecution(
 	ctx context.Context,
 	req *generated.TaskStageClaimFinish,
 	params generated.CompleteTaskExecutionParams,
 ) (generated.CompleteTaskExecutionRes, error) {
-	expectedVersion, operation, actor, err := h.workflowTaskCommandContext(ctx, params.Number, params.IfMatch)
+	expectedVersion, operation, actor, claimTarget, err := h.claimCommandContext(ctx, params.ClaimID, params.IfMatch)
 	if err != nil {
+		return nil, err
+	}
+	if _, _, err := claimClientProvenance(actor, params.PactlineClientKind.Or(""), params.PactlineClientSessionID.Or("")); err != nil {
 		return nil, err
 	}
 	mergeRequests := []domain.MergeRequestSnapshot{}
@@ -194,15 +314,14 @@ func (h *Handler) CompleteTaskExecution(
 			return nil, subjectErr
 		}
 		mergeRequests, err = h.Delivery.PrepareCompletion(
-			ctx, params.Number, subject, baseapi.RequestIDFromContext(ctx),
+			ctx, claimTarget.TaskNumber, subject, baseapi.RequestIDFromContext(ctx),
 		)
 		if err != nil {
 			return nil, err
 		}
 	}
-	task, claim, completion, err := h.Workflow.CompleteExecutionWithDelivery(
-		ctx, params.Number, params.ID, expectedVersion, req.ClaimVersion,
-		req.Body, mergeRequests, actor, operation, time.Now().UTC(),
+	task, claim, completion, err := h.Workflow.CompleteExecutionByID(
+		ctx, params.ClaimID, expectedVersion, req.Body, mergeRequests, actor, operation, time.Now().UTC(),
 	)
 	if err != nil {
 		return nil, err
@@ -222,13 +341,15 @@ func (h *Handler) RequestTaskChanges(
 	req *generated.TaskStageClaimFinish,
 	params generated.RequestTaskChangesParams,
 ) (generated.RequestTaskChangesRes, error) {
-	expectedVersion, operation, actor, err := h.workflowTaskCommandContext(ctx, params.Number, params.IfMatch)
+	expectedVersion, operation, actor, _, err := h.claimCommandContext(ctx, params.ClaimID, params.IfMatch)
 	if err != nil {
 		return nil, err
 	}
-	task, claim, err := h.Workflow.RequestChanges(
-		ctx, params.Number, params.ID, expectedVersion, req.ClaimVersion,
-		req.Body, actor, operation, time.Now().UTC(),
+	if _, _, err := claimClientProvenance(actor, params.PactlineClientKind.Or(""), params.PactlineClientSessionID.Or("")); err != nil {
+		return nil, err
+	}
+	task, claim, err := h.Workflow.RequestChangesByID(
+		ctx, params.ClaimID, expectedVersion, req.Body, actor, operation, time.Now().UTC(),
 	)
 	if err != nil {
 		return nil, err
@@ -241,13 +362,15 @@ func (h *Handler) AcceptTask(
 	req *generated.TaskStageClaimFinish,
 	params generated.AcceptTaskParams,
 ) (generated.AcceptTaskRes, error) {
-	expectedVersion, operation, actor, err := h.workflowTaskCommandContext(ctx, params.Number, params.IfMatch)
+	expectedVersion, operation, actor, _, err := h.claimCommandContext(ctx, params.ClaimID, params.IfMatch)
 	if err != nil {
 		return nil, err
 	}
-	task, claim, err := h.Workflow.AcceptTask(
-		ctx, params.Number, params.ID, expectedVersion, req.ClaimVersion,
-		req.Body, actor, operation, time.Now().UTC(),
+	if _, _, err := claimClientProvenance(actor, params.PactlineClientKind.Or(""), params.PactlineClientSessionID.Or("")); err != nil {
+		return nil, err
+	}
+	task, claim, err := h.Workflow.AcceptTaskByID(
+		ctx, params.ClaimID, expectedVersion, req.Body, actor, operation, time.Now().UTC(),
 	)
 	if err != nil {
 		return nil, err
@@ -260,12 +383,15 @@ func (h *Handler) RequestTaskResolution(
 	req *generated.TaskResolutionRequest,
 	params generated.RequestTaskResolutionParams,
 ) (generated.RequestTaskResolutionRes, error) {
-	expectedVersion, operation, actor, err := h.workflowTaskCommandContext(ctx, params.Number, params.IfMatch)
+	expectedVersion, operation, actor, _, err := h.claimCommandContext(ctx, params.ClaimID, params.IfMatch)
 	if err != nil {
 		return nil, err
 	}
-	task, claim, issue, err := h.Workflow.RequestResolution(
-		ctx, params.Number, params.ID, expectedVersion, req.ClaimVersion,
+	if _, _, err := claimClientProvenance(actor, params.PactlineClientKind.Or(""), params.PactlineClientSessionID.Or("")); err != nil {
+		return nil, err
+	}
+	task, claim, issue, err := h.Workflow.RequestResolutionByID(
+		ctx, params.ClaimID, expectedVersion,
 		domain.IssueThreadType(req.IssueType), req.Request,
 		actor, operation, time.Now().UTC(),
 	)
@@ -312,12 +438,15 @@ func (h *Handler) RecordTaskStageAcceptanceCheck(
 	req *generated.TaskStageAcceptanceCheckWrite,
 	params generated.RecordTaskStageAcceptanceCheckParams,
 ) (generated.RecordTaskStageAcceptanceCheckRes, error) {
-	expectedVersion, operation, actor, err := h.workflowTaskCommandContext(ctx, params.Number, params.IfMatch)
+	expectedVersion, operation, actor, _, err := h.claimCommandContext(ctx, params.ClaimID, params.IfMatch)
 	if err != nil {
 		return nil, err
 	}
-	check, err := h.Workflow.RecordAcceptanceCheck(
-		ctx, params.Number, params.ID, expectedVersion, req.ClaimVersion,
+	if _, _, err := claimClientProvenance(actor, params.PactlineClientKind.Or(""), params.PactlineClientSessionID.Or("")); err != nil {
+		return nil, err
+	}
+	check, err := h.Workflow.RecordAcceptanceCheckByID(
+		ctx, params.ClaimID, expectedVersion,
 		domain.AcceptanceCheck{
 			CriterionID: params.CriterionID, CriterionRevision: req.CriterionRevision,
 			Outcome: domain.AcceptanceOutcome(req.Outcome), Evidence: req.Evidence,
@@ -524,6 +653,72 @@ func (h *Handler) workflowTaskCommandContext(
 		return 0, domain.OperationActor{}, domain.Actor{}, err
 	}
 	return expectedVersion, operation, actor, nil
+}
+
+func (h *Handler) claimCommandContext(
+	ctx context.Context,
+	claimID uuid.UUID,
+	ifMatch string,
+) (int64, domain.OperationActor, domain.Actor, domain.TaskStageClaim, error) {
+	var expectedVersion int64
+	var err error
+	if ifMatch != "" {
+		expectedVersion, err = parseIfMatch(ifMatch)
+		if err != nil {
+			return 0, domain.OperationActor{}, domain.Actor{}, domain.TaskStageClaim{}, err
+		}
+	}
+	claim, err := h.StageClaims.Get(ctx, claimID)
+	if err != nil {
+		return 0, domain.OperationActor{}, domain.Actor{}, domain.TaskStageClaim{}, err
+	}
+	if err := h.requireTaskNumberAccess(ctx, claim.TaskNumber, application.ProjectPermissionWrite); err != nil {
+		return 0, domain.OperationActor{}, domain.Actor{}, domain.TaskStageClaim{}, err
+	}
+	operation, _, err := operationContext(ctx)
+	if err != nil {
+		return 0, domain.OperationActor{}, domain.Actor{}, domain.TaskStageClaim{}, err
+	}
+	if claim.Status == domain.StageClaimStatusActive && !claim.ExpiresAt.After(time.Now().UTC()) {
+		expired, expireErr := h.Workflow.ExpireDueClaim(ctx, claim.TaskNumber, operation, time.Now().UTC())
+		if expireErr != nil {
+			return 0, domain.OperationActor{}, domain.Actor{}, domain.TaskStageClaim{}, expireErr
+		}
+		if expired {
+			return 0, domain.OperationActor{}, domain.Actor{}, domain.TaskStageClaim{},
+				fmt.Errorf("%w: Task Claim expired", domain.ErrConflict)
+		}
+		claim, err = h.StageClaims.Get(ctx, claimID)
+		if err != nil {
+			return 0, domain.OperationActor{}, domain.Actor{}, domain.TaskStageClaim{}, err
+		}
+	}
+	actor, err := workflowActor(ctx, operation)
+	if err != nil {
+		return 0, domain.OperationActor{}, domain.Actor{}, domain.TaskStageClaim{}, err
+	}
+	return expectedVersion, operation, actor, claim, nil
+}
+
+func claimClientProvenance(actor domain.Actor, kind, sessionID string) (string, string, error) {
+	kind = strings.TrimSpace(kind)
+	sessionID = strings.TrimSpace(sessionID)
+	if len(kind) > 100 || len(sessionID) > 255 {
+		return "", "", fmt.Errorf("%w: client provenance is too long", domain.ErrInvalidInput)
+	}
+	if strings.ContainsFunc(kind, unicode.IsControl) || strings.ContainsFunc(sessionID, unicode.IsControl) {
+		return "", "", fmt.Errorf("%w: client provenance contains control characters", domain.ErrInvalidInput)
+	}
+	if actor.Type == domain.ActorTypeAgent && (kind == "" || sessionID == "") {
+		return "", "", fmt.Errorf(
+			"%w: Agent Claim writes require Pactline-Client-Kind and Pactline-Client-Session-ID",
+			domain.ErrInvalidInput,
+		)
+	}
+	if (kind == "") != (sessionID == "") {
+		return "", "", fmt.Errorf("%w: client provenance headers must be provided together", domain.ErrInvalidInput)
+	}
+	return kind, sessionID, nil
 }
 
 func workflowActor(ctx context.Context, operation domain.OperationActor) (domain.Actor, error) {

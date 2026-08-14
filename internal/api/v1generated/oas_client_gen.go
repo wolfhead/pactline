@@ -32,7 +32,7 @@ type Invoker interface {
 	//
 	// Accept the Task outcome and complete the Task.
 	//
-	// POST /api/v1/tasks/{number}/claims/{id}/accept
+	// POST /api/v1/claims/{claim_id}/accept
 	AcceptTask(ctx context.Context, request *TaskStageClaimFinish, params AcceptTaskParams) (AcceptTaskRes, error)
 	// ActivateMilestone invokes activateMilestone operation.
 	//
@@ -92,7 +92,7 @@ type Invoker interface {
 	//
 	// End execution and make the frozen delivery available for review.
 	//
-	// POST /api/v1/tasks/{number}/claims/{id}/complete-execution
+	// POST /api/v1/claims/{claim_id}/complete-execution
 	CompleteTaskExecution(ctx context.Context, request *TaskStageClaimFinish, params CompleteTaskExecutionParams) (CompleteTaskExecutionRes, error)
 	// CreateAcceptanceCheck invokes createAcceptanceCheck operation.
 	//
@@ -147,7 +147,7 @@ type Invoker interface {
 	// Claim the Task's currently available execution or review stage.
 	//
 	// POST /api/v1/tasks/{number}/claims
-	CreateTaskStageClaim(ctx context.Context, request *TaskStageClaimCreate, params CreateTaskStageClaimParams) (CreateTaskStageClaimRes, error)
+	CreateTaskStageClaim(ctx context.Context, params CreateTaskStageClaimParams) (CreateTaskStageClaimRes, error)
 	// CreateTaskThreadMessage invokes createTaskThreadMessage operation.
 	//
 	// Add an ordinary message or immutable progress update to one Task Thread.
@@ -196,12 +196,6 @@ type Invoker interface {
 	//
 	// GET /api/v1/me
 	GetCurrentPrincipal(ctx context.Context) (GetCurrentPrincipalRes, error)
-	// GetCurrentTaskStageClaim invokes getCurrentTaskStageClaim operation.
-	//
-	// Get the active Claim owned by this authenticated client session.
-	//
-	// GET /api/v1/claims/current
-	GetCurrentTaskStageClaim(ctx context.Context, params GetCurrentTaskStageClaimParams) (GetCurrentTaskStageClaimRes, error)
 	// GetProject invokes getProject operation.
 	//
 	// Get a project and its work aggregate.
@@ -226,11 +220,17 @@ type Invoker interface {
 	//
 	// GET /api/v1/tasks/{number}/merge-requests
 	GetTaskDelivery(ctx context.Context, params GetTaskDeliveryParams) (GetTaskDeliveryRes, error)
+	// GetTaskStageClaim invokes getTaskStageClaim operation.
+	//
+	// Get one Claim by its globally unique ID.
+	//
+	// GET /api/v1/claims/{claim_id}
+	GetTaskStageClaim(ctx context.Context, params GetTaskStageClaimParams) (GetTaskStageClaimRes, error)
 	// LinkTaskMergeRequest invokes linkTaskMergeRequest operation.
 	//
 	// Link a GitLab merge request during claimed execution.
 	//
-	// POST /api/v1/tasks/{number}/claims/{id}/merge-requests
+	// POST /api/v1/claims/{claim_id}/merge-requests
 	LinkTaskMergeRequest(ctx context.Context, request *TaskMergeRequestLink, params LinkTaskMergeRequestParams) (LinkTaskMergeRequestRes, error)
 	// ListAgentConversations invokes listAgentConversations operation.
 	//
@@ -250,6 +250,12 @@ type Invoker interface {
 	//
 	// GET /api/v1/projects/{number}/milestones/{id}/criteria
 	ListMilestoneCriteria(ctx context.Context, params ListMilestoneCriteriaParams) (ListMilestoneCriteriaRes, error)
+	// ListOwnedTaskStageClaims invokes listOwnedTaskStageClaims operation.
+	//
+	// List Claims owned by the authenticated logical principal.
+	//
+	// GET /api/v1/claims
+	ListOwnedTaskStageClaims(ctx context.Context, params ListOwnedTaskStageClaimsParams) (ListOwnedTaskStageClaimsRes, error)
 	// ListProjectMembers invokes listProjectMembers operation.
 	//
 	// List Project members.
@@ -322,23 +328,29 @@ type Invoker interface {
 	//
 	// POST /api/v1/tasks/{number}/commands/mark-ready
 	MarkTaskReady(ctx context.Context, params MarkTaskReadyParams) (MarkTaskReadyRes, error)
+	// RecordTaskClaimProgress invokes recordTaskClaimProgress operation.
+	//
+	// Append immutable progress to the Claim's Main Thread.
+	//
+	// POST /api/v1/claims/{claim_id}/progress
+	RecordTaskClaimProgress(ctx context.Context, request *BodyWrite, params RecordTaskClaimProgressParams) (RecordTaskClaimProgressRes, error)
 	// RecordTaskStageAcceptanceCheck invokes recordTaskStageAcceptanceCheck operation.
 	//
 	// Record execution verification or acceptance through the active Claim.
 	//
-	// POST /api/v1/tasks/{number}/claims/{id}/criteria/{criterion_id}/checks
+	// POST /api/v1/claims/{claim_id}/criteria/{criterion_id}/checks
 	RecordTaskStageAcceptanceCheck(ctx context.Context, request *TaskStageAcceptanceCheckWrite, params RecordTaskStageAcceptanceCheckParams) (RecordTaskStageAcceptanceCheckRes, error)
 	// RecordTaskWorkSubmission invokes recordTaskWorkSubmission operation.
 	//
 	// Record an immutable work submission without ending execution.
 	//
-	// POST /api/v1/tasks/{number}/claims/{id}/submissions
+	// POST /api/v1/claims/{claim_id}/submissions
 	RecordTaskWorkSubmission(ctx context.Context, request *TaskStageClaimFinish, params RecordTaskWorkSubmissionParams) (RecordTaskWorkSubmissionRes, error)
 	// ReleaseTaskStageClaim invokes releaseTaskStageClaim operation.
 	//
 	// Release the active Claim with a durable handoff.
 	//
-	// POST /api/v1/tasks/{number}/claims/{id}/release
+	// POST /api/v1/claims/{claim_id}/release
 	ReleaseTaskStageClaim(ctx context.Context, request *TaskStageClaimFinish, params ReleaseTaskStageClaimParams) (ReleaseTaskStageClaimRes, error)
 	// RemoveProjectMember invokes removeProjectMember operation.
 	//
@@ -356,13 +368,13 @@ type Invoker interface {
 	//
 	// Return acceptance review to execution.
 	//
-	// POST /api/v1/tasks/{number}/claims/{id}/request-changes
+	// POST /api/v1/claims/{claim_id}/request-changes
 	RequestTaskChanges(ctx context.Context, request *TaskStageClaimFinish, params RequestTaskChangesParams) (RequestTaskChangesRes, error)
 	// RequestTaskResolution invokes requestTaskResolution operation.
 	//
 	// End the Claim and open one typed blocking Issue Thread.
 	//
-	// POST /api/v1/tasks/{number}/claims/{id}/request-resolution
+	// POST /api/v1/claims/{claim_id}/request-resolution
 	RequestTaskResolution(ctx context.Context, request *TaskResolutionRequest, params RequestTaskResolutionParams) (RequestTaskResolutionRes, error)
 	// ResolveTaskIssue invokes resolveTaskIssue operation.
 	//
@@ -392,8 +404,8 @@ type Invoker interface {
 	//
 	// Unlink a GitLab merge request during claimed execution.
 	//
-	// DELETE /api/v1/tasks/{number}/claims/{id}/merge-requests/{link_id}
-	UnlinkTaskMergeRequest(ctx context.Context, request *TaskMergeRequestUnlink, params UnlinkTaskMergeRequestParams) (UnlinkTaskMergeRequestRes, error)
+	// DELETE /api/v1/claims/{claim_id}/merge-requests/{link_id}
+	UnlinkTaskMergeRequest(ctx context.Context, params UnlinkTaskMergeRequestParams) (UnlinkTaskMergeRequestRes, error)
 	// UpdateAgentConversation invokes updateAgentConversation operation.
 	//
 	// Update an Agent conversation configuration.
@@ -507,7 +519,7 @@ func (c *Client) requestURL(ctx context.Context) *url.URL {
 //
 // Accept the Task outcome and complete the Task.
 //
-// POST /api/v1/tasks/{number}/claims/{id}/accept
+// POST /api/v1/claims/{claim_id}/accept
 func (c *Client) AcceptTask(ctx context.Context, request *TaskStageClaimFinish, params AcceptTaskParams) (AcceptTaskRes, error) {
 	res, err := c.sendAcceptTask(ctx, request, params)
 	return res, err
@@ -526,7 +538,7 @@ func (c *Client) sendAcceptTask(ctx context.Context, request *TaskStageClaimFini
 	otelAttrs := []attribute.KeyValue{
 		otelogen.OperationID("acceptTask"),
 		semconv.HTTPRequestMethodKey.String("POST"),
-		semconv.URLTemplateKey.String("/api/v1/tasks/{number}/claims/{id}/accept"),
+		semconv.URLTemplateKey.String("/api/v1/claims/{claim_id}/accept"),
 	}
 	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
 
@@ -559,17 +571,17 @@ func (c *Client) sendAcceptTask(ctx context.Context, request *TaskStageClaimFini
 
 	stage = "BuildURL"
 	u := uri.Clone(c.requestURL(ctx))
-	var pathParts [5]string
-	pathParts[0] = "/api/v1/tasks/"
+	var pathParts [3]string
+	pathParts[0] = "/api/v1/claims/"
 	{
-		// Encode "number" parameter.
+		// Encode "claim_id" parameter.
 		e := uri.NewPathEncoder(uri.PathEncoderConfig{
-			Param:   "number",
+			Param:   "claim_id",
 			Style:   uri.PathStyleSimple,
 			Explode: false,
 		})
 		if err := func() error {
-			return e.EncodeValue(conv.Int64ToString(params.Number))
+			return e.EncodeValue(conv.UUIDToString(params.ClaimID))
 		}(); err != nil {
 			return res, errors.Wrap(err, "encode path")
 		}
@@ -579,26 +591,7 @@ func (c *Client) sendAcceptTask(ctx context.Context, request *TaskStageClaimFini
 		}
 		pathParts[1] = encoded
 	}
-	pathParts[2] = "/claims/"
-	{
-		// Encode "id" parameter.
-		e := uri.NewPathEncoder(uri.PathEncoderConfig{
-			Param:   "id",
-			Style:   uri.PathStyleSimple,
-			Explode: false,
-		})
-		if err := func() error {
-			return e.EncodeValue(conv.UUIDToString(params.ID))
-		}(); err != nil {
-			return res, errors.Wrap(err, "encode path")
-		}
-		encoded, err := e.Result()
-		if err != nil {
-			return res, errors.Wrap(err, "encode path")
-		}
-		pathParts[3] = encoded
-	}
-	pathParts[4] = "/accept"
+	pathParts[2] = "/accept"
 	uri.AddPathParts(u, pathParts[:]...)
 
 	stage = "EncodeRequest"
@@ -630,6 +623,34 @@ func (c *Client) sendAcceptTask(ctx context.Context, request *TaskStageClaimFini
 		}
 		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
 			if val, ok := params.IdempotencyKey.Get(); ok {
+				return e.EncodeValue(conv.StringToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "Pactline-Client-Kind",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.PactlineClientKind.Get(); ok {
+				return e.EncodeValue(conv.StringToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "Pactline-Client-Session-ID",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.PactlineClientSessionID.Get(); ok {
 				return e.EncodeValue(conv.StringToString(val))
 			}
 			return nil
@@ -2360,7 +2381,7 @@ func (c *Client) sendCompleteTaskAttachmentUpload(ctx context.Context, params Co
 //
 // End execution and make the frozen delivery available for review.
 //
-// POST /api/v1/tasks/{number}/claims/{id}/complete-execution
+// POST /api/v1/claims/{claim_id}/complete-execution
 func (c *Client) CompleteTaskExecution(ctx context.Context, request *TaskStageClaimFinish, params CompleteTaskExecutionParams) (CompleteTaskExecutionRes, error) {
 	res, err := c.sendCompleteTaskExecution(ctx, request, params)
 	return res, err
@@ -2379,7 +2400,7 @@ func (c *Client) sendCompleteTaskExecution(ctx context.Context, request *TaskSta
 	otelAttrs := []attribute.KeyValue{
 		otelogen.OperationID("completeTaskExecution"),
 		semconv.HTTPRequestMethodKey.String("POST"),
-		semconv.URLTemplateKey.String("/api/v1/tasks/{number}/claims/{id}/complete-execution"),
+		semconv.URLTemplateKey.String("/api/v1/claims/{claim_id}/complete-execution"),
 	}
 	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
 
@@ -2412,17 +2433,17 @@ func (c *Client) sendCompleteTaskExecution(ctx context.Context, request *TaskSta
 
 	stage = "BuildURL"
 	u := uri.Clone(c.requestURL(ctx))
-	var pathParts [5]string
-	pathParts[0] = "/api/v1/tasks/"
+	var pathParts [3]string
+	pathParts[0] = "/api/v1/claims/"
 	{
-		// Encode "number" parameter.
+		// Encode "claim_id" parameter.
 		e := uri.NewPathEncoder(uri.PathEncoderConfig{
-			Param:   "number",
+			Param:   "claim_id",
 			Style:   uri.PathStyleSimple,
 			Explode: false,
 		})
 		if err := func() error {
-			return e.EncodeValue(conv.Int64ToString(params.Number))
+			return e.EncodeValue(conv.UUIDToString(params.ClaimID))
 		}(); err != nil {
 			return res, errors.Wrap(err, "encode path")
 		}
@@ -2432,26 +2453,7 @@ func (c *Client) sendCompleteTaskExecution(ctx context.Context, request *TaskSta
 		}
 		pathParts[1] = encoded
 	}
-	pathParts[2] = "/claims/"
-	{
-		// Encode "id" parameter.
-		e := uri.NewPathEncoder(uri.PathEncoderConfig{
-			Param:   "id",
-			Style:   uri.PathStyleSimple,
-			Explode: false,
-		})
-		if err := func() error {
-			return e.EncodeValue(conv.UUIDToString(params.ID))
-		}(); err != nil {
-			return res, errors.Wrap(err, "encode path")
-		}
-		encoded, err := e.Result()
-		if err != nil {
-			return res, errors.Wrap(err, "encode path")
-		}
-		pathParts[3] = encoded
-	}
-	pathParts[4] = "/complete-execution"
+	pathParts[2] = "/complete-execution"
 	uri.AddPathParts(u, pathParts[:]...)
 
 	stage = "EncodeRequest"
@@ -2483,6 +2485,34 @@ func (c *Client) sendCompleteTaskExecution(ctx context.Context, request *TaskSta
 		}
 		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
 			if val, ok := params.IdempotencyKey.Get(); ok {
+				return e.EncodeValue(conv.StringToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "Pactline-Client-Kind",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.PactlineClientKind.Get(); ok {
+				return e.EncodeValue(conv.StringToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "Pactline-Client-Session-ID",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.PactlineClientSessionID.Get(); ok {
 				return e.EncodeValue(conv.StringToString(val))
 			}
 			return nil
@@ -3911,21 +3941,12 @@ func (c *Client) sendCreateTaskCriterion(ctx context.Context, request *Criterion
 // Claim the Task's currently available execution or review stage.
 //
 // POST /api/v1/tasks/{number}/claims
-func (c *Client) CreateTaskStageClaim(ctx context.Context, request *TaskStageClaimCreate, params CreateTaskStageClaimParams) (CreateTaskStageClaimRes, error) {
-	res, err := c.sendCreateTaskStageClaim(ctx, request, params)
+func (c *Client) CreateTaskStageClaim(ctx context.Context, params CreateTaskStageClaimParams) (CreateTaskStageClaimRes, error) {
+	res, err := c.sendCreateTaskStageClaim(ctx, params)
 	return res, err
 }
 
-func (c *Client) sendCreateTaskStageClaim(ctx context.Context, request *TaskStageClaimCreate, params CreateTaskStageClaimParams) (res CreateTaskStageClaimRes, err error) {
-	// Validate request before sending.
-	if err := func() error {
-		if err := request.Validate(); err != nil {
-			return err
-		}
-		return nil
-	}(); err != nil {
-		return res, errors.Wrap(err, "validate")
-	}
+func (c *Client) sendCreateTaskStageClaim(ctx context.Context, params CreateTaskStageClaimParams) (res CreateTaskStageClaimRes, err error) {
 	otelAttrs := []attribute.KeyValue{
 		otelogen.OperationID("createTaskStageClaim"),
 		semconv.HTTPRequestMethodKey.String("POST"),
@@ -3990,9 +4011,6 @@ func (c *Client) sendCreateTaskStageClaim(ctx context.Context, request *TaskStag
 	if err != nil {
 		return res, errors.Wrap(err, "create request")
 	}
-	if err := encodeCreateTaskStageClaimRequest(request, r); err != nil {
-		return res, errors.Wrap(err, "encode request")
-	}
 
 	stage = "EncodeHeaderParams"
 	h := uri.NewHeaderEncoder(r.Header)
@@ -4014,6 +4032,34 @@ func (c *Client) sendCreateTaskStageClaim(ctx context.Context, request *TaskStag
 		}
 		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
 			if val, ok := params.IdempotencyKey.Get(); ok {
+				return e.EncodeValue(conv.StringToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "Pactline-Client-Kind",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.PactlineClientKind.Get(); ok {
+				return e.EncodeValue(conv.StringToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "Pactline-Client-Session-ID",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.PactlineClientSessionID.Get(); ok {
 				return e.EncodeValue(conv.StringToString(val))
 			}
 			return nil
@@ -5312,157 +5358,6 @@ func (c *Client) sendGetCurrentPrincipal(ctx context.Context) (res GetCurrentPri
 	return result, nil
 }
 
-// GetCurrentTaskStageClaim invokes getCurrentTaskStageClaim operation.
-//
-// Get the active Claim owned by this authenticated client session.
-//
-// GET /api/v1/claims/current
-func (c *Client) GetCurrentTaskStageClaim(ctx context.Context, params GetCurrentTaskStageClaimParams) (GetCurrentTaskStageClaimRes, error) {
-	res, err := c.sendGetCurrentTaskStageClaim(ctx, params)
-	return res, err
-}
-
-func (c *Client) sendGetCurrentTaskStageClaim(ctx context.Context, params GetCurrentTaskStageClaimParams) (res GetCurrentTaskStageClaimRes, err error) {
-	otelAttrs := []attribute.KeyValue{
-		otelogen.OperationID("getCurrentTaskStageClaim"),
-		semconv.HTTPRequestMethodKey.String("GET"),
-		semconv.URLTemplateKey.String("/api/v1/claims/current"),
-	}
-	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
-
-	// Run stopwatch.
-	startTime := time.Now()
-	defer func() {
-		// Use floating point division here for higher precision (instead of Millisecond method).
-		elapsedDuration := time.Since(startTime)
-		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
-	}()
-
-	// Increment request counter.
-	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
-
-	// Start a span for this request.
-	ctx, span := c.cfg.Tracer.Start(ctx, GetCurrentTaskStageClaimOperation,
-		trace.WithAttributes(otelAttrs...),
-		clientSpanKind,
-	)
-	// Track stage for error reporting.
-	var stage string
-	defer func() {
-		if err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, stage)
-			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
-		}
-		span.End()
-	}()
-
-	stage = "BuildURL"
-	u := uri.Clone(c.requestURL(ctx))
-	var pathParts [1]string
-	pathParts[0] = "/api/v1/claims/current"
-	uri.AddPathParts(u, pathParts[:]...)
-
-	stage = "EncodeQueryParams"
-	q := uri.NewQueryEncoder()
-	{
-		// Encode "client_kind" parameter.
-		cfg := uri.QueryParameterEncodingConfig{
-			Name:    "client_kind",
-			Style:   uri.QueryStyleForm,
-			Explode: true,
-		}
-
-		if err := q.EncodeParam(cfg, func(e uri.Encoder) error {
-			return e.EncodeValue(conv.StringToString(params.ClientKind))
-		}); err != nil {
-			return res, errors.Wrap(err, "encode query")
-		}
-	}
-	{
-		// Encode "client_session_id" parameter.
-		cfg := uri.QueryParameterEncodingConfig{
-			Name:    "client_session_id",
-			Style:   uri.QueryStyleForm,
-			Explode: true,
-		}
-
-		if err := q.EncodeParam(cfg, func(e uri.Encoder) error {
-			return e.EncodeValue(conv.StringToString(params.ClientSessionID))
-		}); err != nil {
-			return res, errors.Wrap(err, "encode query")
-		}
-	}
-	u.RawQuery = q.Values().Encode()
-
-	stage = "EncodeRequest"
-	r, err := ht.NewRequest(ctx, "GET", u)
-	if err != nil {
-		return res, errors.Wrap(err, "create request")
-	}
-
-	{
-		type bitset = [1]uint8
-		var satisfied bitset
-		{
-			stage = "Security:BearerAuth"
-			switch err := c.securityBearerAuth(ctx, GetCurrentTaskStageClaimOperation, r); {
-			case err == nil: // if NO error
-				satisfied[0] |= 1 << 0
-			case errors.Is(err, ogenerrors.ErrSkipClientSecurity):
-				// Skip this security.
-			default:
-				return res, errors.Wrap(err, "security \"BearerAuth\"")
-			}
-		}
-		{
-			stage = "Security:SessionCookie"
-			switch err := c.securitySessionCookie(ctx, GetCurrentTaskStageClaimOperation, r); {
-			case err == nil: // if NO error
-				satisfied[0] |= 1 << 1
-			case errors.Is(err, ogenerrors.ErrSkipClientSecurity):
-				// Skip this security.
-			default:
-				return res, errors.Wrap(err, "security \"SessionCookie\"")
-			}
-		}
-
-		if ok := func() bool {
-		nextRequirement:
-			for _, requirement := range []bitset{
-				{0b00000001},
-				{0b00000010},
-			} {
-				for i, mask := range requirement {
-					if satisfied[i]&mask != mask {
-						continue nextRequirement
-					}
-				}
-				return true
-			}
-			return false
-		}(); !ok {
-			return res, ogenerrors.ErrSecurityRequirementIsNotSatisfied
-		}
-	}
-
-	stage = "SendRequest"
-	resp, err := c.cfg.Client.Do(r)
-	if err != nil {
-		return res, errors.Wrap(err, "do request")
-	}
-	body := resp.Body
-	defer body.Close()
-
-	stage = "DecodeResponse"
-	result, err := decodeGetCurrentTaskStageClaimResponse(resp)
-	if err != nil {
-		return res, errors.Wrap(err, "decode response")
-	}
-
-	return result, nil
-}
-
 // GetProject invokes getProject operation.
 //
 // Get a project and its work aggregate.
@@ -6053,30 +5948,158 @@ func (c *Client) sendGetTaskDelivery(ctx context.Context, params GetTaskDelivery
 	return result, nil
 }
 
+// GetTaskStageClaim invokes getTaskStageClaim operation.
+//
+// Get one Claim by its globally unique ID.
+//
+// GET /api/v1/claims/{claim_id}
+func (c *Client) GetTaskStageClaim(ctx context.Context, params GetTaskStageClaimParams) (GetTaskStageClaimRes, error) {
+	res, err := c.sendGetTaskStageClaim(ctx, params)
+	return res, err
+}
+
+func (c *Client) sendGetTaskStageClaim(ctx context.Context, params GetTaskStageClaimParams) (res GetTaskStageClaimRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("getTaskStageClaim"),
+		semconv.HTTPRequestMethodKey.String("GET"),
+		semconv.URLTemplateKey.String("/api/v1/claims/{claim_id}"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, GetTaskStageClaimOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [2]string
+	pathParts[0] = "/api/v1/claims/"
+	{
+		// Encode "claim_id" parameter.
+		e := uri.NewPathEncoder(uri.PathEncoderConfig{
+			Param:   "claim_id",
+			Style:   uri.PathStyleSimple,
+			Explode: false,
+		})
+		if err := func() error {
+			return e.EncodeValue(conv.UUIDToString(params.ClaimID))
+		}(); err != nil {
+			return res, errors.Wrap(err, "encode path")
+		}
+		encoded, err := e.Result()
+		if err != nil {
+			return res, errors.Wrap(err, "encode path")
+		}
+		pathParts[1] = encoded
+	}
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "GET", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+
+	{
+		type bitset = [1]uint8
+		var satisfied bitset
+		{
+			stage = "Security:BearerAuth"
+			switch err := c.securityBearerAuth(ctx, GetTaskStageClaimOperation, r); {
+			case err == nil: // if NO error
+				satisfied[0] |= 1 << 0
+			case errors.Is(err, ogenerrors.ErrSkipClientSecurity):
+				// Skip this security.
+			default:
+				return res, errors.Wrap(err, "security \"BearerAuth\"")
+			}
+		}
+		{
+			stage = "Security:SessionCookie"
+			switch err := c.securitySessionCookie(ctx, GetTaskStageClaimOperation, r); {
+			case err == nil: // if NO error
+				satisfied[0] |= 1 << 1
+			case errors.Is(err, ogenerrors.ErrSkipClientSecurity):
+				// Skip this security.
+			default:
+				return res, errors.Wrap(err, "security \"SessionCookie\"")
+			}
+		}
+
+		if ok := func() bool {
+		nextRequirement:
+			for _, requirement := range []bitset{
+				{0b00000001},
+				{0b00000010},
+			} {
+				for i, mask := range requirement {
+					if satisfied[i]&mask != mask {
+						continue nextRequirement
+					}
+				}
+				return true
+			}
+			return false
+		}(); !ok {
+			return res, ogenerrors.ErrSecurityRequirementIsNotSatisfied
+		}
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer body.Close()
+
+	stage = "DecodeResponse"
+	result, err := decodeGetTaskStageClaimResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
 // LinkTaskMergeRequest invokes linkTaskMergeRequest operation.
 //
 // Link a GitLab merge request during claimed execution.
 //
-// POST /api/v1/tasks/{number}/claims/{id}/merge-requests
+// POST /api/v1/claims/{claim_id}/merge-requests
 func (c *Client) LinkTaskMergeRequest(ctx context.Context, request *TaskMergeRequestLink, params LinkTaskMergeRequestParams) (LinkTaskMergeRequestRes, error) {
 	res, err := c.sendLinkTaskMergeRequest(ctx, request, params)
 	return res, err
 }
 
 func (c *Client) sendLinkTaskMergeRequest(ctx context.Context, request *TaskMergeRequestLink, params LinkTaskMergeRequestParams) (res LinkTaskMergeRequestRes, err error) {
-	// Validate request before sending.
-	if err := func() error {
-		if err := request.Validate(); err != nil {
-			return err
-		}
-		return nil
-	}(); err != nil {
-		return res, errors.Wrap(err, "validate")
-	}
 	otelAttrs := []attribute.KeyValue{
 		otelogen.OperationID("linkTaskMergeRequest"),
 		semconv.HTTPRequestMethodKey.String("POST"),
-		semconv.URLTemplateKey.String("/api/v1/tasks/{number}/claims/{id}/merge-requests"),
+		semconv.URLTemplateKey.String("/api/v1/claims/{claim_id}/merge-requests"),
 	}
 	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
 
@@ -6109,17 +6132,17 @@ func (c *Client) sendLinkTaskMergeRequest(ctx context.Context, request *TaskMerg
 
 	stage = "BuildURL"
 	u := uri.Clone(c.requestURL(ctx))
-	var pathParts [5]string
-	pathParts[0] = "/api/v1/tasks/"
+	var pathParts [3]string
+	pathParts[0] = "/api/v1/claims/"
 	{
-		// Encode "number" parameter.
+		// Encode "claim_id" parameter.
 		e := uri.NewPathEncoder(uri.PathEncoderConfig{
-			Param:   "number",
+			Param:   "claim_id",
 			Style:   uri.PathStyleSimple,
 			Explode: false,
 		})
 		if err := func() error {
-			return e.EncodeValue(conv.Int64ToString(params.Number))
+			return e.EncodeValue(conv.UUIDToString(params.ClaimID))
 		}(); err != nil {
 			return res, errors.Wrap(err, "encode path")
 		}
@@ -6129,26 +6152,7 @@ func (c *Client) sendLinkTaskMergeRequest(ctx context.Context, request *TaskMerg
 		}
 		pathParts[1] = encoded
 	}
-	pathParts[2] = "/claims/"
-	{
-		// Encode "id" parameter.
-		e := uri.NewPathEncoder(uri.PathEncoderConfig{
-			Param:   "id",
-			Style:   uri.PathStyleSimple,
-			Explode: false,
-		})
-		if err := func() error {
-			return e.EncodeValue(conv.UUIDToString(params.ID))
-		}(); err != nil {
-			return res, errors.Wrap(err, "encode path")
-		}
-		encoded, err := e.Result()
-		if err != nil {
-			return res, errors.Wrap(err, "encode path")
-		}
-		pathParts[3] = encoded
-	}
-	pathParts[4] = "/merge-requests"
+	pathParts[2] = "/merge-requests"
 	uri.AddPathParts(u, pathParts[:]...)
 
 	stage = "EncodeRequest"
@@ -6180,6 +6184,34 @@ func (c *Client) sendLinkTaskMergeRequest(ctx context.Context, request *TaskMerg
 		}
 		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
 			if val, ok := params.IdempotencyKey.Get(); ok {
+				return e.EncodeValue(conv.StringToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "Pactline-Client-Kind",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.PactlineClientKind.Get(); ok {
+				return e.EncodeValue(conv.StringToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "Pactline-Client-Session-ID",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.PactlineClientSessionID.Get(); ok {
 				return e.EncodeValue(conv.StringToString(val))
 			}
 			return nil
@@ -6714,6 +6746,197 @@ func (c *Client) sendListMilestoneCriteria(ctx context.Context, params ListMiles
 
 	stage = "DecodeResponse"
 	result, err := decodeListMilestoneCriteriaResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
+// ListOwnedTaskStageClaims invokes listOwnedTaskStageClaims operation.
+//
+// List Claims owned by the authenticated logical principal.
+//
+// GET /api/v1/claims
+func (c *Client) ListOwnedTaskStageClaims(ctx context.Context, params ListOwnedTaskStageClaimsParams) (ListOwnedTaskStageClaimsRes, error) {
+	res, err := c.sendListOwnedTaskStageClaims(ctx, params)
+	return res, err
+}
+
+func (c *Client) sendListOwnedTaskStageClaims(ctx context.Context, params ListOwnedTaskStageClaimsParams) (res ListOwnedTaskStageClaimsRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("listOwnedTaskStageClaims"),
+		semconv.HTTPRequestMethodKey.String("GET"),
+		semconv.URLTemplateKey.String("/api/v1/claims"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, ListOwnedTaskStageClaimsOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [1]string
+	pathParts[0] = "/api/v1/claims"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeQueryParams"
+	q := uri.NewQueryEncoder()
+	{
+		// Encode "cursor" parameter.
+		cfg := uri.QueryParameterEncodingConfig{
+			Name:    "cursor",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.Cursor.Get(); ok {
+				return e.EncodeValue(conv.StringToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode query")
+		}
+	}
+	{
+		// Encode "limit" parameter.
+		cfg := uri.QueryParameterEncodingConfig{
+			Name:    "limit",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.Limit.Get(); ok {
+				return e.EncodeValue(conv.IntToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode query")
+		}
+	}
+	{
+		// Encode "status" parameter.
+		cfg := uri.QueryParameterEncodingConfig{
+			Name:    "status",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.Status.Get(); ok {
+				return e.EncodeValue(conv.StringToString(string(val)))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode query")
+		}
+	}
+	{
+		// Encode "stage" parameter.
+		cfg := uri.QueryParameterEncodingConfig{
+			Name:    "stage",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.Stage.Get(); ok {
+				return e.EncodeValue(conv.StringToString(string(val)))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode query")
+		}
+	}
+	u.RawQuery = q.Values().Encode()
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "GET", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+
+	{
+		type bitset = [1]uint8
+		var satisfied bitset
+		{
+			stage = "Security:BearerAuth"
+			switch err := c.securityBearerAuth(ctx, ListOwnedTaskStageClaimsOperation, r); {
+			case err == nil: // if NO error
+				satisfied[0] |= 1 << 0
+			case errors.Is(err, ogenerrors.ErrSkipClientSecurity):
+				// Skip this security.
+			default:
+				return res, errors.Wrap(err, "security \"BearerAuth\"")
+			}
+		}
+		{
+			stage = "Security:SessionCookie"
+			switch err := c.securitySessionCookie(ctx, ListOwnedTaskStageClaimsOperation, r); {
+			case err == nil: // if NO error
+				satisfied[0] |= 1 << 1
+			case errors.Is(err, ogenerrors.ErrSkipClientSecurity):
+				// Skip this security.
+			default:
+				return res, errors.Wrap(err, "security \"SessionCookie\"")
+			}
+		}
+
+		if ok := func() bool {
+		nextRequirement:
+			for _, requirement := range []bitset{
+				{0b00000001},
+				{0b00000010},
+			} {
+				for i, mask := range requirement {
+					if satisfied[i]&mask != mask {
+						continue nextRequirement
+					}
+				}
+				return true
+			}
+			return false
+		}(); !ok {
+			return res, ogenerrors.ErrSecurityRequirementIsNotSatisfied
+		}
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer body.Close()
+
+	stage = "DecodeResponse"
+	result, err := decodeListOwnedTaskStageClaimsResponse(resp)
 	if err != nil {
 		return res, errors.Wrap(err, "decode response")
 	}
@@ -8850,11 +9073,206 @@ func (c *Client) sendMarkTaskReady(ctx context.Context, params MarkTaskReadyPara
 	return result, nil
 }
 
+// RecordTaskClaimProgress invokes recordTaskClaimProgress operation.
+//
+// Append immutable progress to the Claim's Main Thread.
+//
+// POST /api/v1/claims/{claim_id}/progress
+func (c *Client) RecordTaskClaimProgress(ctx context.Context, request *BodyWrite, params RecordTaskClaimProgressParams) (RecordTaskClaimProgressRes, error) {
+	res, err := c.sendRecordTaskClaimProgress(ctx, request, params)
+	return res, err
+}
+
+func (c *Client) sendRecordTaskClaimProgress(ctx context.Context, request *BodyWrite, params RecordTaskClaimProgressParams) (res RecordTaskClaimProgressRes, err error) {
+	// Validate request before sending.
+	if err := func() error {
+		if err := request.Validate(); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return res, errors.Wrap(err, "validate")
+	}
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("recordTaskClaimProgress"),
+		semconv.HTTPRequestMethodKey.String("POST"),
+		semconv.URLTemplateKey.String("/api/v1/claims/{claim_id}/progress"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, RecordTaskClaimProgressOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [3]string
+	pathParts[0] = "/api/v1/claims/"
+	{
+		// Encode "claim_id" parameter.
+		e := uri.NewPathEncoder(uri.PathEncoderConfig{
+			Param:   "claim_id",
+			Style:   uri.PathStyleSimple,
+			Explode: false,
+		})
+		if err := func() error {
+			return e.EncodeValue(conv.UUIDToString(params.ClaimID))
+		}(); err != nil {
+			return res, errors.Wrap(err, "encode path")
+		}
+		encoded, err := e.Result()
+		if err != nil {
+			return res, errors.Wrap(err, "encode path")
+		}
+		pathParts[1] = encoded
+	}
+	pathParts[2] = "/progress"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "POST", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+	if err := encodeRecordTaskClaimProgressRequest(request, r); err != nil {
+		return res, errors.Wrap(err, "encode request")
+	}
+
+	stage = "EncodeHeaderParams"
+	h := uri.NewHeaderEncoder(r.Header)
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "Idempotency-Key",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.IdempotencyKey.Get(); ok {
+				return e.EncodeValue(conv.StringToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "Pactline-Client-Kind",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.PactlineClientKind.Get(); ok {
+				return e.EncodeValue(conv.StringToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "Pactline-Client-Session-ID",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.PactlineClientSessionID.Get(); ok {
+				return e.EncodeValue(conv.StringToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+
+	{
+		type bitset = [1]uint8
+		var satisfied bitset
+		{
+			stage = "Security:BearerAuth"
+			switch err := c.securityBearerAuth(ctx, RecordTaskClaimProgressOperation, r); {
+			case err == nil: // if NO error
+				satisfied[0] |= 1 << 0
+			case errors.Is(err, ogenerrors.ErrSkipClientSecurity):
+				// Skip this security.
+			default:
+				return res, errors.Wrap(err, "security \"BearerAuth\"")
+			}
+		}
+		{
+			stage = "Security:SessionCookie"
+			switch err := c.securitySessionCookie(ctx, RecordTaskClaimProgressOperation, r); {
+			case err == nil: // if NO error
+				satisfied[0] |= 1 << 1
+			case errors.Is(err, ogenerrors.ErrSkipClientSecurity):
+				// Skip this security.
+			default:
+				return res, errors.Wrap(err, "security \"SessionCookie\"")
+			}
+		}
+
+		if ok := func() bool {
+		nextRequirement:
+			for _, requirement := range []bitset{
+				{0b00000001},
+				{0b00000010},
+			} {
+				for i, mask := range requirement {
+					if satisfied[i]&mask != mask {
+						continue nextRequirement
+					}
+				}
+				return true
+			}
+			return false
+		}(); !ok {
+			return res, ogenerrors.ErrSecurityRequirementIsNotSatisfied
+		}
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer body.Close()
+
+	stage = "DecodeResponse"
+	result, err := decodeRecordTaskClaimProgressResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
 // RecordTaskStageAcceptanceCheck invokes recordTaskStageAcceptanceCheck operation.
 //
 // Record execution verification or acceptance through the active Claim.
 //
-// POST /api/v1/tasks/{number}/claims/{id}/criteria/{criterion_id}/checks
+// POST /api/v1/claims/{claim_id}/criteria/{criterion_id}/checks
 func (c *Client) RecordTaskStageAcceptanceCheck(ctx context.Context, request *TaskStageAcceptanceCheckWrite, params RecordTaskStageAcceptanceCheckParams) (RecordTaskStageAcceptanceCheckRes, error) {
 	res, err := c.sendRecordTaskStageAcceptanceCheck(ctx, request, params)
 	return res, err
@@ -8873,7 +9291,7 @@ func (c *Client) sendRecordTaskStageAcceptanceCheck(ctx context.Context, request
 	otelAttrs := []attribute.KeyValue{
 		otelogen.OperationID("recordTaskStageAcceptanceCheck"),
 		semconv.HTTPRequestMethodKey.String("POST"),
-		semconv.URLTemplateKey.String("/api/v1/tasks/{number}/claims/{id}/criteria/{criterion_id}/checks"),
+		semconv.URLTemplateKey.String("/api/v1/claims/{claim_id}/criteria/{criterion_id}/checks"),
 	}
 	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
 
@@ -8906,17 +9324,17 @@ func (c *Client) sendRecordTaskStageAcceptanceCheck(ctx context.Context, request
 
 	stage = "BuildURL"
 	u := uri.Clone(c.requestURL(ctx))
-	var pathParts [7]string
-	pathParts[0] = "/api/v1/tasks/"
+	var pathParts [5]string
+	pathParts[0] = "/api/v1/claims/"
 	{
-		// Encode "number" parameter.
+		// Encode "claim_id" parameter.
 		e := uri.NewPathEncoder(uri.PathEncoderConfig{
-			Param:   "number",
+			Param:   "claim_id",
 			Style:   uri.PathStyleSimple,
 			Explode: false,
 		})
 		if err := func() error {
-			return e.EncodeValue(conv.Int64ToString(params.Number))
+			return e.EncodeValue(conv.UUIDToString(params.ClaimID))
 		}(); err != nil {
 			return res, errors.Wrap(err, "encode path")
 		}
@@ -8926,26 +9344,7 @@ func (c *Client) sendRecordTaskStageAcceptanceCheck(ctx context.Context, request
 		}
 		pathParts[1] = encoded
 	}
-	pathParts[2] = "/claims/"
-	{
-		// Encode "id" parameter.
-		e := uri.NewPathEncoder(uri.PathEncoderConfig{
-			Param:   "id",
-			Style:   uri.PathStyleSimple,
-			Explode: false,
-		})
-		if err := func() error {
-			return e.EncodeValue(conv.UUIDToString(params.ID))
-		}(); err != nil {
-			return res, errors.Wrap(err, "encode path")
-		}
-		encoded, err := e.Result()
-		if err != nil {
-			return res, errors.Wrap(err, "encode path")
-		}
-		pathParts[3] = encoded
-	}
-	pathParts[4] = "/criteria/"
+	pathParts[2] = "/criteria/"
 	{
 		// Encode "criterion_id" parameter.
 		e := uri.NewPathEncoder(uri.PathEncoderConfig{
@@ -8962,9 +9361,9 @@ func (c *Client) sendRecordTaskStageAcceptanceCheck(ctx context.Context, request
 		if err != nil {
 			return res, errors.Wrap(err, "encode path")
 		}
-		pathParts[5] = encoded
+		pathParts[3] = encoded
 	}
-	pathParts[6] = "/checks"
+	pathParts[4] = "/checks"
 	uri.AddPathParts(u, pathParts[:]...)
 
 	stage = "EncodeRequest"
@@ -8996,6 +9395,34 @@ func (c *Client) sendRecordTaskStageAcceptanceCheck(ctx context.Context, request
 		}
 		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
 			if val, ok := params.IdempotencyKey.Get(); ok {
+				return e.EncodeValue(conv.StringToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "Pactline-Client-Kind",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.PactlineClientKind.Get(); ok {
+				return e.EncodeValue(conv.StringToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "Pactline-Client-Session-ID",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.PactlineClientSessionID.Get(); ok {
 				return e.EncodeValue(conv.StringToString(val))
 			}
 			return nil
@@ -9070,7 +9497,7 @@ func (c *Client) sendRecordTaskStageAcceptanceCheck(ctx context.Context, request
 //
 // Record an immutable work submission without ending execution.
 //
-// POST /api/v1/tasks/{number}/claims/{id}/submissions
+// POST /api/v1/claims/{claim_id}/submissions
 func (c *Client) RecordTaskWorkSubmission(ctx context.Context, request *TaskStageClaimFinish, params RecordTaskWorkSubmissionParams) (RecordTaskWorkSubmissionRes, error) {
 	res, err := c.sendRecordTaskWorkSubmission(ctx, request, params)
 	return res, err
@@ -9089,7 +9516,7 @@ func (c *Client) sendRecordTaskWorkSubmission(ctx context.Context, request *Task
 	otelAttrs := []attribute.KeyValue{
 		otelogen.OperationID("recordTaskWorkSubmission"),
 		semconv.HTTPRequestMethodKey.String("POST"),
-		semconv.URLTemplateKey.String("/api/v1/tasks/{number}/claims/{id}/submissions"),
+		semconv.URLTemplateKey.String("/api/v1/claims/{claim_id}/submissions"),
 	}
 	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
 
@@ -9122,17 +9549,17 @@ func (c *Client) sendRecordTaskWorkSubmission(ctx context.Context, request *Task
 
 	stage = "BuildURL"
 	u := uri.Clone(c.requestURL(ctx))
-	var pathParts [5]string
-	pathParts[0] = "/api/v1/tasks/"
+	var pathParts [3]string
+	pathParts[0] = "/api/v1/claims/"
 	{
-		// Encode "number" parameter.
+		// Encode "claim_id" parameter.
 		e := uri.NewPathEncoder(uri.PathEncoderConfig{
-			Param:   "number",
+			Param:   "claim_id",
 			Style:   uri.PathStyleSimple,
 			Explode: false,
 		})
 		if err := func() error {
-			return e.EncodeValue(conv.Int64ToString(params.Number))
+			return e.EncodeValue(conv.UUIDToString(params.ClaimID))
 		}(); err != nil {
 			return res, errors.Wrap(err, "encode path")
 		}
@@ -9142,26 +9569,7 @@ func (c *Client) sendRecordTaskWorkSubmission(ctx context.Context, request *Task
 		}
 		pathParts[1] = encoded
 	}
-	pathParts[2] = "/claims/"
-	{
-		// Encode "id" parameter.
-		e := uri.NewPathEncoder(uri.PathEncoderConfig{
-			Param:   "id",
-			Style:   uri.PathStyleSimple,
-			Explode: false,
-		})
-		if err := func() error {
-			return e.EncodeValue(conv.UUIDToString(params.ID))
-		}(); err != nil {
-			return res, errors.Wrap(err, "encode path")
-		}
-		encoded, err := e.Result()
-		if err != nil {
-			return res, errors.Wrap(err, "encode path")
-		}
-		pathParts[3] = encoded
-	}
-	pathParts[4] = "/submissions"
+	pathParts[2] = "/submissions"
 	uri.AddPathParts(u, pathParts[:]...)
 
 	stage = "EncodeRequest"
@@ -9193,6 +9601,34 @@ func (c *Client) sendRecordTaskWorkSubmission(ctx context.Context, request *Task
 		}
 		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
 			if val, ok := params.IdempotencyKey.Get(); ok {
+				return e.EncodeValue(conv.StringToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "Pactline-Client-Kind",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.PactlineClientKind.Get(); ok {
+				return e.EncodeValue(conv.StringToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "Pactline-Client-Session-ID",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.PactlineClientSessionID.Get(); ok {
 				return e.EncodeValue(conv.StringToString(val))
 			}
 			return nil
@@ -9267,7 +9703,7 @@ func (c *Client) sendRecordTaskWorkSubmission(ctx context.Context, request *Task
 //
 // Release the active Claim with a durable handoff.
 //
-// POST /api/v1/tasks/{number}/claims/{id}/release
+// POST /api/v1/claims/{claim_id}/release
 func (c *Client) ReleaseTaskStageClaim(ctx context.Context, request *TaskStageClaimFinish, params ReleaseTaskStageClaimParams) (ReleaseTaskStageClaimRes, error) {
 	res, err := c.sendReleaseTaskStageClaim(ctx, request, params)
 	return res, err
@@ -9286,7 +9722,7 @@ func (c *Client) sendReleaseTaskStageClaim(ctx context.Context, request *TaskSta
 	otelAttrs := []attribute.KeyValue{
 		otelogen.OperationID("releaseTaskStageClaim"),
 		semconv.HTTPRequestMethodKey.String("POST"),
-		semconv.URLTemplateKey.String("/api/v1/tasks/{number}/claims/{id}/release"),
+		semconv.URLTemplateKey.String("/api/v1/claims/{claim_id}/release"),
 	}
 	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
 
@@ -9319,17 +9755,17 @@ func (c *Client) sendReleaseTaskStageClaim(ctx context.Context, request *TaskSta
 
 	stage = "BuildURL"
 	u := uri.Clone(c.requestURL(ctx))
-	var pathParts [5]string
-	pathParts[0] = "/api/v1/tasks/"
+	var pathParts [3]string
+	pathParts[0] = "/api/v1/claims/"
 	{
-		// Encode "number" parameter.
+		// Encode "claim_id" parameter.
 		e := uri.NewPathEncoder(uri.PathEncoderConfig{
-			Param:   "number",
+			Param:   "claim_id",
 			Style:   uri.PathStyleSimple,
 			Explode: false,
 		})
 		if err := func() error {
-			return e.EncodeValue(conv.Int64ToString(params.Number))
+			return e.EncodeValue(conv.UUIDToString(params.ClaimID))
 		}(); err != nil {
 			return res, errors.Wrap(err, "encode path")
 		}
@@ -9339,26 +9775,7 @@ func (c *Client) sendReleaseTaskStageClaim(ctx context.Context, request *TaskSta
 		}
 		pathParts[1] = encoded
 	}
-	pathParts[2] = "/claims/"
-	{
-		// Encode "id" parameter.
-		e := uri.NewPathEncoder(uri.PathEncoderConfig{
-			Param:   "id",
-			Style:   uri.PathStyleSimple,
-			Explode: false,
-		})
-		if err := func() error {
-			return e.EncodeValue(conv.UUIDToString(params.ID))
-		}(); err != nil {
-			return res, errors.Wrap(err, "encode path")
-		}
-		encoded, err := e.Result()
-		if err != nil {
-			return res, errors.Wrap(err, "encode path")
-		}
-		pathParts[3] = encoded
-	}
-	pathParts[4] = "/release"
+	pathParts[2] = "/release"
 	uri.AddPathParts(u, pathParts[:]...)
 
 	stage = "EncodeRequest"
@@ -9390,6 +9807,34 @@ func (c *Client) sendReleaseTaskStageClaim(ctx context.Context, request *TaskSta
 		}
 		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
 			if val, ok := params.IdempotencyKey.Get(); ok {
+				return e.EncodeValue(conv.StringToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "Pactline-Client-Kind",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.PactlineClientKind.Get(); ok {
+				return e.EncodeValue(conv.StringToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "Pactline-Client-Session-ID",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.PactlineClientSessionID.Get(); ok {
 				return e.EncodeValue(conv.StringToString(val))
 			}
 			return nil
@@ -9856,7 +10301,7 @@ func (c *Client) sendReopenMilestone(ctx context.Context, request *LifecycleRequ
 //
 // Return acceptance review to execution.
 //
-// POST /api/v1/tasks/{number}/claims/{id}/request-changes
+// POST /api/v1/claims/{claim_id}/request-changes
 func (c *Client) RequestTaskChanges(ctx context.Context, request *TaskStageClaimFinish, params RequestTaskChangesParams) (RequestTaskChangesRes, error) {
 	res, err := c.sendRequestTaskChanges(ctx, request, params)
 	return res, err
@@ -9875,7 +10320,7 @@ func (c *Client) sendRequestTaskChanges(ctx context.Context, request *TaskStageC
 	otelAttrs := []attribute.KeyValue{
 		otelogen.OperationID("requestTaskChanges"),
 		semconv.HTTPRequestMethodKey.String("POST"),
-		semconv.URLTemplateKey.String("/api/v1/tasks/{number}/claims/{id}/request-changes"),
+		semconv.URLTemplateKey.String("/api/v1/claims/{claim_id}/request-changes"),
 	}
 	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
 
@@ -9908,17 +10353,17 @@ func (c *Client) sendRequestTaskChanges(ctx context.Context, request *TaskStageC
 
 	stage = "BuildURL"
 	u := uri.Clone(c.requestURL(ctx))
-	var pathParts [5]string
-	pathParts[0] = "/api/v1/tasks/"
+	var pathParts [3]string
+	pathParts[0] = "/api/v1/claims/"
 	{
-		// Encode "number" parameter.
+		// Encode "claim_id" parameter.
 		e := uri.NewPathEncoder(uri.PathEncoderConfig{
-			Param:   "number",
+			Param:   "claim_id",
 			Style:   uri.PathStyleSimple,
 			Explode: false,
 		})
 		if err := func() error {
-			return e.EncodeValue(conv.Int64ToString(params.Number))
+			return e.EncodeValue(conv.UUIDToString(params.ClaimID))
 		}(); err != nil {
 			return res, errors.Wrap(err, "encode path")
 		}
@@ -9928,26 +10373,7 @@ func (c *Client) sendRequestTaskChanges(ctx context.Context, request *TaskStageC
 		}
 		pathParts[1] = encoded
 	}
-	pathParts[2] = "/claims/"
-	{
-		// Encode "id" parameter.
-		e := uri.NewPathEncoder(uri.PathEncoderConfig{
-			Param:   "id",
-			Style:   uri.PathStyleSimple,
-			Explode: false,
-		})
-		if err := func() error {
-			return e.EncodeValue(conv.UUIDToString(params.ID))
-		}(); err != nil {
-			return res, errors.Wrap(err, "encode path")
-		}
-		encoded, err := e.Result()
-		if err != nil {
-			return res, errors.Wrap(err, "encode path")
-		}
-		pathParts[3] = encoded
-	}
-	pathParts[4] = "/request-changes"
+	pathParts[2] = "/request-changes"
 	uri.AddPathParts(u, pathParts[:]...)
 
 	stage = "EncodeRequest"
@@ -9979,6 +10405,34 @@ func (c *Client) sendRequestTaskChanges(ctx context.Context, request *TaskStageC
 		}
 		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
 			if val, ok := params.IdempotencyKey.Get(); ok {
+				return e.EncodeValue(conv.StringToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "Pactline-Client-Kind",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.PactlineClientKind.Get(); ok {
+				return e.EncodeValue(conv.StringToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "Pactline-Client-Session-ID",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.PactlineClientSessionID.Get(); ok {
 				return e.EncodeValue(conv.StringToString(val))
 			}
 			return nil
@@ -10053,7 +10507,7 @@ func (c *Client) sendRequestTaskChanges(ctx context.Context, request *TaskStageC
 //
 // End the Claim and open one typed blocking Issue Thread.
 //
-// POST /api/v1/tasks/{number}/claims/{id}/request-resolution
+// POST /api/v1/claims/{claim_id}/request-resolution
 func (c *Client) RequestTaskResolution(ctx context.Context, request *TaskResolutionRequest, params RequestTaskResolutionParams) (RequestTaskResolutionRes, error) {
 	res, err := c.sendRequestTaskResolution(ctx, request, params)
 	return res, err
@@ -10072,7 +10526,7 @@ func (c *Client) sendRequestTaskResolution(ctx context.Context, request *TaskRes
 	otelAttrs := []attribute.KeyValue{
 		otelogen.OperationID("requestTaskResolution"),
 		semconv.HTTPRequestMethodKey.String("POST"),
-		semconv.URLTemplateKey.String("/api/v1/tasks/{number}/claims/{id}/request-resolution"),
+		semconv.URLTemplateKey.String("/api/v1/claims/{claim_id}/request-resolution"),
 	}
 	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
 
@@ -10105,17 +10559,17 @@ func (c *Client) sendRequestTaskResolution(ctx context.Context, request *TaskRes
 
 	stage = "BuildURL"
 	u := uri.Clone(c.requestURL(ctx))
-	var pathParts [5]string
-	pathParts[0] = "/api/v1/tasks/"
+	var pathParts [3]string
+	pathParts[0] = "/api/v1/claims/"
 	{
-		// Encode "number" parameter.
+		// Encode "claim_id" parameter.
 		e := uri.NewPathEncoder(uri.PathEncoderConfig{
-			Param:   "number",
+			Param:   "claim_id",
 			Style:   uri.PathStyleSimple,
 			Explode: false,
 		})
 		if err := func() error {
-			return e.EncodeValue(conv.Int64ToString(params.Number))
+			return e.EncodeValue(conv.UUIDToString(params.ClaimID))
 		}(); err != nil {
 			return res, errors.Wrap(err, "encode path")
 		}
@@ -10125,26 +10579,7 @@ func (c *Client) sendRequestTaskResolution(ctx context.Context, request *TaskRes
 		}
 		pathParts[1] = encoded
 	}
-	pathParts[2] = "/claims/"
-	{
-		// Encode "id" parameter.
-		e := uri.NewPathEncoder(uri.PathEncoderConfig{
-			Param:   "id",
-			Style:   uri.PathStyleSimple,
-			Explode: false,
-		})
-		if err := func() error {
-			return e.EncodeValue(conv.UUIDToString(params.ID))
-		}(); err != nil {
-			return res, errors.Wrap(err, "encode path")
-		}
-		encoded, err := e.Result()
-		if err != nil {
-			return res, errors.Wrap(err, "encode path")
-		}
-		pathParts[3] = encoded
-	}
-	pathParts[4] = "/request-resolution"
+	pathParts[2] = "/request-resolution"
 	uri.AddPathParts(u, pathParts[:]...)
 
 	stage = "EncodeRequest"
@@ -10176,6 +10611,34 @@ func (c *Client) sendRequestTaskResolution(ctx context.Context, request *TaskRes
 		}
 		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
 			if val, ok := params.IdempotencyKey.Get(); ok {
+				return e.EncodeValue(conv.StringToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "Pactline-Client-Kind",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.PactlineClientKind.Get(); ok {
+				return e.EncodeValue(conv.StringToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "Pactline-Client-Session-ID",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.PactlineClientSessionID.Get(); ok {
 				return e.EncodeValue(conv.StringToString(val))
 			}
 			return nil
@@ -10951,26 +11414,17 @@ func (c *Client) sendUnbindProjectRepository(ctx context.Context, params UnbindP
 //
 // Unlink a GitLab merge request during claimed execution.
 //
-// DELETE /api/v1/tasks/{number}/claims/{id}/merge-requests/{link_id}
-func (c *Client) UnlinkTaskMergeRequest(ctx context.Context, request *TaskMergeRequestUnlink, params UnlinkTaskMergeRequestParams) (UnlinkTaskMergeRequestRes, error) {
-	res, err := c.sendUnlinkTaskMergeRequest(ctx, request, params)
+// DELETE /api/v1/claims/{claim_id}/merge-requests/{link_id}
+func (c *Client) UnlinkTaskMergeRequest(ctx context.Context, params UnlinkTaskMergeRequestParams) (UnlinkTaskMergeRequestRes, error) {
+	res, err := c.sendUnlinkTaskMergeRequest(ctx, params)
 	return res, err
 }
 
-func (c *Client) sendUnlinkTaskMergeRequest(ctx context.Context, request *TaskMergeRequestUnlink, params UnlinkTaskMergeRequestParams) (res UnlinkTaskMergeRequestRes, err error) {
-	// Validate request before sending.
-	if err := func() error {
-		if err := request.Validate(); err != nil {
-			return err
-		}
-		return nil
-	}(); err != nil {
-		return res, errors.Wrap(err, "validate")
-	}
+func (c *Client) sendUnlinkTaskMergeRequest(ctx context.Context, params UnlinkTaskMergeRequestParams) (res UnlinkTaskMergeRequestRes, err error) {
 	otelAttrs := []attribute.KeyValue{
 		otelogen.OperationID("unlinkTaskMergeRequest"),
 		semconv.HTTPRequestMethodKey.String("DELETE"),
-		semconv.URLTemplateKey.String("/api/v1/tasks/{number}/claims/{id}/merge-requests/{link_id}"),
+		semconv.URLTemplateKey.String("/api/v1/claims/{claim_id}/merge-requests/{link_id}"),
 	}
 	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
 
@@ -11003,17 +11457,17 @@ func (c *Client) sendUnlinkTaskMergeRequest(ctx context.Context, request *TaskMe
 
 	stage = "BuildURL"
 	u := uri.Clone(c.requestURL(ctx))
-	var pathParts [6]string
-	pathParts[0] = "/api/v1/tasks/"
+	var pathParts [4]string
+	pathParts[0] = "/api/v1/claims/"
 	{
-		// Encode "number" parameter.
+		// Encode "claim_id" parameter.
 		e := uri.NewPathEncoder(uri.PathEncoderConfig{
-			Param:   "number",
+			Param:   "claim_id",
 			Style:   uri.PathStyleSimple,
 			Explode: false,
 		})
 		if err := func() error {
-			return e.EncodeValue(conv.Int64ToString(params.Number))
+			return e.EncodeValue(conv.UUIDToString(params.ClaimID))
 		}(); err != nil {
 			return res, errors.Wrap(err, "encode path")
 		}
@@ -11023,26 +11477,7 @@ func (c *Client) sendUnlinkTaskMergeRequest(ctx context.Context, request *TaskMe
 		}
 		pathParts[1] = encoded
 	}
-	pathParts[2] = "/claims/"
-	{
-		// Encode "id" parameter.
-		e := uri.NewPathEncoder(uri.PathEncoderConfig{
-			Param:   "id",
-			Style:   uri.PathStyleSimple,
-			Explode: false,
-		})
-		if err := func() error {
-			return e.EncodeValue(conv.UUIDToString(params.ID))
-		}(); err != nil {
-			return res, errors.Wrap(err, "encode path")
-		}
-		encoded, err := e.Result()
-		if err != nil {
-			return res, errors.Wrap(err, "encode path")
-		}
-		pathParts[3] = encoded
-	}
-	pathParts[4] = "/merge-requests/"
+	pathParts[2] = "/merge-requests/"
 	{
 		// Encode "link_id" parameter.
 		e := uri.NewPathEncoder(uri.PathEncoderConfig{
@@ -11059,7 +11494,7 @@ func (c *Client) sendUnlinkTaskMergeRequest(ctx context.Context, request *TaskMe
 		if err != nil {
 			return res, errors.Wrap(err, "encode path")
 		}
-		pathParts[5] = encoded
+		pathParts[3] = encoded
 	}
 	uri.AddPathParts(u, pathParts[:]...)
 
@@ -11067,9 +11502,6 @@ func (c *Client) sendUnlinkTaskMergeRequest(ctx context.Context, request *TaskMe
 	r, err := ht.NewRequest(ctx, "DELETE", u)
 	if err != nil {
 		return res, errors.Wrap(err, "create request")
-	}
-	if err := encodeUnlinkTaskMergeRequestRequest(request, r); err != nil {
-		return res, errors.Wrap(err, "encode request")
 	}
 
 	stage = "EncodeHeaderParams"
@@ -11092,6 +11524,34 @@ func (c *Client) sendUnlinkTaskMergeRequest(ctx context.Context, request *TaskMe
 		}
 		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
 			if val, ok := params.IdempotencyKey.Get(); ok {
+				return e.EncodeValue(conv.StringToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "Pactline-Client-Kind",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.PactlineClientKind.Get(); ok {
+				return e.EncodeValue(conv.StringToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "Pactline-Client-Session-ID",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.PactlineClientSessionID.Get(); ok {
 				return e.EncodeValue(conv.StringToString(val))
 			}
 			return nil

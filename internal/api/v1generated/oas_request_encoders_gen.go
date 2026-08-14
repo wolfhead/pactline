@@ -232,20 +232,6 @@ func encodeCreateTaskCriterionRequest(
 	return nil
 }
 
-func encodeCreateTaskStageClaimRequest(
-	req *TaskStageClaimCreate,
-	r *http.Request,
-) error {
-	const contentType = "application/json"
-	e := new(jx.Encoder)
-	{
-		req.Encode(e)
-	}
-	encoded := e.Bytes()
-	ht.SetBody(r, bytes.NewReader(encoded), contentType)
-	return nil
-}
-
 func encodeCreateTaskThreadMessageRequest(
 	req *TaskThreadMessageWrite,
 	r *http.Request,
@@ -282,6 +268,20 @@ func encodeDeleteCriterionRequest(
 
 func encodeLinkTaskMergeRequestRequest(
 	req *TaskMergeRequestLink,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
+func encodeRecordTaskClaimProgressRequest(
+	req *BodyWrite,
 	r *http.Request,
 ) error {
 	const contentType = "application/json"
@@ -380,20 +380,6 @@ func encodeRequestTaskResolutionRequest(
 
 func encodeResolveTaskIssueRequest(
 	req *TaskIssueResolve,
-	r *http.Request,
-) error {
-	const contentType = "application/json"
-	e := new(jx.Encoder)
-	{
-		req.Encode(e)
-	}
-	encoded := e.Bytes()
-	ht.SetBody(r, bytes.NewReader(encoded), contentType)
-	return nil
-}
-
-func encodeUnlinkTaskMergeRequestRequest(
-	req *TaskMergeRequestUnlink,
 	r *http.Request,
 ) error {
 	const contentType = "application/json"
