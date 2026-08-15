@@ -143,6 +143,14 @@ func (c TaskStageClaim) Validate() error {
 			c.Outcome,
 		)
 	}
+	if !stageAcceptsOutcome(c.Stage, c.Outcome) {
+		return fmt.Errorf(
+			"%w: %s Claim cannot have outcome %q",
+			ErrInvalidInput,
+			c.Stage,
+			c.Outcome,
+		)
+	}
 	return nil
 }
 
