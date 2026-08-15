@@ -206,7 +206,7 @@ func (p TaskPatch) IsEmpty() bool {
 	return p.Title == nil && p.Context == nil && p.ExpectedResult == nil &&
 		p.Description == nil && p.Status == nil && p.Priority == nil &&
 		p.ExecutionMode == nil &&
-		!p.AssigneeSet && !p.StartDateSet && !p.DueDateSet && !p.LabelsSet &&
+		!p.AssigneeSet && !p.DueDateSet && !p.LabelsSet &&
 		!p.ProjectSet && !p.MilestoneSet && !p.ParentSet && !p.DependenciesSet &&
 		p.ScheduleShiftDays == nil
 }
