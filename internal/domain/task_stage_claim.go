@@ -143,6 +143,14 @@ func (c TaskStageClaim) Validate() error {
 			c.Outcome,
 		)
 	}
+	if !stageAcceptsOutcome(c.Stage, c.Outcome) {
+		return fmt.Errorf(
+			"%w: %s Claim cannot have outcome %q",
+			ErrInvalidInput,
+			c.Stage,
+			c.Outcome,
+		)
+	}
 	return nil
 }
 
@@ -215,8 +223,7 @@ func stageAcceptsOutcome(stage TaskClaimStage, outcome TaskClaimOutcome) bool {
 		return true
 	}
 	if stage == TaskClaimStageExecution {
-		return outcome == TaskClaimOutcomeExecutionCompleted ||
-			outcome == TaskClaimOutcomeChangesRequested
+		return outcome == TaskClaimOutcomeExecutionCompleted
 	}
 	return stage == TaskClaimStageReview &&
 		(outcome == TaskClaimOutcomeTaskAccepted || outcome == TaskClaimOutcomeChangesRequested)

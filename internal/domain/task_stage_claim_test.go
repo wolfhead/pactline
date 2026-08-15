@@ -50,18 +50,58 @@ func TestTaskStageClaimOutcomeMustMatchStage(t *testing.T) {
 		return claim
 	}
 
-	execution := newClaim(domain.TaskClaimStageExecution)
-	require.ErrorIs(t, execution.Complete(domain.TaskClaimOutcomeTaskAccepted, now), domain.ErrConflict)
-	require.NoError(t, execution.Complete(domain.TaskClaimOutcomeExecutionCompleted, now))
-	require.Equal(t, domain.StageClaimStatusCompleted, execution.Status)
-	require.ErrorIs(t, execution.Complete(domain.TaskClaimOutcomeExecutionCompleted, now), domain.ErrConflict)
+	testCases := []struct {
+		stage        domain.TaskClaimStage
+		outcome      domain.TaskClaimOutcome
+		wantStatus   domain.StageClaimStatus
+		wantConflict bool
+	}{
+		{domain.TaskClaimStageExecution, domain.TaskClaimOutcomeExecutionCompleted, domain.StageClaimStatusCompleted, false},
+		{domain.TaskClaimStageExecution, domain.TaskClaimOutcomeTaskAccepted, domain.StageClaimStatusActive, true},
+		{domain.TaskClaimStageExecution, domain.TaskClaimOutcomeChangesRequested, domain.StageClaimStatusActive, true},
+		{domain.TaskClaimStageReview, domain.TaskClaimOutcomeExecutionCompleted, domain.StageClaimStatusActive, true},
+		{domain.TaskClaimStageReview, domain.TaskClaimOutcomeTaskAccepted, domain.StageClaimStatusCompleted, false},
+		{domain.TaskClaimStageReview, domain.TaskClaimOutcomeChangesRequested, domain.StageClaimStatusCompleted, false},
+	}
 
-	review := newClaim(domain.TaskClaimStageReview)
-	require.ErrorIs(t, review.Complete(domain.TaskClaimOutcomeExecutionCompleted, now), domain.ErrConflict)
-	require.NoError(t, review.Complete(domain.TaskClaimOutcomeChangesRequested, now))
-	require.Equal(t, domain.StageClaimStatusCompleted, review.Status)
+	sharedOutcomes := []struct {
+		outcome domain.TaskClaimOutcome
+		status  domain.StageClaimStatus
+	}{
+		{domain.TaskClaimOutcomeNeedsResolution, domain.StageClaimStatusReleased},
+		{domain.TaskClaimOutcomeVoluntarilyReleased, domain.StageClaimStatusReleased},
+		{domain.TaskClaimOutcomeDeadlineElapsed, domain.StageClaimStatusExpired},
+		{domain.TaskClaimOutcomeTaskCancelled, domain.StageClaimStatusCancelled},
+	}
+	for _, stage := range []domain.TaskClaimStage{domain.TaskClaimStageExecution, domain.TaskClaimStageReview} {
+		for _, shared := range sharedOutcomes {
+			testCases = append(testCases, struct {
+				stage        domain.TaskClaimStage
+				outcome      domain.TaskClaimOutcome
+				wantStatus   domain.StageClaimStatus
+				wantConflict bool
+			}{stage, shared.outcome, shared.status, false})
+		}
+	}
 
-	blocked := newClaim(domain.TaskClaimStageExecution)
-	require.NoError(t, blocked.Complete(domain.TaskClaimOutcomeNeedsResolution, now))
-	require.Equal(t, domain.StageClaimStatusReleased, blocked.Status)
+	for _, testCase := range testCases {
+		t.Run(string(testCase.stage)+"/"+string(testCase.outcome), func(t *testing.T) {
+			claim := newClaim(testCase.stage)
+			err := claim.Complete(testCase.outcome, now)
+			if testCase.wantConflict {
+				require.ErrorIs(t, err, domain.ErrConflict)
+				require.Equal(t, domain.StageClaimStatusActive, claim.Status)
+				require.Empty(t, claim.Outcome)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, testCase.wantStatus, claim.Status)
+			require.NoError(t, claim.Validate())
+		})
+	}
+
+	invalidPersistedClaim := newClaim(domain.TaskClaimStageReview)
+	require.NoError(t, invalidPersistedClaim.Complete(domain.TaskClaimOutcomeChangesRequested, now))
+	invalidPersistedClaim.Stage = domain.TaskClaimStageExecution
+	require.ErrorIs(t, invalidPersistedClaim.Validate(), domain.ErrInvalidInput)
 }
