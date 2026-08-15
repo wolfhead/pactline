@@ -91,3 +91,51 @@ func TestValidateSchedule(t *testing.T) {
 		})
 	}
 }
+
+func TestTaskPatchIsEmptyDistinguishesScheduleClearFromAbsence(t *testing.T) {
+	scheduled := time.Date(2026, 7, 30, 0, 0, 0, 0, time.UTC)
+
+	for _, test := range []struct {
+		name  string
+		patch domain.TaskPatch
+		empty bool
+	}{
+		{
+			name:  "absent schedule field leaves task unchanged",
+			patch: domain.TaskPatch{},
+			empty: true,
+		},
+		{
+			name: "explicit start date clear is a mutation",
+			patch: domain.TaskPatch{
+				StartDateSet: true,
+			},
+		},
+		{
+			name: "explicit start date set is a mutation",
+			patch: domain.TaskPatch{
+				StartDateSet: true,
+				StartDate:    &scheduled,
+			},
+		},
+		{
+			name: "explicit due date clear is a mutation",
+			patch: domain.TaskPatch{
+				DueDateSet: true,
+			},
+		},
+		{
+			name: "explicit due date set is a mutation",
+			patch: domain.TaskPatch{
+				DueDateSet: true,
+				DueDate:    &scheduled,
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := test.patch.IsEmpty(); got != test.empty {
+				t.Fatalf("IsEmpty() = %v, want %v", got, test.empty)
+			}
+		})
+	}
+}
