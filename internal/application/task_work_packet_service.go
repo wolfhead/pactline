@@ -110,10 +110,15 @@ func includeOriginalThreadItem(
 	items []domain.ThreadItem,
 	original domain.ThreadItem,
 ) []domain.ThreadItem {
+	if len(items) > 0 && items[0].ID == original.ID {
+		return items
+	}
+	ordered := make([]domain.ThreadItem, 0, len(items)+1)
+	ordered = append(ordered, original)
 	for index := range items {
-		if items[index].ID == original.ID {
-			return items
+		if items[index].ID != original.ID {
+			ordered = append(ordered, items[index])
 		}
 	}
-	return append(items, original)
+	return ordered
 }
