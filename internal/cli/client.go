@@ -14,6 +14,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const maxResponseBodyBytes = 8 * 1024 * 1024
+
 type APIError struct {
 	Status    int    `json:"status,omitempty"`
 	Code      string `json:"code"`
@@ -101,13 +103,20 @@ func (c *client) request(
 		}
 	}
 	defer response.Body.Close()
-	responseBody, err := io.ReadAll(io.LimitReader(response.Body, 8*1024*1024))
+	responseBody, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBodyBytes+1))
 	if err != nil {
 		return nil, response.Header, fmt.Errorf("read response: %w", err)
 	}
 	c.verbose("response status=%d duration=%s request_id=%s etag=%s",
 		response.StatusCode, time.Since(started).Round(time.Millisecond),
 		response.Header.Get("X-Request-ID"), response.Header.Get("ETag"))
+	if len(responseBody) > maxResponseBodyBytes {
+		return nil, response.Header, &APIError{
+			Status: response.StatusCode, Code: "RESPONSE_TOO_LARGE",
+			Message:   "Response exceeds the configured byte limit.",
+			RequestID: response.Header.Get("X-Request-ID"), Key: idempotencyKey,
+		}
+	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		problem := struct {
 			Code      string `json:"code"`
@@ -115,7 +124,10 @@ func (c *client) request(
 			Title     string `json:"title"`
 			RequestID string `json:"request_id"`
 		}{Code: "HTTP_ERROR", Detail: response.Status}
-		_ = json.Unmarshal(responseBody, &problem)
+		decodedProblem := problem
+		if err := json.Unmarshal(responseBody, &decodedProblem); err == nil {
+			problem = decodedProblem
+		}
 		message := problem.Detail
 		if message == "" {
 			message = problem.Title
