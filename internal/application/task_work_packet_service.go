@@ -115,5 +115,7 @@ func includeOriginalThreadItem(
 			return items
 		}
 	}
-	return append(items, original)
+	// The original resolution request must precede the recent window, so
+	// prepend it instead of appending it.
+	return append([]domain.ThreadItem{original}, items...)
 }

@@ -23,3 +23,15 @@ func TestCompactIssueContextAlwaysIncludesOriginalResolutionRequest(t *testing.T
 	alreadyIncluded := includeOriginalThreadItem(withRequest, request)
 	require.Equal(t, withRequest, alreadyIncluded)
 }
+
+func TestIncludeOriginalThreadItemLimitOnePrecedesRecent(t *testing.T) {
+	request := domain.ThreadItem{ID: uuid.New(), Kind: domain.ThreadItemKindResolutionRequest}
+	recent := []domain.ThreadItem{
+		{ID: uuid.New(), Kind: domain.ThreadItemKindMessage},
+	}
+
+	withRequest := includeOriginalThreadItem(recent, request)
+	require.Len(t, withRequest, 2)
+	require.Equal(t, request.ID, withRequest[0].ID)
+	require.Equal(t, recent[0].ID, withRequest[1].ID)
+}
