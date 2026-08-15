@@ -14,6 +14,29 @@ import (
 	"github.com/google/uuid"
 )
 
+// maxResponseBodySize is the largest response body the CLI reads. A response
+// one byte over the limit is rejected as an oversized response instead of
+// being truncated into partial JSON.
+const maxResponseBodySize = 8 << 20
+
+// problemDetails carries the RFC 9457 fields the CLI surfaces from a
+// well-formed error response.
+type problemDetails struct {
+	Code      string `json:"code"`
+	Detail    string `json:"detail"`
+	Title     string `json:"title"`
+	RequestID string `json:"request_id"`
+}
+
+// redactSecret removes the client Token from diagnostic text so a hostile or
+// misconfigured server cannot bounce credentials back into error output.
+func redactSecret(value, secret string) string {
+	if secret == "" {
+		return value
+	}
+	return strings.ReplaceAll(value, secret, "[redacted]")
+}
+
 type APIError struct {
 	Status    int    `json:"status,omitempty"`
 	Code      string `json:"code"`
@@ -101,21 +124,36 @@ func (c *client) request(
 		}
 	}
 	defer response.Body.Close()
-	responseBody, err := io.ReadAll(io.LimitReader(response.Body, 8*1024*1024))
+	responseBody, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBodySize+1))
 	if err != nil {
 		return nil, response.Header, fmt.Errorf("read response: %w", err)
 	}
+	// Header values are server-controlled and may reflect the client Token
+	// back, so redact them before they reach diagnostics.
 	c.verbose("response status=%d duration=%s request_id=%s etag=%s",
 		response.StatusCode, time.Since(started).Round(time.Millisecond),
-		response.Header.Get("X-Request-ID"), response.Header.Get("ETag"))
+		redactSecret(response.Header.Get("X-Request-ID"), c.token),
+		redactSecret(response.Header.Get("ETag"), c.token))
+	if len(responseBody) > maxResponseBodySize {
+		c.verbose("response rejected status=%d code=RESPONSE_TOO_LARGE limit=%d",
+			response.StatusCode, maxResponseBodySize)
+		return nil, response.Header, &APIError{
+			Status:    response.StatusCode,
+			Code:      "RESPONSE_TOO_LARGE",
+			Message:   fmt.Sprintf("The response exceeds the configured %d byte limit.", maxResponseBodySize),
+			Hint:      "Refine the request to return less data.",
+			RequestID: redactSecret(response.Header.Get("X-Request-ID"), c.token),
+			Key:       idempotencyKey,
+		}
+	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		problem := struct {
-			Code      string `json:"code"`
-			Detail    string `json:"detail"`
-			Title     string `json:"title"`
-			RequestID string `json:"request_id"`
-		}{Code: "HTTP_ERROR", Detail: response.Status}
-		_ = json.Unmarshal(responseBody, &problem)
+		problem := problemDetails{Code: "HTTP_ERROR", Detail: response.Status}
+		if err := json.Unmarshal(responseBody, &problem); err != nil {
+			// Never use a malformed body for diagnostics: a partial parse
+			// could otherwise leak body content or credentials into the
+			// error message. Fall back to the HTTP status instead.
+			problem = problemDetails{Code: "HTTP_ERROR", Detail: response.Status}
+		}
 		message := problem.Detail
 		if message == "" {
 			message = problem.Title
@@ -128,8 +166,11 @@ func (c *client) request(
 			requestID = response.Header.Get("X-Request-ID")
 		}
 		return nil, response.Header, &APIError{
-			Status: response.StatusCode, Code: problem.Code, Message: message,
-			RequestID: requestID, Key: idempotencyKey,
+			Status:    response.StatusCode,
+			Code:      redactSecret(problem.Code, c.token),
+			Message:   redactSecret(message, c.token),
+			RequestID: redactSecret(requestID, c.token),
+			Key:       idempotencyKey,
 		}
 	}
 	c.lastMeta = responseMeta{
