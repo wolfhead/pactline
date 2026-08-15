@@ -215,7 +215,8 @@ func stageAcceptsOutcome(stage TaskClaimStage, outcome TaskClaimOutcome) bool {
 		return true
 	}
 	if stage == TaskClaimStageExecution {
-		return outcome == TaskClaimOutcomeExecutionCompleted
+		return outcome == TaskClaimOutcomeExecutionCompleted ||
+			outcome == TaskClaimOutcomeChangesRequested
 	}
 	return stage == TaskClaimStageReview &&
 		(outcome == TaskClaimOutcomeTaskAccepted || outcome == TaskClaimOutcomeChangesRequested)
