@@ -14,6 +14,11 @@ import (
 	"github.com/google/uuid"
 )
 
+// maxResponseBodyBytes bounds how much of a single CLI response is read and
+// parsed. A response larger than this limit is rejected after the first
+// response; it is never retried automatically.
+const maxResponseBodyBytes = 8 * 1024 * 1024
+
 type APIError struct {
 	Status    int    `json:"status,omitempty"`
 	Code      string `json:"code"`
@@ -101,9 +106,19 @@ func (c *client) request(
 		}
 	}
 	defer response.Body.Close()
-	responseBody, err := io.ReadAll(io.LimitReader(response.Body, 8*1024*1024))
+	responseBody, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBodyBytes+1))
 	if err != nil {
 		return nil, response.Header, fmt.Errorf("read response: %w", err)
+	}
+	if len(responseBody) > maxResponseBodyBytes {
+		return nil, response.Header, &APIError{
+			Status:    response.StatusCode,
+			Code:      "RESPONSE_TOO_LARGE",
+			Message:   fmt.Sprintf("response exceeds the %d MiB client limit", maxResponseBodyBytes/(1024*1024)),
+			Hint:      "Repeat the command against a narrower endpoint or with reduced context.",
+			RequestID: response.Header.Get("X-Request-ID"),
+			Key:       idempotencyKey,
+		}
 	}
 	c.verbose("response status=%d duration=%s request_id=%s etag=%s",
 		response.StatusCode, time.Since(started).Round(time.Millisecond),
