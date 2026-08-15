@@ -65,3 +65,44 @@ func TestTaskStageClaimOutcomeMustMatchStage(t *testing.T) {
 	require.NoError(t, blocked.Complete(domain.TaskClaimOutcomeNeedsResolution, now))
 	require.Equal(t, domain.StageClaimStatusReleased, blocked.Status)
 }
+
+func TestTaskStageClaimNonSuccessOutcomesAllowedForBothStages(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 13, 5, 0, 0, 0, time.UTC)
+	userID := uuid.New()
+	newClaim := func(stage domain.TaskClaimStage) domain.TaskStageClaim {
+		claim, err := domain.NewTaskStageClaim(
+			uuid.New(), 42, stage,
+			domain.Actor{Type: domain.ActorTypeUser, UserID: &userID},
+			domain.SessionOperation(userID, "claim"), "browser", uuid.NewString(), now,
+		)
+		require.NoError(t, err)
+		return claim
+	}
+
+	cases := []struct {
+		name    string
+		stage   domain.TaskClaimStage
+		outcome domain.TaskClaimOutcome
+		status  domain.StageClaimStatus
+	}{
+		{"execution needs resolution", domain.TaskClaimStageExecution, domain.TaskClaimOutcomeNeedsResolution, domain.StageClaimStatusReleased},
+		{"execution voluntarily released", domain.TaskClaimStageExecution, domain.TaskClaimOutcomeVoluntarilyReleased, domain.StageClaimStatusReleased},
+		{"execution deadline elapsed", domain.TaskClaimStageExecution, domain.TaskClaimOutcomeDeadlineElapsed, domain.StageClaimStatusExpired},
+		{"execution task cancelled", domain.TaskClaimStageExecution, domain.TaskClaimOutcomeTaskCancelled, domain.StageClaimStatusCancelled},
+		{"review needs resolution", domain.TaskClaimStageReview, domain.TaskClaimOutcomeNeedsResolution, domain.StageClaimStatusReleased},
+		{"review voluntarily released", domain.TaskClaimStageReview, domain.TaskClaimOutcomeVoluntarilyReleased, domain.StageClaimStatusReleased},
+		{"review deadline elapsed", domain.TaskClaimStageReview, domain.TaskClaimOutcomeDeadlineElapsed, domain.StageClaimStatusExpired},
+		{"review task cancelled", domain.TaskClaimStageReview, domain.TaskClaimOutcomeTaskCancelled, domain.StageClaimStatusCancelled},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			claim := newClaim(tc.stage)
+			require.NoError(t, claim.Complete(tc.outcome, now))
+			require.Equal(t, tc.status, claim.Status)
+			require.Equal(t, tc.outcome, claim.Outcome)
+			require.NoError(t, claim.Validate())
+		})
+	}
+}
