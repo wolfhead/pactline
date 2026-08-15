@@ -65,6 +65,7 @@ func TestTaskReadinessAcceptanceGateIgnoresCompletionRelationships(t *testing.T)
 func TestValidateSchedule(t *testing.T) {
 	start := time.Date(2026, 7, 30, 0, 0, 0, 0, time.UTC)
 	before := start.AddDate(0, 0, -1)
+	justBefore := start.Add(-time.Nanosecond)
 	after := start.AddDate(0, 0, 1)
 
 	for _, test := range []struct {
@@ -78,6 +79,7 @@ func TestValidateSchedule(t *testing.T) {
 		{name: "start only", start: &start, valid: true},
 		{name: "same day", start: &start, due: &start, valid: true},
 		{name: "ordered range", start: &start, due: &after, valid: true},
+		{name: "reversed instant", start: &start, due: &justBefore},
 		{name: "reversed range", start: &start, due: &before},
 	} {
 		t.Run(test.name, func(t *testing.T) {
