@@ -124,7 +124,10 @@ func (c *client) request(
 			Title     string `json:"title"`
 			RequestID string `json:"request_id"`
 		}{Code: "HTTP_ERROR", Detail: response.Status}
-		_ = json.Unmarshal(responseBody, &problem)
+		decodedProblem := problem
+		if err := json.Unmarshal(responseBody, &decodedProblem); err == nil {
+			problem = decodedProblem
+		}
 		message := problem.Detail
 		if message == "" {
 			message = problem.Title

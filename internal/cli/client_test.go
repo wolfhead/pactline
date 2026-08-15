@@ -56,6 +56,11 @@ func TestClientResponseErrorsDoNotExposeCredentialsOrBodies(t *testing.T) {
 			body:         "malformed sensitive response body " + token,
 			expectedCode: "HTTP_ERROR",
 		},
+		{
+			name:         "schema_malformed_error_response",
+			body:         `{"code":"` + token + `","detail":"sensitive response body","title":false}`,
+			expectedCode: "HTTP_ERROR",
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			response, _, err := testClient(t, token, http.StatusBadGateway, testCase.body).request(
