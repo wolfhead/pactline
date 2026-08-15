@@ -171,11 +171,55 @@ func TestRequestRedactsTokenFromWellFormedErrorDetails(t *testing.T) {
 	require.Contains(t, err.Error(), "credential [redacted] was rejected")
 }
 
+func TestRequestRedactsTokenReflectedInResponseHeaders(t *testing.T) {
+	const marker = "BODY-CONTENT-MARKER-"
+	for _, testCase := range []struct {
+		name    string
+		status  int
+		body    []byte
+		wantErr string
+	}{
+		{name: "oversized_success", status: http.StatusOK, body: oversizedBody(marker), wantErr: "RESPONSE_TOO_LARGE"},
+		{name: "malformed_error", status: http.StatusBadGateway, body: []byte("not-json " + testToken + " " + marker), wantErr: "HTTP_ERROR"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			var verboseLog bytes.Buffer
+			c := newTestClient(t, func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("X-Request-ID", "reflected-"+testToken)
+				w.Header().Set("ETag", `"`+testToken+`-etag"`)
+				w.WriteHeader(testCase.status)
+				_, _ = w.Write(testCase.body)
+			})
+			c.verbose = func(format string, values ...any) {
+				fmt.Fprintf(&verboseLog, format+"\n", values...)
+			}
+
+			raw, _, err := c.request(context.Background(), http.MethodGet, "/api/v1/tasks/142", nil, 0, "", false)
+
+			require.Error(t, err)
+			require.Nil(t, raw)
+			var apiErr *APIError
+			require.ErrorAs(t, err, &apiErr)
+			require.Equal(t, testCase.wantErr, apiErr.Code)
+			require.NotContains(t, err.Error(), testToken)
+			require.NotContains(t, err.Error(), marker)
+			require.NotContains(t, apiErr.RequestID, testToken)
+			require.Contains(t, apiErr.RequestID, "reflected-[redacted]")
+			require.NotContains(t, verboseLog.String(), testToken)
+			require.NotContains(t, verboseLog.String(), marker)
+			require.Contains(t, verboseLog.String(), "[redacted]")
+		})
+	}
+}
+
 func TestCLIReportsOversizedResponseWithoutLeakingBodyOrToken(t *testing.T) {
 	const marker = "BODY-CONTENT-MARKER-"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		body := []byte(`{"detail":"credential ` + testToken + ` ` + marker + `"} `)
 		body = append(body, bytes.Repeat([]byte(" "), maxResponseBodySize+1-len(body))...)
+		w.Header().Set("X-Request-ID", "reflected-"+testToken)
+		w.Header().Set("ETag", `"`+testToken+`-etag"`)
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write(body)
 	}))
@@ -191,6 +235,7 @@ func TestCLIReportsOversizedResponseWithoutLeakingBodyOrToken(t *testing.T) {
 	require.Contains(t, stderr.String(), "Error [RESPONSE_TOO_LARGE]")
 	require.Contains(t, stderr.String(), "byte limit")
 	require.Contains(t, stderr.String(), "[verbose] response rejected")
+	require.Contains(t, stderr.String(), "reflected-[redacted]")
 	require.NotContains(t, stdout.String()+stderr.String(), testToken)
 	require.NotContains(t, stdout.String()+stderr.String(), marker)
 }

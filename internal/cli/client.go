@@ -128,9 +128,12 @@ func (c *client) request(
 	if err != nil {
 		return nil, response.Header, fmt.Errorf("read response: %w", err)
 	}
+	// Header values are server-controlled and may reflect the client Token
+	// back, so redact them before they reach diagnostics.
 	c.verbose("response status=%d duration=%s request_id=%s etag=%s",
 		response.StatusCode, time.Since(started).Round(time.Millisecond),
-		response.Header.Get("X-Request-ID"), response.Header.Get("ETag"))
+		redactSecret(response.Header.Get("X-Request-ID"), c.token),
+		redactSecret(response.Header.Get("ETag"), c.token))
 	if len(responseBody) > maxResponseBodySize {
 		c.verbose("response rejected status=%d code=RESPONSE_TOO_LARGE limit=%d",
 			response.StatusCode, maxResponseBodySize)
@@ -139,7 +142,7 @@ func (c *client) request(
 			Code:      "RESPONSE_TOO_LARGE",
 			Message:   fmt.Sprintf("The response exceeds the configured %d byte limit.", maxResponseBodySize),
 			Hint:      "Refine the request to return less data.",
-			RequestID: response.Header.Get("X-Request-ID"),
+			RequestID: redactSecret(response.Header.Get("X-Request-ID"), c.token),
 			Key:       idempotencyKey,
 		}
 	}
