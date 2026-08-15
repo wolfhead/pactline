@@ -4,15 +4,26 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// MaxResponseBytes is the largest response body the CLI will read. A response
+// that exceeds it is rejected with ErrResponseTooLarge instead of being
+// silently truncated and misreported as malformed JSON downstream.
+const MaxResponseBytes = 8 * 1024 * 1024
+
+// ErrResponseTooLarge reports that a server response exceeded MaxResponseBytes.
+// The CLI discards the partial body and never returns or echoes it.
+var ErrResponseTooLarge = errors.New("response body exceeds the supported size limit")
 
 type APIError struct {
 	Status    int    `json:"status,omitempty"`
@@ -21,9 +32,15 @@ type APIError struct {
 	Hint      string `json:"hint,omitempty"`
 	RequestID string `json:"request_id,omitempty"`
 	Key       string `json:"idempotency_key,omitempty"`
+
+	wrapped error
 }
 
 func (e *APIError) Error() string { return e.Message }
+
+// Unwrap exposes the wrapped sentinel so callers can match expected outcomes
+// with errors.Is while diagnostics keep the stable APIError shape.
+func (e *APIError) Unwrap() error { return e.wrapped }
 
 type client struct {
 	server, token, clientKind, sessionID string
@@ -95,15 +112,29 @@ func (c *client) request(
 	response, err := c.httpClient.Do(request)
 	if err != nil {
 		return nil, nil, &APIError{
-			Code: "NETWORK_ERROR", Message: "The request outcome is unknown: " + err.Error(),
+			Code: "NETWORK_ERROR", Message: "The request outcome is unknown: " + sanitizeDiagnostic(err.Error(), c.token),
 			Hint: "Inspect current state or repeat the exact command with the same idempotency key.",
 			Key:  idempotencyKey,
 		}
 	}
 	defer response.Body.Close()
-	responseBody, err := io.ReadAll(io.LimitReader(response.Body, 8*1024*1024))
+	responseBody, err := io.ReadAll(io.LimitReader(response.Body, MaxResponseBytes+1))
 	if err != nil {
 		return nil, response.Header, fmt.Errorf("read response: %w", err)
+	}
+	if len(responseBody) > MaxResponseBytes {
+		c.verbose("response status=%d duration=%s request_id=%s etag=%s",
+			response.StatusCode, time.Since(started).Round(time.Millisecond),
+			response.Header.Get("X-Request-ID"), response.Header.Get("ETag"))
+		return nil, response.Header, &APIError{
+			Status:    response.StatusCode,
+			Code:      "RESPONSE_TOO_LARGE",
+			Message:   fmt.Sprintf("response body exceeds the %d-byte limit", MaxResponseBytes),
+			Hint:      "Narrow the query or repeat the paged endpoint; the CLI never processes partial responses.",
+			RequestID: response.Header.Get("X-Request-ID"),
+			Key:       idempotencyKey,
+			wrapped:   ErrResponseTooLarge,
+		}
 	}
 	c.verbose("response status=%d duration=%s request_id=%s etag=%s",
 		response.StatusCode, time.Since(started).Round(time.Millisecond),
@@ -115,7 +146,14 @@ func (c *client) request(
 			Title     string `json:"title"`
 			RequestID string `json:"request_id"`
 		}{Code: "HTTP_ERROR", Detail: response.Status}
-		_ = json.Unmarshal(responseBody, &problem)
+		if err := json.Unmarshal(responseBody, &problem); err != nil {
+			// A malformed error body must not leak partial body content
+			// into diagnostics; fall back to the HTTP status line.
+			problem.Code = "HTTP_ERROR"
+			problem.Detail = response.Status
+			problem.Title = ""
+			problem.RequestID = ""
+		}
 		message := problem.Detail
 		if message == "" {
 			message = problem.Title
@@ -137,4 +175,15 @@ func (c *client) request(
 		IdempotencyKey: idempotencyKey,
 	}
 	return json.RawMessage(responseBody), response.Header, nil
+}
+
+var urlUserinfoPattern = regexp.MustCompile(`(https?://)[^/@\s]+@`)
+
+// sanitizeDiagnostic removes credentials from boundary error text so that
+// authorization tokens and URL userinfo never reach logs or users.
+func sanitizeDiagnostic(message, token string) string {
+	if token != "" {
+		message = strings.ReplaceAll(message, token, "[REDACTED]")
+	}
+	return urlUserinfoPattern.ReplaceAllString(message, "$1")
 }
