@@ -11,15 +11,22 @@ import (
 
 func TestCompactIssueContextAlwaysIncludesOriginalResolutionRequest(t *testing.T) {
 	request := domain.ThreadItem{ID: uuid.New(), Kind: domain.ThreadItemKindResolutionRequest}
-	recent := []domain.ThreadItem{
-		{ID: uuid.New(), Kind: domain.ThreadItemKindMessage},
-		{ID: uuid.New(), Kind: domain.ThreadItemKindMessage},
+	firstRecent := domain.ThreadItem{ID: uuid.New(), Kind: domain.ThreadItemKindMessage}
+	secondRecent := domain.ThreadItem{ID: uuid.New(), Kind: domain.ThreadItemKindMessage}
+	recentWithoutRequest := []domain.ThreadItem{
+		firstRecent,
+		secondRecent,
 	}
 
-	withRequest := includeOriginalThreadItem(recent, request)
-	require.Len(t, withRequest, 3)
-	require.Equal(t, request.ID, withRequest[0].ID)
+	withRequest := includeOriginalThreadItem(recentWithoutRequest, request)
+	require.Equal(t, []domain.ThreadItem{request, firstRecent, secondRecent}, withRequest)
 
 	alreadyIncluded := includeOriginalThreadItem(withRequest, request)
 	require.Equal(t, withRequest, alreadyIncluded)
+
+	requestOutOfOrder := includeOriginalThreadItem(
+		[]domain.ThreadItem{firstRecent, request, secondRecent},
+		request,
+	)
+	require.Equal(t, []domain.ThreadItem{request, firstRecent, secondRecent}, requestOutOfOrder)
 }
