@@ -115,5 +115,5 @@ func includeOriginalThreadItem(
 			return items
 		}
 	}
-	return append([]domain.ThreadItem{original}, items...)
+	return append(items, original)
 }
