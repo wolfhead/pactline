@@ -158,7 +158,8 @@ func ValidateSchedule(startDate, dueDate *time.Time) error {
 
 // TaskPatch is a partial update to a Task. Every field is optional; the
 // *Set booleans distinguish "not provided, leave unchanged" from "provided
-// as null, clear the value" for the nullable fields (AssigneeID, DueDate),
+// as null, clear the value" for nullable fields such as AssigneeID, StartDate,
+// and DueDate,
 // which a plain pointer cannot: encoding/json sets a *T field to nil for
 // both a missing key and an explicit JSON null. Title, Description, and
 // Priority are never null-valued, so a plain pointer (nil = not provided) is
@@ -206,7 +207,7 @@ func (p TaskPatch) IsEmpty() bool {
 	return p.Title == nil && p.Context == nil && p.ExpectedResult == nil &&
 		p.Description == nil && p.Status == nil && p.Priority == nil &&
 		p.ExecutionMode == nil &&
-		!p.AssigneeSet && !p.DueDateSet && !p.LabelsSet &&
+		!p.AssigneeSet && !p.StartDateSet && !p.DueDateSet && !p.LabelsSet &&
 		!p.ProjectSet && !p.MilestoneSet && !p.ParentSet && !p.DependenciesSet &&
 		p.ScheduleShiftDays == nil
 }

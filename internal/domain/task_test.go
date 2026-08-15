@@ -91,3 +91,21 @@ func TestValidateSchedule(t *testing.T) {
 		})
 	}
 }
+
+func TestTaskPatchIsEmptyPreservesNullableSchedulePresence(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		patch domain.TaskPatch
+		empty bool
+	}{
+		{name: "schedule fields absent", patch: domain.TaskPatch{}, empty: true},
+		{name: "start date explicitly cleared", patch: domain.TaskPatch{StartDateSet: true}},
+		{name: "due date explicitly cleared", patch: domain.TaskPatch{DueDateSet: true}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := test.patch.IsEmpty(); got != test.empty {
+				t.Fatalf("TaskPatch.IsEmpty() = %t, want %t", got, test.empty)
+			}
+		})
+	}
+}
