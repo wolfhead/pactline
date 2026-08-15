@@ -158,11 +158,11 @@ func ValidateSchedule(startDate, dueDate *time.Time) error {
 
 // TaskPatch is a partial update to a Task. Every field is optional; the
 // *Set booleans distinguish "not provided, leave unchanged" from "provided
-// as null, clear the value" for the nullable fields (AssigneeID, DueDate),
-// which a plain pointer cannot: encoding/json sets a *T field to nil for
-// both a missing key and an explicit JSON null. Title, Description, and
-// Priority are never null-valued, so a plain pointer (nil = not provided) is
-// enough for them. Status and ExecutionMode remain internal compatibility
+// as null, clear the value" for the nullable fields (AssigneeID, StartDate,
+// DueDate), which a plain pointer cannot: encoding/json sets a *T field to
+// nil for both a missing key and an explicit JSON null. Title, Description,
+// and Priority are never null-valued, so a plain pointer (nil = not provided)
+// is enough for them. Status and ExecutionMode remain internal compatibility
 // inputs until the contract migration; /api/v1 does not expose them.
 type TaskPatch struct {
 	Title          *string
@@ -206,7 +206,7 @@ func (p TaskPatch) IsEmpty() bool {
 	return p.Title == nil && p.Context == nil && p.ExpectedResult == nil &&
 		p.Description == nil && p.Status == nil && p.Priority == nil &&
 		p.ExecutionMode == nil &&
-		!p.AssigneeSet && !p.DueDateSet && !p.LabelsSet &&
+		!p.AssigneeSet && !p.StartDateSet && !p.DueDateSet && !p.LabelsSet &&
 		!p.ProjectSet && !p.MilestoneSet && !p.ParentSet && !p.DependenciesSet &&
 		p.ScheduleShiftDays == nil
 }
