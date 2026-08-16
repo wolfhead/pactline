@@ -1,0 +1,40 @@
+version: 1
+
+service:
+  pactline:
+    server: http://localhost:8080
+    tokenEnv: PACTLINE_TOKEN
+    executable: /absolute/path/to/pactline
+  stateDirectory: /absolute/path/to/pactline-fleet-state
+  pollInterval: 10s
+  maxConcurrentRuns: 1
+  shutdownDeadline: 30s
+  http:
+    address: 127.0.0.1
+    port: 7331
+
+fleets:
+  pactline-development:
+    project: 5
+    enabled: true
+    maxConcurrentRuns: 1
+    workspaceRoot: /absolute/path/to/pactline-fleet-work/project-5
+    routing:
+      execution:
+        adapter: codex
+        model: gpt-5.6-sol
+        reasoning: high
+      review:
+        adapter: codex
+        model: gpt-5.6-sol
+        reasoning: high
+      correction:
+        adapter: codex
+        model: gpt-5.6-sol
+        reasoning: high
+      resolutionAnalysis:
+        adapter: codex
+        model: gpt-5.6-sol
+        reasoning: high
+    credentials:
+      git: pactline-development-git

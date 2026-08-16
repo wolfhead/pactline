@@ -1,0 +1,32 @@
+{
+  "name": "@pactline/fleet-deepseek-runtime",
+  "version": "0.0.0-development",
+  "private": true,
+  "type": "module",
+  "description": "Adapter-owned DeepSeek Harness runtime closure for Pactline Fleet",
+  "license": "MIT",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-agent-spine-demo": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-bash-sandbox": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-fs-observation-policy": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-fs-sandbox": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-llm-deepseek": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-sandbox-local": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-sandbox-policy": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-sdk-jsonrpc-demo": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-sdk-jsonrpc-server": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-session-checkpoint-policy": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-session-persistence-jsonl": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-subprocess-local": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-token-meter": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-tool-fs": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-tools": "0.1.0-rc.6"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis-plugin-include": "1.0.6",
+    "@deepseek-ai/dsh-llm-replay": "0.1.0-rc.6"
+  }
+}

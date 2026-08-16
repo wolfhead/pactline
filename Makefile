@@ -51,6 +51,54 @@ pactline-cli:
 		-ldflags="-X github.com/wolfhead/pactline/internal/cli.Version=0.1.0-dev" \
 		-o bin/pactline ./cmd/pactline
 
+pactline-fleet-install:
+	npm --prefix fleet ci
+
+pactline-fleet-deepseek-install:
+	npm --prefix fleet/runtime/deepseek ci
+
+pactline-fleet-codex-install:
+	npm --prefix fleet/runtime/codex ci --ignore-scripts
+
+pactline-fleet-codex-test:
+	npm --prefix fleet ci
+	npm --prefix fleet run codex:test
+	npm --prefix fleet run build
+	node fleet/lib/bin.js codex-doctor --json
+
+pactline-fleet-codex-l1:
+	npm --prefix fleet ci
+	npm --prefix fleet/runtime/codex ci --ignore-scripts
+	npm --prefix fleet run codex:l1
+
+pactline-fleet-deepseek-test:
+	npm --prefix fleet ci
+	npm --prefix fleet run deepseek:test
+	npm --prefix fleet run build
+	node fleet/lib/bin.js deepseek-doctor --json
+
+pactline-fleet-deepseek-l1:
+	npm --prefix fleet ci
+	npm --prefix fleet/runtime/deepseek ci
+	npm --prefix fleet run deepseek:l1
+
+pactline-fleet-check:
+	npm --prefix fleet ci
+	npm --prefix fleet run baseline:verify
+	npm --prefix fleet run typecheck
+	npm --prefix fleet test
+	npm --prefix fleet run build
+	node fleet/scripts/m5-1-smoke.mjs
+
+pactline-fleet-doctor: pactline-cli
+	npm --prefix fleet ci
+	npm --prefix fleet run build
+	node fleet/lib/bin.js doctor --json --pactline "$(CURDIR)/bin/pactline"
+
+pactline-fleet-local-integration: stack-up pactline-cli
+	npm --prefix fleet ci
+	PACTLINE_FLEET_PACTLINE_BIN="$(CURDIR)/bin/pactline" npm --prefix fleet run local:integration
+
 pactline-release:
 	sh scripts/build-pactline-release.sh
 
@@ -67,4 +115,4 @@ agent-api-e2e:
 agent-eval:
 	go run ./cmd/agent-eval --scenario all --judge=true --format markdown
 
-.PHONY: up down test run web-install web-dev web-test web-build stack-up stack-down stack-logs openapi-generate openapi-check pactline-cli pactline-release e2e agent-api-e2e agent-eval
+.PHONY: up down test run web-install web-dev web-test web-build stack-up stack-down stack-logs openapi-generate openapi-check pactline-cli pactline-fleet-install pactline-fleet-deepseek-install pactline-fleet-deepseek-test pactline-fleet-deepseek-l1 pactline-fleet-codex-install pactline-fleet-codex-test pactline-fleet-codex-l1 pactline-fleet-check pactline-fleet-doctor pactline-fleet-local-integration pactline-release e2e agent-api-e2e agent-eval

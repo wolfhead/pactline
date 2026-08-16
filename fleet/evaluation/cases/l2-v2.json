@@ -1,0 +1,157 @@
+{
+  "schemaVersion": 1,
+  "projectName": "Pactline Fleet L2 v2 Evaluation",
+  "repository": {
+    "url": "https://github.com/wolfhead/pactline",
+    "baseRef": "refs/heads/main",
+    "baseRevision": "abc3599c863fbc2041e0cd463776d3d8ca8c7fb1",
+    "branchPrefix": "fleet-eval/l2-v2/"
+  },
+  "cases": [
+    {
+      "caseId": "L2V2-01",
+      "baselineCaseId": "L2-01",
+      "title": "[L2V2-01] Preserve nullable schedule PATCH semantics",
+      "description": "Corpus case L2V2-01. Base and branch identity are coordinator-owned evaluation metadata.",
+      "seedRef": "refs/heads/fleet-eval/l2-v1/base/l2-01",
+      "baseRevision": "b424af842bcbd1d4aba33cf16db1e9aa09e6af57",
+      "allowedPaths": ["internal/domain/task.go", "internal/domain/task_test.go"],
+      "verificationCommands": ["go test ./internal/domain"],
+      "expectedPath": "direct_accept",
+      "hiddenProfile": "nullable_schedule_patch",
+      "criteria": [
+        {
+          "criterion": "Explicitly clearing either nullable schedule endpoint is treated as a mutation, while an absent field leaves the Task unchanged.",
+          "verificationInstructions": "Run go test ./internal/domain and the coordinator-provided hidden nullable-schedule cases."
+        },
+        {
+          "criterion": "The change is limited to Task PATCH semantics and adds a focused regression test.",
+          "verificationInstructions": "Inspect the delivered diff and run the focused domain test suite."
+        }
+      ]
+    },
+    {
+      "caseId": "L2V2-02",
+      "baselineCaseId": "L2-02",
+      "title": "[L2V2-02] Preserve compact Issue Thread ordering",
+      "description": "Corpus case L2V2-02. Work is restricted to the work-packet application code and focused tests.",
+      "seedRef": "refs/heads/fleet-eval/l2-v1/base/l2-02",
+      "baseRevision": "f8245f4172b374db13c176eeee35dca036a81ee3",
+      "allowedPaths": ["internal/application/task_work_packet_service.go", "internal/application/task_work_packet_service_test.go"],
+      "verificationCommands": ["go test ./internal/application -run TestCompactIssueContextAlwaysIncludesOriginalResolutionRequest -count=1"],
+      "expectedPath": "direct_accept",
+      "hiddenProfile": "compact_issue_ordering",
+      "criteria": [
+        {
+          "criterion": "The original resolution request is returned exactly once and precedes recent Issue Thread items.",
+          "verificationInstructions": "Run the focused task work-packet tests, including original-present and original-absent cases."
+        },
+        {
+          "criterion": "Compact reads remain bounded for a limit of one and do not load complete Thread history.",
+          "verificationInstructions": "Run hidden limit-one and stable-ordering checks and inspect store calls in the diff."
+        }
+      ]
+    },
+    {
+      "caseId": "L2V2-03",
+      "baselineCaseId": "L2-03",
+      "title": "[L2V2-03] Reject oversized CLI responses safely",
+      "description": "Corpus case L2V2-03. Work is restricted to the CLI HTTP client and focused tests.",
+      "seedRef": "refs/heads/fleet-eval/l2-v1/base/l2-03",
+      "baseRevision": "abc3599c863fbc2041e0cd463776d3d8ca8c7fb1",
+      "allowedPaths": ["internal/cli/client.go", "internal/cli/client_test.go"],
+      "verificationCommands": ["go test ./internal/cli"],
+      "expectedPath": "direct_accept",
+      "hiddenProfile": "oversized_cli_response",
+      "criteria": [
+        {
+          "criterion": "A response at the configured byte limit succeeds and a response one byte over it returns a stable oversized-response error without returning partial JSON.",
+          "verificationInstructions": "Run focused internal/cli tests plus hidden exact-limit and one-byte-over cases."
+        },
+        {
+          "criterion": "Oversized and malformed error responses do not expose authorization tokens or response-body contents in diagnostics.",
+          "verificationInstructions": "Run credential-redaction and malformed oversized-response checks."
+        }
+      ]
+    },
+    {
+      "caseId": "L2V2-04",
+      "baselineCaseId": "L2-04",
+      "title": "[L2V2-04] Review and correct Claim-stage outcome authorization",
+      "description": "Corpus case L2V2-04. This case guarantees the request-changes and new-review-cycle path.",
+      "seedRef": "refs/heads/fleet-eval/l2-v1/base/l2-04",
+      "baseRevision": "abc3599c863fbc2041e0cd463776d3d8ca8c7fb1",
+      "candidate": {
+        "seedRef": "refs/heads/fleet-eval/l2-v1/candidate/l2-04",
+        "revision": "badde97c2e6f5a1039065ad7a9694b345249f20f"
+      },
+      "allowedPaths": ["internal/domain/task_stage_claim.go", "internal/domain/task_stage_claim_test.go"],
+      "verificationCommands": ["go test ./internal/domain -run TestTaskStageClaimOutcomeMustMatchStage -count=1"],
+      "expectedPath": "changes_correction_accept",
+      "hiddenProfile": "claim_stage_outcome_matrix",
+      "criteria": [
+        {
+          "criterion": "Execution and review Claims accept only their stage-compatible successful outcomes.",
+          "verificationInstructions": "Run the full hidden stage/status/outcome matrix and focused domain tests."
+        },
+        {
+          "criterion": "Resolution, voluntary release, expiry, and cancellation outcomes remain valid for both Claim stages where currently allowed.",
+          "verificationInstructions": "Run focused regression tests covering every non-success terminal outcome."
+        }
+      ]
+    },
+    {
+      "caseId": "L2V2-05",
+      "baselineCaseId": "L2-05",
+      "title": "[L2V2-05] Review a clean schedule-validation test expansion",
+      "description": "Corpus case L2V2-05. This is the clean-review false-positive control.",
+      "seedRef": "refs/heads/fleet-eval/l2-v1/base/l2-05",
+      "baseRevision": "abc3599c863fbc2041e0cd463776d3d8ca8c7fb1",
+      "candidate": {
+        "seedRef": "refs/heads/fleet-eval/l2-v1/candidate/l2-05",
+        "revision": "0babaf9f8930d03af64acd2e63da5bbe8105e8e3"
+      },
+      "allowedPaths": ["internal/domain/task.go", "internal/domain/task_test.go"],
+      "verificationCommands": ["go test ./internal/domain"],
+      "expectedPath": "clean_review_accept",
+      "hiddenProfile": "clean_schedule_validation",
+      "criteria": [
+        {
+          "criterion": "Tests cover due-only, start-only, equal-date, forward-range, and reversed-range schedules.",
+          "verificationInstructions": "Run go test ./internal/domain and inspect the exact table cases."
+        },
+        {
+          "criterion": "The candidate changes tests only and preserves current production schedule behavior.",
+          "verificationInstructions": "Inspect the frozen delivery diff and confirm no non-test file changes."
+        }
+      ]
+    },
+    {
+      "caseId": "L2V2-06",
+      "baselineCaseId": "L2-06",
+      "title": "[L2V2-06] Request resolution for conflicting retry requirements",
+      "description": "Corpus case L2V2-06. This is the typed-resolution control.",
+      "seedRef": "refs/heads/fleet-eval/l2-v1/base/l2-06",
+      "baseRevision": "abc3599c863fbc2041e0cd463776d3d8ca8c7fb1",
+      "allowedPaths": ["internal/cli/client.go", "internal/cli/client_test.go"],
+      "verificationCommands": ["go test ./internal/cli"],
+      "expectedPath": "resolution_accept",
+      "hiddenProfile": "typed_retry_resolution",
+      "resolution": {
+        "issueType": "decision_required",
+        "supersededCriterionPosition": 0,
+        "conclusion": "Do not retry an oversized CLI response automatically. Return a stable RESPONSE_TOO_LARGE error after the first response, preserve only safe request metadata, and keep credentials and response bodies out of diagnostics. The conflicting retry-once criterion is superseded and must be recorded as waived."
+      },
+      "criteria": [
+        {
+          "criterion": "An oversized CLI response is retried automatically exactly once before returning an error.",
+          "verificationInstructions": "Inspect the focused CLI tests and hidden retry-count evidence."
+        },
+        {
+          "criterion": "An oversized CLI response is never retried automatically and returns an error after the first response.",
+          "verificationInstructions": "Inspect the focused CLI tests and hidden request-count evidence."
+        }
+      ]
+    }
+  ]
+}
