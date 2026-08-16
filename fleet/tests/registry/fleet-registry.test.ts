@@ -186,4 +186,24 @@ describe('FleetRegistry', () => {
     })).toMatchObject({ taskNumber: 8, taskVersion: 3, state: 'admitted' })
     registry.close()
   })
+
+  it('lists bounded Run history and causal events for observation', async () => {
+    const parent = await mkdtemp(join(tmpdir(), 'fleet-registry-history-'))
+    directories.push(parent)
+    const state = await ensurePrivateDirectory(join(parent, 'state'))
+    const registry = await FleetRegistry.open(join(state, 'fleet.sqlite3'))
+    const source = serviceConfigYAML({ stateDirectory: state, firstWorkspace: join(parent, 'work', 'first') })
+    registry.recordConfiguration(parseFleetConfig(source, join(parent, 'fleet.yml'), { knownAdapterIds: ['codex'] }))
+    const first = registry.admitRun('first', { taskNumber: 2, taskVersion: 1, stage: 'execution', frozenPolicy: {} }, new Date('2026-08-16T10:00:00Z'))
+    registry.transitionRun(first.runId, 'admitted', 'released', { checkpoint: 'candidate_changed' }, new Date('2026-08-16T10:01:00Z'))
+    registry.admitRun('first', { taskNumber: 3, taskVersion: 1, stage: 'review', frozenPolicy: {} }, new Date('2026-08-16T10:02:00Z'))
+
+    expect(registry.listRuns({ limit: 1 })).toEqual([expect.objectContaining({ taskNumber: 3 })])
+    expect(registry.listRuns({ state: 'released' })).toEqual([expect.objectContaining({ taskNumber: 2 })])
+    expect(registry.listRunEvents(first.runId)).toEqual([
+      expect.objectContaining({ eventType: 'run.admitted' }),
+      expect.objectContaining({ eventType: 'run.transitioned', payload: expect.objectContaining({ to: 'released' }) }),
+    ])
+    registry.close()
+  })
 })

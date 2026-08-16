@@ -9,6 +9,8 @@ import { DeepSeekHarnessAdapter } from '../adapters/deepseek/deepseek-adapter.js
 import { FleetHealthStore, sanitizeHealthDiagnostic } from '../health/store.js'
 import type { FleetServiceHealth } from '../health/model.js'
 import { FleetHealthServer, type FleetHealthServerAddress } from '../http/health-server.js'
+import { fleetWebAssetsPath } from '../http/static-assets.js'
+import { FleetObservationProjector } from '../observation/projection.js'
 import { PactlineCLI } from '../pactline/client.js'
 import type { PactlinePreflightResult } from '../pactline/types.js'
 import { FleetRegistry } from '../registry/fleet-registry.js'
@@ -59,6 +61,7 @@ export interface FleetServiceOptions {
     readonly logger: FleetLogger
   }) => FleetSchedulingRuntime
   readonly faultInjector?: FleetFaultInjector
+  readonly webAssetsDirectory?: string
 }
 
 interface AdapterRequirement {
@@ -211,9 +214,17 @@ export class FleetService {
       ])
       await this.ensureSchedulingRuntime(snapshot)
       this.healthStore.settleMode()
-      this.healthServer = (this.options.createHealthServer ?? (health => new FleetHealthServer(health)))(
-        () => this.health,
-      )
+      this.healthServer = this.options.createHealthServer !== undefined
+        ? this.options.createHealthServer(() => this.health)
+        : new FleetHealthServer(() => this.health, {
+            observation: new FleetObservationProjector(
+              () => this.health,
+              () => this.manager.snapshot,
+              this.registry,
+              this.now,
+            ),
+            staticDirectory: this.options.webAssetsDirectory ?? fleetWebAssetsPath(),
+          })
       const address = await this.healthServer.start(
         snapshot.config.service.http.address,
         snapshot.config.service.http.port,
@@ -277,6 +288,7 @@ export class FleetService {
     try {
       const result = await this.schedulingCycle
       if (this.registry !== undefined && this.healthStore !== undefined) {
+        this.healthStore.setFleetDiscovery(result.fleets)
         this.healthStore.setRegistry('ok', this.registry.listNonTerminalRuns().length)
       }
       return result

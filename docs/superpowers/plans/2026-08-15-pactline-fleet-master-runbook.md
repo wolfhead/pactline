@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-15
 
-**Status:** M0 through M5.2 complete; M5.3 pending activation
+**Status:** M0 through M5.3 complete; M5.4 pending activation
 
 **Purpose:** Canonical recovery and execution document for the complete
 Harness-neutral Pactline Fleet initiative. Read this file first after context
@@ -41,6 +41,14 @@ release, unfamiliar same-principal Claim quarantine, finite `serve --once`,
 and a trusted executable work-plugin boundary for repository and verification
 policy. A real DeepSeek Pro/max isolated service demo and real local Pactline
 two-Project discovery both pass.
+
+M5.3 adds the independent read-only Operations Console and its versioned local
+observation plane. Overview, Fleet, Runs, Run detail, and System routes are
+served from the Fleet Service loopback listener. Bounded SSE revision events
+fall back to polling; safe projections exclude raw prompts, reasoning, secrets,
+unbounded output, and raw registry rows. Prometheus metrics use bounded labels,
+and the packed artifact contains its production-built static assets. Component,
+real Chromium responsive, HTTP boundary, and package smoke gates pass.
 
 The DeepSeek Adapter owns a separate pinned DSH `0.1.0-rc.6` runtime closure,
 Cordis profile, terminal result plugin, credential resolution, JSON-RPC
@@ -526,7 +534,7 @@ is frozen.
 
 ## M5 — Resident Fleet Service
 
-**Status:** M5.2 complete; M5.3 pending activation
+**Status:** M5.3 complete; M5.4 pending activation
 
 ### Objective
 
@@ -751,7 +759,7 @@ real Tasks before making any Game Design migration decision.
 | M2 DeepSeek Adapter parity | complete | all exit criteria passed |
 | M3 Codex Adapter | complete | shared L1 read-only gate passed |
 | M4 Codex L2 v2 | complete | capability report accepted |
-| M5 Resident Service | M5.2 complete | activate M5.3 local Web UI |
+| M5 Resident Service | M5.3 complete | activate M5.4 distributed/restart acceptance |
 | M6 Provider/security/ops | pending | M5 crash gates |
 | M7 Cutover/cleanup | pending | M6 hardening report |
 | M8 Real-work pilot | pending separate approval | M7 cutover report |
@@ -917,5 +925,13 @@ Stop and request owner direction when:
   policy and checkpoints commit, push, and PR/MR creation separately. The
   bounded real DeepSeek Pro/max service demo completed in an isolated local
   repository with a fake Pactline authority; real local Pactline protocol 2
-  discovery passed across two Projects with a revoked temporary Token. M5.3
-  Web UI and read-only observation APIs are next.
+  discovery passed across two Projects with a revoked temporary Token.
+
+- 2026-08-16: M5.3 completed the loopback-only read-only Operations Console,
+  versioned observation API, SSE with polling fallback, bounded Run timelines
+  and external-effect projections, Adapter and scheduler discovery health,
+  Prometheus metrics, static delivery, and the `ui --open` command. The full
+  Fleet gate passed 144 service tests, 5 component tests, 5 real Chromium
+  flows, type checking, production build, M5.1 process smoke, and packed UI
+  smoke. npm audit reported zero vulnerabilities. M5.4 distributed and
+  restart acceptance is next.

@@ -34,6 +34,16 @@ export interface FleetSchedulerCycle {
   readonly skipped: number
   readonly contentions: number
   readonly outcomes: readonly FleetRunOutcome[]
+  readonly fleets: readonly FleetDiscoveryCycle[]
+}
+
+export interface FleetDiscoveryCycle {
+  readonly fleetId: string
+  readonly projectNumber: number
+  readonly status: 'ok' | 'error' | 'backoff'
+  readonly candidateCount: number
+  readonly checkedAt: string
+  readonly retryAt?: string
 }
 
 interface ActiveRun {
@@ -67,19 +77,25 @@ export class FairFleetScheduler {
   get activeRunCount(): number { return this.active.size }
 
   async cycle(signal?: AbortSignal, waitForAdmitted = true): Promise<FleetSchedulerCycle> {
-    if (this.draining) return { discovered: 0, admitted: 0, skipped: 0, contentions: 0, outcomes: [] }
+    if (this.draining) return { discovered: 0, admitted: 0, skipped: 0, contentions: 0, outcomes: [], fleets: [] }
     const snapshot = this.options.snapshot()
     const fleets = enabledFleets(snapshot).filter(fleet => this.options.resolver.enabled?.(fleet) ?? true)
-    if (fleets.length === 0) return { discovered: 0, admitted: 0, skipped: 0, contentions: 0, outcomes: [] }
+    if (fleets.length === 0) return { discovered: 0, admitted: 0, skipped: 0, contentions: 0, outcomes: [], fleets: [] }
     const controller = new AbortController()
     this.cycleController = controller
     const forwardAbort = (): void => controller.abort(signal?.reason)
     signal?.addEventListener('abort', forwardAbort, { once: true })
     try {
       const queues = new Map<string, FleetWorkCandidate[]>()
+      const fleetCycles: FleetDiscoveryCycle[] = []
       let discovered = 0
       for (const fleet of fleets) {
-        if ((this.blockedUntil.get(fleet.id) ?? 0) > this.now().getTime()) continue
+        const checkedAt = this.now().toISOString()
+        const blockedUntil = this.blockedUntil.get(fleet.id) ?? 0
+        if (blockedUntil > this.now().getTime()) {
+          fleetCycles.push({ fleetId: fleet.id, projectNumber: fleet.projectNumber, status: 'backoff', candidateCount: 0, checkedAt, retryAt: new Date(blockedUntil).toISOString() })
+          continue
+        }
         try {
           const [execution, review] = await Promise.all([
             this.options.discovery.listTasks('execution', fleet.projectNumber, this.discoveryLimit, {
@@ -100,12 +116,14 @@ export class FairFleetScheduler {
           ].sort(compareCandidates)
           queues.set(fleet.id, candidates)
           discovered += candidates.length
+          fleetCycles.push({ fleetId: fleet.id, projectNumber: fleet.projectNumber, status: 'ok', candidateCount: candidates.length, checkedAt })
           this.backoff(fleet.id).success()
           this.blockedUntil.delete(fleet.id)
         } catch (error) {
           if (controller.signal.aborted) throw error
           const until = this.backoff(fleet.id).fail(this.now().getTime())
           this.blockedUntil.set(fleet.id, until)
+          fleetCycles.push({ fleetId: fleet.id, projectNumber: fleet.projectNumber, status: 'error', candidateCount: 0, checkedAt, retryAt: new Date(until).toISOString() })
           this.options.logger.log('warn', 'fleet.discovery.failed', {
             fleetId: fleet.id,
             projectNumber: fleet.projectNumber,
@@ -176,6 +194,7 @@ export class FairFleetScheduler {
         skipped,
         contentions: outcomes.filter(outcome => outcome.kind === 'contention').length,
         outcomes,
+        fleets: fleetCycles,
       }
     } finally {
       if (this.cycleController === controller) this.cycleController = undefined

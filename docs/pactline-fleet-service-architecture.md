@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-15
 
-**Status:** Accepted design; implementation pending
+**Status:** Accepted design; M5.1 through M5.3 implemented, M5.4 acceptance pending
 
 ## Purpose
 

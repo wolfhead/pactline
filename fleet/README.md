@@ -74,18 +74,22 @@ export PACTLINE_TOKEN=replace-locally
 node lib/bin.js serve --config /absolute/path/to/fleet.yml
 ```
 
-The first release exposes:
+The resident service exposes:
 
 - `GET /livez`
 - `GET /readyz`
 - `GET /healthz`
 - `GET /api/v1/service`
+- `GET /api/v1/overview`
+- `GET /api/v1/fleets` and `/api/v1/fleets/:fleetId`
+- `GET /api/v1/runs` and `/api/v1/runs/:runId`
+- `GET /api/v1/adapters`
+- `GET /api/v1/events`
+- `GET /metrics`
 
-The M5.1 service does not discover Tasks, create Claims, run Harness work,
-change repositories, or include the later Web UI. Its HTTP surface is
-loopback-only and has no mutation routes. `stateDirectory`, the Pactline
-endpoint, and the HTTP listener require restart when changed; Fleet routing
-and concurrency changes can reload atomically.
+Its HTTP surface is loopback-only and has no mutation routes. `stateDirectory`,
+the Pactline endpoint, and the HTTP listener require restart when changed;
+Fleet routing and concurrency changes can reload atomically.
 
 ## Durable scheduler and work plugins
 
@@ -153,6 +157,33 @@ can exercise the real DeepSeek Pro/max route (and consumes model tokens):
 
 ```bash
 npm run service:m5-2-deepseek-demo
+```
+
+## Local Operations Console
+
+M5.3 serves a read-only React Operations Console from the same loopback
+listener as the observation API. No Vite process is required after the package
+has been built. The console includes Overview, Fleet detail, Runs, Run detail,
+and System routes, receives bounded revision notifications through SSE, and
+falls back to polling when the event stream is unavailable.
+
+Start the resident service, then print or open its configured URL:
+
+```bash
+node lib/bin.js serve --config /absolute/path/to/fleet.yml
+node lib/bin.js ui --config /absolute/path/to/fleet.yml
+node lib/bin.js ui --config /absolute/path/to/fleet.yml --open
+```
+
+The `ui` command verifies `/livez`; it does not start another service. The UI
+projects only bounded operational facts. It intentionally omits credentials,
+raw prompts, model reasoning, unbounded Harness output, and raw SQLite rows.
+Prometheus-compatible metrics use finite or configuration-bounded labels.
+
+Verify the production-built and packed UI without Vite with:
+
+```bash
+npm run service:m5-3-package-smoke
 ```
 
 The doctor calls only `pactline capabilities --json`. It does not authenticate,

@@ -14,14 +14,25 @@ export type {
   FleetServiceConfig,
 } from './config/types.js'
 export { FleetRegistry } from './registry/fleet-registry.js'
-export type { FleetRunRecord, FleetRunState } from './registry/fleet-registry.js'
+export type {
+  FleetRunEventRecord, FleetRunListOptions, FleetRunRecord, FleetRunStage, FleetRunState,
+} from './registry/fleet-registry.js'
 export type { FleetServiceHealth } from './health/model.js'
+export { FleetObservationProjector } from './observation/projection.js'
+export type { FleetObservationSource } from './observation/projection.js'
+export type {
+  ObservationAdapter, ObservationAttention, ObservationEffect, ObservationEnvelope,
+  ObservationFleet, ObservationList, ObservationOverview, ObservationRoute,
+  ObservationRunDetail, ObservationRunSummary, ObservationTimelineItem,
+} from './observation/model.js'
 export { runFleetDoctor, isSupportedNodeVersion } from './commands/doctor.js'
 export type { FleetDoctorOptions, FleetDoctorResult } from './commands/doctor.js'
 export { runDeepSeekDoctor } from './commands/deepseek-doctor.js'
 export type { DeepSeekDoctorOptions, DeepSeekDoctorResult } from './commands/deepseek-doctor.js'
 export { fleetVersion } from './commands/version.js'
 export type { FleetVersionResult } from './commands/version.js'
+export { launchFleetUI, runFleetUI } from './commands/ui.js'
+export type { FleetUIOptions, FleetUIResult } from './commands/ui.js'
 export type {
   HarnessAdapter, HarnessCapabilities, HarnessProbeRequest, HarnessRunEvent, HarnessRunObserver, HarnessSessionReference,
   HarnessRunPolicy, HarnessRunRequest, HarnessSandbox, HarnessStage,

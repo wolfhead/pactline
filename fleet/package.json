@@ -3,6 +3,9 @@
   "version": "0.0.0-development",
   "description": "Harness-neutral orchestration for Pactline work",
   "private": true,
+  "workspaces": [
+    "web"
+  ],
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -42,6 +45,7 @@
     "runtime/deepseek/*.mjs",
     "runtime/codex/package.json",
     "runtime/codex/package-lock.json",
+    "web/dist/**/*",
     "README.md"
   ],
   "license": "MIT",
@@ -50,7 +54,9 @@
   },
   "scripts": {
     "baseline:verify": "node scripts/verify-deepseek-baseline.mjs",
-    "build": "tsc -p tsconfig.json",
+    "build": "npm run build:service && npm run build:web",
+    "build:service": "tsc -p tsconfig.json",
+    "build:web": "npm --prefix web run build",
     "doctor": "npm run build && node lib/bin.js doctor --json",
     "deepseek:install": "npm --prefix runtime/deepseek ci",
     "codex:install": "npm --prefix runtime/codex ci --ignore-scripts",
@@ -66,9 +72,13 @@
     "codex:test": "npm --prefix runtime/codex ci --ignore-scripts && vitest run tests/adapters/codex-adapter.test.ts tests/adapters/codex-wire.test.ts",
     "local:integration": "npm run build && node lib/evaluation/local-integration-bin.js",
     "service:m5-1-smoke": "npm run build && node scripts/m5-1-smoke.mjs",
+    "service:m5-3-package-smoke": "npm run build && node scripts/m5-3-package-smoke.mjs",
     "service:m5-2-deepseek-demo": "PACTLINE_FLEET_LIVE_DEEPSEEK=1 vitest run tests/service/m5-2-plugin-service.integration.test.ts",
-    "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit"
+    "test": "npm run test:service && npm run test:web",
+    "test:e2e": "npm --prefix web run test:e2e",
+    "test:service": "vitest run",
+    "test:web": "npm --prefix web test",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit && npm --prefix web run typecheck"
   },
   "dependencies": {
     "better-sqlite3": "13.0.3",

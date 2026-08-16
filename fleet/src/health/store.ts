@@ -8,6 +8,7 @@ import type {
   FleetServiceMode,
   PactlineHealth,
 } from './model.js'
+import type { FleetDiscoveryCycle } from '../scheduler/fair-scheduler.js'
 
 const MAX_DIAGNOSTIC_LENGTH = 2_048
 
@@ -28,6 +29,7 @@ export class FleetHealthStore {
   private registryValue: DependencyHealth & { path: string; schemaVersion: number; nonTerminalRuns: number }
   private pactlineValue: PactlineHealth
   private readonly adapterValues = new Map<string, AdapterHealth>()
+  private readonly discoveryValues = new Map<string, FleetDiscoveryCycle>()
 
   constructor(
     private readonly serviceId: string,
@@ -118,6 +120,11 @@ export class FleetHealthStore {
     this.touch()
   }
 
+  setFleetDiscovery(results: readonly FleetDiscoveryCycle[]): void {
+    for (const result of results) this.discoveryValues.set(result.fleetId, result)
+    this.touch()
+  }
+
   applyConfiguration(snapshot: FleetConfigSnapshot): void {
     this.configSnapshot = snapshot
     this.reloadAt = this.timestamp()
@@ -175,6 +182,7 @@ export class FleetHealthStore {
             enabled: false,
             status: 'disabled',
             adapters,
+            discovery: { status: 'unknown', candidateCount: 0 },
           }
         }
         const unavailable = adapters.filter(adapter => this.adapterValues.get(adapter)?.status !== 'ok')
@@ -184,9 +192,21 @@ export class FleetHealthStore {
           enabled: true,
           status: unavailable.length === 0 ? 'healthy' : 'degraded',
           adapters,
+          discovery: this.discovery(fleet.id),
           ...(unavailable.length === 0 ? {} : { message: `Unavailable Adapter: ${unavailable.join(', ')}` }),
         }
       })
+  }
+
+  private discovery(fleetId: string): FleetHealth['discovery'] {
+    const value = this.discoveryValues.get(fleetId)
+    if (value === undefined) return { status: 'unknown', candidateCount: 0 }
+    return {
+      status: value.status,
+      candidateCount: value.candidateCount,
+      checkedAt: value.checkedAt,
+      ...(value.retryAt === undefined ? {} : { retryAt: value.retryAt }),
+    }
   }
 
   private timestamp(): string {

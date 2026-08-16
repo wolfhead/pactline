@@ -83,10 +83,14 @@ describe('FairFleetScheduler', () => {
       random: () => 0.5,
     })
 
-    await scheduler.cycle()
+    const firstCycle = await scheduler.cycle()
     await scheduler.cycle()
     await scheduler.cycle()
     expect(order).toEqual(['first:3', 'second:4', 'first:9'])
+    expect(firstCycle.fleets).toEqual([
+      expect.objectContaining({ fleetId: 'first', status: 'ok', candidateCount: 2 }),
+      expect.objectContaining({ fleetId: 'second', status: 'ok', candidateCount: 1 }),
+    ])
     registry.close()
   })
 
@@ -183,10 +187,17 @@ describe('FairFleetScheduler', () => {
         },
       },
     })
-    await scheduler.cycle()
-    await scheduler.cycle()
+    const failedCycle = await scheduler.cycle()
+    const backedOffCycle = await scheduler.cycle()
     expect(firstCalls).toBe(2) // execution + review fail together on the first attempt only
     expect(order).toEqual(['second', 'second'])
+    expect(failedCycle.fleets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ fleetId: 'first', status: 'error', candidateCount: 0 }),
+      expect.objectContaining({ fleetId: 'second', status: 'ok', candidateCount: 1 }),
+    ]))
+    expect(backedOffCycle.fleets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ fleetId: 'first', status: 'backoff' }),
+    ]))
     now = new Date(now.getTime() + 1_001)
     await scheduler.cycle()
     expect(firstCalls).toBe(4)

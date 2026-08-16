@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-15
 
-**Status:** M5.0 through M5.2 complete; M5.3 pending activation
+**Status:** M5.0 through M5.3 complete; M5.4 pending
 
 ## Objective
 
@@ -32,7 +32,7 @@ M5.0 accepted design
 | M5.0 Design freeze | complete | Architecture and implementation gates documented |
 | M5.1 Service foundation | complete | Resident process, config, registry, local health |
 | M5.2 Durable scheduler and recovery | complete | Fair scheduling, durable checkpoints, recovery, work plugins |
-| M5.3 Local Web UI and observability | pending | Read-only Operations Console |
+| M5.3 Local Web UI and observability | complete | Read-only Operations Console and observation API |
 | M5.4 Distributed and restart acceptance | pending | Production-shaped local release candidate |
 
 ## M5.0 — Design freeze
@@ -289,6 +289,20 @@ health, active work, recent outcomes, and recovery evidence.
 - no secret or raw model reasoning is visible in HTML, API responses, browser
   storage, logs, or packaged fixtures;
 - all primary information remains usable on desktop and phone.
+
+### Completion evidence
+
+- the versioned read-only observation API projects service, Fleet, Run,
+  Adapter, discovery, timeline, and external-effect facts with bounded fields;
+- SSE revision notifications and polling fallback are covered independently;
+- the production package serves the independent React application from the
+  same loopback listener and includes its hashed static assets;
+- Overview, Fleet detail, Run detail, System, phone, and medium-width flows pass
+  real Chromium tests without horizontal overflow;
+- Host, Origin, method, CSP, SPA fallback, and package-delivery tests pass;
+- `make pactline-fleet-check` passes 144 service tests, 5 component tests, 5
+  browser tests, type checking, production build, process smoke, and package
+  smoke with zero npm audit findings.
 
 ## M5.4 — Distributed and restart acceptance
 

@@ -30,6 +30,12 @@ export interface FleetHealth {
   readonly status: FleetOperationalStatus
   readonly adapters: readonly string[]
   readonly message?: string
+  readonly discovery: {
+    readonly status: 'unknown' | 'ok' | 'error' | 'backoff'
+    readonly candidateCount: number
+    readonly checkedAt?: string
+    readonly retryAt?: string
+  }
 }
 
 export interface FleetServiceHealth {

@@ -88,7 +88,9 @@ pactline-fleet-check:
 	npm --prefix fleet run typecheck
 	npm --prefix fleet test
 	npm --prefix fleet run build
+	npm --prefix fleet run test:e2e
 	node fleet/scripts/m5-1-smoke.mjs
+	node fleet/scripts/m5-3-package-smoke.mjs
 
 pactline-fleet-doctor: pactline-cli
 	npm --prefix fleet ci

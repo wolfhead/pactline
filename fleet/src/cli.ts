@@ -4,6 +4,7 @@ import { runDeepSeekDoctor } from './commands/deepseek-doctor.js'
 import { runCodexDoctor } from './commands/codex-doctor.js'
 import { fleetVersion } from './commands/version.js'
 import { runFleetServe } from './commands/serve.js'
+import { runFleetUI } from './commands/ui.js'
 
 export interface FleetCLIIO {
   readonly stdout: { write(value: string): unknown }
@@ -18,6 +19,7 @@ function usage(): string {
     '  pactline-fleet deepseek-doctor [--json] [--runtime-command <path>] [--runtime-config <path>]',
     '  pactline-fleet codex-doctor [--json] [--runtime-command <path>]',
     '  pactline-fleet serve --config <path> [--once] [--json]',
+    '  pactline-fleet ui --config <path> [--open] [--json]',
   ].join('\n')
 }
 
@@ -103,6 +105,24 @@ export async function runFleetCLI(args: readonly string[], io: FleetCLIIO = proc
         else io.stdout.write(`Pactline Fleet Service ${result.ready ? 'ready' : 'degraded'} at ${result.url}\n`)
       },
     })
+    return 0
+  }
+  if (command === 'ui') {
+    const parsed = parseArgs({
+      args: args.slice(1),
+      options: {
+        config: { type: 'string', default: process.env.PACTLINE_FLEET_CONFIG },
+        open: { type: 'boolean', default: false },
+        json: { type: 'boolean', default: false },
+      },
+      strict: true,
+    })
+    if (parsed.values.config === undefined || parsed.values.config.trim() === '') {
+      throw new Error('Fleet Service configuration is required; use --config or PACTLINE_FLEET_CONFIG')
+    }
+    const result = await runFleetUI({ configPath: parsed.values.config, open: parsed.values.open })
+    if (parsed.values.json) writeJSON(io.stdout, { ok: true, data: result })
+    else io.stdout.write(`${result.url}${result.opened ? ' (opened)' : ''}\n`)
     return 0
   }
   io.stderr.write(`Unknown command: ${command}\n${usage()}\n`)

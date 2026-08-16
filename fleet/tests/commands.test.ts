@@ -8,7 +8,9 @@ import { fleetVersion } from '../src/commands/version.js'
 import { runDeepSeekDoctor } from '../src/commands/deepseek-doctor.js'
 import { runCodexDoctor } from '../src/commands/codex-doctor.js'
 import { runFleetServe } from '../src/commands/serve.js'
+import { runFleetUI } from '../src/commands/ui.js'
 import type { FleetServiceHealth } from '../src/health/model.js'
+import { serviceConfigYAML } from './fixtures/service-config.js'
 
 describe('finite Fleet commands', () => {
   it('reports the standalone application identity', () => {
@@ -157,5 +159,22 @@ describe('finite Fleet commands', () => {
     await runFleetServe({ configPath: '/test/fleet.yml', service, signals, once: true })
     expect(calls).toEqual(['start', 'once', 'stop:finite cycle completed'])
     expect(signals.eventNames()).toEqual([])
+  })
+
+  it('resolves, validates, and optionally opens the configured local UI', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'pactline-fleet-ui-'))
+    const configPath = join(directory, 'fleet.yml')
+    await writeFile(configPath, serviceConfigYAML({
+      stateDirectory: join(directory, 'state'), firstWorkspace: join(directory, 'workspace'), httpPort: 7441,
+    }))
+    let launched: string | undefined
+    try {
+      await expect(runFleetUI({
+        configPath, open: true,
+        fetchURL: async url => ({ ok: url === 'http://127.0.0.1:7441/livez', status: 200 }),
+        launch: url => { launched = url },
+      })).resolves.toEqual({ url: 'http://127.0.0.1:7441', serviceReachable: true, opened: true })
+      expect(launched).toBe('http://127.0.0.1:7441')
+    } finally { await rm(directory, { recursive: true, force: true }) }
   })
 })

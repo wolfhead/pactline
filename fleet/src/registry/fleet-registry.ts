@@ -76,6 +76,22 @@ export interface FleetExternalEffectRecord {
   readonly updatedAt: string
 }
 
+export interface FleetRunEventRecord {
+  readonly sequence: number
+  readonly runId: string
+  readonly eventType: string
+  readonly payload: Readonly<Record<string, unknown>>
+  readonly createdAt: string
+}
+
+export interface FleetRunListOptions {
+  readonly fleetId?: string
+  readonly state?: FleetRunState
+  readonly stage?: FleetRunStage
+  readonly limit?: number
+  readonly before?: string
+}
+
 interface FleetRow {
   readonly fleet_id: string
   readonly project_number: number
@@ -114,6 +130,14 @@ interface EffectRow {
   readonly observation_json: string | null
   readonly created_at: string
   readonly updated_at: string
+}
+
+interface EventRow {
+  readonly sequence: number
+  readonly run_id: string
+  readonly event_type: string
+  readonly payload_json: string
+  readonly created_at: string
 }
 
 function parseJSON(value: string | null, name: string): Readonly<Record<string, unknown>> | undefined {
@@ -525,6 +549,21 @@ export class FleetRegistry {
     `).all(runId).map(effectRecord)
   }
 
+  listRunEvents(runId: string, limit = 200): readonly FleetRunEventRecord[] {
+    this.assertOpen()
+    const bounded = Math.min(Math.max(Math.trunc(limit), 1), 500)
+    return this.database.prepare<[string, number], EventRow>(`
+      SELECT sequence, run_id, event_type, payload_json, created_at
+      FROM run_events WHERE run_id = ? ORDER BY sequence DESC LIMIT ?
+    `).all(runId, bounded).reverse().map(row => ({
+      sequence: row.sequence,
+      runId: row.run_id,
+      eventType: row.event_type,
+      payload: parseJSON(row.payload_json, 'event payload')!,
+      createdAt: row.created_at,
+    }))
+  }
+
   getRun(runId: string): FleetRunRecord | undefined {
     this.assertOpen()
     const row = this.database.prepare<[string], RunRow>(`
@@ -568,6 +607,40 @@ export class FleetRegistry {
       WHERE state NOT IN (${terminal})
       ORDER BY created_at, run_id
     `).all(...TERMINAL_RUN_STATES).map(runRecord)
+  }
+
+  listRuns(options: FleetRunListOptions = {}): readonly FleetRunRecord[] {
+    this.assertOpen()
+    const limit = Math.min(Math.max(Math.trunc(options.limit ?? 50), 1), 200)
+    const clauses: string[] = []
+    const parameters: Array<string | number> = []
+    if (options.fleetId !== undefined) {
+      clauses.push('fleet_id = ?')
+      parameters.push(options.fleetId)
+    }
+    if (options.state !== undefined) {
+      clauses.push('state = ?')
+      parameters.push(options.state)
+    }
+    if (options.stage !== undefined) {
+      clauses.push('stage = ?')
+      parameters.push(options.stage)
+    }
+    if (options.before !== undefined) {
+      clauses.push('updated_at < ?')
+      parameters.push(options.before)
+    }
+    const where = clauses.length === 0 ? '' : `WHERE ${clauses.join(' AND ')}`
+    return this.database.prepare<Array<string | number>, RunRow>(`
+      SELECT run_id, service_id, fleet_id, project_number, config_revision,
+             state, task_number, task_version, stage, frozen_policy_json,
+             claim_id, claim_version, runtime_session_id, workspace_json,
+             claim_task_version,
+             checkpoint, disposition, error, created_at, updated_at
+      FROM runs ${where}
+      ORDER BY updated_at DESC, run_id DESC
+      LIMIT ?
+    `).all(...parameters, limit).map(runRecord)
   }
 
   healthCheck(): boolean {

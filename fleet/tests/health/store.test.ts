@@ -35,13 +35,14 @@ describe('FleetHealthStore', () => {
     health.setRegistry('ok', 0)
     health.setPactline({ status: 'ok', cliVersion: '0.1.0', protocol: 2, featureCount: 16 })
     health.setAdapter({ id: 'codex', version: 'test', status: 'ok', capabilities })
+    health.setFleetDiscovery([{ fleetId: 'first', projectNumber: 5, status: 'ok', candidateCount: 3, checkedAt: '2026-08-15T10:00:01.000Z' }])
     health.settleMode()
 
     expect(health.snapshot()).toMatchObject({
       mode: 'ready',
       live: true,
       ready: true,
-      fleets: [{ id: 'first', projectNumber: 5, status: 'healthy' }],
+      fleets: [{ id: 'first', projectNumber: 5, status: 'healthy', discovery: { status: 'ok', candidateCount: 3 } }],
     })
   })
 
