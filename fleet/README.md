@@ -6,13 +6,20 @@ Agent Loop. Codex, DeepSeek Harness, and future Agent Harnesses integrate
 through internal Adapters while Pactline remains authoritative for workflow
 state.
 
-Milestones M1 through M3 provide the Harness-neutral Core and two real
-Adapters. The Core owns the Pactline CLI boundary, routing, Claim-stage
+Milestones M1 through M5 provide the Harness-neutral Core, Codex and DeepSeek
+Adapters, durable multi-Fleet scheduling and recovery, and the local Operations
+Console. The Core owns the Pactline CLI boundary, routing, Claim-stage
 coordination, proposal validation, disposable Git workspaces, fixed
-verification, delivery evidence, and settlement. `DeepSeekHarnessAdapter`
-owns a separate DeepSeek Harness runtime closure and translates its JSON-RPC
-Session lifecycle into the same internal contract used by Fake and future
-Adapters.
+verification, delivery evidence, and settlement. Harness-specific runtimes
+remain behind their Adapter contracts.
+
+The current release is accepted for bounded local trials. It is not approved
+for production: exhaustive crash qualification, distributed competition,
+history retention, provider failure handling, and production sandbox and
+credential hardening remain M6 work. See the
+[M5.4 acceptance report](../docs/pactline-fleet-m5-4-report.md) and the
+[Fleet domain model](../docs/pactline-fleet-domain-model.md) for the verified
+boundary and review map.
 
 ## Codex Adapter
 
@@ -58,6 +65,31 @@ npm run build
 node lib/bin.js version --json
 node lib/bin.js doctor --json --pactline /absolute/path/to/pactline
 ```
+
+For a first local service start:
+
+1. Build the Pactline CLI and make the local Pactline instance reachable.
+2. Install Fleet and the runtime for every configured Adapter.
+3. Copy `config.example.yml`, replace every absolute path and Project number,
+   and export the configured Pactline Token environment variable.
+4. Add a trusted `workPlugin` to each Fleet that should admit work. A Fleet
+   without one remains observable but intentionally does not claim Tasks.
+5. Start `serve`, then use `ui --open` from a second terminal.
+
+```bash
+make pactline-cli
+cd fleet
+npm install
+npm run codex:install
+npm run build
+cp config.example.yml /absolute/path/to/fleet.yml
+export PACTLINE_TOKEN=replace-locally
+node lib/bin.js doctor --json --pactline /absolute/path/to/pactline
+node lib/bin.js codex-doctor --json
+node lib/bin.js serve --config /absolute/path/to/fleet.yml
+```
+
+Never place Pactline, model, or repository-provider credentials in Fleet YAML.
 
 ## Resident Service Foundation
 
@@ -188,6 +220,28 @@ npm run service:m5-3-package-smoke
 
 The doctor calls only `pactline capabilities --json`. It does not authenticate,
 start a Harness, create a Claim, mutate a Task, or access a repository.
+
+## Bounded usability acceptance
+
+M5.4 exercises the resident scheduler through public Pactline, Fleet Service,
+work-plugin, local Git, Harness Adapter, and Web UI boundaries. Its finite
+runner includes deterministic delivery, request-changes and correction, one
+representative restart, DeepSeek Pro/max execution with Codex high review, and
+Codex high execution and review.
+
+With local Pactline running and both Harness credentials already configured:
+
+```bash
+make pactline-cli
+cd fleet
+npm run m5-4:preflight
+npm run m5-4:acceptance
+```
+
+The complete live command consumes model tokens. Individual modes are
+available as `m5-4:deterministic`, `m5-4:correction`, `m5-4:restart`, and
+`m5-4:live`. Private evidence is retained under the gitignored
+`.fleet/m5-4-usability/` directory.
 
 ## Optional DeepSeek Adapter
 

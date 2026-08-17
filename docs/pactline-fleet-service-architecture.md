@@ -1,8 +1,8 @@
 # Pactline Fleet Service Architecture
 
-**Date:** 2026-08-15
+**Date:** 2026-08-17
 
-**Status:** Accepted design; M5.1 through M5.3 implemented, M5.4 acceptance pending
+**Status:** Accepted design; M5.1 through M5.4 implemented; M6 hardening pending
 
 ## Purpose
 
@@ -725,9 +725,12 @@ Metrics use bounded labels such as Fleet, Project, Adapter, stage, and outcome.
 Task IDs, Run IDs, error messages, branch names, and repository URLs must not
 be Prometheus labels.
 
-Default local history retention is bounded by both age and count. The initial
-implementation should propose concrete defaults during M5.1 and verify that
-cleanup deletes only registry-owned records and exact recorded artifacts.
+The current M5 implementation removes disposable workspaces on terminal or
+safely released paths, but retains terminal Runs, effects, events, and recorded
+configuration revisions in the private local registry. It does not yet perform
+automatic age- or count-based history pruning. Concrete retention limits,
+operator-visible pruning, and proof that cleanup deletes only registry-owned
+records and exact recorded artifacts remain M6 work.
 
 ## Non-goals
 
@@ -758,3 +761,12 @@ cleanup deletes only registry-owned records and exact recorded artifacts.
 - the local UI accurately represents service, Fleet, Adapter, and Run health;
 - the UI remains read-only and loopback-only;
 - finite diagnostic commands continue to work without starting the service.
+
+M5.4 verified the complete resident path for one Project-bound Fleet,
+deterministic delivery and correction, one representative post-Session
+restart, both live Adapter routes, and real-browser observation. The complete
+distributed-service competition gate, exhaustive crash matrix, storage fault
+injection, long-duration soak, provider degradation, and retention policy are
+not yet verified and remain M6 qualification. The exact evidence and limits
+are recorded in the
+[M5.4 Acceptance Report](pactline-fleet-m5-4-report.md).

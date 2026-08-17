@@ -239,6 +239,9 @@ is documented in
 [Pactline Fleet Service Architecture](pactline-fleet-service-architecture.md).
 Its staged delivery gates are documented in
 [Pactline Fleet Service Milestones](pactline-fleet-service-milestones.md).
+The current entity classification, Run state model, invariants, and review
+entry points are documented in the
+[Pactline Fleet Domain Model](pactline-fleet-domain-model.md).
 
 ## Migration boundary
 
@@ -297,3 +300,22 @@ all three seeded defects, preserved the Git tree, passed Fleet's fixed tests,
 and retained only bounded sanitized evidence. A fresh six-Task Pactline cohort
 was unnecessary because Core lifecycle tests plus real DSH replay established
 the required lifecycle parity without external mutations.
+
+Milestone M3 adds the Codex Adapter behind the same contract. Codex
+`gpt-5.6-sol/high` is the accepted default route, while DeepSeek Pro/max remains
+an explicit sibling route. Both Adapters expose their real capability
+differences; Fleet never substitutes one Harness after admission.
+
+Milestone M4 proves the Harness-neutral lifecycle across execution, review,
+correction, and typed resolution cases. It establishes Codex as the default on
+quality evidence without removing DeepSeek support or moving workflow and
+repository authority into either Adapter.
+
+Milestone M5 turns the finite coordinator into one recoverable resident
+service managing multiple Project-bound Fleets. It adds fair scheduling,
+durable Run and external-effect records, startup reconciliation, trusted work
+plugins, bounded health and metrics, and a loopback-only read-only Operations
+Console. M5.4 accepts bounded local trials after deterministic, live Adapter,
+correction, restart, and browser-observation gates. Production hardening,
+distributed competition qualification, retention, and exhaustive failure
+testing remain M6.
