@@ -48,7 +48,7 @@ Quick start:
 Use "pactline help workflow" for the complete execution and review loops.`,
 		PersistentPreRunE: func(command *cobra.Command, _ []string) error {
 			if command.Name() == "version" || command.Name() == "capabilities" || command.CommandPath() == "pactline help" ||
-				(command.Parent() != nil && (command.Parent().Name() == "config" || command.Parent().Name() == "help")) {
+				(command.Parent() != nil && (command.Parent().Name() == "auth" || command.Parent().Name() == "config" || command.Parent().Name() == "help")) {
 				return nil
 			}
 			return app.initialize(command.Context())
@@ -65,7 +65,7 @@ Use "pactline help workflow" for the complete execution and review loops.`,
 	root.PersistentFlags().StringVar(&app.idempotencyKey, "idempotency-key", "", "reuse this key for one mutation after an uncertain outcome")
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.AddCommand(
-		app.versionCommand(), app.capabilitiesCommand(), app.configCommand(), app.doctorCommand(),
+		app.versionCommand(), app.capabilitiesCommand(), app.authCommand(), app.configCommand(), app.doctorCommand(),
 		app.taskCommand(), app.claimCommand(), app.threadCommand(), app.issueCommand(),
 	)
 	root.SetHelpCommand(app.helpCommand(root))
