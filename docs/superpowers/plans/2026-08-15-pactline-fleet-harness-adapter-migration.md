@@ -2,7 +2,12 @@
 
 **Date:** 2026-08-15
 
-**Status:** Architecture approved; M0 through M3 complete; M4 pending owner direction
+**Status:** M0 through M5 complete; former reference Bundle retired after M5.4
+
+References below to a frozen or future-removed old Bundle record the original
+milestone sequence. The current decision is that the untracked reference source
+and its active verification commands were retired after M5.4; they are not a
+remaining gate.
 
 **Supersedes for new development:** the DeepSeek-specific architecture in
 `docs/superpowers/specs/2026-08-14-pactline-deepseek-fleet-bundle.md`
@@ -24,10 +29,9 @@ The first supported Adapters are:
 - `DeepSeekHarnessAdapter`, a supported evaluation and optional routing
   runtime backed by DeepSeek Harness.
 
-The migration creates a new standalone `fleet` application subtree. The existing
-`bundles/deepseek-fleet` subtree remains frozen as a known-good reference until
-the new Fleet passes its complete acceptance gates. It is not modified in
-place, used as a runtime dependency, or deleted before cutover approval.
+The migration created the standalone `fleet` application subtree. The former
+DeepSeek-specific Bundle was never a runtime dependency and was retired with
+owner approval after the standalone Fleet passed M5.4 bounded usability.
 
 ## Accepted decisions
 
@@ -43,9 +47,8 @@ place, used as a runtime dependency, or deleted before cutover approval.
   write credential.
 - There is no automatic cross-Adapter fallback. A provider failure remains
   attributable to the selected Adapter and is retried or recovered explicitly.
-- The new implementation is built beside the old Bundle. The old Bundle is
-  removed only after parity, Codex qualification, evidence preservation, and
-  explicit cutover verification.
+- The standalone implementation was built without importing the old Bundle;
+  the reference source and its obsolete commands were retired after M5.4.
 - The package and directory are renamed without a compatibility alias after
   cutover:
   - `bundles/deepseek-fleet` -> standalone `fleet` application;

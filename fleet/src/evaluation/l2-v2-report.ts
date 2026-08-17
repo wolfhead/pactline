@@ -146,7 +146,7 @@ export async function generateL2V2Report(options: { readonly runRoot?: string; r
       codexDetectedDeepSeekImplementationDefect: true,
     },
     frozenDeepSeekBaseline: {
-      route: 'DeepSeek/DeepSeek', cases: 6, passed: 6, source: 'bundles/deepseek-fleet/.fleet/l2-results',
+      route: 'DeepSeek/DeepSeek', cases: 6, passed: 6, source: 'retired M2 qualification evidence',
       tasks: [6, 7, 8, 9, 10, 11], pullRequests: [31, 32, 33, 34, 35, 36, 37],
     },
     byAdapter, cases,

@@ -310,5 +310,7 @@ Session resume is deliberately reported as unsupported.
 The Replay Adapter is deterministic evaluation infrastructure, not a provider
 fallback. A configured Adapter failure remains attributed to that Adapter.
 
-The completed DeepSeek-specific evaluation remains frozen under
-`bundles/deepseek-fleet` until the standalone Fleet passes all cutover gates.
+The former DeepSeek-specific Bundle was retired after the standalone Fleet
+completed M5.4. DeepSeek remains supported through `runtime/deepseek/` and
+`DeepSeekHarnessAdapter`; no active command, test, or package depends on the
+retired Bundle source.

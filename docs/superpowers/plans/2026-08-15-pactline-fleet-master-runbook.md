@@ -77,10 +77,11 @@ model commands. M4 then completed six Codex/Codex lifecycle cases and two
 bounded mixed-Adapter comparisons. Codex is the accepted default; DeepSeek is
 retained as an explicit opt-in sibling Adapter. M5 is complete.
 
-The existing DeepSeek-specific implementation remains under
-`bundles/deepseek-fleet` and must be treated as frozen reference code during the
-parallel build. Do not refactor, rename, delete, or make the new application
-import it before the cutover Milestone.
+The former DeepSeek-specific Bundle was retired with owner approval after M5.4
+proved the standalone Core, both Adapters, resident scheduling, representative
+recovery, and bounded usability. DeepSeek support remains under
+`fleet/runtime/deepseek/`; the standalone application never imported the old
+source.
 
 ### Verified baseline snapshot
 
@@ -138,8 +139,8 @@ format, stage, delete, or rewrite unrelated files.
     it; no public third-party plugin API is frozen in the first version.
 11. Finite runners may retain private atomic JSON evidence. The resident Fleet
     Service uses SQLite for local coordination, recovery, and observation.
-12. New work occurs beside the frozen old Bundle. Old source is removed only
-    after all cutover gates and evidence preservation pass.
+12. The former reference Bundle was never a runtime dependency and was retired
+    after M5.4; no active command or test may restore that dependency.
 13. No compatibility alias remains for `@pactline/dsh-fleet` after cutover.
 14. New qualification uses new Tasks and branches; completed Tasks #6 through
     #11 are never reused.
@@ -182,7 +183,7 @@ M0 Architecture freeze and standalone scaffold
   -> M5.3 Local Web UI and observability
   -> M5.4 Bounded usability acceptance
   -> M6 Provider, sandbox, and operations hardening
-  -> M7 Cutover and old-Bundle cleanup
+  -> M7 Final cutover and residual cleanup
   -> M8 Controlled real-work pilot and Game Design decision input
 ```
 
@@ -648,32 +649,29 @@ Close the remaining security and operational gaps before any real-work pilot.
 - retention and cleanup act only on exact recorded artifacts;
 - operational documentation can be followed from a fresh local environment.
 
-## M7 — Cutover and old-Bundle cleanup
+## M7 — Final cutover and residual cleanup
 
-**Status:** pending M6
+**Status:** reference source cleanup complete; final cutover pending M6
 
 ### Objective
 
-Make standalone Pactline Fleet the only active implementation and remove the
-old DeepSeek-specific source without losing private baseline evidence.
+Complete the post-hardening cutover with standalone Pactline Fleet as the only
+active implementation. The former DeepSeek-specific reference source and its
+obsolete commands were retired early with owner approval after M5.4.
 
 ### Scope
 
-- switch root commands and current docs to `fleet/`;
-- produce an exact old-source and evidence inventory;
-- move retained private L1/L2 evidence to an explicit restricted archive
-  outside the source subtree;
-- scan all active code and docs for old package/path dependencies;
-- remove obsolete old Make targets and source only after gates pass;
+- confirm root commands and current docs use `fleet/` only;
+- scan all active code and docs for retired package/path dependencies;
 - rerun full new verification and fresh local preflight;
-- publish a cutover and cleanup report.
+- publish the final post-M6 cutover report.
 
 ### Destructive boundary
 
-The owner has approved eventual cleanup after acceptance, but deletion occurs
-only after the exact inventory and cutover report identify every target and
-retained artifact. Do not delete the old subtree as part of an earlier
-Milestone or infer targets from a broad prefix.
+The owner explicitly approved retiring the untracked reference Bundle after
+M5.4. It was moved to the operating-system Trash rather than irreversibly
+deleted. Any later cleanup must still resolve exact targets and preserve active
+standalone Fleet state and private acceptance evidence.
 
 ### Exit criteria
 
@@ -681,8 +679,9 @@ Milestone or infer targets from a broad prefix.
 - no runtime or test imports the old package;
 - no compatibility alias remains;
 - new Core, both Adapters, recovery, provider, and live preflight gates pass;
-- old private evidence remains accessible at its documented restricted path;
-- removed source and recovery approach are reported explicitly.
+- retained private standalone evidence remains accessible at its documented
+  restricted path;
+- final cutover and recovery approach are reported explicitly.
 
 ## M8 — Controlled real-work pilot and Game Design decision input
 
@@ -753,8 +752,8 @@ real Tasks before making any Game Design migration decision.
 3. Call `get_goal`; continue an existing active Goal rather than creating a
    duplicate.
 4. Run `git status --short --branch` and preserve unrelated changes.
-5. Confirm the old `bundles/deepseek-fleet` baseline has not been modified
-   unless the current approved Milestone is M7.
+5. Confirm no active code or command has reintroduced a dependency on the
+   retired `bundles/deepseek-fleet` path.
 6. Inspect only the files and evidence named by the current Milestone.
 7. Check Docker, Fleet, Harness, and test processes before starting new ones.
 8. Run the smallest checkpoint verification that proves current state.
@@ -773,7 +772,7 @@ real Tasks before making any Game Design migration decision.
 | M4 Codex L2 v2 | complete | capability report accepted |
 | M5 Resident Service | complete | bounded local trials accepted |
 | M6 Provider/security/ops | pending | M5 usability report |
-| M7 Cutover/cleanup | pending | M6 hardening report |
+| M7 Final cutover | source cleanup complete; final gate pending | M6 hardening report |
 | M8 Real-work pilot | pending separate approval | M7 cutover report |
 
 At most one Milestone is active. A Milestone may contain several coherent
@@ -957,3 +956,10 @@ Stop and request owner direction when:
   rate-limit retry propagation, and two Codex structured-output constraints.
   Exhaustive crashes, distributed competition, storage faults, soak, live
   provider failure, and production sandbox qualification remain M6 work.
+
+- 2026-08-17: With owner approval, the untracked DeepSeek-specific reference
+  Bundle was retired after M5.4. Obsolete root Make targets, the standalone
+  Fleet hash verifier, its baseline manifest, and active documentation claims
+  were removed. DeepSeek support remains in the standalone
+  `DeepSeekHarnessAdapter` and `fleet/runtime/deepseek/`; no active build or
+  test depends on the retired source.

@@ -84,7 +84,6 @@ pactline-fleet-deepseek-l1:
 
 pactline-fleet-check:
 	npm --prefix fleet ci
-	npm --prefix fleet run baseline:verify
 	npm --prefix fleet run typecheck
 	npm --prefix fleet test
 	npm --prefix fleet run build

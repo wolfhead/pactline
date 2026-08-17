@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-15
 
-**Status:** Accepted direction; implementation pending Milestone approval
+**Status:** Implemented through M5; former reference Bundle retired after M5.4
 
 ## Product statement
 
@@ -342,22 +342,14 @@ reasoning.
 
 ## Source migration and cleanup
 
-New implementation occurs only in `fleet/`. The completed
-`bundles/deepseek-fleet` source remains frozen during development and is never
-imported by the new application.
+The implementation lives only in `fleet/`. The former DeepSeek-specific
+Bundle was never imported by the standalone application and was retired with
+owner approval after M5.4 established Adapter parity, Codex qualification,
+continuous scheduling, representative recovery, and bounded usability.
 
-Before old source removal:
-
-- DeepSeek parity passes from the new Adapter;
-- Codex qualification passes;
-- continuous scheduling and crash recovery pass;
-- all active commands and documentation use `fleet/`;
-- an exact scan finds no source dependency on the old package;
-- private L1/L2 baseline evidence is inventoried and retained outside the old
-  source subtree;
-- the owner reviews the cutover report.
-
-After cutover there is no compatibility alias for `@pactline/dsh-fleet`.
+There is no compatibility alias for `@pactline/dsh-fleet`. DeepSeek remains a
+supported Adapter through its separate pinned runtime under
+`fleet/runtime/deepseek/`.
 
 ## Promotion boundary
 

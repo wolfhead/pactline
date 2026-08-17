@@ -245,22 +245,16 @@ entry points are documented in the
 
 ## Migration boundary
 
-The completed DeepSeek-specific implementation remains frozen under
-`bundles/deepseek-fleet` while the standalone application is built in `fleet/`.
-The new application never imports the old source.
+The former DeepSeek-specific Bundle was used only as a frozen comparison while
+the standalone application was built. After M5.4 proved the independent Core,
+both Adapters, resident scheduling, recovery, and bounded usability, the owner
+approved retiring that untracked reference source and its obsolete commands and
+hash gate. No standalone Fleet source imported it.
 
-Old source is removed only after:
-
-- DeepSeek Adapter parity passes;
-- Codex qualification passes;
-- recovery and continuous scheduling pass;
-- provider and credential-isolation gates pass;
-- active commands and documentation use the standalone application;
-- private baseline evidence is inventoried and retained separately;
-- the owner reviews the exact cutover and cleanup report.
-
-After cutover there is no compatibility alias for `@pactline/dsh-fleet`.
-Controlled real work and Game Design remain separate promotion decisions.
+DeepSeek support remains active through `DeepSeekHarnessAdapter` and its pinned
+runtime under `fleet/runtime/deepseek/`. There is no compatibility alias for
+`@pactline/dsh-fleet`. Production hardening, controlled real work, and Game
+Design remain separate promotion decisions.
 
 ## Implemented Fleet milestones
 
