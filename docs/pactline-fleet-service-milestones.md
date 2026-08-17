@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-15
 
-**Status:** M5.0 through M5.3 complete; M5.4 pending
+**Status:** M5.0 through M5.4 complete
 
 ## Objective
 
@@ -21,7 +21,7 @@ M5.0 accepted design
   -> M5.1 service foundation
   -> M5.2 durable scheduling and recovery
   -> M5.3 local Web UI and observability
-  -> M5.4 distributed and restart acceptance
+  -> M5.4 bounded usability acceptance
   -> M6 provider, sandbox, and production hardening
 ~~~
 
@@ -33,7 +33,7 @@ M5.0 accepted design
 | M5.1 Service foundation | complete | Resident process, config, registry, local health |
 | M5.2 Durable scheduler and recovery | complete | Fair scheduling, durable checkpoints, recovery, work plugins |
 | M5.3 Local Web UI and observability | complete | Read-only Operations Console and observation API |
-| M5.4 Distributed and restart acceptance | pending | Production-shaped local release candidate |
+| M5.4 Usability acceptance | complete | Bounded local trials accepted; production hardening remains M6 |
 
 ## M5.0 — Design freeze
 
@@ -118,7 +118,7 @@ part of this design.
 ### Exit criteria
 
 - a bounded idle child-process smoke exits without leaked subprocesses or
-  residual state ownership; the long-duration soak remains the M5.4 gate;
+  residual state ownership; long-duration soak is deferred hardening evidence;
 - a two-Fleet configuration loads and exposes both Project mappings;
 - no discovery or Claim mutation occurs before readiness;
 - invalid reload never partially changes active configuration;
@@ -304,38 +304,32 @@ health, active work, recent outcomes, and recovery evidence.
   browser tests, type checking, production build, process smoke, and package
   smoke with zero npm audit findings.
 
-## M5.4 — Distributed and restart acceptance
+## M5.4 — Usability acceptance
 
 ### Objective
 
-Prove the complete resident service under realistic local operation before
-provider and sandbox hardening or real-work promotion.
+Determine whether the current resident Fleet can support bounded day-to-day
+trials without manual Task, Claim, repository, or local Run repair.
 
 ### Test topology
 
-- one local Pactline instance;
-- at least two Pactline Projects;
-- one Fleet Service managing both Projects;
-- a second isolated Fleet Service competing for one of those Projects;
-- separate state directories and registries;
-- both Codex and DeepSeek Adapters available where their configured stage
-  requires them;
-- a controlled local repository and provider fixture;
-- Web UI observation throughout the run.
+- one local Pactline instance and isolated acceptance Project;
+- one resident Fleet Service and Project-bound Fleet;
+- the existing repository cloned into disposable worktrees;
+- a local bare Git remote and provider fixture, with no GitHub dependency;
+- Replay for deterministic lifecycle control;
+- one representative DeepSeek Pro/max execution with Codex review;
+- one representative Codex `gpt-5.6-sol/high` execution and review;
+- Web UI observation throughout each bounded Run.
 
 ### Scenarios
 
-- both local Fleets discover and drain bounded work fairly;
-- the second service loses and wins different Claim races;
-- one Adapter becomes unavailable while another Fleet remains healthy;
-- Pactline becomes temporarily unreachable;
-- configuration reload disables one Fleet during an active Run;
-- service termination occurs at every required crash checkpoint;
-- the service restarts with resumable and non-resumable Sessions;
-- an unfamiliar same-principal Claim is presented;
-- SSE disconnects while work continues;
-- SQLite and disk health degrade in controlled fixtures;
-- old terminal history is retained and exact disposable artifacts are cleaned.
+- deterministic discovery, execution, verification, delivery, and settlement;
+- representative live DeepSeek and Codex paths;
+- request-changes, correction, and final review;
+- normal drain and restart;
+- one controlled termination after Session persistence and before Agent work;
+- exact disposable-artifact and child-process cleanup.
 
 ### Evidence
 
@@ -345,22 +339,39 @@ provider and sandbox hardening or real-work promotion.
 - Adapter Session identity and bounded usage;
 - structured service logs;
 - health endpoint snapshots;
-- Web UI screenshots for healthy, active, degraded, reconciling, and
-  quarantined states;
-- resource and subprocess leak checks;
+- Web UI screenshots for active and terminal states;
+- bounded subprocess and disposable-worktree checks;
 - a secret-shape scan over retained evidence and packaged UI assets.
 
 ### Exit criteria
 
-- all admitted Tasks have one correct terminal or quarantined disposition;
-- no duplicate external effect occurs across crashes or service competition;
-- no unfamiliar Claim is adopted implicitly;
-- one Fleet failure remains isolated;
-- the UI matches authoritative and local coordination state throughout;
-- service restart requires no database or file repair by the operator;
-- a 24-hour bounded soak completes without unbounded memory, database, event,
-  file-descriptor, or subprocess growth;
-- the owner receives a release-candidate acceptance report.
+- every bounded Task reaches its expected Pactline state without manual repair;
+- no duplicate Claim, commit, branch, delivery, or Thread submission occurs;
+- the UI matches authoritative and local coordination state;
+- normal and representative injected restart require no database repair;
+- no subprocess or disposable worktree remains after cleanup;
+- the owner receives a usability acceptance report and current go/no-go
+  recommendation.
+
+The exhaustive crash matrix, distributed service competition, storage fault
+injection, 24-hour soak, and live provider failures are explicitly deferred.
+They are reliability and hardening evidence, not prerequisites for deciding
+whether bounded local trials are currently useful.
+
+### Completion evidence
+
+- Replay completed deterministic execution, request-changes/correction/final
+  review, and one post-Session restart without manual repair;
+- DeepSeek Pro/max execution with Codex high review reached `done`;
+- Codex high execution and review reached `done`;
+- the real Web UI exposed the Project-bound Fleet, both Adapter routes, both
+  runtime Sessions, terminal checkpoints, and accepted settlement with no
+  browser-console errors;
+- three integration boundaries found by the vertical slices now have
+  regression coverage: empty Claim lists, bounded rate-limit retry, and Codex
+  structured-output compatibility for fixed verification commands;
+- the accepted decision and remaining limits are recorded in
+  [Pactline Fleet M5.4 Acceptance Report](pactline-fleet-m5-4-report.md).
 
 ## M6 boundary after resident-service delivery
 

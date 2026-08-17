@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,12 +16,13 @@ import (
 )
 
 type APIError struct {
-	Status    int    `json:"status,omitempty"`
-	Code      string `json:"code"`
-	Message   string `json:"message"`
-	Hint      string `json:"hint,omitempty"`
-	RequestID string `json:"request_id,omitempty"`
-	Key       string `json:"idempotency_key,omitempty"`
+	Status            int    `json:"status,omitempty"`
+	Code              string `json:"code"`
+	Message           string `json:"message"`
+	Hint              string `json:"hint,omitempty"`
+	RequestID         string `json:"request_id,omitempty"`
+	Key               string `json:"idempotency_key,omitempty"`
+	RetryAfterSeconds int    `json:"retry_after_seconds,omitempty"`
 }
 
 func (e *APIError) Error() string { return e.Message }
@@ -127,9 +129,10 @@ func (c *client) request(
 		if requestID == "" {
 			requestID = response.Header.Get("X-Request-ID")
 		}
+		retryAfterSeconds, _ := strconv.Atoi(response.Header.Get("Retry-After"))
 		return nil, response.Header, &APIError{
 			Status: response.StatusCode, Code: problem.Code, Message: message,
-			RequestID: requestID, Key: idempotencyKey,
+			RequestID: requestID, Key: idempotencyKey, RetryAfterSeconds: retryAfterSeconds,
 		}
 	}
 	c.lastMeta = responseMeta{

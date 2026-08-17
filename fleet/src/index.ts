@@ -63,3 +63,17 @@ export type { DeepSeekHarnessAdapterOptions } from './adapters/deepseek/deepseek
 export { resolveDeepSeekCredential } from './adapters/deepseek/credential.js'
 export { runDeepSeekL1 } from './evaluation/deepseek-l1-live.js'
 export type { DeepSeekL1Options, DeepSeekL1Result } from './evaluation/deepseek-l1-live.js'
+export { preflightM54Usability } from './evaluation/m5-4-usability.js'
+export type { M54UsabilityPreflightOptions, M54UsabilityPreflightResult } from './evaluation/m5-4-usability.js'
+export {
+  runM54DeterministicCorrection,
+  runM54DeterministicUsability,
+  runM54LiveWorkflow,
+  runM54RestartRecovery,
+} from './evaluation/m5-4-deterministic.js'
+export type {
+  M54CorrectionResult,
+  M54DeterministicResult,
+  M54LiveResult,
+  M54RestartResult,
+} from './evaluation/m5-4-deterministic.js'

@@ -184,6 +184,29 @@ func TestAPIProblemRetainsMachineCodeAndRequestID(t *testing.T) {
 	require.Equal(t, "req-42", envelope.Error.RequestID)
 }
 
+func TestRateLimitProblemExposesBoundedRetryDelay(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.Header().Set("Retry-After", "2")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = io.WriteString(w, `{"code":"RATE_LIMITED","detail":"Too many requests"}`)
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv("PACTLINE_CONFIG", filepath.Join(t.TempDir(), "missing.json"))
+	t.Setenv("PACTLINE_SERVER", server.URL)
+	t.Setenv("PACTLINE_TOKEN", "token-a")
+
+	var stdout, stderr bytes.Buffer
+	code := ExecuteArgs(context.Background(), []string{"--json", "claim", "list"}, strings.NewReader(""), &stdout, &stderr)
+	require.Equal(t, 5, code)
+	var envelope struct {
+		Error APIError `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &envelope))
+	require.Equal(t, "RATE_LIMITED", envelope.Error.Code)
+	require.Equal(t, 2, envelope.Error.RetryAfterSeconds)
+}
+
 func TestContentRequiresOneExplicitSource(t *testing.T) {
 	_, err := content("inline", "file", strings.NewReader(""), "message")
 	require.Error(t, err)
@@ -281,6 +304,31 @@ func TestTaskListUsesServerClaimableStageFilters(t *testing.T) {
 	review := requests[0].URL.Query()
 	require.Equal(t, "review", review.Get("claimable_stage"))
 	require.Empty(t, review.Get("assignee"))
+}
+
+func TestClaimListJSONUsesAnEmptyArrayWhenThereAreNoActiveClaims(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/api/v1/claims", r.URL.Path)
+		require.Equal(t, "active", r.URL.Query().Get("status"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"items":[]}`)
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv("PACTLINE_CONFIG", filepath.Join(t.TempDir(), "missing.json"))
+	t.Setenv("PACTLINE_SERVER", server.URL)
+	t.Setenv("PACTLINE_TOKEN", "token-a")
+
+	var stdout, stderr bytes.Buffer
+	code := ExecuteArgs(context.Background(), []string{"--json", "claim", "list"}, strings.NewReader(""), &stdout, &stderr)
+	require.Zero(t, code, stderr.String())
+	var envelope struct {
+		Data struct {
+			Items []claimSummary `json:"items"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &envelope))
+	require.NotNil(t, envelope.Data.Items)
+	require.Empty(t, envelope.Data.Items)
 }
 
 func TestCompactClaimShowUsesOneBoundedEndpoint(t *testing.T) {

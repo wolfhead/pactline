@@ -45,6 +45,7 @@ export interface PactlineCLIConfig {
   readonly clientKind?: string
   readonly timeoutMs?: number
   readonly maxOutputBytes?: number
+  readonly rateLimitRetries?: number
 }
 
 export interface PactlinePreflightOptions {
@@ -105,6 +106,9 @@ function safeErrorBody(value: unknown): PactlineErrorBody | undefined {
     message: value.message,
     ...(typeof value.hint === 'string' ? { hint: value.hint } : {}),
     ...(typeof value.request_id === 'string' ? { request_id: value.request_id } : {}),
+    ...(Number.isSafeInteger(value.retry_after_seconds) && Number(value.retry_after_seconds) >= 0
+      ? { retry_after_seconds: Number(value.retry_after_seconds) }
+      : {}),
   }
 }
 
@@ -240,6 +244,7 @@ export class PactlineCLI {
   readonly clientKind: string
   readonly timeoutMs: number
   readonly maxOutputBytes: number
+  readonly rateLimitRetries: number
   private readonly environment: NodeJS.ProcessEnv
 
   constructor(config: PactlineCLIConfig = {}, runtime: PactlineCLIRuntime = {}) {
@@ -248,6 +253,10 @@ export class PactlineCLI {
     this.clientKind = config.clientKind ?? 'pactline-fleet'
     this.timeoutMs = config.timeoutMs ?? 30_000
     this.maxOutputBytes = config.maxOutputBytes ?? 1_048_576
+    this.rateLimitRetries = config.rateLimitRetries ?? 3
+    if (!Number.isSafeInteger(this.rateLimitRetries) || this.rateLimitRetries < 0 || this.rateLimitRetries > 10) {
+      throw new Error('rateLimitRetries must be between 0 and 10')
+    }
     this.environment = { ...(runtime.environment ?? process.env) }
   }
 
@@ -397,24 +406,47 @@ export class PactlineCLI {
   }
 
   private async invokeEnvelope<T>(args: readonly string[], options: InvocationOptions): Promise<PactlineOperation<T>> {
-    const result = await this.runProcess(args, options)
-    const parsed = this.parseEnvelope<T>(result.stdout)
-    if (parsed.ok === false) {
-      const pactlineError: PactlineErrorBody = {
-        ...parsed.error,
-        message: this.safeDiagnostic(parsed.error.message),
-        ...(parsed.error.hint === undefined ? {} : { hint: this.safeDiagnostic(parsed.error.hint) }),
+    for (let attempt = 0; ; attempt += 1) {
+      const result = await this.runProcess(args, options)
+      const parsed = this.parseEnvelope<T>(result.stdout)
+      if (parsed.ok === false) {
+        const pactlineError: PactlineErrorBody = {
+          ...parsed.error,
+          message: this.safeDiagnostic(parsed.error.message),
+          ...(parsed.error.hint === undefined ? {} : { hint: this.safeDiagnostic(parsed.error.hint) }),
+        }
+        if (pactlineError.code === 'RATE_LIMITED'
+          && pactlineError.retry_after_seconds !== undefined
+          && attempt < this.rateLimitRetries) {
+          await this.waitForRateLimit(Math.min(30, pactlineError.retry_after_seconds) * 1_000, options.signal)
+          continue
+        }
+        throw new PactlineClientError('CLI_ERROR', `Pactline CLI rejected ${args[0] ?? 'operation'}: ${pactlineError.code}`, {
+          exitCode: result.exitCode,
+          pactlineError,
+        })
       }
-      throw new PactlineClientError('CLI_ERROR', `Pactline CLI rejected ${args[0] ?? 'operation'}: ${pactlineError.code}`, {
-        exitCode: result.exitCode,
-        pactlineError,
-      })
+      if (result.exitCode !== 0) {
+        throw new PactlineClientError('CLI_ERROR', `Pactline CLI exited with status ${String(result.exitCode)}: ${this.safeDiagnostic(result.stderr)}`, { exitCode: result.exitCode })
+      }
+      const meta = operationMeta(parsed.meta)
+      return { data: parsed.data, ...(meta === undefined ? {} : { meta }) }
     }
-    if (result.exitCode !== 0) {
-      throw new PactlineClientError('CLI_ERROR', `Pactline CLI exited with status ${String(result.exitCode)}: ${this.safeDiagnostic(result.stderr)}`, { exitCode: result.exitCode })
-    }
-    const meta = operationMeta(parsed.meta)
-    return { data: parsed.data, ...(meta === undefined ? {} : { meta }) }
+  }
+
+  private waitForRateLimit(delayMs: number, signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted === true) return Promise.reject(new PactlineClientError('ABORTED', 'Pactline CLI retry was aborted'))
+    return new Promise((resolvePromise, reject) => {
+      const timer = setTimeout(() => {
+        signal?.removeEventListener('abort', onAbort)
+        resolvePromise()
+      }, delayMs)
+      const onAbort = (): void => {
+        clearTimeout(timer)
+        reject(new PactlineClientError('ABORTED', 'Pactline CLI retry was aborted'))
+      }
+      signal?.addEventListener('abort', onAbort, { once: true })
+    })
   }
 
   private parseEnvelope<T>(stdout: string): PactlineSuccess<T> | PactlineFailure {

@@ -325,7 +325,7 @@ export function proposalResultSchema(context: ProposalValidationContext): Readon
         },
       },
       verification: {
-        type: 'array', maxItems: MAX_ITEMS, items: {
+        type: 'array', minItems: context.verificationCommands.length, maxItems: context.verificationCommands.length, items: {
           type: 'object', additionalProperties: false, required: ['command', 'outcome', 'summary'],
           properties: {
             command: { type: 'string', enum: [...context.verificationCommands] },

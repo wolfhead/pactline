@@ -47,7 +47,7 @@ func (a *App) claimListCommand() *cobra.Command {
 	return &cobra.Command{Use: "list", Short: "List active Claims owned by this logical principal", Long: "Lists all active Claims owned by the authenticated Token or Agent Run, regardless of Client Session ID.", Args: cobra.NoArgs, RunE: func(command *cobra.Command, _ []string) error {
 		page := struct {
 			Items []claimSummary `json:"items"`
-		}{}
+		}{Items: []claimSummary{}}
 		path := "/api/v1/claims?status=active&limit=200"
 		for {
 			body, _, err := a.client.request(command.Context(), http.MethodGet, path, nil, 0, "", false)

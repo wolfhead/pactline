@@ -17,6 +17,7 @@ export interface PactlineErrorBody {
   readonly message: string
   readonly hint?: string
   readonly request_id?: string
+  readonly retry_after_seconds?: number
 }
 
 export interface PactlineFailure {

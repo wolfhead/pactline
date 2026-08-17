@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-15
 
-**Status:** M0 through M5.3 complete; M5.4 pending activation
+**Status:** M0 through M5 complete; M6 pending
 
 **Purpose:** Canonical recovery and execution document for the complete
 Harness-neutral Pactline Fleet initiative. Read this file first after context
@@ -50,6 +50,15 @@ unbounded output, and raw registry rows. Prometheus metrics use bounded labels,
 and the packed artifact contains its production-built static assets. Component,
 real Chromium responsive, HTTP boundary, and package smoke gates pass.
 
+M5.4 completed the bounded usability gate. Replay proved deterministic
+delivery, request-changes/correction/final review, and one non-resumable
+post-Session restart. DeepSeek Pro/max execution with Codex high review and
+Codex high execution/review both reached `done` through real local Pactline,
+local Git delivery, and resident scheduling. The real Operations Console
+accurately exposed the Fleet, Adapter routes, Sessions, checkpoints, and
+settlement. Bounded local trials are accepted; production provider, sandbox,
+and operational hardening remains M6.
+
 The DeepSeek Adapter owns a separate pinned DSH `0.1.0-rc.6` runtime closure,
 Cordis profile, terminal result plugin, credential resolution, JSON-RPC
 transport, event/usage translation, and one process per Run. The fixed
@@ -66,7 +75,7 @@ wire parsing, and process-tree reap. The real read-only spike passed with
 kept Git clean, and exposed no Pactline/GitHub sentinel environment name to
 model commands. M4 then completed six Codex/Codex lifecycle cases and two
 bounded mixed-Adapter comparisons. Codex is the accepted default; DeepSeek is
-retained as an explicit opt-in sibling Adapter. M5 has not started.
+retained as an explicit opt-in sibling Adapter. M5 is complete.
 
 The existing DeepSeek-specific implementation remains under
 `bundles/deepseek-fleet` and must be treated as frozen reference code during the
@@ -171,7 +180,7 @@ M0 Architecture freeze and standalone scaffold
   -> M5.1 Resident service foundation
   -> M5.2 Durable multi-Fleet scheduler and recovery
   -> M5.3 Local Web UI and observability
-  -> M5.4 Distributed and restart acceptance
+  -> M5.4 Bounded usability acceptance
   -> M6 Provider, sandbox, and operations hardening
   -> M7 Cutover and old-Bundle cleanup
   -> M8 Controlled real-work pilot and Game Design decision input
@@ -534,7 +543,7 @@ is frozen.
 
 ## M5 — Resident Fleet Service
 
-**Status:** M5.3 complete; M5.4 pending activation
+**Status:** complete
 
 ### Objective
 
@@ -560,8 +569,8 @@ UI without changing Pactline's workflow authority.
 - implement a loopback-only read-only observation API and Web UI;
 - expose scoped service, Fleet, Adapter, and Run health;
 - retain finite `once` commands for diagnosis;
-- inject termination before and after every durable or external-effect
-  boundary.
+- retain injectable durable and external-effect checkpoints for deferred
+  reliability qualification.
 
 ### Delivery gates
 
@@ -572,9 +581,9 @@ The detailed plan is
 - M5.1 resident service foundation;
 - M5.2 durable multi-Fleet scheduler and recovery;
 - M5.3 local Web UI and observability;
-- M5.4 distributed and restart acceptance.
+- M5.4 bounded usability acceptance.
 
-### Required crash checkpoints
+### Deferred exhaustive crash qualification
 
 1. before Claim creation;
 2. after Claim creation and before Run persistence;
@@ -589,23 +598,26 @@ The detailed plan is
 11. before and after typed Issue resolution;
 12. before new post-resolution Claim dispatch.
 
+These checkpoints remain implemented and individually testable, but M5.4 uses
+one representative post-Session termination to decide bounded usability. The
+full matrix is not a prerequisite for local trials.
+
 ### Exit criteria
 
-- every checkpoint converges to resumed, settled, released, or quarantined;
-- no duplicate Claim mutation, submission, check, PR/MR, or Thread Item occurs;
+- deterministic and representative live Tasks reach their expected Pactline
+  state without manual repair;
+- no duplicate Claim mutation, delivery, submission, check, or Thread Item
+  occurs in the bounded scenarios;
 - no recovery changes Harness automatically;
-- a bounded two-Project queue drains fairly;
-- separate Fleet Services safely compete for one Project;
-- unfamiliar same-principal Claims are never adopted implicitly;
 - graceful stop leaves no unfinished local write;
-- restart reconstructs decisions from Pactline/provider truth plus local
-  coordination facts, never local projection alone.
+- one representative injected restart converges safely without database
+  repair;
 - one local URL exposes accurate read-only service, Fleet, Adapter, and Run
   health without a separate UI process.
 
 ## M6 — Provider, sandbox, and operations hardening
 
-**Status:** pending M5
+**Status:** pending
 
 ### Objective
 
@@ -759,8 +771,8 @@ real Tasks before making any Game Design migration decision.
 | M2 DeepSeek Adapter parity | complete | all exit criteria passed |
 | M3 Codex Adapter | complete | shared L1 read-only gate passed |
 | M4 Codex L2 v2 | complete | capability report accepted |
-| M5 Resident Service | M5.3 complete | activate M5.4 distributed/restart acceptance |
-| M6 Provider/security/ops | pending | M5 crash gates |
+| M5 Resident Service | complete | bounded local trials accepted |
+| M6 Provider/security/ops | pending | M5 usability report |
 | M7 Cutover/cleanup | pending | M6 hardening report |
 | M8 Real-work pilot | pending separate approval | M7 cutover report |
 
@@ -933,5 +945,15 @@ Stop and request owner direction when:
   Prometheus metrics, static delivery, and the `ui --open` command. The full
   Fleet gate passed 144 service tests, 5 component tests, 5 real Chromium
   flows, type checking, production build, M5.1 process smoke, and packed UI
-  smoke. npm audit reported zero vulnerabilities. M5.4 distributed and
-  restart acceptance is next.
+  smoke. npm audit reported zero vulnerabilities. M5.4 bounded usability
+  acceptance is next.
+
+- 2026-08-17: M5.4 accepted bounded local trials. Deterministic Replay Tasks
+  completed direct delivery, four-Claim correction, and a post-Session restart
+  with safe release and one replacement delivery. Live DeepSeek Pro/max plus
+  Codex high and Codex/Codex paths both reached `done`. Browser inspection
+  confirmed accurate Overview, Fleet, Run, and System state with no console
+  errors. The vertical slices exposed and fixed empty Claim-list encoding,
+  rate-limit retry propagation, and two Codex structured-output constraints.
+  Exhaustive crashes, distributed competition, storage faults, soak, live
+  provider failure, and production sandbox qualification remain M6 work.

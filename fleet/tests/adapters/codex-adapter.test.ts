@@ -99,6 +99,24 @@ describe('CodexHarnessAdapter', () => {
     expect(recordForTest(schema.properties)).not.toHaveProperty('changedPaths')
   })
 
+  it('keeps arbitrary fixed shell commands out of provider string literals', () => {
+    const base = request('review', reviewProposal)
+    const schema = codexOutputSchema({
+      ...base,
+      verificationCommands: ['test "$(cat marker.txt)" = "passed"'],
+      resultSchema: proposalResultSchema({
+        stage: 'review', runId: 'run-1', claimId: 'claim-1', taskNumber: 7,
+        criteria: [], verificationCommands: ['test "$(cat marker.txt)" = "passed"'],
+      }),
+    })
+    const properties = recordForTest(schema.properties)
+    const verification = recordForTest(properties.verification)
+    expect(verification).toMatchObject({ minItems: 1, maxItems: 1 })
+    const items = recordForTest(verification.items)
+    const command = recordForTest(recordForTest(items.properties).command)
+    expect(command).toEqual({ type: 'string' })
+  })
+
   it.each([
     ['workspace-write execution', 'execution', executionProposal],
     ['read-only review', 'review', reviewProposal],

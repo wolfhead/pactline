@@ -161,6 +161,14 @@ export function codexOutputSchema(request: HarnessRunRequest): Readonly<Record<s
     const property = record(properties[name])
     if (property !== undefined && property.type === undefined) property.type = type
   }
+  // Codex strict structured output rejects some valid shell characters in
+  // schema string literals. Core still requires every fixed command exactly
+  // once, so the transport schema only needs to constrain this field to text.
+  const verification = record(properties.verification)
+  const verificationItems = record(verification?.items)
+  const verificationProperties = record(verificationItems?.properties)
+  const verificationCommand = record(verificationProperties?.command)
+  if (verificationCommand !== undefined) delete verificationCommand.enum
   const resolution = properties.resolutionRequest
   if (resolution !== undefined) properties.resolutionRequest = { anyOf: [resolution, { type: 'null' }] }
   root.required = Object.keys(properties)

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { PactlineCLI, PactlineClientError, REQUIRED_PACTLINE_FEATURES } from '../../src/pactline/client.js'
 
 const FAKE_CLI = `#!/usr/bin/env node
-import { appendFileSync } from 'node:fs'
+import { appendFileSync, existsSync, writeFileSync } from 'node:fs'
 let input = ''; for await (const chunk of process.stdin) input += chunk
 const args = process.argv.slice(2)
 if (process.env.FAKE_CAPTURE) appendFileSync(process.env.FAKE_CAPTURE, JSON.stringify({
@@ -13,7 +13,11 @@ if (process.env.FAKE_CAPTURE) appendFileSync(process.env.FAKE_CAPTURE, JSON.stri
   sessionId: process.env.PACTLINE_SESSION_ID, token: process.env.PACTLINE_TOKEN,
 }) + '\\n')
 const command = args.at(-1)
-const output = command === 'capabilities' ? process.env.FAKE_CAPABILITIES : process.env.FAKE_OUTPUT
+let output = command === 'capabilities' ? process.env.FAKE_CAPABILITIES : process.env.FAKE_OUTPUT
+if (process.env.FAKE_ALWAYS_RATE_LIMIT === '1' || (process.env.FAKE_RATE_LIMIT_STATE && !existsSync(process.env.FAKE_RATE_LIMIT_STATE))) {
+  if (process.env.FAKE_RATE_LIMIT_STATE) writeFileSync(process.env.FAKE_RATE_LIMIT_STATE, 'limited')
+  output = JSON.stringify({ ok: false, error: { code: 'RATE_LIMITED', message: 'Retry later.', retry_after_seconds: 0 } })
+}
 const finish = () => {
   process.stdout.write(output ?? '')
   process.stderr.write(process.env.FAKE_STDERR ?? '')
@@ -92,6 +96,39 @@ describe('PactlineCLI', () => {
       args: ['--json', '--idempotency-key', 'key-1', 'claim', 'complete', 'claim-1', '--task-version', '3', '--file', '-'],
       input: 'Ready.', sessionId: 'run-1',
     })
+  })
+
+  it('retries an explicit bounded rate limit with the same mutation identity', async () => {
+    const response = {
+      task: { task_number: 7, version: 4, phase: 'in_review', activity: 'available' },
+      claim: { id: 'claim-1', task_number: 7, stage: 'execution', status: 'completed', version: 2 },
+    }
+    const client = new PactlineCLI({ executable }, { environment: {
+      ...process.env,
+      FAKE_OUTPUT: success(response),
+      FAKE_CAPTURE: capture,
+      FAKE_RATE_LIMIT_STATE: join(directory, 'rate-limited'),
+    } })
+    await expect(client.completeClaim('claim-1', 3, 'Ready.', {
+      sessionId: 'run-1', idempotencyKey: 'key-1',
+    })).resolves.toMatchObject({ data: response })
+    const invocations = (await readFile(capture, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as Record<string, unknown>)
+    expect(invocations).toHaveLength(2)
+    expect(invocations[0]?.args).toEqual(invocations[1]?.args)
+    expect(invocations[0]?.input).toBe('Ready.')
+    expect(invocations[1]?.input).toBe('Ready.')
+  })
+
+  it('stops after the configured bounded rate-limit retries', async () => {
+    const client = new PactlineCLI({ executable, rateLimitRetries: 2 }, { environment: {
+      ...process.env, FAKE_ALWAYS_RATE_LIMIT: '1', FAKE_CAPTURE: capture,
+    } })
+    await expect(client.completeClaim('claim-1', 3, 'Ready.', {
+      sessionId: 'run-1', idempotencyKey: 'key-1',
+    })).rejects.toMatchObject({
+      code: 'CLI_ERROR', pactlineError: { code: 'RATE_LIMITED', retry_after_seconds: 0 },
+    })
+    expect((await readFile(capture, 'utf8')).trim().split('\n')).toHaveLength(3)
   })
 
   it('bounds output, duration, and caller cancellation', async () => {
