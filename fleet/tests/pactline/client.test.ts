@@ -69,12 +69,16 @@ describe('PactlineCLI', () => {
   })
 
   it('returns typed list data and success correlation metadata', async () => {
-    const task = { id: 'task-id', number: 7, title: 'Task', version: 3, phase: 'ready', activity: '' }
+    const task = { id: 'task-id', number: 7, title: 'Task', version: 3, phase: 'ready' }
     const client = new PactlineCLI({ executable }, { environment: {
       ...process.env, FAKE_OUTPUT: success({ items: [task] }, { request_id: 'request-1', etag: '"3"' }), FAKE_CAPTURE: capture,
     } })
     await expect(client.listTasks('execution', 4, 10, { sessionId: 'run-1' })).resolves.toEqual({
-      data: [task], meta: { request_id: 'request-1', etag: '"3"' },
+      data: [{
+        stage: 'execution',
+        task: { id: 'task-id', number: 7, title: 'Task', version: 3 },
+      }],
+      meta: { request_id: 'request-1', etag: '"3"' },
     })
 
     const claim = { id: 'claim-7', task_number: 7, stage: 'execution', status: 'active', version: 1 }
@@ -82,6 +86,38 @@ describe('PactlineCLI', () => {
       ...process.env, FAKE_OUTPUT: success({ items: [claim] }), FAKE_CAPTURE: capture,
     } })
     await expect(claims.listActiveClaims({ sessionId: 'run-1' })).resolves.toEqual({ data: [claim] })
+  })
+
+  it.each([
+    ['execution', 'ready', '', 'execution'],
+    ['execution', 'in_progress', 'available', 'correction'],
+    ['review', 'in_review', 'available', 'review'],
+  ] as const)('translates %s discovery from %s.%s into %s eligibility', async (requested, phase, activity, expected) => {
+    const client = new PactlineCLI({ executable }, { environment: {
+      ...process.env,
+      FAKE_OUTPUT: success({ items: [{ id: 'task-id', number: 7, title: 'Task', version: 3, phase, activity }] }),
+    } })
+
+    await expect(client.listTasks(requested, 4, 10, { sessionId: 'run-1' })).resolves.toMatchObject({
+      data: [{ stage: expected, task: { number: 7, version: 3 } }],
+    })
+  })
+
+  it.each([
+    ['execution', 'ready', 'available'],
+    ['execution', 'ready', 'working'],
+    ['execution', 'done', 'available'],
+    ['review', 'in_review', 'needs_resolution'],
+    ['review', 'ready', 'available'],
+  ] as const)('rejects contradictory %s discovery lifecycle %s.%s', async (requested, phase, activity) => {
+    const client = new PactlineCLI({ executable }, { environment: {
+      ...process.env,
+      FAKE_OUTPUT: success({ items: [{ id: 'task-id', number: 7, title: 'Task', version: 3, phase, activity }] }),
+    } })
+
+    await expect(client.listTasks(requested, 4, 10, { sessionId: 'run-1' })).rejects.toMatchObject({
+      code: 'INVALID_RESPONSE',
+    })
   })
 
   it('sends mutation bodies on stdin and preserves idempotency', async () => {

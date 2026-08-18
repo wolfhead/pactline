@@ -48,7 +48,7 @@ process.stdout.write(JSON.stringify({ ok: true, data: {
     const fleet = snapshot.config.fleets.first!
     const resolved = await resolver.resolve({
       fleetId: fleet.id, projectNumber: fleet.projectNumber, stage: 'execution',
-      task: { id: 'task-21', number: 21, title: 'Test', version: 1, phase: 'ready', activity: 'available' },
+      task: { id: 'task-21', number: 21, title: 'Test', version: 1 },
     }, fleet, new AbortController().signal)
 
     expect(resolved?.admission).toMatchObject({
@@ -57,6 +57,7 @@ process.stdout.write(JSON.stringify({ ok: true, data: {
         definition: { allowedPaths: ['fleet/'], verificationCommands: ['npm test'], criteria: [{ id: 'criterion-1', revision: 2 }] },
         route: { adapter: 'codex', model: 'gpt-5.6-sol' },
         plugin: { executable: pluginPath, timeoutMs: 5_000 },
+        pactlineTokenEnv: 'TEST_PACTLINE_TOKEN',
       },
     })
   })

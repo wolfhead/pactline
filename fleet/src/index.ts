@@ -1,3 +1,8 @@
+/**
+ * Compatibility surface: this root export set predates the Run-domain
+ * hardening. Keep it stable until a separately approved compatibility review;
+ * new internal coordination types should not be added here by default.
+ */
 export { runFleetCLI } from './cli.js'
 export type { FleetCLIIO } from './cli.js'
 export { runFleetServe } from './commands/serve.js'

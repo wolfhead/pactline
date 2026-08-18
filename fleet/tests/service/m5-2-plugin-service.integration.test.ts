@@ -44,7 +44,7 @@ const command = args.slice(commandIndex)
 const ok = data => process.stdout.write(JSON.stringify({ ok: true, data }))
 const task = () => ({
   id: 'task-21', number: 21, title: 'M5.2 plugin service', version: state.version,
-  phase: state.phase, activity: state.activity, project: { number: 5 },
+  phase: state.phase, activity: state.phase === 'ready' ? '' : state.activity, project: { number: 5 },
   context: 'Change README.md from baseline to implemented.', expected_result: 'README.md contains exactly implemented followed by a newline.',
   description: 'A bounded M5.2 scheduler demonstration.'
 })

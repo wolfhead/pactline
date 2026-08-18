@@ -202,6 +202,21 @@ boundary.
 - graceful shutdown leaves no unrecorded local effect;
 - restart finishes reconciliation before admitting new work.
 
+### Implemented recovery qualification
+
+The Run-domain hardening pass proves close/reopen behavior for Claim intent,
+retained pre-result Sessions, persisted `validating` and `delivering` work,
+local commit reconciliation, remote push reconciliation, exact settlement
+replay, and terminal settlement reconciliation. Recovery after a persisted
+Harness result never invokes Harness `run` or `resume`.
+
+The current provider-neutral Work Plugin has no read operation for discovering
+the PR/MR created by an unobserved code-change intent. That checkpoint therefore
+converges to a specific quarantine disposition without repeating creation. The
+same rule applies to a generic repository-delivery intent without an observed
+delivery. M6 provider qualification may deepen this seam with authoritative
+read support; it must not weaken quarantine merely to preserve a happy path.
+
 ## M5.3 — Local Web UI and observability
 
 ### Objective
@@ -300,7 +315,7 @@ health, active work, recent outcomes, and recovery evidence.
 - Overview, Fleet detail, Run detail, System, phone, and medium-width flows pass
   real Chromium tests without horizontal overflow;
 - Host, Origin, method, CSP, SPA fallback, and package-delivery tests pass;
-- `make pactline-fleet-check` passes 144 service tests, 5 component tests, 5
+- `make pactline-fleet-check` passes 206 service tests (4 skipped), 5 component tests, 5
   browser tests, type checking, production build, process smoke, and package
   smoke with zero npm audit findings.
 

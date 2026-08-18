@@ -1,79 +1,79 @@
 import { randomUUID } from 'node:crypto'
 import Database from 'better-sqlite3'
 import type { FleetConfigSnapshot } from '../config/types.js'
+import {
+  admitRun as admitDomainRun,
+  assertRunDecisionEffect,
+  decodeRunRecord,
+  isLegacyRun,
+  TERMINAL_RUN_STATES,
+  transitionRun as transitionDomainRun,
+} from '../run/run.js'
+import type {
+  FleetRun,
+  FleetRunAdmission,
+  FleetRunRecord,
+  FleetRunStage,
+  FleetRunState,
+  FleetRunUpdate,
+} from '../run/run.js'
+import {
+  createExternalEffectIntent,
+  decodeExternalEffect,
+  observeExternalEffect,
+  replayExternalEffectIntent,
+} from '../run/external-effect.js'
+import type {
+  FleetExternalEffectIntent,
+  FleetExternalEffectKind,
+  FleetExternalEffectObservation,
+  FleetExternalEffectRecord,
+} from '../run/external-effect.js'
 import { preparePrivateFile } from '../service/state-directory.js'
+import type { RunRecoveryDecision, RunRecoveryFacts } from '../run/recovery.js'
 
 const SCHEMA_VERSION = 3
-const TERMINAL_RUN_STATES = ['completed', 'released', 'quarantined', 'failed'] as const
 
-export type FleetRunState =
-  | 'admitted'
-  | 'claiming'
-  | 'claimed'
-  | 'preparing_workspace'
-  | 'starting_harness'
-  | 'running_harness'
-  | 'validating'
-  | 'delivering'
-  | 'settling'
-  | 'releasing'
-  | (typeof TERMINAL_RUN_STATES)[number]
+export type { FleetRun, FleetRunAdmission, FleetRunRecord, FleetRunStage, FleetRunState, FleetRunUpdate } from '../run/run.js'
+export type {
+  FleetExternalEffectIntent,
+  FleetExternalEffectKind,
+  FleetExternalEffectObservation,
+  FleetExternalEffectRecord,
+  FleetExternalEffectStatus,
+} from '../run/external-effect.js'
 
-export type FleetRunStage = 'execution' | 'review' | 'correction'
+export type FleetExternalEffectDecision = {
+  readonly [K in FleetExternalEffectKind]:
+    | {
+        readonly type: 'intent'
+        readonly kind: K
+        readonly idempotencyKey: string
+        readonly intent: FleetExternalEffectIntent<K>
+      }
+    | {
+        readonly type: 'observation'
+        readonly kind: K
+        readonly observation: FleetExternalEffectObservation<K>
+      }
+}[FleetExternalEffectKind]
 
-export interface FleetRunAdmission {
-  readonly taskNumber: number
-  readonly taskVersion: number
-  readonly stage: FleetRunStage
-  /** Complete credential-free policy frozen before Claim creation. */
-  readonly frozenPolicy: Readonly<Record<string, unknown>>
+export interface FleetRunDecision {
+  readonly expected: {
+    readonly state: FleetRunState
+    /** The persisted Run timestamp is its optimistic local version token. */
+    readonly updatedAt: string
+  }
+  readonly transition?: {
+    readonly state: FleetRunState
+    readonly update?: FleetRunUpdate
+  }
+  readonly effect?: FleetExternalEffectDecision
 }
 
-export interface FleetRunUpdate {
-  readonly claimId?: string
-  readonly claimVersion?: number
-  readonly claimTaskVersion?: number
-  readonly runtimeSessionId?: string
-  readonly workspace?: Readonly<Record<string, unknown>>
-  readonly checkpoint?: string
-  readonly disposition?: string
-  readonly error?: string
-}
-
-export interface FleetRunRecord {
-  readonly runId: string
-  readonly serviceId: string
-  readonly fleetId: string
-  readonly projectNumber: number
-  readonly configRevision: string
-  readonly state: FleetRunState
-  readonly taskNumber?: number
-  readonly taskVersion?: number
-  readonly stage?: FleetRunStage
-  readonly frozenPolicy?: Readonly<Record<string, unknown>>
-  readonly claimId?: string
-  readonly claimVersion?: number
-  readonly claimTaskVersion?: number
-  readonly runtimeSessionId?: string
-  readonly workspace?: Readonly<Record<string, unknown>>
-  readonly checkpoint?: string
-  readonly disposition?: string
-  readonly error?: string
-  readonly createdAt: string
-  readonly updatedAt: string
-}
-
-export type FleetExternalEffectStatus = 'intended' | 'observed'
-
-export interface FleetExternalEffectRecord {
-  readonly runId: string
-  readonly kind: string
-  readonly idempotencyKey: string
-  readonly status: FleetExternalEffectStatus
-  readonly intent: Readonly<Record<string, unknown>>
-  readonly observation?: Readonly<Record<string, unknown>>
-  readonly createdAt: string
-  readonly updatedAt: string
+export interface FleetRunDecisionResult {
+  readonly run: FleetRunRecord
+  readonly effect?: FleetExternalEffectRecord
 }
 
 export interface FleetRunEventRecord {
@@ -125,7 +125,7 @@ interface EffectRow {
   readonly run_id: string
   readonly kind: string
   readonly idempotency_key: string
-  readonly status: FleetExternalEffectStatus
+  readonly status: string
   readonly intent_json: string
   readonly observation_json: string | null
   readonly created_at: string
@@ -149,10 +149,10 @@ function parseJSON(value: string | null, name: string): Readonly<Record<string, 
   return parsed as Readonly<Record<string, unknown>>
 }
 
-function runRecord(row: RunRow): FleetRunRecord {
+function runRecord(row: RunRow, effects: readonly FleetExternalEffectRecord[]): FleetRunRecord {
   const frozenPolicy = parseJSON(row.frozen_policy_json, 'frozen policy')
   const workspace = parseJSON(row.workspace_json, 'workspace')
-  return {
+  return decodeRunRecord({
     runId: row.run_id,
     serviceId: row.service_id,
     fleetId: row.fleet_id,
@@ -173,13 +173,13 @@ function runRecord(row: RunRow): FleetRunRecord {
     ...(row.error === null ? {} : { error: row.error }),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  }
+  }, effects)
 }
 
 function effectRecord(row: EffectRow): FleetExternalEffectRecord {
   const intent = parseJSON(row.intent_json, 'effect intent')!
   const observation = parseJSON(row.observation_json, 'effect observation')
-  return {
+  return decodeExternalEffect({
     runId: row.run_id,
     kind: row.kind,
     idempotencyKey: row.idempotency_key,
@@ -188,7 +188,7 @@ function effectRecord(row: EffectRow): FleetExternalEffectRecord {
     ...(observation === undefined ? {} : { observation }),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  }
+  })
 }
 
 function migrate(database: Database.Database): void {
@@ -313,26 +313,6 @@ function migrate(database: Database.Database): void {
   }
 }
 
-const allowedTransitions: Readonly<Record<FleetRunState, readonly FleetRunState[]>> = {
-  admitted: ['claiming', 'releasing', 'released', 'quarantined', 'failed'],
-  claiming: ['claimed', 'releasing', 'released', 'quarantined', 'failed'],
-  claimed: ['preparing_workspace', 'releasing', 'quarantined', 'failed'],
-  preparing_workspace: ['starting_harness', 'releasing', 'quarantined', 'failed'],
-  starting_harness: ['running_harness', 'releasing', 'quarantined', 'failed'],
-  running_harness: ['validating', 'releasing', 'quarantined', 'failed'],
-  validating: ['delivering', 'settling', 'releasing', 'quarantined', 'failed'],
-  delivering: ['settling', 'releasing', 'quarantined', 'failed'],
-  settling: ['completed', 'released', 'quarantined', 'failed'],
-  releasing: ['released', 'quarantined', 'failed'],
-  completed: [], released: [], quarantined: [], failed: [],
-}
-
-function assertAdmission(admission: FleetRunAdmission): void {
-  if (!Number.isSafeInteger(admission.taskNumber) || admission.taskNumber < 1) throw new Error('Task number must be positive')
-  if (!Number.isSafeInteger(admission.taskVersion) || admission.taskVersion < 1) throw new Error('Task version must be positive')
-  if (!['execution', 'review', 'correction'].includes(admission.stage)) throw new Error('Run stage is invalid')
-}
-
 /** Local durable operational ledger. Pactline remains authoritative for workflow state. */
 export class FleetRegistry {
   readonly path: string
@@ -402,17 +382,11 @@ export class FleetRegistry {
     apply()
   }
 
-  /** M5.1 compatibility helper for a policy-free placeholder Run. */
-  createRun(fleetId: string, now: Date = new Date()): FleetRunRecord {
-    return this.insertRun(fleetId, undefined, now)
-  }
-
-  admitRun(fleetId: string, admission: FleetRunAdmission, now: Date = new Date()): FleetRunRecord {
-    assertAdmission(admission)
+  admitRun(fleetId: string, admission: FleetRunAdmission, now: Date = new Date()): FleetRun {
     return this.insertRun(fleetId, admission, now)
   }
 
-  private insertRun(fleetId: string, admission: FleetRunAdmission | undefined, now: Date): FleetRunRecord {
+  private insertRun(fleetId: string, admission: FleetRunAdmission, now: Date): FleetRun {
     this.assertOpen()
     const fleet = this.database.prepare<[string], FleetRow>(`
       SELECT fleet_id, project_number, config_revision
@@ -422,6 +396,13 @@ export class FleetRegistry {
     if (fleet === undefined) throw new Error(`Enabled Fleet is not registered: ${fleetId}`)
     const runId = randomUUID()
     const timestamp = now.toISOString()
+    const admitted = admitDomainRun({
+      runId,
+      serviceId: this.serviceId,
+      fleetId: fleet.fleet_id,
+      projectNumber: fleet.project_number,
+      configRevision: fleet.config_revision,
+    }, admission, timestamp)
     this.database.prepare(`
       INSERT INTO runs(
         run_id, service_id, fleet_id, project_number, config_revision,
@@ -430,14 +411,16 @@ export class FleetRegistry {
       ) VALUES (?, ?, ?, ?, ?, 'admitted', ?, ?, ?, ?, ?, ?, ?)
     `).run(
       runId, this.serviceId, fleet.fleet_id, fleet.project_number, fleet.config_revision,
-      admission?.taskNumber ?? null, admission?.taskVersion ?? null, admission?.stage ?? null,
-      admission === undefined ? null : JSON.stringify(admission.frozenPolicy),
-      admission === undefined ? null : 'run_admitted', timestamp, timestamp,
+      admitted.taskNumber, admitted.taskVersion, admitted.stage, JSON.stringify(admitted.frozenPolicy),
+      admitted.checkpoint, timestamp, timestamp,
     )
-    this.appendEvent(runId, 'run.admitted', admission ?? {}, timestamp)
-    return this.getRun(runId)!
+    this.appendEvent(runId, 'run.admitted', admission, timestamp)
+    const created = this.getRun(runId)!
+    if (isLegacyRun(created)) throw new Error('Fleet registry created a legacy Run')
+    return created
   }
 
+  /** Compatibility helper for local transitions; external boundaries use commitRunDecision. */
   transitionRun(
     runId: string,
     expected: FleetRunState | readonly FleetRunState[],
@@ -450,14 +433,82 @@ export class FleetRegistry {
     const current = this.getRun(runId)
     if (current === undefined) throw new Error(`Fleet Run does not exist: ${runId}`)
     if (!expectedStates.includes(current.state)) throw new Error(`Fleet Run ${runId} is ${current.state}; expected ${expectedStates.join(' or ')}`)
-    if (!allowedTransitions[current.state].includes(next)) throw new Error(`Invalid Fleet Run transition: ${current.state} -> ${next}`)
-    if (update.claimId !== undefined && current.claimId !== undefined && update.claimId !== current.claimId) {
-      throw new Error('Fleet Run Claim identity is immutable')
+    return this.commitRunDecisionInternal(runId, {
+      expected: { state: current.state, updatedAt: current.updatedAt },
+      transition: { state: next, update },
+    }, now, false).run
+  }
+
+  /** Commit one aggregate decision: Effect fact, Run state/version, and audit event. */
+  commitRunDecision(
+    runId: string,
+    decision: FleetRunDecision,
+    now: Date = new Date(),
+  ): FleetRunDecisionResult {
+    return this.commitRunDecisionInternal(runId, decision, now, true)
+  }
+
+  private commitRunDecisionInternal(
+    runId: string,
+    decision: FleetRunDecision,
+    now: Date,
+    enforceAtomicEffect: boolean,
+  ): FleetRunDecisionResult {
+    this.assertOpen()
+    if (decision.transition === undefined && decision.effect === undefined) {
+      throw new Error('Fleet Run decision has no transition or Effect fact')
     }
-    if (update.runtimeSessionId !== undefined && current.runtimeSessionId !== undefined
-      && update.runtimeSessionId !== current.runtimeSessionId) throw new Error('Fleet Run Adapter Session identity is immutable')
-    const timestamp = now.toISOString()
-    const apply = this.database.transaction(() => {
+    const apply = this.database.transaction((): FleetRunDecisionResult => {
+      const current = this.getRun(runId)
+      if (current === undefined) throw new Error(`Fleet Run does not exist: ${runId}`)
+      if (current.state !== decision.expected.state || current.updatedAt !== decision.expected.updatedAt) {
+        throw new Error(`Fleet Run ${runId} changed after the decision was made`)
+      }
+      const timestamp = this.nextRunTimestamp(current.updatedAt, now)
+      const effects = [...this.listEffects(runId)]
+      const effectDecision = decision.effect
+      let decidedEffect: FleetExternalEffectRecord | undefined
+      let effectChanged = false
+      if (effectDecision?.type === 'intent') {
+        const existing = effects.find(effect => effect.kind === effectDecision.kind)
+        if (existing === undefined) {
+          decidedEffect = createExternalEffectIntent(
+            runId,
+            effectDecision.kind,
+            effectDecision.idempotencyKey,
+            effectDecision.intent,
+            timestamp,
+          )
+          effects.push(decidedEffect)
+          effectChanged = true
+        } else {
+          decidedEffect = replayExternalEffectIntent(
+            existing,
+            effectDecision.idempotencyKey,
+            effectDecision.intent,
+          )
+        }
+      } else if (effectDecision?.type === 'observation') {
+        const index = effects.findIndex(effect => effect.kind === effectDecision.kind)
+        if (index < 0) throw new Error(`External effect intent does not exist: ${effectDecision.kind}`)
+        const currentEffect = effects[index]!
+        decidedEffect = observeExternalEffect(currentEffect, effectDecision.observation, timestamp)
+        effectChanged = decidedEffect !== currentEffect
+        effects[index] = decidedEffect
+      }
+
+      const update = decision.transition?.update ?? {}
+      if (decision.transition !== undefined) {
+        if (enforceAtomicEffect) assertRunDecisionEffect(current, decision.transition.state, effectDecision)
+        if (isLegacyRun(current)) transitionDomainRun(current, decision.transition.state, update, timestamp, effects)
+        else transitionDomainRun(current, decision.transition.state, update, timestamp, effects)
+      }
+      if (decision.transition === undefined && !effectChanged) {
+        return { run: current, ...(decidedEffect === undefined ? {} : { effect: decidedEffect }) }
+      }
+
+      if (effectChanged && decidedEffect !== undefined) this.persistEffect(decidedEffect)
+      const nextState = decision.transition?.state ?? current.state
       const result = this.database.prepare(`
         UPDATE runs SET
           state = ?,
@@ -470,9 +521,9 @@ export class FleetRegistry {
           disposition = COALESCE(?, disposition),
           error = COALESCE(?, error),
           updated_at = ?
-        WHERE run_id = ? AND state = ?
+        WHERE run_id = ? AND state = ? AND updated_at = ?
       `).run(
-        next,
+        nextState,
         update.claimId ?? null,
         update.claimVersion ?? null,
         update.claimTaskVersion ?? null,
@@ -484,61 +535,61 @@ export class FleetRegistry {
         timestamp,
         runId,
         current.state,
+        current.updatedAt,
       )
-      if (result.changes !== 1) throw new Error('Fleet Run transition lost a concurrent update')
-      this.appendEvent(runId, 'run.transitioned', { from: current.state, to: next, ...update }, timestamp)
+      if (result.changes !== 1) throw new Error('Fleet Run decision lost a concurrent update')
+      const eventType = decision.transition === undefined
+        ? effectDecision?.type === 'intent' ? 'run.effect_intended' : 'run.effect_observed'
+        : 'run.transitioned'
+      this.appendEvent(runId, eventType, {
+        ...(decision.transition === undefined ? {} : { from: current.state, to: nextState, ...update }),
+        ...(effectDecision === undefined ? {} : {
+          effect: effectDecision.kind,
+          effectStatus: effectDecision.type === 'intent' ? 'intended' : 'observed',
+        }),
+      }, timestamp)
+      const run = this.getRun(runId)!
+      return { run, ...(decidedEffect === undefined ? {} : { effect: this.getEffect(runId, decidedEffect.kind)! }) }
     })
-    apply()
-    return this.getRun(runId)!
+    return apply()
   }
 
-  recordEffectIntent(
+  recordEffectIntent<K extends FleetExternalEffectKind>(
     runId: string,
-    kind: string,
+    kind: K,
     idempotencyKey: string,
-    intent: Readonly<Record<string, unknown>>,
+    intent: FleetExternalEffectIntent<K>,
     now: Date = new Date(),
-  ): FleetExternalEffectRecord {
-    this.assertOpen()
-    if (kind.trim() === '' || idempotencyKey.trim() === '') throw new Error('External effect kind and idempotency key are required')
-    const timestamp = now.toISOString()
-    this.database.prepare(`
-      INSERT INTO run_external_effects(
-        run_id, kind, idempotency_key, status, intent_json, observation_json, created_at, updated_at
-      ) VALUES (?, ?, ?, 'intended', ?, NULL, ?, ?)
-      ON CONFLICT(run_id, kind) DO NOTHING
-    `).run(runId, kind, idempotencyKey, JSON.stringify(intent), timestamp, timestamp)
-    const effect = this.getEffect(runId, kind)!
-    if (effect.idempotencyKey !== idempotencyKey || JSON.stringify(effect.intent) !== JSON.stringify(intent)) {
-      throw new Error(`External effect intent changed for ${kind}`)
-    }
-    return effect
+  ): FleetExternalEffectRecord<K> {
+    const run = this.getRun(runId)
+    if (run === undefined) throw new Error(`Fleet Run does not exist: ${runId}`)
+    return this.commitRunDecision(runId, {
+      expected: { state: run.state, updatedAt: run.updatedAt },
+      effect: { type: 'intent', kind, idempotencyKey, intent } as FleetExternalEffectDecision,
+    }, now).effect as FleetExternalEffectRecord<K>
   }
 
-  observeEffect(
+  observeEffect<K extends FleetExternalEffectKind>(
     runId: string,
-    kind: string,
-    observation: Readonly<Record<string, unknown>>,
+    kind: K,
+    observation: FleetExternalEffectObservation<K>,
     now: Date = new Date(),
-  ): FleetExternalEffectRecord {
-    this.assertOpen()
-    const timestamp = now.toISOString()
-    const result = this.database.prepare(`
-      UPDATE run_external_effects
-      SET status = 'observed', observation_json = ?, updated_at = ?
-      WHERE run_id = ? AND kind = ?
-    `).run(JSON.stringify(observation), timestamp, runId, kind)
-    if (result.changes !== 1) throw new Error(`External effect intent does not exist: ${kind}`)
-    return this.getEffect(runId, kind)!
+  ): FleetExternalEffectRecord<K> {
+    const run = this.getRun(runId)
+    if (run === undefined) throw new Error(`Fleet Run does not exist: ${runId}`)
+    return this.commitRunDecision(runId, {
+      expected: { state: run.state, updatedAt: run.updatedAt },
+      effect: { type: 'observation', kind, observation } as FleetExternalEffectDecision,
+    }, now).effect as FleetExternalEffectRecord<K>
   }
 
-  getEffect(runId: string, kind: string): FleetExternalEffectRecord | undefined {
+  getEffect<K extends FleetExternalEffectKind>(runId: string, kind: K): FleetExternalEffectRecord<K> | undefined {
     this.assertOpen()
     const row = this.database.prepare<[string, string], EffectRow>(`
       SELECT run_id, kind, idempotency_key, status, intent_json, observation_json, created_at, updated_at
       FROM run_external_effects WHERE run_id = ? AND kind = ?
     `).get(runId, kind)
-    return row === undefined ? undefined : effectRecord(row)
+    return row === undefined ? undefined : effectRecord(row) as FleetExternalEffectRecord<K>
   }
 
   listEffects(runId: string): readonly FleetExternalEffectRecord[] {
@@ -564,6 +615,30 @@ export class FleetRegistry {
     }))
   }
 
+  /** Append the bounded, secret-free facts behind one deterministic recovery choice. */
+  recordRecoveryDecision(
+    runId: string,
+    facts: RunRecoveryFacts,
+    decision: RunRecoveryDecision,
+    now: Date = new Date(),
+  ): void {
+    this.assertOpen()
+    if (this.getRun(runId) === undefined) throw new Error(`Fleet Run does not exist: ${runId}`)
+    this.appendEvent(runId, 'run.recovery_decided', {
+      state: facts.state,
+      claimAuthority: facts.claimAuthority.kind,
+      ...(facts.claimAuthority.kind === 'active' || facts.claimAuthority.kind === 'terminal'
+        ? { claimIdentityMatches: facts.claimAuthority.identityMatches }
+        : {}),
+      ...(facts.claimAuthority.kind === 'terminal' ? { claimStatus: facts.claimAuthority.status } : {}),
+      sessionResumable: facts.sessionResumable,
+      hasSettlementIntent: facts.hasSettlementIntent,
+      decision: decision.kind,
+      ...('reason' in decision ? { reason: decision.reason } : {}),
+      ...('terminal' in decision ? { terminal: decision.terminal } : {}),
+    }, now.toISOString())
+  }
+
   getRun(runId: string): FleetRunRecord | undefined {
     this.assertOpen()
     const row = this.database.prepare<[string], RunRow>(`
@@ -574,7 +649,7 @@ export class FleetRegistry {
              checkpoint, disposition, error, created_at, updated_at
       FROM runs WHERE run_id = ?
     `).get(runId)
-    return row === undefined ? undefined : runRecord(row)
+    return row === undefined ? undefined : runRecord(row, this.listEffects(row.run_id))
   }
 
   hasNonTerminalRun(fleetId: string, taskNumber: number, stage: FleetRunStage): boolean {
@@ -606,7 +681,7 @@ export class FleetRegistry {
       FROM runs
       WHERE state NOT IN (${terminal})
       ORDER BY created_at, run_id
-    `).all(...TERMINAL_RUN_STATES).map(runRecord)
+    `).all(...TERMINAL_RUN_STATES).map(row => runRecord(row, this.listEffects(row.run_id)))
   }
 
   listRuns(options: FleetRunListOptions = {}): readonly FleetRunRecord[] {
@@ -640,7 +715,7 @@ export class FleetRegistry {
       FROM runs ${where}
       ORDER BY updated_at DESC, run_id DESC
       LIMIT ?
-    `).all(...parameters, limit).map(runRecord)
+    `).all(...parameters, limit).map(row => runRecord(row, this.listEffects(row.run_id)))
   }
 
   healthCheck(): boolean {
@@ -659,6 +734,36 @@ export class FleetRegistry {
       INSERT INTO run_events(run_id, event_type, payload_json, created_at)
       VALUES (?, ?, ?, ?)
     `).run(runId, eventType, JSON.stringify(payload), timestamp)
+  }
+
+  private persistEffect(effect: FleetExternalEffectRecord): void {
+    if (effect.status === 'intended') {
+      this.database.prepare(`
+        INSERT INTO run_external_effects(
+          run_id, kind, idempotency_key, status, intent_json, observation_json, created_at, updated_at
+        ) VALUES (?, ?, ?, 'intended', ?, NULL, ?, ?)
+      `).run(
+        effect.runId,
+        effect.kind,
+        effect.idempotencyKey,
+        JSON.stringify(effect.intent),
+        effect.createdAt,
+        effect.updatedAt,
+      )
+      return
+    }
+    const result = this.database.prepare(`
+      UPDATE run_external_effects
+      SET status = 'observed', observation_json = ?, updated_at = ?
+      WHERE run_id = ? AND kind = ? AND status = 'intended'
+    `).run(JSON.stringify(effect.observation), effect.updatedAt, effect.runId, effect.kind)
+    if (result.changes !== 1) throw new Error(`External effect intent does not exist: ${effect.kind}`)
+  }
+
+  private nextRunTimestamp(current: string, now: Date): string {
+    const requested = now.toISOString()
+    if (requested > current) return requested
+    return new Date(Date.parse(current) + 1).toISOString()
   }
 
   private assertOpen(): void {

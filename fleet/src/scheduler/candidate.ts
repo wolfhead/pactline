@@ -1,14 +1,24 @@
 import type { FleetDefinitionConfig } from '../config/types.js'
-import type { PactlineTaskSummary } from '../pactline/types.js'
-import type { FleetRunAdmission, FleetRunRecord } from '../registry/fleet-registry.js'
+import type { FleetRunAdmission } from '../registry/fleet-registry.js'
 
 export type FleetCandidateStage = 'execution' | 'review' | 'correction'
 
-export interface FleetWorkCandidate {
+/** Fleet-owned projection of eligible Pactline work; transport lifecycle strings stop at the Adapter. */
+export interface FleetCandidateTask {
+  readonly id: string
+  readonly number: number
+  readonly title: string
+  readonly version: number
+}
+
+export interface FleetDiscoveredCandidate {
+  readonly stage: FleetCandidateStage
+  readonly task: FleetCandidateTask
+}
+
+export interface FleetWorkCandidate extends FleetDiscoveredCandidate {
   readonly fleetId: string
   readonly projectNumber: number
-  readonly stage: FleetCandidateStage
-  readonly task: PactlineTaskSummary
 }
 
 export interface ResolvedFleetWork {
@@ -28,12 +38,7 @@ export type FleetRunOutcome =
   | { readonly kind: 'contention'; readonly reason: string }
 
 export interface ScheduledRunExecutor {
-  execute(
-    run: FleetRunRecord,
-    candidate: FleetWorkCandidate,
-    fleet: FleetDefinitionConfig,
-    signal: AbortSignal,
-  ): Promise<FleetRunOutcome>
+  execute(runId: string, signal: AbortSignal): Promise<FleetRunOutcome>
 }
 
 export interface CandidateDiscoveryClient {
@@ -42,7 +47,7 @@ export interface CandidateDiscoveryClient {
     projectNumber: number,
     limit: number,
     options: { readonly sessionId: string; readonly signal?: AbortSignal },
-  ): Promise<{ readonly data: readonly PactlineTaskSummary[] }>
+  ): Promise<{ readonly data: readonly FleetDiscoveredCandidate[] }>
 }
 
 export function compareCandidates(first: FleetWorkCandidate, second: FleetWorkCandidate): number {

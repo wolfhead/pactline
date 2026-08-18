@@ -1,14 +1,20 @@
 import type { StaticRuntimeRouter } from '../core/runtime-router.js'
-import { runClaimStage } from '../core/claim-stage.js'
+import { continueClaimStageAfterHarness, runClaimStage } from '../core/claim-stage.js'
 import type { ClaimStageClient, ClaimStageOptions, ClaimWorkflowStage } from '../core/claim-stage.js'
+import type { HarnessRunResult } from '../core/harness-result.js'
 import type { FleetWorkDefinition } from '../core/work-definition.js'
 import { PactlineClientError } from '../pactline/client.js'
+import { replaySettlement } from '../pactline/settlement.js'
+import type { PactlineClaimMutationResult } from '../pactline/types.js'
 import type { RepositoryDelivery } from '../repository/delivery.js'
 import type { FleetWorkspace } from '../repository/workspace.js'
-import type { FleetDefinitionConfig } from '../config/types.js'
-import type { FleetRunRecord, FleetRunState } from '../registry/fleet-registry.js'
+import type { FleetExternalEffectDecision, FleetRun, FleetRunDecision } from '../registry/fleet-registry.js'
 import { FleetRegistry } from '../registry/fleet-registry.js'
-import type { FleetRunOutcome, FleetWorkCandidate, ScheduledRunExecutor } from './candidate.js'
+import { hasAmbiguousExternalEffect } from '../run/external-effect.js'
+import { isTerminalRunState, requireClaimedRun, requireRun, requireSessionRun } from '../run/run.js'
+import { decideRunRecovery } from '../run/recovery.js'
+import type { RecoveryClaimAuthority, RunRecoveryDecision, RunRecoveryFacts } from '../run/recovery.js'
+import type { FleetRunOutcome, ScheduledRunExecutor } from './candidate.js'
 import { sanitizeHealthDiagnostic } from '../health/store.js'
 
 export interface MaterializedFleetRun {
@@ -24,14 +30,12 @@ export interface MaterializedFleetRun {
 
 export interface FleetRunMaterializer {
   materialize(
-    run: FleetRunRecord,
-    candidate: FleetWorkCandidate,
-    fleet: FleetDefinitionConfig,
+    run: FleetRun,
     signal: AbortSignal,
   ): Promise<MaterializedFleetRun>
   /** Recreate only explicitly persisted authority; never select a different Adapter. */
-  resume?(run: FleetRunRecord, signal: AbortSignal): Promise<MaterializedFleetRun | undefined>
-  cleanupRecovered?(run: FleetRunRecord): Promise<void>
+  resume?(run: FleetRun, signal: AbortSignal): Promise<MaterializedFleetRun | undefined>
+  cleanupRecovered?(run: FleetRun): Promise<void>
 }
 
 export interface ClaimStageRunCoordinatorOptions {
@@ -58,7 +62,7 @@ export type FleetCrashCheckpoint =
   | 'after_code_change_persistence_before_link'
   | 'after_settlement_before_terminal_persistence'
 
-export type FleetFaultInjector = (checkpoint: FleetCrashCheckpoint, run: FleetRunRecord) => Promise<void> | void
+export type FleetFaultInjector = (checkpoint: FleetCrashCheckpoint, run: FleetRun) => Promise<void> | void
 
 export class FleetInjectedCrash extends Error {
   constructor(readonly checkpoint: FleetCrashCheckpoint) {
@@ -90,10 +94,6 @@ function workspaceRecord(workspace: FleetWorkspace): Readonly<Record<string, unk
   }
 }
 
-function stageFor(candidate: FleetWorkCandidate): ClaimWorkflowStage {
-  return candidate.stage
-}
-
 function safeReason(error: unknown): string {
   return sanitizeHealthDiagnostic(error instanceof Error ? error.message : String(error)).slice(0, 2_000)
 }
@@ -103,140 +103,230 @@ export class ClaimStageRunCoordinator implements ScheduledRunExecutor {
   constructor(private readonly options: ClaimStageRunCoordinatorOptions) {}
 
   async execute(
-    initial: FleetRunRecord,
-    candidate: FleetWorkCandidate,
-    fleet: FleetDefinitionConfig,
+    runId: string,
     signal: AbortSignal,
   ): Promise<FleetRunOutcome> {
+    const initial = this.currentRun(runId)
     try {
-      const materialized = await this.options.materializer.materialize(initial, candidate, fleet, signal)
-      return await this.run(initial, stageFor(candidate), materialized, signal)
+      const materialized = await this.options.materializer.materialize(initial, signal)
+      return await this.run(initial, initial.stage, materialized, signal)
     } catch (error) {
       const current = this.options.registry.getRun(initial.runId)
       if (current !== undefined && current.state === 'admitted') {
-        return this.releaseLocal(current, safeReason(error))
+        return this.releaseLocal(requireRun(current), safeReason(error))
       }
       throw error
     }
   }
 
-  async recover(run: FleetRunRecord, signal: AbortSignal): Promise<FleetRunOutcome> {
-    if (run.state === 'admitted') {
-      this.options.registry.transitionRun(run.runId, 'admitted', 'released', {
-        checkpoint: 'recovery_no_claim', disposition: 'recovered_before_claim',
-      })
-      return { kind: 'released', reason: 'recovered_before_claim' }
+  async recover(runId: string, signal: AbortSignal): Promise<FleetRunOutcome> {
+    const run = this.currentRun(runId)
+    const claimAuthority = run.claimId === undefined
+      ? { kind: 'not_read' } as const
+      : await this.readClaimAuthority(run, signal)
+    const facts: RunRecoveryFacts = {
+      state: run.state,
+      claimAuthority,
+      sessionResumable: run.runtimeSessionId !== undefined && this.options.materializer.resume !== undefined,
+      hasSettlementIntent: this.options.registry.getEffect(run.runId, 'pactline_settlement') !== undefined,
     }
-    if (run.state === 'claiming' && run.claimId === undefined) {
-      return await this.reconcileClaimIntent(run, signal)
-    }
-    if (run.claimId === undefined) return this.quarantine(run, 'non_terminal_run_has_no_claim_identity')
-    if (run.state === 'settling') {
-      const terminal = await this.reconcileTerminalClaim(run, signal)
-      if (terminal !== undefined) return terminal
-    }
-    if (run.runtimeSessionId !== undefined && this.options.materializer.resume !== undefined) {
-      const materialized = await this.options.materializer.resume(run, signal)
-      if (materialized !== undefined) {
-        return await this.run(run, run.stage ?? 'execution', materialized, signal, true)
+    const decision = decideRunRecovery(facts)
+    this.options.registry.recordRecoveryDecision(run.runId, facts, decision)
+    return await this.applyRecoveryDecision(run, decision, signal)
+  }
+
+  private async applyRecoveryDecision(
+    run: FleetRun,
+    decision: RunRecoveryDecision,
+    signal: AbortSignal,
+  ): Promise<FleetRunOutcome> {
+    switch (decision.kind) {
+      case 'no_action': return isTerminalRunState(run.state)
+        ? run.state === 'completed' ? { kind: 'completed' }
+          : run.state === 'quarantined' ? { kind: 'quarantined', reason: run.disposition ?? 'quarantined' }
+            : { kind: 'released', reason: run.disposition ?? run.state }
+        : this.quarantine(run, 'recovery_policy_returned_no_action')
+      case 'release_local':
+        this.options.registry.transitionRun(run.runId, run.state, 'released', {
+          checkpoint: 'recovery_no_claim', disposition: decision.reason,
+        })
+        return { kind: 'released', reason: decision.reason }
+      case 'reconcile_claim': return await this.reconcileClaimIntent(run, signal)
+      case 'restore_workspace': {
+        try {
+          const materialized = await this.options.materializer.materialize(run, signal)
+          return await this.run(run, run.stage, materialized, signal, true)
+        } catch (error) {
+          return await this.releaseKnownClaim(run, `workspace_recovery_failed:${safeReason(error)}`, signal)
+        }
       }
+      case 'resume_harness': {
+        const materialized = await this.options.materializer.resume?.(run, signal)
+        if (materialized !== undefined) return await this.run(run, run.stage, materialized, signal, true)
+        return await this.releaseRecoveredClaim(run, 'adapter_session_not_resumable', signal)
+      }
+      case 'release_claim': return await this.releaseRecoveredClaim(run, decision.reason, signal)
+      case 'finish_terminal': {
+        const reconciled = await this.reconcileTerminalClaim(run, signal)
+        return reconciled ?? this.quarantine(run, 'claim_changed_during_terminal_reconciliation')
+      }
+      case 'reconcile_release': return await this.releaseKnownClaim(run, run.error ?? 'recovery_release', signal)
+      case 'revalidate_result':
+      case 'reconcile_delivery': return await this.continuePostResult(run, signal)
+      case 'replay_settlement': return await this.replaySettlementIntent(run, signal)
+      case 'quarantine': return this.quarantine(run, decision.reason)
     }
-    const outcome = await this.releaseKnownClaim(run, 'adapter_session_not_resumable', signal)
+  }
+
+  private async releaseRecoveredClaim(run: FleetRun, reason: string, signal: AbortSignal): Promise<FleetRunOutcome> {
+    const outcome = await this.releaseKnownClaim(run, reason, signal)
     if (outcome.kind === 'released') await this.options.materializer.cleanupRecovered?.(run)
     return outcome
   }
 
+  private async readClaimAuthority(run: FleetRun, signal: AbortSignal): Promise<RecoveryClaimAuthority> {
+    try {
+      const claimedRun = requireClaimedRun(run)
+      const packet = await this.options.client.showClaim(claimedRun.claimId, 20, {
+        sessionId: this.options.clientSessionId, signal,
+      })
+      const claim = record(packet.data.claim)
+      const task = record(packet.data.task)
+      const identityMatches = claim.id === claimedRun.claimId
+        && task.number === run.taskNumber
+        && claim.stage === (run.stage === 'review' ? 'review' : 'execution')
+      if (claim.status === 'active') return { kind: 'active', identityMatches }
+      return {
+        kind: 'terminal',
+        identityMatches,
+        status: claim.status === 'released' ? 'released' : 'completed',
+      }
+    } catch {
+      return { kind: 'unavailable' }
+    }
+  }
+
   private async run(
-    initial: FleetRunRecord,
+    initial: FleetRun,
     stage: ClaimWorkflowStage,
     materialized: MaterializedFleetRun,
     signal: AbortSignal,
-    resume = false,
+    recovery = false,
   ): Promise<FleetRunOutcome> {
     let workspace: FleetWorkspace | undefined
-    let run = this.options.registry.getRun(initial.runId)!
+    let settlementDelivery: RepositoryDelivery | undefined
+    let run = this.currentRun(initial.runId)
     try {
-      if (!resume) {
-        run = this.options.registry.transitionRun(run.runId, 'admitted', 'claiming', { checkpoint: 'claim_intent' })
-        this.options.registry.recordEffectIntent(run.runId, 'claim', `${run.runId}-claim`, {
-          taskNumber: run.taskNumber, taskVersion: run.taskVersion, stage,
+      if (!recovery) {
+        run = this.decide(run.runId, {
+          transition: { state: 'claiming', update: { checkpoint: 'claim_intent' } },
+          effect: {
+            type: 'intent', kind: 'claim', idempotencyKey: `${run.runId}-claim`,
+            intent: { taskNumber: run.taskNumber, taskVersion: run.taskVersion, stage },
+          },
         })
         await this.inject('before_claim_creation', run)
       }
+      const recovered = recovery ? requireClaimedRun(run) : undefined
+      const dispatchTaskVersion = recovered === undefined ? run.taskVersion : recovered.claimTaskVersion
       const result = await runClaimStage({
         client: this.options.client,
         router: materialized.router,
         definition: materialized.definition,
         stage,
-        taskVersion: resume ? (run.claimTaskVersion ?? run.taskVersion!) : run.taskVersion!,
+        taskVersion: dispatchTaskVersion,
         runId: run.runId,
         clientSessionId: this.options.clientSessionId,
         idempotencyKey: run.runId,
         deadline: materialized.deadline,
         signal,
-        ...(resume ? { existingClaimId: run.claimId!, resumeRuntimeSessionId: run.runtimeSessionId! } : {}),
+        ...(recovered === undefined ? {} : {
+          existingClaimId: recovered.claimId,
+          ...(run.runtimeSessionId === undefined ? {} : { resumeRuntimeSessionId: requireSessionRun(run).runtimeSessionId }),
+        }),
         onClaimed: async (claimId, taskVersion, claimVersion) => {
-          const current = this.options.registry.getRun(run.runId)!
-          if (!resume) {
+          const current = this.currentRun(run.runId)
+          if (!recovery) {
             await this.inject('after_claim_creation_before_persistence', run)
-            this.options.registry.observeEffect(run.runId, 'claim', {
-              claimId, taskVersion, ...(claimVersion === undefined ? {} : { claimVersion }),
-            })
-            run = this.options.registry.transitionRun(run.runId, 'claiming', 'claimed', {
-              claimId, claimTaskVersion: taskVersion,
-              ...(claimVersion === undefined ? {} : { claimVersion }), checkpoint: 'claim_observed',
+            run = this.decide(run.runId, {
+              transition: {
+                state: 'claimed',
+                update: {
+                  claimId, claimTaskVersion: taskVersion,
+                  ...(claimVersion === undefined ? {} : { claimVersion }), checkpoint: 'claim_observed',
+                },
+              },
+              effect: {
+                type: 'observation', kind: 'claim',
+                observation: { claimId, taskVersion, ...(claimVersion === undefined ? {} : { claimVersion }) },
+              },
             })
             await this.inject('after_claim_persistence_before_session', run)
           } else if (current.claimId !== claimId) {
             throw new Error('Recovery attempted to change the frozen Claim identity')
           }
-          const latest = this.options.registry.getRun(run.runId)!
+          const latest = this.currentRun(run.runId)
           if (latest.state === 'claimed') {
-            run = this.options.registry.transitionRun(run.runId, 'claimed', 'preparing_workspace', {
-              checkpoint: 'workspace_intent',
-            })
-            this.options.registry.recordEffectIntent(run.runId, 'workspace', `${run.runId}-workspace`, {
-              mode: stage === 'review' ? 'review' : 'execution',
+            run = this.decide(run.runId, {
+              transition: { state: 'preparing_workspace', update: { checkpoint: 'workspace_intent' } },
+              effect: {
+                type: 'intent', kind: 'workspace', idempotencyKey: `${run.runId}-workspace`,
+                intent: { mode: stage === 'review' ? 'review' : 'execution' },
+              },
             })
           }
         },
         workspace: async () => {
           workspace = await materialized.prepareWorkspace(signal)
           await this.inject('after_workspace_effect_before_persistence', run)
-          const current = this.options.registry.getRun(run.runId)!
+          const current = this.currentRun(run.runId)
           if (current.state === 'preparing_workspace') {
-            this.options.registry.observeEffect(run.runId, 'workspace', workspaceRecord(workspace))
-            run = this.options.registry.transitionRun(run.runId, 'preparing_workspace', 'starting_harness', {
-              workspace: workspaceRecord(workspace), checkpoint: 'workspace_observed',
+            run = this.decide(run.runId, {
+              transition: {
+                state: 'starting_harness',
+                update: { workspace: workspaceRecord(workspace), checkpoint: 'workspace_observed' },
+              },
+              effect: { type: 'observation', kind: 'workspace', observation: workspaceRecord(workspace) },
             })
           }
-          this.options.registry.recordEffectIntent(run.runId, 'adapter_session', `${run.runId}-adapter-session`, {
-            adapter: materialized.router.routeFor(stage).adapterId,
+          run = this.decide(run.runId, {
+            effect: {
+              type: 'intent', kind: 'adapter_session', idempotencyKey: `${run.runId}-adapter-session`,
+              intent: { adapter: materialized.router.routeFor(stage).adapterId },
+            },
+          })
+          run = this.decide(run.runId, {
+            effect: { type: 'intent', kind: 'harness_result', idempotencyKey: `${run.runId}-result`, intent: {} },
           })
           return workspace
         },
         onRuntimeSession: async runtimeSessionId => {
-          this.options.registry.observeEffect(run.runId, 'adapter_session', { runtimeSessionId })
-          const current = this.options.registry.getRun(run.runId)!
+          const current = this.currentRun(run.runId)
           if (current.state === 'starting_harness') {
-            run = this.options.registry.transitionRun(run.runId, 'starting_harness', 'running_harness', {
-              runtimeSessionId, checkpoint: 'adapter_session_observed',
+            run = this.decide(run.runId, {
+              transition: {
+                state: 'running_harness',
+                update: { runtimeSessionId, checkpoint: 'adapter_session_observed' },
+              },
+              effect: { type: 'observation', kind: 'adapter_session', observation: { runtimeSessionId } },
             })
           }
           await this.inject('after_session_persistence_before_agent', run)
         },
         onHarnessResult: async harnessResult => {
           await this.inject('after_harness_result_before_persistence', run)
-          this.options.registry.recordEffectIntent(run.runId, 'harness_result', `${run.runId}-result`, {})
-          this.options.registry.observeEffect(run.runId, 'harness_result', {
-            terminalState: harnessResult.terminalState,
-            runtimeSessionId: harnessResult.runtimeSessionId,
-            result: harnessResult,
-          })
-          const current = this.options.registry.getRun(run.runId)!
+          const current = this.currentRun(run.runId)
           if (current.state === 'running_harness') {
-            run = this.options.registry.transitionRun(run.runId, 'running_harness', 'validating', {
-              checkpoint: 'harness_result_observed',
+            run = this.decide(run.runId, {
+              transition: { state: 'validating', update: { checkpoint: 'harness_result_observed' } },
+              effect: {
+                type: 'observation', kind: 'harness_result',
+                observation: {
+                  terminalState: harnessResult.terminalState,
+                  runtimeSessionId: harnessResult.runtimeSessionId,
+                  result: harnessResult,
+                },
+              },
             })
           }
           await this.inject('after_harness_result_persistence_before_delivery', run)
@@ -244,44 +334,67 @@ export class ClaimStageRunCoordinator implements ScheduledRunExecutor {
         ...(materialized.validateObservation === undefined ? {} : { validateObservation: materialized.validateObservation }),
         ...(materialized.publishDelivery === undefined ? {} : {
           publishDelivery: async (dispatch, proposal, observation): Promise<RepositoryDelivery> => {
-            const current = this.options.registry.getRun(run.runId)!
+            const current = this.currentRun(run.runId)
             if (current.state === 'validating') {
-              run = this.options.registry.transitionRun(run.runId, 'validating', 'delivering', {
-                checkpoint: 'delivery_intent',
+              const effect: FleetExternalEffectDecision = materialized.deliveryOwnsCheckpoints === true
+                ? { type: 'intent', kind: 'git_commit', idempotencyKey: `${run.runId}-commit`, intent: {} }
+                : { type: 'intent', kind: 'repository_delivery', idempotencyKey: `${run.runId}-delivery`, intent: {} }
+              run = this.decide(run.runId, {
+                transition: { state: 'delivering', update: { checkpoint: 'delivery_intent' } },
+                effect,
               })
             }
-            if (materialized.deliveryOwnsCheckpoints !== true) {
-              this.options.registry.recordEffectIntent(run.runId, 'repository_delivery', `${run.runId}-delivery`, {})
-            }
             const delivery = await materialized.publishDelivery!(dispatch, proposal, observation)
+            settlementDelivery = delivery
             if (materialized.deliveryOwnsCheckpoints !== true) {
-              this.options.registry.observeEffect(run.runId, 'repository_delivery', {
-                codeChangeUrl: delivery.codeChangeUrl, revision: delivery.revision, branch: delivery.branch,
+              run = this.decide(run.runId, {
+                effect: {
+                  type: 'observation', kind: 'repository_delivery',
+                  observation: {
+                    codeChangeUrl: delivery.codeChangeUrl, revision: delivery.revision, branch: delivery.branch,
+                  },
+                },
               })
             }
             return delivery
           },
         }),
-        onBeforeSettlement: async () => {
-          const current = this.options.registry.getRun(run.runId)!
+        onBeforeSettlement: async (dispatch, proposal) => {
+          const current = this.currentRun(run.runId)
           if (current.state === 'validating' || current.state === 'delivering') {
-            run = this.options.registry.transitionRun(run.runId, current.state, 'settling', {
-              checkpoint: 'settlement_intent',
+            run = this.decide(run.runId, {
+              transition: { state: 'settling', update: { checkpoint: 'settlement_intent' } },
+              effect: {
+                type: 'intent', kind: 'pactline_settlement', idempotencyKey: `${run.runId}-settle`,
+                intent: {
+                  stage: dispatch.stage === 'review' ? 'review' : 'execution',
+                  taskVersion: dispatch.taskVersion,
+                  proposal,
+                  ...(settlementDelivery === undefined ? {} : { delivery: settlementDelivery }),
+                },
+              },
             })
           }
-          this.options.registry.recordEffectIntent(run.runId, 'pactline_settlement', `${run.runId}-settle`, {})
         },
         onSettled: async settlement => {
           await this.inject('after_settlement_before_terminal_persistence', run)
-          this.options.registry.observeEffect(run.runId, 'pactline_settlement', {
-            claimId: settlement.claim.id,
-            claimStatus: settlement.claim.status,
-            claimOutcome: settlement.claim.outcome,
-            taskVersion: settlement.task.version,
-          })
           const terminal = settlement.claim.status === 'released' ? 'released' : 'completed'
-          run = this.options.registry.transitionRun(run.runId, 'settling', terminal, {
-            checkpoint: 'settlement_observed', disposition: settlement.claim.outcome ?? settlement.claim.status,
+          run = this.decide(run.runId, {
+            transition: {
+              state: terminal,
+              update: {
+                checkpoint: 'settlement_observed', disposition: settlement.claim.outcome ?? settlement.claim.status,
+              },
+            },
+            effect: {
+              type: 'observation', kind: 'pactline_settlement',
+              observation: {
+                claimId: settlement.claim.id,
+                claimStatus: settlement.claim.status,
+                claimOutcome: settlement.claim.outcome,
+                taskVersion: settlement.task.version,
+              },
+            },
           })
         },
       })
@@ -292,7 +405,7 @@ export class ClaimStageRunCoordinator implements ScheduledRunExecutor {
     } catch (error) {
       if (error instanceof FleetInjectedCrash) throw error
       if (contention(error)) {
-        const current = this.options.registry.getRun(run.runId)!
+        const current = this.currentRun(run.runId)
         if (current.state === 'claiming') {
           this.options.registry.transitionRun(run.runId, 'claiming', 'released', {
             checkpoint: 'claim_contended', disposition: 'claim_contention',
@@ -300,12 +413,8 @@ export class ClaimStageRunCoordinator implements ScheduledRunExecutor {
         }
         return { kind: 'contention', reason: (error as PactlineClientError).pactlineError!.code }
       }
-      const current = this.options.registry.getRun(run.runId)!
-      const ambiguous = this.options.registry.listEffects(run.runId).some(effect => (
-        effect.status === 'intended' && [
-          'repository_delivery', 'git_commit', 'git_push', 'code_change_creation', 'pactline_settlement', 'claim_release',
-        ].includes(effect.kind)
-      ))
+      const current = this.currentRun(run.runId)
+      const ambiguous = hasAmbiguousExternalEffect(this.options.registry.listEffects(run.runId))
       const outcome = ambiguous
         ? this.quarantine(current, `ambiguous_external_effect: ${safeReason(error)}`)
         : current.claimId === undefined
@@ -316,19 +425,25 @@ export class ClaimStageRunCoordinator implements ScheduledRunExecutor {
     }
   }
 
-  private async reconcileClaimIntent(run: FleetRunRecord, signal: AbortSignal): Promise<FleetRunOutcome> {
+  private async reconcileClaimIntent(run: FleetRun, signal: AbortSignal): Promise<FleetRunOutcome> {
     try {
-      const claimed = await this.options.client.claimTask(run.taskNumber!, run.taskVersion!, run.stage === 'review' ? 'review' : 'execution', {
+      const claimed = await this.options.client.claimTask(run.taskNumber, run.taskVersion, run.stage === 'review' ? 'review' : 'execution', {
         sessionId: this.options.clientSessionId,
         idempotencyKey: `${run.runId}-claim`,
         signal,
       })
-      this.options.registry.observeEffect(run.runId, 'claim', {
-        claimId: claimed.data.claim.id, taskVersion: claimed.data.task.version,
-      })
-      const claimedRun = this.options.registry.transitionRun(run.runId, 'claiming', 'claimed', {
-        claimId: claimed.data.claim.id, claimVersion: claimed.data.claim.version, checkpoint: 'claim_reconciled',
-        claimTaskVersion: claimed.data.task.version,
+      const claimedRun = this.decide(run.runId, {
+        transition: {
+          state: 'claimed',
+          update: {
+            claimId: claimed.data.claim.id, claimVersion: claimed.data.claim.version,
+            checkpoint: 'claim_reconciled', claimTaskVersion: claimed.data.task.version,
+          },
+        },
+        effect: {
+          type: 'observation', kind: 'claim',
+          observation: { claimId: claimed.data.claim.id, taskVersion: claimed.data.task.version },
+        },
       })
       return await this.releaseKnownClaim(claimedRun, 'recovered_claim_without_dispatch', signal)
     } catch (error) {
@@ -337,75 +452,246 @@ export class ClaimStageRunCoordinator implements ScheduledRunExecutor {
     }
   }
 
-  private async releaseKnownClaim(run: FleetRunRecord, reason: string, signal: AbortSignal): Promise<FleetRunOutcome> {
+  private async releaseKnownClaim(run: FleetRun, reason: string, signal: AbortSignal): Promise<FleetRunOutcome> {
     try {
-      const packet = await this.options.client.showClaim(run.claimId!, 20, {
+      const claimedRun = requireClaimedRun(run)
+      const packet = await this.options.client.showClaim(claimedRun.claimId, 20, {
         sessionId: this.options.clientSessionId, signal,
       })
       const claim = record(packet.data.claim)
       const task = record(packet.data.task)
-      if (claim.id !== run.claimId || task.number !== run.taskNumber) return this.quarantine(run, 'claim_identity_mismatch')
+      if (claim.id !== claimedRun.claimId || task.number !== run.taskNumber) return this.quarantine(run, 'claim_identity_mismatch')
       if (claim.status !== 'active') {
         const terminal = claim.status === 'released' ? 'released' : 'completed'
         return this.finishRecovered(run, terminal, `claim_already_${String(claim.status)}`)
       }
-      const current = this.options.registry.getRun(run.runId)!
+      const current = this.currentRun(run.runId)
       if (current.state !== 'releasing') {
-        this.options.registry.transitionRun(run.runId, current.state, 'releasing', {
-          checkpoint: 'release_intent', error: reason,
+        this.decide(run.runId, {
+          transition: { state: 'releasing', update: { checkpoint: 'release_intent', error: reason } },
+          effect: {
+            type: 'intent', kind: 'claim_release', idempotencyKey: `${run.runId}-recovery-release`,
+            intent: { reason },
+          },
         })
       }
-      this.options.registry.recordEffectIntent(run.runId, 'claim_release', `${run.runId}-recovery-release`, { reason })
-      const released = await this.options.client.releaseClaim(run.claimId!, Number(task.version), `Fleet recovery release: ${reason}`, {
+      const released = await this.options.client.releaseClaim(claimedRun.claimId, Number(task.version), `Fleet recovery release: ${reason}`, {
         sessionId: this.options.clientSessionId,
         idempotencyKey: `${run.runId}-recovery-release`,
         signal,
       })
-      this.options.registry.observeEffect(run.runId, 'claim_release', {
-        claimStatus: released.data.claim.status, taskVersion: released.data.task.version,
-      })
-      this.options.registry.transitionRun(run.runId, 'releasing', 'released', {
-        checkpoint: 'release_observed', disposition: reason,
+      this.decide(run.runId, {
+        transition: { state: 'released', update: { checkpoint: 'release_observed', disposition: reason } },
+        effect: {
+          type: 'observation', kind: 'claim_release',
+          observation: { claimStatus: released.data.claim.status, taskVersion: released.data.task.version },
+        },
       })
       return { kind: 'released', reason }
     } catch {
-      return this.quarantine(this.options.registry.getRun(run.runId)!, 'known_claim_release_ambiguous')
+      return this.quarantine(this.currentRun(run.runId), 'known_claim_release_ambiguous')
     }
   }
 
-  private async reconcileTerminalClaim(run: FleetRunRecord, signal: AbortSignal): Promise<FleetRunOutcome | undefined> {
+  private async reconcileTerminalClaim(run: FleetRun, signal: AbortSignal): Promise<FleetRunOutcome | undefined> {
     try {
-      const packet = await this.options.client.showClaim(run.claimId!, 20, {
+      const claimedRun = requireClaimedRun(run)
+      const packet = await this.options.client.showClaim(claimedRun.claimId, 20, {
         sessionId: this.options.clientSessionId, signal,
       })
       const claim = record(packet.data.claim)
       const task = record(packet.data.task)
-      if (claim.id !== run.claimId || task.number !== run.taskNumber) return this.quarantine(run, 'claim_identity_mismatch')
+      if (claim.id !== claimedRun.claimId || task.number !== run.taskNumber) return this.quarantine(run, 'claim_identity_mismatch')
       if (claim.status === 'active') return undefined
-      this.options.registry.observeEffect(run.runId, 'pactline_settlement', {
-        claimId: claim.id,
-        claimStatus: claim.status,
-        claimOutcome: claim.outcome,
-        taskVersion: task.version,
-        recovered: true,
+      if (typeof claim.id !== 'string' || typeof claim.status !== 'string' || typeof task.version !== 'number') {
+        throw new Error('Pactline settlement recovery packet is invalid')
+      }
+      const terminal = claim.status === 'released' ? 'released' : 'completed'
+      const reason = `claim_reconciled_${String(claim.status)}`
+      this.decide(run.runId, {
+        transition: { state: terminal, update: { checkpoint: 'settlement_reconciled', disposition: reason } },
+        effect: {
+          type: 'observation', kind: 'pactline_settlement',
+          observation: {
+            claimId: claim.id,
+            claimStatus: claim.status,
+            taskVersion: task.version,
+            recovered: true,
+            ...(typeof claim.outcome === 'string' ? { claimOutcome: claim.outcome } : {}),
+          },
+        },
       })
-      return this.finishRecovered(run, claim.status === 'released' ? 'released' : 'completed', `claim_reconciled_${String(claim.status)}`)
+      return terminal === 'completed' ? { kind: 'completed' } : { kind: 'released', reason }
     } catch {
       return this.quarantine(run, 'settlement_could_not_be_reconciled')
     }
   }
 
-  private releaseLocal(run: FleetRunRecord, reason: string): FleetRunOutcome {
-    const current = this.options.registry.getRun(run.runId)!
+  private async replaySettlementIntent(run: FleetRun, signal: AbortSignal): Promise<FleetRunOutcome> {
+    const effect = this.options.registry.getEffect(run.runId, 'pactline_settlement')
+    if (effect === undefined || effect.status !== 'intended') {
+      return this.quarantine(run, 'settlement_intent_is_not_replayable')
+    }
+    try {
+      const claimedRun = requireClaimedRun(run)
+      const settlement = await replaySettlement(this.options.client, effect.intent, {
+        taskNumber: run.taskNumber,
+        claimId: claimedRun.claimId,
+        taskVersion: claimedRun.claimTaskVersion,
+        stage: run.stage === 'review' ? 'review' : 'execution',
+        sessionId: this.options.clientSessionId,
+        idempotencyKey: effect.idempotencyKey,
+        signal,
+      })
+      await this.inject('after_settlement_before_terminal_persistence', run)
+      return this.persistSettlement(this.currentRun(run.runId), settlement)
+    } catch (error) {
+      return this.quarantine(this.currentRun(run.runId), `settlement_replay_failed:${safeReason(error)}`)
+    }
+  }
+
+  private async continuePostResult(run: FleetRun, signal: AbortSignal): Promise<FleetRunOutcome> {
+    const resultEffect = this.options.registry.getEffect(run.runId, 'harness_result')
+    if (resultEffect === undefined || resultEffect.status !== 'observed') {
+      return this.quarantine(run, 'persisted_harness_result_missing')
+    }
+    try {
+      const sessionRun = requireSessionRun(run)
+      const materialized = await this.options.materializer.resume?.(run, signal)
+      if (materialized === undefined) return this.quarantine(run, 'post_result_workspace_not_recoverable')
+      if (run.state === 'delivering' && materialized.deliveryOwnsCheckpoints !== true) {
+        const deliveryEffect = this.options.registry.getEffect(run.runId, 'repository_delivery')
+        if (deliveryEffect?.status !== 'observed') {
+          return this.quarantine(run, 'repository_delivery_intent_cannot_be_reconciled')
+        }
+      }
+      const workspace = await materialized.prepareWorkspace(signal)
+      const harnessResult = record(resultEffect.observation.result) as unknown as HarnessRunResult
+      let settlementDelivery: RepositoryDelivery | undefined
+      const result = await continueClaimStageAfterHarness({
+        client: this.options.client,
+        router: materialized.router,
+        definition: materialized.definition,
+        stage: run.stage,
+        taskVersion: sessionRun.claimTaskVersion,
+        runId: run.runId,
+        clientSessionId: this.options.clientSessionId,
+        idempotencyKey: run.runId,
+        deadline: materialized.deadline,
+        signal,
+        existingClaimId: sessionRun.claimId,
+        resumeRuntimeSessionId: sessionRun.runtimeSessionId,
+        workspace,
+        harnessResult,
+        ...(materialized.validateObservation === undefined ? {} : { validateObservation: materialized.validateObservation }),
+        ...(materialized.publishDelivery === undefined ? {} : {
+          publishDelivery: async (dispatch, proposal, observation): Promise<RepositoryDelivery> => {
+            const current = this.currentRun(run.runId)
+            if (current.state === 'validating') {
+              const effect: FleetExternalEffectDecision = materialized.deliveryOwnsCheckpoints === true
+                ? { type: 'intent', kind: 'git_commit', idempotencyKey: `${run.runId}-commit`, intent: {} }
+                : { type: 'intent', kind: 'repository_delivery', idempotencyKey: `${run.runId}-delivery`, intent: {} }
+              this.decide(run.runId, {
+                transition: { state: 'delivering', update: { checkpoint: 'delivery_intent' } },
+                effect,
+              })
+            }
+            const deliveryEffect = this.options.registry.getEffect(run.runId, 'repository_delivery')
+            const delivery = materialized.deliveryOwnsCheckpoints !== true && deliveryEffect?.status === 'observed'
+              ? this.deliveryFromObservation(materialized.definition, deliveryEffect.observation)
+              : await materialized.publishDelivery!(dispatch, proposal, observation)
+            settlementDelivery = delivery
+            if (materialized.deliveryOwnsCheckpoints !== true && deliveryEffect?.status !== 'observed') {
+              this.decide(run.runId, {
+                effect: {
+                  type: 'observation', kind: 'repository_delivery',
+                  observation: {
+                    codeChangeUrl: delivery.codeChangeUrl, revision: delivery.revision, branch: delivery.branch,
+                  },
+                },
+              })
+            }
+            return delivery
+          },
+        }),
+        onBeforeSettlement: async (dispatch, proposal) => {
+          const current = this.currentRun(run.runId)
+          if (current.state === 'validating' || current.state === 'delivering') {
+            this.decide(run.runId, {
+              transition: { state: 'settling', update: { checkpoint: 'settlement_intent' } },
+              effect: {
+                type: 'intent', kind: 'pactline_settlement', idempotencyKey: `${run.runId}-settle`,
+                intent: {
+                  stage: dispatch.stage === 'review' ? 'review' : 'execution',
+                  taskVersion: dispatch.taskVersion,
+                  proposal,
+                  ...(settlementDelivery === undefined ? {} : { delivery: settlementDelivery }),
+                },
+              },
+            })
+          }
+        },
+        onSettled: async settlement => {
+          await this.inject('after_settlement_before_terminal_persistence', run)
+          this.persistSettlement(this.currentRun(run.runId), settlement)
+        },
+      })
+      await materialized.cleanup?.(workspace, true)
+      return result.settlement.claim.status === 'released'
+        ? { kind: 'released', reason: result.settlement.claim.outcome ?? 'released' }
+        : { kind: 'completed' }
+    } catch (error) {
+      if (error instanceof FleetInjectedCrash) throw error
+      return this.quarantine(this.currentRun(run.runId), `post_result_recovery_failed:${safeReason(error)}`)
+    }
+  }
+
+  private deliveryFromObservation(
+    definition: FleetWorkDefinition,
+    observation: Readonly<Record<string, unknown>>,
+  ): RepositoryDelivery {
+    if (typeof observation.codeChangeUrl !== 'string' || typeof observation.revision !== 'string'
+      || typeof observation.branch !== 'string') throw new Error('Recorded repository delivery is invalid')
+    return {
+      repository: definition.repository,
+      codeChangeUrl: observation.codeChangeUrl,
+      revision: observation.revision,
+      branch: observation.branch,
+    }
+  }
+
+  private persistSettlement(run: FleetRun, settlement: PactlineClaimMutationResult): FleetRunOutcome {
+    const terminal = settlement.claim.status === 'released' ? 'released' : 'completed'
+    const reason = settlement.claim.outcome ?? settlement.claim.status
+    this.decide(run.runId, {
+      transition: {
+        state: terminal,
+        update: { checkpoint: 'settlement_observed', disposition: reason },
+      },
+      effect: {
+        type: 'observation', kind: 'pactline_settlement',
+        observation: {
+          claimId: settlement.claim.id,
+          claimStatus: settlement.claim.status,
+          claimOutcome: settlement.claim.outcome,
+          taskVersion: settlement.task.version,
+        },
+      },
+    })
+    return terminal === 'released' ? { kind: 'released', reason } : { kind: 'completed' }
+  }
+
+  private releaseLocal(run: FleetRun, reason: string): FleetRunOutcome {
+    const current = this.currentRun(run.runId)
     this.options.registry.transitionRun(run.runId, current.state, 'released', {
       checkpoint: 'local_release', disposition: reason,
     })
     return { kind: 'released', reason }
   }
 
-  private quarantine(run: FleetRunRecord, reason: string): FleetRunOutcome {
-    const current = this.options.registry.getRun(run.runId)!
-    if (!['completed', 'released', 'quarantined', 'failed'].includes(current.state)) {
+  private quarantine(run: FleetRun, reason: string): FleetRunOutcome {
+    const current = this.currentRun(run.runId)
+    if (!isTerminalRunState(current.state)) {
       this.options.registry.transitionRun(run.runId, current.state, 'quarantined', {
         checkpoint: 'recovery_quarantine', disposition: reason,
       })
@@ -413,23 +699,35 @@ export class ClaimStageRunCoordinator implements ScheduledRunExecutor {
     return { kind: 'quarantined', reason }
   }
 
-  private finishRecovered(run: FleetRunRecord, terminal: 'completed' | 'released', reason: string): FleetRunOutcome {
-    const current = this.options.registry.getRun(run.runId)!
+  private finishRecovered(run: FleetRun, terminal: 'completed' | 'released', reason: string): FleetRunOutcome {
+    const current = this.currentRun(run.runId)
     this.options.registry.transitionRun(run.runId, current.state, terminal, {
       checkpoint: 'settlement_reconciled', disposition: reason,
     })
     return terminal === 'completed' ? { kind: 'completed' } : { kind: 'released', reason }
   }
 
-  private async inject(checkpoint: FleetCrashCheckpoint, run: FleetRunRecord): Promise<void> {
-    await this.options.faultInjector?.(checkpoint, this.options.registry.getRun(run.runId) ?? run)
+  private async inject(checkpoint: FleetCrashCheckpoint, run: FleetRun): Promise<void> {
+    await this.options.faultInjector?.(checkpoint, this.currentRun(run.runId))
+  }
+
+  private decide(runId: string, decision: Omit<FleetRunDecision, 'expected'>): FleetRun {
+    const current = this.currentRun(runId)
+    return requireRun(this.options.registry.commitRunDecision(runId, {
+      expected: { state: current.state, updatedAt: current.updatedAt },
+      ...decision,
+    }).run)
+  }
+
+  private currentRun(runId: string): FleetRun {
+    const run = this.options.registry.getRun(runId)
+    if (run === undefined) throw new Error(`Fleet Run does not exist: ${runId}`)
+    return requireRun(run)
   }
 }
 
 export interface RecoverableRunExecutor extends ScheduledRunExecutor {
-  recover(run: FleetRunRecord, signal: AbortSignal): Promise<FleetRunOutcome>
+  recover(runId: string, signal: AbortSignal): Promise<FleetRunOutcome>
 }
 
-export function isTerminalRunState(state: FleetRunState): boolean {
-  return ['completed', 'released', 'quarantined', 'failed'].includes(state)
-}
+export { isTerminalRunState } from '../run/run.js'

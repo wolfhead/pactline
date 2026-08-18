@@ -1,5 +1,22 @@
 import type { HarnessCapabilities } from '../core/harness-adapter.js'
-import type { FleetRunStage, FleetRunState } from '../registry/fleet-registry.js'
+import type { FleetExternalEffectKind } from '../run/external-effect.js'
+import type { FleetRunStage, FleetRunState } from '../run/run.js'
+
+export const OBSERVATION_EFFECT_PROJECTION: Readonly<Record<
+  FleetExternalEffectKind,
+  { readonly title: string; readonly safeFields: readonly string[] }
+>> = {
+  claim: { title: 'Pactline Claim', safeFields: ['claimId', 'claimVersion', 'taskVersion', 'stage'] },
+  workspace: { title: 'Workspace', safeFields: ['mode', 'baseRevision', 'branch'] },
+  adapter_session: { title: 'Adapter Session', safeFields: ['runtimeSessionId', 'adapter'] },
+  harness_result: { title: 'Harness result', safeFields: ['terminalState', 'runtimeSessionId'] },
+  git_commit: { title: 'Git commit', safeFields: ['revision', 'branch'] },
+  git_push: { title: 'Git push', safeFields: ['revision', 'branch'] },
+  code_change_creation: { title: 'Code change', safeFields: ['codeChangeUrl', 'revision', 'branch'] },
+  repository_delivery: { title: 'Repository delivery', safeFields: ['codeChangeUrl', 'revision', 'branch'] },
+  pactline_settlement: { title: 'Pactline settlement', safeFields: ['claimId', 'claimStatus', 'claimOutcome', 'taskVersion'] },
+  claim_release: { title: 'Claim release', safeFields: ['claimId', 'reason'] },
+}
 
 export interface ObservationEnvelope<T> {
   readonly ok: true

@@ -4,9 +4,9 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { parseFleetConfig } from '../../src/config/load.js'
 import type { FleetConfigSnapshot } from '../../src/config/types.js'
-import type { PactlineTaskSummary } from '../../src/pactline/types.js'
 import { FleetRegistry } from '../../src/registry/fleet-registry.js'
-import type { ScheduledRunExecutor, WorkDefinitionResolver } from '../../src/scheduler/candidate.js'
+import { requireRun } from '../../src/run/run.js'
+import type { FleetCandidateStage, FleetDiscoveredCandidate, ScheduledRunExecutor, WorkDefinitionResolver } from '../../src/scheduler/candidate.js'
 import { FairFleetScheduler } from '../../src/scheduler/fair-scheduler.js'
 import { NullFleetLogger } from '../../src/service/logger.js'
 import { ensurePrivateDirectory } from '../../src/service/state-directory.js'
@@ -18,8 +18,8 @@ afterEach(async () => {
   await Promise.all(directories.splice(0).map(path => rm(path, { recursive: true, force: true })))
 })
 
-function task(number: number): PactlineTaskSummary {
-  return { id: `task-${String(number)}`, number, title: `Task ${String(number)}`, version: 1, phase: 'ready', activity: 'available' }
+function task(number: number, stage: FleetCandidateStage = 'execution'): FleetDiscoveredCandidate {
+  return { stage, task: { id: `task-${String(number)}`, number, title: `Task ${String(number)}`, version: 1 } }
 }
 
 async function fixture(options: { globalConcurrency?: number } = {}): Promise<{
@@ -55,15 +55,19 @@ const resolver: WorkDefinitionResolver = {
 describe('FairFleetScheduler', () => {
   it('round-robins Fleets with deterministic in-Fleet ordering', async () => {
     const { snapshot, registry } = await fixture()
-    const queues = new Map<number, PactlineTaskSummary[]>([
+    const queues = new Map<number, FleetDiscoveredCandidate[]>([
       [5, [task(9), task(3)]],
       [12, [task(4)]],
     ])
     const order: string[] = []
     const executor: ScheduledRunExecutor = {
-      async execute(run, candidate) {
-        order.push(`${candidate.fleetId}:${String(candidate.task.number)}`)
-        queues.set(candidate.projectNumber, (queues.get(candidate.projectNumber) ?? []).filter(item => item.number !== candidate.task.number))
+      async execute(...args) {
+        expect(args).toHaveLength(2)
+        const [runId, signal] = args
+        expect(signal).toBeInstanceOf(AbortSignal)
+        const run = requireRun(registry.getRun(runId))
+        order.push(`${run.fleetId}:${String(run.taskNumber)}`)
+        queues.set(run.projectNumber, (queues.get(run.projectNumber) ?? []).filter(item => item.task.number !== run.taskNumber))
         registry.transitionRun(run.runId, 'admitted', 'released', { disposition: 'test' })
         return { kind: 'released', reason: 'test' }
       },
@@ -97,7 +101,7 @@ describe('FairFleetScheduler', () => {
   it('routes available in-progress execution work as a correction stage', async () => {
     const { snapshot, registry } = await fixture()
     let observedStage: string | undefined
-    const correction = { ...task(22), phase: 'in_progress' }
+    const correction = task(22, 'correction')
     const scheduler = new FairFleetScheduler({
       snapshot: () => snapshot,
       registry,
@@ -108,8 +112,9 @@ describe('FairFleetScheduler', () => {
         data: stage === 'execution' && projectNumber === 5 ? [correction] : [],
       }) },
       executor: {
-        async execute(run, candidate) {
-          observedStage = candidate.stage
+        async execute(runId) {
+          const run = requireRun(registry.getRun(runId))
+          observedStage = run.stage
           registry.transitionRun(run.runId, 'admitted', 'released', { disposition: 'test' })
           return { kind: 'released', reason: 'test' }
         },
@@ -138,8 +143,9 @@ describe('FairFleetScheduler', () => {
         },
       },
       executor: {
-        async execute(run, candidate) {
-          started.push(`${candidate.fleetId}:${String(candidate.task.number)}`)
+        async execute(runId) {
+          const run = requireRun(registry.getRun(runId))
+          started.push(`${run.fleetId}:${String(run.taskNumber)}`)
           await gate
           registry.transitionRun(run.runId, 'admitted', 'released', { disposition: 'test' })
           return { kind: 'released', reason: 'test' }
@@ -180,8 +186,9 @@ describe('FairFleetScheduler', () => {
         },
       },
       executor: {
-        async execute(run, candidate) {
-          order.push(candidate.fleetId)
+        async execute(runId) {
+          const run = requireRun(registry.getRun(runId))
+          order.push(run.fleetId)
           registry.transitionRun(run.runId, 'admitted', 'released', { disposition: 'test' })
           return { kind: 'released', reason: 'test' }
         },
@@ -218,7 +225,8 @@ describe('FairFleetScheduler', () => {
         listTasks: async stage => ({ data: stage === 'execution' ? [task(11)] : [] }),
       },
       executor: {
-        async execute(run) {
+        async execute(runId) {
+          const run = requireRun(registry.getRun(runId))
           await gate
           registry.transitionRun(run.runId, 'admitted', 'released', { disposition: 'drained' })
           return { kind: 'released', reason: 'drained' }
@@ -243,7 +251,8 @@ describe('FairFleetScheduler', () => {
     const second = await fixture()
     let claimed = false
     const executor = (registry: FleetRegistry): ScheduledRunExecutor => ({
-      async execute(run) {
+      async execute(runId) {
+        const run = requireRun(registry.getRun(runId))
         const won = !claimed
         claimed = true
         registry.transitionRun(run.runId, 'admitted', 'released', { disposition: won ? 'winner_fixture' : 'claim_contention' })
@@ -275,7 +284,7 @@ describe('FairFleetScheduler', () => {
 
   it('replenishes a free slot while another Fleet Run remains active', async () => {
     const { snapshot, registry } = await fixture({ globalConcurrency: 2 })
-    const queues = new Map<number, PactlineTaskSummary[]>([[5, [task(1), task(2)]], [12, [task(3)]]])
+    const queues = new Map<number, FleetDiscoveredCandidate[]>([[5, [task(1), task(2)]], [12, [task(3)]]])
     let releaseSecond!: () => void
     const secondGate = new Promise<void>(resolvePromise => { releaseSecond = resolvePromise })
     const started: number[] = []
@@ -289,10 +298,11 @@ describe('FairFleetScheduler', () => {
         data: stage === 'execution' ? [...(queues.get(projectNumber) ?? [])] : [],
       }) },
       executor: {
-        async execute(run, candidate) {
-          started.push(candidate.task.number)
-          queues.set(candidate.projectNumber, (queues.get(candidate.projectNumber) ?? []).filter(item => item.number !== candidate.task.number))
-          if (candidate.task.number === 3) await secondGate
+        async execute(runId) {
+          const run = requireRun(registry.getRun(runId))
+          started.push(run.taskNumber)
+          queues.set(run.projectNumber, (queues.get(run.projectNumber) ?? []).filter(item => item.task.number !== run.taskNumber))
+          if (run.taskNumber === 3) await secondGate
           registry.transitionRun(run.runId, 'admitted', 'released', { disposition: 'test' })
           return { kind: 'released', reason: 'test' }
         },

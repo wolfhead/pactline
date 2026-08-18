@@ -146,6 +146,47 @@ describe('Harness-neutral Claim-stage workflows', () => {
     expect(client.mutations.map(item => item.operation)).toEqual(['claim', 'verify', 'link', 'submit', 'complete', 'claim', 'verify', 'accept'])
   })
 
+  it('publishes a complete execution delivery before signaling settlement intent', async () => {
+    const client = new InMemoryPactlineClient(21, [criterion])
+    const operations: string[] = []
+    const adapter = new ReplayHarnessAdapter([{
+      sessionId: 'delivery-order-session',
+      effect: async request => { await writeFile(join(request.workspace, 'README.md'), 'implemented\n') },
+      result: request => result(executionProposal(request), 'delivery-order-session'),
+    }])
+
+    await runClaimStage({
+      client, router: new StaticRuntimeRouter([adapter], routes()), definition, stage: 'execution', taskVersion: client.version,
+      runId: 'delivery-order', clientSessionId: 'fleet-test', idempotencyKey: 'delivery-order',
+      workspace: await workspace('execution', 'delivery-order'), deadline: '2026-08-16T00:00:00Z',
+      publishDelivery: async () => { operations.push('delivery'); return delivery },
+      onBeforeSettlement: () => { operations.push('settlement') },
+    })
+
+    expect(operations).toEqual(['delivery', 'settlement'])
+  })
+
+  it('settles an unable execution without publishing a delivery', async () => {
+    const client = new InMemoryPactlineClient(21, [criterion])
+    const operations: string[] = []
+    const adapter = new ReplayHarnessAdapter([{
+      sessionId: 'unable-session',
+      result: request => result(executionProposal(request, 'unable_to_complete'), 'unable-session'),
+    }])
+
+    await runClaimStage({
+      client, router: new StaticRuntimeRouter([adapter], routes()), definition, stage: 'execution', taskVersion: client.version,
+      runId: 'unable', clientSessionId: 'fleet-test', idempotencyKey: 'unable',
+      workspace: await workspace('execution', 'unable'), deadline: '2026-08-16T00:00:00Z',
+      publishDelivery: async () => { operations.push('delivery'); return delivery },
+      onBeforeSettlement: () => { operations.push('settlement') },
+    })
+
+    expect(operations).toEqual(['settlement'])
+    expect(client.activity).toBe('available')
+    expect(client.mutations.map(item => item.operation)).toEqual(['claim', 'release'])
+  })
+
   it('imports a frozen candidate before review-first acceptance', async () => {
     const client = new InMemoryPactlineClient(21, [criterion])
     await runCandidateImport({

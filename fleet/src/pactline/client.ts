@@ -17,8 +17,9 @@ import type {
   PactlinePreflightResult,
   PactlineResponseMeta,
   PactlineSuccess,
-  PactlineTaskSummary,
+  PactlineTaskSummaryDTO,
 } from './types.js'
+import type { FleetDiscoveredCandidate } from '../scheduler/candidate.js'
 
 const DEFAULT_REQUIRED_FEATURES = [
   'bounded_work_packets',
@@ -163,7 +164,7 @@ function operationMeta(value: unknown): PactlineResponseMeta | undefined {
   }
 }
 
-function taskSummary(value: unknown): PactlineTaskSummary {
+function taskSummary(value: unknown): PactlineTaskSummaryDTO {
   if (!isRecord(value) || typeof value.id !== 'string' || typeof value.number !== 'number'
     || typeof value.title !== 'string' || typeof value.version !== 'number'
     || typeof value.phase !== 'string' || (value.activity !== undefined && typeof value.activity !== 'string')) {
@@ -171,7 +172,25 @@ function taskSummary(value: unknown): PactlineTaskSummary {
   }
   positiveInteger(value.number, 'Task number')
   positiveInteger(value.version, 'Task version')
-  return { ...value, activity: typeof value.activity === 'string' ? value.activity : '' } as unknown as PactlineTaskSummary
+  return { ...value, activity: typeof value.activity === 'string' ? value.activity : '' } as unknown as PactlineTaskSummaryDTO
+}
+
+function discoveredCandidate(value: unknown, requestedStage: PactlineClaimStage): FleetDiscoveredCandidate {
+  const task = taskSummary(value)
+  let stage: FleetDiscoveredCandidate['stage']
+  if (requestedStage === 'execution' && task.phase === 'ready' && task.activity === '') stage = 'execution'
+  else if (requestedStage === 'execution' && task.phase === 'in_progress' && task.activity === 'available') stage = 'correction'
+  else if (requestedStage === 'review' && task.phase === 'in_review' && task.activity === 'available') stage = 'review'
+  else {
+    throw new PactlineClientError(
+      'INVALID_RESPONSE',
+      `Pactline returned unsupported ${requestedStage} candidate lifecycle: ${task.phase}.${task.activity || 'none'}`,
+    )
+  }
+  return {
+    stage,
+    task: { id: task.id, number: task.number, title: task.title, version: task.version },
+  }
 }
 
 function packetTask(value: unknown): void {
@@ -284,13 +303,13 @@ export class PactlineCLI {
     return { capabilities: actual, doctor: await this.doctor(options.sessionId ?? 'pactline-fleet-preflight', options.signal) }
   }
 
-  async listTasks(stage: PactlineClaimStage, projectNumber: number, limit: number, options: Pick<PactlineCallOptions, 'sessionId' | 'signal'>): Promise<PactlineOperation<readonly PactlineTaskSummary[]>> {
+  async listTasks(stage: PactlineClaimStage, projectNumber: number, limit: number, options: Pick<PactlineCallOptions, 'sessionId' | 'signal'>): Promise<PactlineOperation<readonly FleetDiscoveredCandidate[]>> {
     positiveInteger(projectNumber, 'projectNumber')
     positiveInteger(limit, 'limit')
     if (limit > 200) throw new Error('limit must not exceed 200')
     const result = await this.invokeEnvelope<unknown>(['task', 'list', '--stage', stage, '--project', String(projectNumber), '--limit', String(limit)], options)
     if (!isRecord(result.data) || !Array.isArray(result.data.items)) throw new PactlineClientError('INVALID_RESPONSE', 'Pactline Task list is invalid')
-    return { data: result.data.items.map(taskSummary), ...(result.meta === undefined ? {} : { meta: result.meta }) }
+    return { data: result.data.items.map(item => discoveredCandidate(item, stage)), ...(result.meta === undefined ? {} : { meta: result.meta }) }
   }
 
   async listActiveClaims(options: Pick<PactlineCallOptions, 'sessionId' | 'signal'>): Promise<PactlineOperation<readonly PactlineClaimSummary[]>> {

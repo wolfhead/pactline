@@ -22,8 +22,8 @@ under a frozen policy.
 _Avoid_: Task, Claim, job
 
 **Work Candidate**:
-A bounded view of Pactline work that is currently eligible for one Fleet stage
-but has not yet been admitted as a Run.
+A bounded Fleet-owned view of Pactline work that is currently eligible for one
+explicit Fleet stage but has not yet been admitted as a Run.
 _Avoid_: queued Run, claimed Task
 
 **Work Definition**:
@@ -75,6 +75,12 @@ _Avoid_: Task status, Pactline phase
 A terminal local Run disposition used when Fleet cannot safely prove whether
 an external effect or authority transition occurred.
 _Avoid_: failure, cancellation
+
+**Recovery Decision**:
+One deterministic instruction derived from a Run's durable facts and a fresh
+read of external authority after Fleet restarts. It may continue, reconcile,
+release, quarantine, or perform no action; it is not itself an External Effect.
+_Avoid_: retry, recovery status
 
 **Settlement**:
 The Pactline workflow mutation that concludes the active Claim outcome for a

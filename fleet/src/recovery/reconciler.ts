@@ -1,5 +1,6 @@
 import type { FleetRunRecord } from '../registry/fleet-registry.js'
 import { FleetRegistry } from '../registry/fleet-registry.js'
+import { isLegacyRun } from '../run/run.js'
 import type { FleetRunOutcome } from '../scheduler/candidate.js'
 import type { RecoverableRunExecutor } from '../scheduler/run-coordinator.js'
 import type { PactlineCLI } from '../pactline/client.js'
@@ -29,7 +30,18 @@ export class FleetRunReconciler {
       const results: FleetRecoveryResult[] = []
       for (const run of this.registry.listNonTerminalRuns()) {
         if (controller.signal.aborted) throw controller.signal.reason
-        const outcome = await this.executor.recover(run, controller.signal)
+        if (isLegacyRun(run)) {
+          this.registry.transitionRun(run.runId, run.state, 'quarantined', {
+            checkpoint: 'legacy_run_quarantined', disposition: 'legacy_policy_free_run',
+          })
+          results.push({
+            runId: run.runId,
+            before: run.state,
+            outcome: { kind: 'quarantined', reason: 'legacy_policy_free_run' },
+          })
+          continue
+        }
+        const outcome = await this.executor.recover(run.runId, controller.signal)
         results.push({ runId: run.runId, before: run.state, outcome })
       }
       if (this.claimInventory !== undefined && this.snapshot !== undefined) {

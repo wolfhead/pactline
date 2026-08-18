@@ -7,9 +7,11 @@ import type {
   FleetRunEventRecord,
   FleetRunListOptions,
   FleetRunRecord,
-  FleetRunState,
 } from '../registry/fleet-registry.js'
 import { FleetRegistry } from '../registry/fleet-registry.js'
+import { isTerminalRunState } from '../run/run.js'
+import { RUN_STATES } from '../run/run.js'
+import type { FleetRunState } from '../run/run.js'
 import type {
   ObservationAdapter,
   ObservationAttention,
@@ -23,8 +25,7 @@ import type {
   ObservationRunSummary,
   ObservationTimelineItem,
 } from './model.js'
-
-const TERMINAL_STATES = new Set<FleetRunState>(['completed', 'released', 'quarantined', 'failed'])
+import { OBSERVATION_EFFECT_PROJECTION } from './model.js'
 
 function object(value: unknown): Readonly<Record<string, unknown>> | undefined {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -111,26 +112,27 @@ function timeline(event: FleetRunEventRecord): ObservationTimelineItem {
       ...(checkpoint === undefined ? {} : { checkpoint }),
     }
   }
+  if (event.eventType === 'run.recovery_decided') {
+    const decision = text(event.payload.decision) ?? 'unknown'
+    const authority = text(event.payload.claimAuthority) ?? 'unknown'
+    const state = text(event.payload.state) as FleetRunState | undefined
+    return {
+      sequence: event.sequence,
+      at: event.createdAt,
+      kind: event.eventType,
+      title: `Recovery chose ${decision.replaceAll('_', ' ')}`,
+      detail: `Claim authority: ${authority.replaceAll('_', ' ')}`,
+      ...(state === undefined ? {} : { state }),
+    }
+  }
   return { sequence: event.sequence, at: event.createdAt, kind: event.eventType, title: 'Run event recorded' }
 }
 
 function safeEffectDetail(effect: FleetExternalEffectRecord): Readonly<Record<string, string | number | boolean>> | undefined {
-  const source = effect.status === 'observed' ? effect.observation : effect.intent
+  const source = object(effect.status === 'observed' ? effect.observation : effect.intent)
   if (source === undefined) return undefined
   const result: Record<string, string | number | boolean> = {}
-  const allowedByKind: Readonly<Record<string, readonly string[]>> = {
-    claim: ['claimId', 'claimVersion', 'taskVersion', 'stage'],
-    workspace: ['mode', 'baseRevision', 'branch'],
-    adapter_session: ['runtimeSessionId', 'adapter'],
-    harness_result: ['terminalState', 'runtimeSessionId'],
-    git_commit: ['revision', 'branch'],
-    git_push: ['revision', 'branch'],
-    repository_delivery: ['codeChangeUrl', 'revision', 'branch'],
-    code_change_creation: ['codeChangeUrl', 'revision', 'branch'],
-    pactline_settlement: ['claimId', 'claimStatus', 'claimOutcome', 'taskVersion'],
-    claim_release: ['claimId', 'reason'],
-  }
-  for (const key of allowedByKind[effect.kind] ?? []) {
+  for (const key of OBSERVATION_EFFECT_PROJECTION[effect.kind].safeFields) {
     const value = source[key]
     if (typeof value === 'string' && key.toLowerCase().endsWith('url')) {
       const safe = safeExternalURL(value)
@@ -141,22 +143,12 @@ function safeEffectDetail(effect: FleetExternalEffectRecord): Readonly<Record<st
   return Object.keys(result).length === 0 ? undefined : result
 }
 
-function effectTitle(kind: string): string {
-  const titles: Readonly<Record<string, string>> = {
-    claim: 'Pactline Claim', workspace: 'Workspace', adapter_session: 'Adapter Session',
-    harness_result: 'Harness result', git_commit: 'Git commit', git_push: 'Git push',
-    repository_delivery: 'Repository delivery', code_change_creation: 'Code change',
-    pactline_settlement: 'Pactline settlement', claim_release: 'Claim release',
-  }
-  return titles[kind] ?? kind.replaceAll('_', ' ')
-}
-
 function effect(value: FleetExternalEffectRecord): ObservationEffect {
   const detail = safeEffectDetail(value)
   return {
     kind: value.kind,
     status: value.status,
-    title: effectTitle(value.kind),
+    title: OBSERVATION_EFFECT_PROJECTION[value.kind].title,
     ...(detail === undefined ? {} : { detail }),
     updatedAt: value.updatedAt,
   }
@@ -178,8 +170,8 @@ function fleetProjection(
     workPluginConfigured: fleet.workPlugin !== undefined,
     workspaceRoot: fleet.workspaceRoot,
     routing: Object.fromEntries(Object.entries(fleet.routing).map(([stage, value]) => [stage, route(value)])),
-    activeRunCount: runs.filter(run => run.fleetId === fleet.id && !TERMINAL_STATES.has(run.state)).length,
-    recentRunCount: runs.filter(run => run.fleetId === fleet.id && TERMINAL_STATES.has(run.state)).length,
+    activeRunCount: runs.filter(run => run.fleetId === fleet.id && !isTerminalRunState(run.state)).length,
+    recentRunCount: runs.filter(run => run.fleetId === fleet.id && isTerminalRunState(run.state)).length,
     discovery: healthValue?.discovery ?? { status: 'unknown', candidateCount: 0 },
   }
 }
@@ -208,8 +200,8 @@ export class FleetObservationProjector implements FleetObservationSource {
 
   overview(): ObservationEnvelope<ObservationOverview> {
     const runs = this.registry.listRuns({ limit: 100 })
-    const activeRuns = runs.filter(run => !TERMINAL_STATES.has(run.state)).map(runSummary)
-    const recentRuns = runs.filter(run => TERMINAL_STATES.has(run.state)).slice(0, 12).map(runSummary)
+    const activeRuns = runs.filter(run => !isTerminalRunState(run.state)).map(runSummary)
+    const recentRuns = runs.filter(run => isTerminalRunState(run.state)).slice(0, 12).map(runSummary)
     return this.envelope({
       attention: this.attention(runs),
       fleets: this.fleetValues(runs),
@@ -252,7 +244,9 @@ export class FleetObservationProjector implements FleetObservationSource {
       ...(value.claimTaskVersion === undefined ? {} : { claimTaskVersion: value.claimTaskVersion }),
       ...(value.runtimeSessionId === undefined ? {} : { runtimeSessionId: value.runtimeSessionId }),
       ...(safeWorkspace(value.workspace) === undefined ? {} : { workspace: safeWorkspace(value.workspace)! }),
-      timeline: this.registry.listRunEvents(id, 200).map(timeline),
+      timeline: this.registry.listRunEvents(id, 200)
+        .filter(event => ['run.admitted', 'run.transitioned', 'run.recovery_decided'].includes(event.eventType))
+        .map(timeline),
       effects: this.registry.listEffects(id).map(effect),
     })
   }
@@ -277,7 +271,7 @@ export class FleetObservationProjector implements FleetObservationSource {
       '# HELP pactline_fleet_runs Number of locally retained Runs by state.',
       '# TYPE pactline_fleet_runs gauge',
     ]
-    for (const state of ['admitted', 'claiming', 'claimed', 'preparing_workspace', 'starting_harness', 'running_harness', 'validating', 'delivering', 'settling', 'releasing', 'completed', 'released', 'quarantined', 'failed'] as const) {
+    for (const state of RUN_STATES) {
       lines.push(`pactline_fleet_runs{state="${state}"} ${String(runs.filter(run => run.state === state).length)}`)
     }
     lines.push('# HELP pactline_fleet_adapter_up Whether a configured Adapter probe succeeds.')

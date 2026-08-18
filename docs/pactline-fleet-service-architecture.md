@@ -52,9 +52,11 @@ concurrency, and health. It is not a new Pactline domain entity.
 
 ### Run
 
-One Fleet attempt to process one Pactline Claim stage. A Run freezes the Task,
-Claim, Project, Adapter, model, reasoning, prompt policy, verification policy,
-repository revision, and configuration revision used for that attempt.
+One Fleet attempt to coordinate one Task through one Claim stage. Admission
+freezes the Task, Project, Adapter, model, reasoning, prompt policy,
+verification policy, repository revision, and configuration revision. The
+Claim and Adapter Session identities become immutable when they are later
+observed.
 
 ### Adapter Session
 
@@ -433,19 +435,26 @@ Fleet records intent before, and observed fact after:
 - Claim creation;
 - workspace allocation;
 - Adapter Session creation;
-- workspace mutation;
-- result capture;
+- Harness result capture;
 - commit creation;
 - branch push;
 - PR or MR creation;
-- Pactline code-change link;
-- execution submission;
-- acceptance check;
 - Claim settlement;
-- Issue resolution.
+- recovery Claim release.
 
-Recovery re-reads Pactline, Git, and provider state before repeating an
-uncertain effect. Local projection alone never authorizes a mutation.
+Run state and the matching Effect fact are committed atomically at authority
+boundaries. Recovery re-reads Pactline, the retained workspace, local Git, and
+the remote branch before continuing. An already observed effect is never
+repeated. An unobserved effect is repeated only when the available authority
+can prove it did not happen; otherwise the Run is quarantined. In particular,
+the current Work Plugin cannot read PR/MR identity, so an unobserved
+code-change-creation intent is quarantined rather than blindly replayed.
+
+`validating` and `delivering` recovery revalidate the persisted Harness result,
+current Claim, frozen route, workspace, allowed paths, and fixed verification
+without calling Harness `run` or `resume`. `settling` recovery re-reads the
+Claim and replays only the exact persisted settlement action and original
+idempotency-key prefix.
 
 ## Health model
 
@@ -732,6 +741,13 @@ automatic age- or count-based history pruning. Concrete retention limits,
 operator-visible pruning, and proof that cleanup deletes only registry-owned
 records and exact recorded artifacts remain M6 work.
 
+Run states and stages come from the Run domain, while the closed External
+Effect title and safe-field map is owned by the Observation Model. Recovery
+decisions are projected into the causal Run timeline but never become mutation
+authority. The broad `fleet/src/index.ts` root exports are retained as a
+compatibility surface pending a separate review; new coordination internals
+should not be exported there by default.
+
 ## Non-goals
 
 - global Fleet registration in Pactline;
@@ -764,9 +780,10 @@ records and exact recorded artifacts remain M6 work.
 
 M5.4 verified the complete resident path for one Project-bound Fleet,
 deterministic delivery and correction, one representative post-Session
-restart, both live Adapter routes, and real-browser observation. The complete
-distributed-service competition gate, exhaustive crash matrix, storage fault
-injection, long-duration soak, provider degradation, and retention policy are
-not yet verified and remain M6 qualification. The exact evidence and limits
-are recorded in the
+restart, both live Adapter routes, and real-browser observation. Run-domain
+hardening subsequently added deterministic close/reopen coverage for persisted
+post-result work, Git commit and push reconciliation, settlement replay, and
+safe quarantine where provider observation is unavailable. Storage fault
+injection, long-duration soak, live provider degradation, and retention policy
+remain M6 qualification. The exact M5.4 evidence and limits are recorded in the
 [M5.4 Acceptance Report](pactline-fleet-m5-4-report.md).

@@ -7,7 +7,7 @@ import type { FleetWorkDefinition } from '../core/work-definition.js'
 import type { PactlineCLI } from '../pactline/client.js'
 import type { RepositoryDelivery, RepositoryIdentity } from '../repository/delivery.js'
 import { validateRepositoryDelivery } from '../repository/delivery.js'
-import type { FleetRunRecord } from '../registry/fleet-registry.js'
+import type { FleetRun } from '../registry/fleet-registry.js'
 import type { FleetWorkCandidate, ResolvedFleetWork, WorkDefinitionResolver } from '../scheduler/candidate.js'
 
 const MAX_OUTPUT_BYTES = 2 * 1024 * 1024
@@ -23,6 +23,7 @@ export interface FrozenWorkPluginPolicy {
   readonly route: FleetRouteConfig
   readonly plugin: NonNullable<FleetDefinitionConfig['workPlugin']>
   readonly workspaceRoot: string
+  readonly pactlineTokenEnv: string
   readonly gitCredentialReference?: string
 }
 
@@ -202,7 +203,8 @@ export class ExecutableWorkDefinitionResolver implements WorkDefinitionResolver 
   async resolve(candidate: FleetWorkCandidate, fleet: FleetDefinitionConfig, signal: AbortSignal): Promise<ResolvedFleetWork | undefined> {
     if (fleet.workPlugin === undefined) return undefined
     const packet = await this.client.showTask(candidate.task.number, 20, { sessionId: this.sessionId, signal })
-    const current = this.snapshot().config.fleets[fleet.id]
+    const snapshot = this.snapshot()
+    const current = snapshot.config.fleets[fleet.id]
     if (current === undefined || !current.enabled || current.projectNumber !== candidate.projectNumber
       || current.workPlugin === undefined) return undefined
     const route = current.routing[candidate.stage]
@@ -210,7 +212,7 @@ export class ExecutableWorkDefinitionResolver implements WorkDefinitionResolver 
       current.workPlugin,
       workPluginEnvironment(
         this.environment,
-        this.snapshot().config.service.pactline.tokenEnv,
+        snapshot.config.service.pactline.tokenEnv,
         current.credentials.git,
       ),
     )
@@ -227,6 +229,7 @@ export class ExecutableWorkDefinitionResolver implements WorkDefinitionResolver 
       route,
       plugin: current.workPlugin,
       workspaceRoot: current.workspaceRoot,
+      pactlineTokenEnv: snapshot.config.service.pactline.tokenEnv,
       ...(current.credentials.git === undefined ? {} : { gitCredentialReference: current.credentials.git }),
     }
     return {
@@ -240,7 +243,7 @@ export class ExecutableWorkDefinitionResolver implements WorkDefinitionResolver 
   }
 }
 
-export function frozenPluginPolicy(run: FleetRunRecord): FrozenWorkPluginPolicy {
+export function frozenPluginPolicy(run: FleetRun): FrozenWorkPluginPolicy {
   const policy = record(run.frozenPolicy, 'frozen Run policy')
   const route = record(policy.route, 'frozen route')
   const plugin = record(policy.plugin, 'frozen work plugin')
@@ -249,7 +252,7 @@ export function frozenPluginPolicy(run: FleetRunRecord): FrozenWorkPluginPolicy 
     projectNumber: run.projectNumber,
     stage: run.stage === 'review' ? 'review' : 'execution',
     task: {
-      id: 'frozen', number: run.taskNumber!, title: 'frozen', version: run.taskVersion!, phase: 'frozen', activity: 'frozen',
+      id: 'frozen', number: run.taskNumber, title: 'frozen', version: run.taskVersion,
     },
   }
   return {
@@ -267,6 +270,7 @@ export function frozenPluginPolicy(run: FleetRunRecord): FrozenWorkPluginPolicy 
       timeoutMs: positive(plugin.timeoutMs, 'plugin.timeoutMs'),
     },
     workspaceRoot: string(policy.workspaceRoot, 'workspaceRoot'),
+    pactlineTokenEnv: string(policy.pactlineTokenEnv, 'pactlineTokenEnv'),
     ...(policy.gitCredentialReference === undefined ? {} : { gitCredentialReference: string(policy.gitCredentialReference, 'gitCredentialReference') }),
   }
 }

@@ -4,6 +4,7 @@ import type { ExecutionProposal, ReviewProposal } from '../core/harness-result.j
 import type { PactlineClaimMutationResult, PactlineOperation } from './types.js'
 import type { RepositoryDelivery } from '../repository/delivery.js'
 import { validateRepositoryDelivery } from '../repository/delivery.js'
+import type { PactlineSettlementIntent } from '../run/external-effect.js'
 
 const RESOLVED_ISSUE_AUTHORITY = Symbol('resolved-issue-authority')
 
@@ -273,4 +274,18 @@ export async function settleReview(
   return terminalMutation(client, context, terminalExpected('released'), () => (
     client.releaseClaim(context.claimId, context.taskVersion, proposal.summary, key(context, 'release'))
   ))
+}
+
+/** Replay only the immutable settlement action persisted before the original external call. */
+export async function replaySettlement(
+  client: SettlementClient,
+  intent: PactlineSettlementIntent,
+  context: SettlementContext,
+): Promise<PactlineClaimMutationResult> {
+  if (intent.stage !== context.stage || intent.taskVersion !== context.taskVersion) {
+    throw new Error('Persisted settlement intent does not match the active Claim context')
+  }
+  return intent.stage === 'execution'
+    ? settleExecution(client, intent.proposal as ExecutionProposal, context, intent.delivery)
+    : settleReview(client, intent.proposal as ReviewProposal, context)
 }

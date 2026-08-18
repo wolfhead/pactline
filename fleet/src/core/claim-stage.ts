@@ -92,6 +92,16 @@ export interface ClaimStageResult {
   readonly settlement: PactlineClaimMutationResult
 }
 
+export interface PersistedResultContinuationOptions extends Omit<
+  ClaimStageOptions,
+  'workspace' | 'existingClaimId' | 'resumeRuntimeSessionId' | 'onRuntimeSession' | 'onClaimed' | 'onEvent' | 'onHarnessResult'
+> {
+  readonly workspace: FleetWorkspace
+  readonly existingClaimId: string
+  readonly resumeRuntimeSessionId: string
+  readonly harnessResult: HarnessRunResult
+}
+
 export interface CandidateImportOptions {
   readonly client: ClaimStageClient
   readonly definition: FleetWorkDefinition
@@ -211,6 +221,115 @@ async function dispatchHarness(
   return { result, runtimeSessionId }
 }
 
+function buildDispatch(
+  options: ClaimStageOptions,
+  runtime: AdmittedRuntime,
+  claimId: string,
+  taskVersion: number,
+  packet: Record<string, unknown>,
+  workspace: FleetWorkspace,
+): { readonly dispatch: ClaimStageDispatch; readonly validationContext: ProposalValidationContext } {
+  const waivedCriterionIds = waivedCriteriaFromAuthority(
+    options.resolutionAuthority, options.definition.taskNumber, options.taskVersion,
+  )
+  const validationContext: ProposalValidationContext = {
+    stage: options.stage,
+    runId: options.runId,
+    claimId,
+    taskNumber: options.definition.taskNumber,
+    criteria: options.definition.criteria,
+    verificationCommands: options.definition.verificationCommands,
+    ...(waivedCriterionIds === undefined ? {} : { waivedCriterionIds }),
+  }
+  const policy = promptPolicy(options.stage, runtime.route.promptVersion)
+  const request: HarnessRunRequest = {
+    runId: options.runId,
+    claimId,
+    stage: options.stage,
+    workspace: workspace.repositoryPath,
+    repositoryRevision: workspace.baseRevision,
+    taskPacket: packet,
+    allowedPaths: options.definition.allowedPaths,
+    verificationCommands: options.definition.verificationCommands,
+    resultSchema: proposalResultSchema(validationContext),
+    sandbox: requiredSandbox(options.stage),
+    deadline: options.deadline,
+    policy: {
+      model: runtime.route.model,
+      ...(runtime.route.reasoning === undefined ? {} : { reasoning: runtime.route.reasoning }),
+      promptVersion: runtime.route.promptVersion,
+      systemInstructions: policy.system,
+      stageInstructions: policy.stageInstructions,
+      resultContractVersion: runtime.route.resultContractVersion,
+    },
+  }
+  return {
+    validationContext,
+    dispatch: {
+      definition: options.definition,
+      stage: options.stage,
+      claimId,
+      taskVersion,
+      packet,
+      request,
+      runtime,
+    },
+  }
+}
+
+async function finishClaimStage(
+  options: ClaimStageOptions,
+  dispatch: ClaimStageDispatch,
+  workspace: FleetWorkspace,
+  harnessResult: HarnessRunResult,
+  validationContext: ProposalValidationContext,
+  baseHead: string,
+): Promise<ClaimStageResult> {
+  const proposal = validateHarnessProposal(harnessResult.proposal, validationContext)
+  if (proposal.kind === 'resolution_analysis') throw new Error('Resolution analysis cannot directly settle a Pactline Claim')
+
+  const afterAgent = await observeGit(workspace.repositoryPath, workspace.baseRevision)
+  const requiresUnchanged = proposal.recommendation === 'request_resolution' || proposal.recommendation === 'unable_to_complete'
+  if (requiresUnchanged && (afterAgent.head !== baseHead || afterAgent.changedPaths.length > 0 || afterAgent.porcelain !== '')) {
+    throw new Error('Resolution or release proposal requires unchanged workspace and HEAD')
+  }
+  const commands = requiresUnchanged ? [] : await runFixedVerification(workspace.repositoryPath, options.definition.verificationCommands)
+  const git = await observeGit(workspace.repositoryPath, workspace.baseRevision)
+  const observation = { git, commands }
+  if (!requiresUnchanged) {
+    assertProposalMatchesObservation(proposal, observation, { baseHead, allowedPaths: options.definition.allowedPaths })
+  }
+  if (proposal.kind === 'review') await assertReviewFindingsExist(workspace.repositoryPath, proposal)
+  await options.validateObservation?.(dispatch, proposal, observation)
+
+  const settlementContext = {
+    taskNumber: options.definition.taskNumber,
+    claimId: dispatch.claimId,
+    taskVersion: dispatch.taskVersion,
+    stage: pactlineStage(options.stage),
+    sessionId: options.clientSessionId,
+    idempotencyKey: `${options.idempotencyKey}-settle`,
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  } as const
+  const delivery = proposal.kind === 'execution' && proposal.recommendation === 'complete'
+    ? await options.publishDelivery?.(dispatch, proposal, observation)
+    : undefined
+  await options.onBeforeSettlement?.(dispatch, proposal)
+  const settlement = proposal.kind === 'execution'
+    ? await settleExecution(options.client, proposal, settlementContext, delivery)
+    : await settleReview(options.client, proposal, settlementContext)
+  await options.onSettled?.(settlement, dispatch)
+  return {
+    claimId: dispatch.claimId,
+    dispatchedTaskVersion: dispatch.taskVersion,
+    runtimeSessionId: harnessResult.runtimeSessionId,
+    harnessResult,
+    proposal,
+    observation,
+    settlement,
+  }
+}
+
 /** Admit capability, Claim exact state, run one Harness Session, observe it, and settle its proposal. */
 export async function runClaimStage(options: ClaimStageOptions): Promise<ClaimStageResult> {
   if ((options.stage as HarnessStage) === 'resolution_analysis') {
@@ -248,89 +367,46 @@ export async function runClaimStage(options: ClaimStageOptions): Promise<ClaimSt
     ? await options.workspace(claimId, dispatchedTaskVersion)
     : options.workspace
 
-  const waivedCriterionIds = waivedCriteriaFromAuthority(
-    options.resolutionAuthority, options.definition.taskNumber, options.taskVersion,
+  const { dispatch, validationContext } = buildDispatch(
+    options, runtime, claimId, dispatchedTaskVersion, work.data, workspace,
   )
-  const validationContext: ProposalValidationContext = {
-    stage: options.stage,
-    runId: options.runId,
-    claimId,
-    taskNumber: options.definition.taskNumber,
-    criteria: options.definition.criteria,
-    verificationCommands: options.definition.verificationCommands,
-    ...(waivedCriterionIds === undefined ? {} : { waivedCriterionIds }),
-  }
-  const policy = promptPolicy(options.stage, runtime.route.promptVersion)
-  const request: HarnessRunRequest = {
-    runId: options.runId,
-    claimId,
-    stage: options.stage,
-    workspace: workspace.repositoryPath,
-    repositoryRevision: workspace.baseRevision,
-    taskPacket: work.data,
-    allowedPaths: options.definition.allowedPaths,
-    verificationCommands: options.definition.verificationCommands,
-    resultSchema: proposalResultSchema(validationContext),
-    sandbox: requiredSandbox(options.stage),
-    deadline: options.deadline,
-    policy: {
-      model: runtime.route.model,
-      ...(runtime.route.reasoning === undefined ? {} : { reasoning: runtime.route.reasoning }),
-      promptVersion: runtime.route.promptVersion,
-      systemInstructions: policy.system,
-      stageInstructions: policy.stageInstructions,
-      resultContractVersion: runtime.route.resultContractVersion,
-    },
-  }
-  const dispatch: ClaimStageDispatch = {
-    definition: options.definition, stage: options.stage, claimId, taskVersion: dispatchedTaskVersion,
-    packet: work.data, request, runtime,
-  }
   const before = await observeGit(workspace.repositoryPath, workspace.baseRevision)
   assertInitialWorkspace(options, workspace, before.head, before.changedPaths, before.porcelain)
   const run = await dispatchHarness(options, dispatch)
   await options.onHarnessResult?.(run.result, dispatch)
-  const proposal = validateHarnessProposal(run.result.proposal, validationContext)
-  if (proposal.kind === 'resolution_analysis') throw new Error('Resolution analysis cannot directly settle a Pactline Claim')
+  return await finishClaimStage(options, dispatch, workspace, run.result, validationContext, before.head)
+}
 
-  const afterAgent = await observeGit(workspace.repositoryPath, workspace.baseRevision)
-  const requiresUnchanged = proposal.recommendation === 'request_resolution' || proposal.recommendation === 'unable_to_complete'
-  if (requiresUnchanged && (afterAgent.head !== before.head || afterAgent.changedPaths.length > 0 || afterAgent.porcelain !== '')) {
-    throw new Error('Resolution or release proposal requires unchanged workspace and HEAD')
+/** Continue only the post-Harness half from an observed result; never runs or resumes an Adapter. */
+export async function continueClaimStageAfterHarness(
+  options: PersistedResultContinuationOptions,
+): Promise<ClaimStageResult> {
+  if ((options.stage as HarnessStage) === 'resolution_analysis') {
+    throw new Error('Resolution analysis is advisory and cannot create a Pactline Claim')
   }
-  const commands = requiresUnchanged ? [] : await runFixedVerification(workspace.repositoryPath, options.definition.verificationCommands)
-  const git = await observeGit(workspace.repositoryPath, workspace.baseRevision)
-  const observation = { git, commands }
-  if (!requiresUnchanged) {
-    assertProposalMatchesObservation(proposal, observation, { baseHead: before.head, allowedPaths: options.definition.allowedPaths })
+  const runtime = await options.router.admit(options.stage)
+  const readOptions = { sessionId: options.clientSessionId, ...(options.signal === undefined ? {} : { signal: options.signal }) }
+  const work = await options.client.showClaim(options.existingClaimId, 20, readOptions)
+  const task = record(work.data.task, 'Claim work packet Task')
+  const claim = record(work.data.claim, 'Claim work packet Claim')
+  const stage = pactlineStage(options.stage)
+  if (task.number !== options.definition.taskNumber || task.version !== options.taskVersion
+    || claim.id !== options.existingClaimId || claim.stage !== stage || claim.status !== 'active') {
+    throw new Error('Pactline Claim changed before persisted result continuation')
   }
-  if (proposal.kind === 'review') await assertReviewFindingsExist(workspace.repositoryPath, proposal)
-  await options.validateObservation?.(dispatch, proposal, observation)
-
-  const settlementContext = {
-    taskNumber: options.definition.taskNumber,
-    claimId,
-    taskVersion: dispatchedTaskVersion,
-    stage,
-    sessionId: options.clientSessionId,
-    idempotencyKey: `${options.idempotencyKey}-settle`,
-    ...(options.signal === undefined ? {} : { signal: options.signal }),
-  } as const
-  let settlement: PactlineClaimMutationResult
-  await options.onBeforeSettlement?.(dispatch, proposal)
-  if (proposal.kind === 'execution') {
-    const delivery = proposal.recommendation === 'complete'
-      ? await options.publishDelivery?.(dispatch, proposal, observation)
-      : undefined
-    settlement = await settleExecution(options.client, proposal, settlementContext, delivery)
-  } else {
-    settlement = await settleReview(options.client, proposal, settlementContext)
-  }
-  await options.onSettled?.(settlement, dispatch)
-  return {
-    claimId, dispatchedTaskVersion, runtimeSessionId: run.runtimeSessionId,
-    harnessResult: run.result, proposal, observation, settlement,
-  }
+  assertTaskAdmission(work.data, options.definition, options.stage, options.taskVersion)
+  const { dispatch, validationContext } = buildDispatch(
+    options, runtime, options.existingClaimId, options.taskVersion, work.data, options.workspace,
+  )
+  assertRunResult(options.harnessResult, runtime, options.resumeRuntimeSessionId)
+  return await finishClaimStage(
+    options,
+    dispatch,
+    options.workspace,
+    options.harnessResult,
+    validationContext,
+    options.workspace.baseRevision,
+  )
 }
 
 /** Import a pre-existing frozen candidate through an honest Execution Claim before independent review. */

@@ -63,7 +63,8 @@ export type PactlineClaimStage = 'execution' | 'review'
 export type PactlineCheckOutcome = 'passed' | 'failed' | 'unable' | 'waived'
 export type PactlineIssueType = 'decision_required' | 'dependency_required'
 
-export interface PactlineTaskSummary {
+/** Private wire DTO. Domain callers receive a Fleet candidate projection from the Adapter. */
+export interface PactlineTaskSummaryDTO {
   readonly id: string
   readonly number: number
   readonly title: string

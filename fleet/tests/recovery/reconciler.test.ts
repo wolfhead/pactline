@@ -15,6 +15,56 @@ afterEach(async () => {
 })
 
 describe('FleetRunReconciler', () => {
+  it('recovers an admitted Run by ID after its Fleet is disabled in current configuration', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'fleet-reconciler-disabled-'))
+    directories.push(directory)
+    const state = await ensurePrivateDirectory(join(directory, 'state'))
+    const source = serviceConfigYAML({ stateDirectory: state, firstWorkspace: join(directory, 'work') })
+    const initial = parseFleetConfig(source, join(directory, 'fleet.yml'), { knownAdapterIds: ['codex'] })
+    const registry = await FleetRegistry.open(join(state, 'fleet.sqlite3'))
+    registry.recordConfiguration(initial)
+    const run = registry.admitRun('first', {
+      taskNumber: 17,
+      taskVersion: 4,
+      stage: 'execution',
+      frozenPolicy: { route: { adapter: 'codex', model: 'frozen-model' }, verificationCommands: ['frozen-check'] },
+    })
+    const disabled = parseFleetConfig(
+      source.replace('  first:\n', '  first:\n    enabled: false\n'),
+      join(directory, 'fleet.yml'),
+      { knownAdapterIds: ['codex'] },
+    )
+    registry.recordConfiguration(disabled)
+    const recovered: string[] = []
+    const reconciler = new FleetRunReconciler(registry, {
+      execute: () => Promise.reject(new Error('not used')),
+      async recover(...args) {
+        expect(args).toHaveLength(2)
+        const [runId, signal] = args
+        expect(signal).toBeInstanceOf(AbortSignal)
+        const admitted = registry.getRun(runId)
+        expect(admitted).toMatchObject({
+          runId: run.runId,
+          frozenPolicy: {
+            route: { adapter: 'codex', model: 'frozen-model' },
+            verificationCommands: ['frozen-check'],
+          },
+        })
+        recovered.push(runId)
+        registry.transitionRun(runId, 'admitted', 'released', { disposition: 'recovered_disabled_fleet' })
+        return { kind: 'released', reason: 'recovered_disabled_fleet' }
+      },
+    })
+
+    await expect(reconciler.reconcile()).resolves.toEqual([{
+      runId: run.runId,
+      before: 'admitted',
+      outcome: { kind: 'released', reason: 'recovered_disabled_fleet' },
+    }])
+    expect(recovered).toEqual([run.runId])
+    registry.close()
+  })
+
   it('records but never adopts or releases an unfamiliar same-principal active Claim', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'fleet-reconciler-test-'))
     directories.push(directory)

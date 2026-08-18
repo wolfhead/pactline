@@ -355,7 +355,6 @@ export class FleetService {
       const materializer = new PluginRunMaterializer({
         adapters: () => [...this.adapters.values()],
         environment: this.environment,
-        pactlineTokenEnv: () => this.manager.snapshot.config.service.pactline.tokenEnv,
         now: this.now,
         registry: this.registry,
         ...(this.options.faultInjector === undefined ? {} : { faultInjector: this.options.faultInjector }),

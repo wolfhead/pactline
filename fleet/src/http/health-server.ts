@@ -5,15 +5,13 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net'
 import type { FleetServiceHealth } from '../health/model.js'
 import type { FleetObservationSource } from '../observation/projection.js'
-import type { FleetRunListOptions, FleetRunStage, FleetRunState } from '../registry/fleet-registry.js'
+import type { FleetRunListOptions } from '../registry/fleet-registry.js'
+import { RUN_STAGES, RUN_STATES } from '../run/run.js'
+import type { FleetRunStage, FleetRunState } from '../run/run.js'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1'])
-const RUN_STATES = new Set<FleetRunState>([
-  'admitted', 'claiming', 'claimed', 'preparing_workspace', 'starting_harness',
-  'running_harness', 'validating', 'delivering', 'settling', 'releasing',
-  'completed', 'released', 'quarantined', 'failed',
-])
-const RUN_STAGES = new Set<FleetRunStage>(['execution', 'review', 'correction'])
+const RUN_STATE_FILTERS = new Set<FleetRunState>(RUN_STATES)
+const RUN_STAGE_FILTERS = new Set<FleetRunStage>(RUN_STAGES)
 const MIME_TYPES: Readonly<Record<string, string>> = {
   '.css': 'text/css; charset=utf-8',
   '.html': 'text/html; charset=utf-8',
@@ -174,8 +172,8 @@ export class FleetHealthServer {
       const limit = positiveInteger(url.searchParams.get('limit'), 50)
       const stateValue = url.searchParams.get('state')
       const stageValue = url.searchParams.get('stage')
-      if (limit === undefined || limit > 200 || (stateValue !== null && !RUN_STATES.has(stateValue as FleetRunState))
-        || (stageValue !== null && !RUN_STAGES.has(stageValue as FleetRunStage))) {
+      if (limit === undefined || limit > 200 || (stateValue !== null && !RUN_STATE_FILTERS.has(stateValue as FleetRunState))
+        || (stageValue !== null && !RUN_STAGE_FILTERS.has(stageValue as FleetRunStage))) {
         problem(response, 400, 'INVALID_RUN_FILTER', 'Run filters are invalid')
         return
       }

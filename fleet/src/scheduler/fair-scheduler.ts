@@ -1,5 +1,5 @@
 import type { FleetConfigSnapshot, FleetDefinitionConfig } from '../config/types.js'
-import type { FleetRunRecord } from '../registry/fleet-registry.js'
+import type { FleetRun } from '../registry/fleet-registry.js'
 import { FleetRegistry } from '../registry/fleet-registry.js'
 import type {
   CandidateDiscoveryClient,
@@ -47,7 +47,7 @@ export interface FleetDiscoveryCycle {
 }
 
 interface ActiveRun {
-  readonly run: FleetRunRecord
+  readonly run: FleetRun
   readonly promise: Promise<FleetRunOutcome>
   readonly controller: AbortController
 }
@@ -106,13 +106,8 @@ export class FairFleetScheduler {
             }),
           ])
           const candidates = [
-            ...execution.data.map(task => ({
-              fleetId: fleet.id,
-              projectNumber: fleet.projectNumber,
-              stage: task.phase === 'in_progress' ? 'correction' as const : 'execution' as const,
-              task,
-            })),
-            ...review.data.map(task => ({ fleetId: fleet.id, projectNumber: fleet.projectNumber, stage: 'review' as const, task })),
+            ...execution.data.map(candidate => ({ fleetId: fleet.id, projectNumber: fleet.projectNumber, ...candidate })),
+            ...review.data.map(candidate => ({ fleetId: fleet.id, projectNumber: fleet.projectNumber, ...candidate })),
           ].sort(compareCandidates)
           queues.set(fleet.id, candidates)
           discovered += candidates.length
@@ -172,7 +167,7 @@ export class FairFleetScheduler {
         }
         const run = this.options.registry.admitRun(fleet.id, resolved.admission, this.now())
         const runController = new AbortController()
-        const promise = this.options.executor.execute(run, selected, fleet, runController.signal)
+        const promise = this.options.executor.execute(run.runId, runController.signal)
           .then(outcome => {
             if (outcome.kind === 'contention') {
               const until = this.backoff(fleet.id).fail(this.now().getTime())

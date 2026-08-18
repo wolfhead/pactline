@@ -6,6 +6,7 @@ import { parseFleetConfig } from '../../src/config/load.js'
 import type { FleetServiceHealth } from '../../src/health/model.js'
 import { FleetObservationProjector } from '../../src/observation/projection.js'
 import { FleetRegistry } from '../../src/registry/fleet-registry.js'
+import { requireRun } from '../../src/run/run.js'
 import { ensurePrivateDirectory } from '../../src/service/state-directory.js'
 import { serviceConfigYAML } from '../fixtures/service-config.js'
 
@@ -42,7 +43,11 @@ describe('FleetObservationProjector', () => {
       taskNumber: 41, taskVersion: 7, stage: 'execution',
       frozenPolicy: { route: { adapter: 'codex', model: 'gpt-5.6-sol', reasoning: 'high' }, apiKey: 'must-not-project' },
     }, new Date('2026-08-16T10:01:00.000Z'))
-    run = registry.transitionRun(run.runId, 'admitted', 'claiming', { checkpoint: 'claim_intent' }, new Date('2026-08-16T10:01:01.000Z'))
+    run = requireRun(registry.transitionRun(run.runId, 'admitted', 'claiming', { checkpoint: 'claim_intent' }, new Date('2026-08-16T10:01:01.000Z')))
+    registry.recordRecoveryDecision(run.runId, {
+      state: 'claiming', claimAuthority: { kind: 'not_read' },
+      sessionResumable: false, hasSettlementIntent: false,
+    }, { kind: 'reconcile_claim' }, new Date('2026-08-16T10:01:02.000Z'))
     registry.recordEffectIntent(run.runId, 'harness_result', `${run.runId}-result`, {})
     registry.observeEffect(run.runId, 'harness_result', {
       terminalState: 'success', runtimeSessionId: 'session-41',
@@ -59,7 +64,12 @@ describe('FleetObservationProjector', () => {
       taskNumber: 41, adapter: 'codex', checkpoint: 'claim_intent',
     })])
     const detail = projector.run(run.runId)!.data
-    expect(detail.timeline.map(item => item.title)).toEqual(['Run admitted', 'Run entered claiming'])
+    expect(detail.timeline.map(item => item.title)).toEqual([
+      'Run admitted', 'Run entered claiming', 'Recovery chose reconcile claim',
+    ])
+    expect(detail.timeline.at(-1)).toMatchObject({
+      kind: 'run.recovery_decided', state: 'claiming', detail: 'Claim authority: not read',
+    })
     expect(detail.effects).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'harness_result', detail: { terminalState: 'success', runtimeSessionId: 'session-41' } }),
       expect.objectContaining({ kind: 'repository_delivery', detail: expect.objectContaining({ codeChangeUrl: 'https://example.com/org/repo/pull/41' }) }),

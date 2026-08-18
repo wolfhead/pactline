@@ -98,6 +98,43 @@ export async function verifyWorkspace(workspace: FleetWorkspace, environment: No
   if (workspace.mode === 'execution' && branch !== workspace.branch) throw new Error('Execution workspace is not on its admitted branch')
 }
 
+/** Read the local delivery authority needed to reconcile an unobserved commit intent. */
+export async function observeWorkspaceRevision(
+  workspace: FleetWorkspace,
+  environment: NodeJS.ProcessEnv = process.env,
+): Promise<{ readonly revision: string; readonly branch: string; readonly clean: boolean }> {
+  await verifyWorkspace(workspace, environment)
+  const safe = safeEnvironment(environment)
+  const revision = (await runGit(['rev-parse', 'HEAD'], workspace.repositoryPath, safe)).trim()
+  const branch = (await runGit(['symbolic-ref', '--quiet', '--short', 'HEAD'], workspace.repositoryPath, safe)).trim()
+  const porcelain = (await runGit(['status', '--porcelain=v1', '--untracked-files=all'], workspace.repositoryPath, safe)).trimEnd()
+  if (!/^[a-f0-9]{40}$/.test(revision) || branch === '') throw new Error('Execution workspace revision authority is invalid')
+  return { revision, branch, clean: porcelain === '' }
+}
+
+/** Read the remote branch without mutating it; absence is authoritative, transport failure is not. */
+export async function observeRemoteRevision(
+  workspace: FleetWorkspace,
+  branch: string,
+  environment: NodeJS.ProcessEnv = process.env,
+): Promise<string | undefined> {
+  await verifyWorkspace(workspace, environment)
+  if (branch.trim() === '' || branch.includes('..') || /[~^:?*[\\\s]/.test(branch)) {
+    throw new Error('Remote branch authority is invalid')
+  }
+  const output = await runGit(
+    ['ls-remote', '--heads', 'origin', `refs/heads/${branch}`],
+    workspace.repositoryPath,
+    safeEnvironment(environment),
+  )
+  if (output.trim() === '') return undefined
+  const [revision, ref, ...extra] = output.trim().split(/\s+/)
+  if (extra.length > 0 || ref !== `refs/heads/${branch}` || !/^[a-f0-9]{40}$/.test(revision ?? '')) {
+    throw new Error('Remote branch revision authority is invalid')
+  }
+  return revision
+}
+
 export async function prepareWorkspace(options: PrepareWorkspaceOptions): Promise<FleetWorkspace> {
   if (!RUN_ID_PATTERN.test(options.runId)) throw new Error('runId must be a lowercase branch-safe identifier')
   if (!/^[a-f0-9]{40}$/.test(options.input.revision)) throw new Error('Repository revision must be a lowercase 40-character Git SHA')

@@ -7,18 +7,18 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { ReplayHarnessAdapter } from '../../src/adapters/replay/replay-adapter.js'
 import { parseFleetConfig } from '../../src/config/load.js'
 import type { FleetDefinitionConfig } from '../../src/config/types.js'
-import type { ExecutionProposal, HarnessRunResult } from '../../src/core/harness-result.js'
+import type { ExecutionProposal, HarnessRunResult, ReviewProposal } from '../../src/core/harness-result.js'
 import type { HarnessAdapter, HarnessCapabilities, HarnessRunObserver, HarnessRunRequest } from '../../src/core/harness-adapter.js'
 import { StaticRuntimeRouter } from '../../src/core/runtime-router.js'
 import type { RuntimeRoutes } from '../../src/core/runtime-router.js'
 import type { FleetWorkDefinition } from '../../src/core/work-definition.js'
 import { FleetRegistry } from '../../src/registry/fleet-registry.js'
-import type { FleetWorkCandidate } from '../../src/scheduler/candidate.js'
 import { ClaimStageRunCoordinator, FleetInjectedCrash } from '../../src/scheduler/run-coordinator.js'
 import { prepareWorkspace, removeWorkspace } from '../../src/repository/workspace.js'
 import { ensurePrivateDirectory } from '../../src/service/state-directory.js'
 import { InMemoryPactlineClient } from '../contract/in-memory-pactline.js'
 import { serviceConfigYAML } from '../fixtures/service-config.js'
+import { frozenPluginPolicy } from '../../src/work-plugin/executable-plugin.js'
 
 const exec = promisify(execFile)
 const directories: string[] = []
@@ -62,15 +62,35 @@ function routes(): RuntimeRoutes {
   return { execution: route, correction: route, review: route, resolution_analysis: route }
 }
 
+function persistedWorkspace(): Readonly<Record<string, unknown>> {
+  return {
+    mode: 'execution', root: '/tmp/fleet-test', temporaryParent: '/tmp',
+    repositoryPath: '/tmp/fleet-test/repository', source: '/tmp/fleet-test/origin.git',
+    baseRevision: 'a'.repeat(40), branch: 'fleet/test',
+  }
+}
+
+function unableProposal(runId: string, claimId: string): ExecutionProposal {
+  return {
+    schemaVersion: 1,
+    kind: 'execution',
+    runId,
+    claimId,
+    taskNumber: 21,
+    recommendation: 'unable_to_complete',
+    summary: 'Unable.',
+    verification: [],
+    criteria: [{ criterionId: 'criterion-1', criterionRevision: 1, outcome: 'unable', evidence: 'blocked' }],
+    limitations: ['blocked'],
+    changedPaths: [],
+  }
+}
+
 describe('ClaimStageRunCoordinator', () => {
   it('checkpoints Claim, workspace, Session, result, delivery, and settlement', async () => {
     const { directory, origin, revision, registry, fleet } = await fixture()
     const criterion = { id: 'criterion-1', revision: 1 }
     const client = new InMemoryPactlineClient(21, [criterion])
-    const candidate: FleetWorkCandidate = {
-      fleetId: fleet.id, projectNumber: fleet.projectNumber, stage: 'execution',
-      task: { id: 'task-21', number: 21, title: 'Test', version: 1, phase: 'ready', activity: 'available' },
-    }
     const definition: FleetWorkDefinition = {
       caseId: 'M5.2', taskNumber: 21, taskVersion: 1,
       base: { source: origin, ref: 'refs/heads/main', revision },
@@ -96,17 +116,46 @@ describe('ClaimStageRunCoordinator', () => {
         return result
       },
     }])
+    let deliveryState: string | undefined
+    let settlementIntentBeforeDelivery = false
     const coordinator = new ClaimStageRunCoordinator({
       registry, client, clientSessionId: 'fleet-service-test',
       materializer: {
-        materialize() {
+        materialize(...args) {
+          expect(args).toHaveLength(2)
+          const [admitted, signal] = args
+          expect(signal).toBeInstanceOf(AbortSignal)
+          expect(admitted).toMatchObject({
+            taskNumber: 21,
+            taskVersion: 1,
+            stage: 'execution',
+            frozenPolicy: { definition, pactlineTokenEnv: 'TEST_PACTLINE_TOKEN' },
+          })
+          const policy = frozenPluginPolicy(admitted)
+          const route = {
+            adapterId: policy.route.adapter,
+            model: policy.route.model,
+            ...(policy.route.reasoning === undefined ? {} : { reasoning: policy.route.reasoning }),
+            promptVersion: policy.route.promptVersion,
+            resultContractVersion: policy.route.resultContractVersion,
+          }
           return Promise.resolve({
-            definition, router: new StaticRuntimeRouter([adapter], routes()), deadline: '2026-08-17T00:00:00Z',
-            prepareWorkspace: () => prepareWorkspace({ input: definition.base, mode: 'execution', runId: 'task-21', temporaryDirectory: directory }),
-            publishDelivery: () => Promise.resolve({
-              repository: definition.repository,
-              codeChangeUrl: 'https://github.com/wolfhead/pactline/pull/52', revision: 'b'.repeat(40), branch: 'fleet/run/21',
+            definition: policy.definition,
+            router: new StaticRuntimeRouter([adapter], {
+              execution: route, correction: route, review: route, resolution_analysis: route,
             }),
+            deadline: '2026-08-17T00:00:00Z',
+            prepareWorkspace: () => prepareWorkspace({
+              input: policy.definition.base, mode: 'execution', runId: 'task-21', temporaryDirectory: directory,
+            }),
+            publishDelivery: () => {
+              deliveryState = registry.getRun(run.runId)?.state
+              settlementIntentBeforeDelivery = registry.getEffect(run.runId, 'pactline_settlement') !== undefined
+              return Promise.resolve({
+                repository: policy.definition.repository,
+                codeChangeUrl: 'https://github.com/wolfhead/pactline/pull/52', revision: 'b'.repeat(40), branch: 'fleet/run/21',
+              })
+            },
             cleanup: workspace => removeWorkspace(workspace),
           })
         },
@@ -114,10 +163,19 @@ describe('ClaimStageRunCoordinator', () => {
     })
     const run = registry.admitRun(fleet.id, {
       taskNumber: 21, taskVersion: 1, stage: 'execution',
-      frozenPolicy: { route: routes().execution, definition },
+      frozenPolicy: {
+        definition,
+        route: {
+          adapter: 'replay', model: 'quality', reasoning: 'max',
+          promptVersion: 'm5.2', resultContractVersion: 1,
+        },
+        plugin: { executable: '/not-used/frozen-plugin', args: [], timeoutMs: 1_000 },
+        workspaceRoot: directory,
+        pactlineTokenEnv: 'TEST_PACTLINE_TOKEN',
+      },
     })
 
-    await expect(coordinator.execute(run, candidate, fleet, new AbortController().signal)).resolves.toEqual({ kind: 'completed' })
+    await expect(coordinator.execute(run.runId, new AbortController().signal)).resolves.toEqual({ kind: 'completed' })
     expect(registry.getRun(run.runId)).toMatchObject({
       state: 'completed', claimId: expect.any(String), runtimeSessionId: 'replay-session', checkpoint: 'settlement_observed',
     })
@@ -125,8 +183,90 @@ describe('ClaimStageRunCoordinator', () => {
       'claim:observed', 'workspace:observed', 'adapter_session:observed', 'harness_result:observed',
       'repository_delivery:observed', 'pactline_settlement:observed',
     ]))
+    expect(deliveryState).toBe('delivering')
+    expect(settlementIntentBeforeDelivery).toBe(false)
+    expect(registry.listRunEvents(run.runId)
+      .filter(event => event.eventType === 'run.transitioned')
+      .map(event => event.payload.to)).toEqual([
+      'claiming', 'claimed', 'preparing_workspace', 'starting_harness', 'running_harness',
+      'validating', 'delivering', 'settling', 'completed',
+    ])
     registry.close()
   })
+
+  it.each(['execution', 'review'] as const)(
+    'settles a non-delivery %s Run without entering delivering',
+    async stage => {
+      const { directory, origin, revision, registry, fleet } = await fixture()
+      const criterion = { id: 'criterion-1', revision: 1 }
+      const client = new InMemoryPactlineClient(21, [criterion], stage === 'review' ? { phase: 'in_review' } : {})
+      const definition: FleetWorkDefinition = {
+        caseId: `non-delivery-${stage}`, taskNumber: 21, taskVersion: 1,
+        base: { source: origin, ref: 'refs/heads/main', revision },
+        repository: { provider: 'github', host: 'github.com', owner: 'wolfhead', name: 'pactline' },
+        allowedPaths: ['README.md'], verificationCommands: ['true'], criteria: [criterion],
+      }
+      const adapter = new ReplayHarnessAdapter([{
+        sessionId: `non-delivery-${stage}-session`,
+        result: request => {
+          const proposal: ExecutionProposal | ReviewProposal = stage === 'execution'
+            ? {
+                schemaVersion: 1, kind: 'execution', runId: request.runId, claimId: request.claimId,
+                taskNumber: 21, recommendation: 'unable_to_complete', summary: 'Unable.', changedPaths: [],
+                verification: [],
+                criteria: [{ criterionId: criterion.id, criterionRevision: 1, outcome: 'unable', evidence: 'blocked' }],
+                limitations: [],
+              }
+            : {
+                schemaVersion: 1, kind: 'review', runId: request.runId, claimId: request.claimId,
+                taskNumber: 21, recommendation: 'accept', summary: 'Accepted.', findings: [],
+                verification: [{ command: 'true', outcome: 'passed', summary: 'passed' }],
+                criteria: [{ criterionId: criterion.id, criterionRevision: 1, outcome: 'passed', evidence: 'reviewed' }],
+                limitations: [],
+              }
+          return {
+            adapterId: 'replay', adapterVersion: '1.0.0', runtimeSessionId: `non-delivery-${stage}-session`,
+            model: { provider: 'replay', model: 'quality', reasoning: 'max' }, terminalState: 'completed',
+            proposal, usage: {}, eventSummary: { total: 0, byType: {}, toolCalls: {}, toolErrors: {} },
+          }
+        },
+      }])
+      let deliveryCalls = 0
+      const coordinator = new ClaimStageRunCoordinator({
+        registry, client, clientSessionId: 'fleet-service-test',
+        materializer: {
+          materialize: () => Promise.resolve({
+            definition, router: new StaticRuntimeRouter([adapter], routes()), deadline: '2026-08-17T00:00:00Z',
+            prepareWorkspace: () => prepareWorkspace({
+              input: definition.base, mode: stage === 'review' ? 'review' : 'execution',
+              runId: `non-delivery-${stage}`, temporaryDirectory: directory,
+            }),
+            publishDelivery: () => {
+              deliveryCalls += 1
+              throw new Error('non-delivery settlement must not publish')
+            },
+            cleanup: workspace => removeWorkspace(workspace),
+          }),
+        },
+      })
+      const run = registry.admitRun(fleet.id, {
+        taskNumber: 21, taskVersion: 1, stage, frozenPolicy: { route: routes()[stage], definition },
+      })
+
+      await expect(coordinator.execute(run.runId, new AbortController().signal)).resolves.toEqual(
+        stage === 'execution' ? { kind: 'released', reason: 'released' } : { kind: 'completed' },
+      )
+      expect(deliveryCalls).toBe(0)
+      expect(registry.getEffect(run.runId, 'repository_delivery')).toBeUndefined()
+      expect(registry.listRunEvents(run.runId)
+        .filter(event => event.eventType === 'run.transitioned')
+        .map(event => event.payload.to)).toEqual([
+        'claiming', 'claimed', 'preparing_workspace', 'starting_harness', 'running_harness',
+        'validating', 'settling', stage === 'execution' ? 'released' : 'completed',
+      ])
+      registry.close()
+    },
+  )
 
   it('releases a known active Claim when its Adapter Session cannot resume', async () => {
     const { registry, fleet } = await fixture()
@@ -138,16 +278,20 @@ describe('ClaimStageRunCoordinator', () => {
       taskNumber: 21, taskVersion: 1, stage: 'execution', frozenPolicy: { adapter: 'deepseek' },
     })
     registry.transitionRun(run.runId, 'admitted', 'claiming')
-    registry.transitionRun(run.runId, 'claiming', 'claimed', { claimId: claimed.data.claim.id })
+    registry.transitionRun(run.runId, 'claiming', 'claimed', {
+      claimId: claimed.data.claim.id,
+      claimVersion: claimed.data.claim.version,
+      claimTaskVersion: claimed.data.task.version,
+    })
     registry.transitionRun(run.runId, 'claimed', 'preparing_workspace')
-    registry.transitionRun(run.runId, 'preparing_workspace', 'starting_harness')
+    registry.transitionRun(run.runId, 'preparing_workspace', 'starting_harness', { workspace: persistedWorkspace() })
     registry.transitionRun(run.runId, 'starting_harness', 'running_harness', { runtimeSessionId: 'deepseek-session' })
     const coordinator = new ClaimStageRunCoordinator({
       registry, client, clientSessionId: 'fleet-service-test',
       materializer: { materialize: () => Promise.reject(new Error('not used')) },
     })
 
-    await expect(coordinator.recover(registry.getRun(run.runId)!, new AbortController().signal)).resolves.toEqual({
+    await expect(coordinator.recover(run.runId, new AbortController().signal)).resolves.toEqual({
       kind: 'released', reason: 'adapter_session_not_resumable',
     })
     expect(client.phase).toBe('in_progress')
@@ -194,12 +338,7 @@ describe('ClaimStageRunCoordinator', () => {
     const run = registry.admitRun(fleet.id, {
       taskNumber: 21, taskVersion: 1, stage: 'execution', frozenPolicy: { adapter: 'deepseek' },
     })
-    const candidate: FleetWorkCandidate = {
-      fleetId: fleet.id, projectNumber: fleet.projectNumber, stage: 'execution',
-      task: { id: 'task-21', number: 21, title: 'Crash', version: 1, phase: 'ready', activity: 'available' },
-    }
-
-    await expect(coordinator.execute(run, candidate, fleet, new AbortController().signal)).rejects.toMatchObject({
+    await expect(coordinator.execute(run.runId, new AbortController().signal)).rejects.toMatchObject({
       checkpoint: 'after_session_persistence_before_agent',
     })
     expect(agentEffect).toBe(false)
@@ -209,9 +348,54 @@ describe('ClaimStageRunCoordinator', () => {
     const recovery = new ClaimStageRunCoordinator({
       registry, client, materializer, clientSessionId: 'fleet-service-test',
     })
-    await expect(recovery.recover(registry.getRun(run.runId)!, new AbortController().signal)).resolves.toMatchObject({ kind: 'released' })
+    await expect(recovery.recover(run.runId, new AbortController().signal)).resolves.toMatchObject({ kind: 'released' })
     expect(registry.getRun(run.runId)).toMatchObject({ state: 'released', checkpoint: 'release_observed' })
     registry.close()
+  })
+
+  it('persists Claim intent and claiming state together before Claim creation', async () => {
+    const { origin, revision, registry, fleet } = await fixture()
+    const client = new InMemoryPactlineClient(21, [{ id: 'criterion-1', revision: 1 }])
+    const definition: FleetWorkDefinition = {
+      caseId: 'claim-intent-crash', taskNumber: 21, taskVersion: 1,
+      base: { source: origin, ref: 'refs/heads/main', revision },
+      repository: { provider: 'github', host: 'github.com', owner: 'wolfhead', name: 'pactline' },
+      allowedPaths: ['README.md'], verificationCommands: ['true'], criteria: [{ id: 'criterion-1', revision: 1 }],
+    }
+    const adapter = new ReplayHarnessAdapter([])
+    const coordinator = new ClaimStageRunCoordinator({
+      registry,
+      client,
+      clientSessionId: 'fleet-service-test',
+      materializer: {
+        materialize: () => Promise.resolve({
+          definition,
+          router: new StaticRuntimeRouter([adapter], routes()),
+          deadline: '2026-08-17T00:00:00Z',
+          prepareWorkspace: () => Promise.reject(new Error('must not prepare workspace')),
+        }),
+      },
+      faultInjector: checkpoint => {
+        if (checkpoint === 'before_claim_creation') throw new FleetInjectedCrash(checkpoint)
+      },
+    })
+    const run = registry.admitRun(fleet.id, {
+      taskNumber: 21, taskVersion: 1, stage: 'execution', frozenPolicy: { route: routes().execution, definition },
+    })
+    await expect(coordinator.execute(run.runId, new AbortController().signal)).rejects.toMatchObject({
+      checkpoint: 'before_claim_creation',
+    })
+    expect(client.phase).toBe('ready')
+    expect(client.activity).toBe('available')
+    expect(registry.getRun(run.runId)).toMatchObject({ state: 'claiming', checkpoint: 'claim_intent' })
+    expect(registry.getEffect(run.runId, 'claim')).toMatchObject({ status: 'intended' })
+    const path = registry.path
+    registry.close()
+
+    const reopened = await FleetRegistry.open(path)
+    expect(reopened.getRun(run.runId)).toMatchObject({ state: 'claiming' })
+    expect(reopened.getEffect(run.runId, 'claim')).toMatchObject({ status: 'intended' })
+    reopened.close()
   })
 
   it('resumes the exact recorded Codex-style Session with the post-Claim Task version', async () => {
@@ -287,10 +471,188 @@ describe('ClaimStageRunCoordinator', () => {
     })
     const coordinator = new ClaimStageRunCoordinator({ registry, client, materializer, clientSessionId: 'second-service-session' })
 
-    await expect(coordinator.recover(registry.getRun(run.runId)!, new AbortController().signal)).resolves.toEqual({ kind: 'completed' })
+    await expect(coordinator.recover(run.runId, new AbortController().signal)).resolves.toEqual({ kind: 'completed' })
     expect(resumedSession).toBe('codex-session-21')
     expect(client.phase).toBe('in_review')
     expect(registry.getRun(run.runId)).toMatchObject({ state: 'completed', claimTaskVersion: 2 })
+    registry.close()
+  })
+
+  it.each(['validating', 'delivering'] as const)(
+    'continues a persisted post-result Run in %s without calling Harness',
+    async recoveryState => {
+      const { directory, origin, revision, registry, fleet } = await fixture()
+      const criterion = { id: 'criterion-1', revision: 1 }
+      const client = new InMemoryPactlineClient(21, [criterion])
+      const claimed = await client.claimTask(21, 1, 'execution', {
+        sessionId: 'first-service', idempotencyKey: 'claim',
+      })
+      const definition: FleetWorkDefinition = {
+        caseId: 'post-result-recovery', taskNumber: 21, taskVersion: 1,
+        base: { source: origin, ref: 'refs/heads/main', revision },
+        repository: { provider: 'github', host: 'github.com', owner: 'wolfhead', name: 'pactline' },
+        allowedPaths: ['README.md'], verificationCommands: ['true'], criteria: [criterion],
+      }
+      const workspace = await prepareWorkspace({
+        input: definition.base, mode: 'execution', runId: `post-result-${recoveryState}`, temporaryDirectory: directory,
+      })
+      await writeFile(join(workspace.repositoryPath, 'README.md'), 'recovered result\n')
+      const run = registry.admitRun(fleet.id, {
+        taskNumber: 21, taskVersion: 1, stage: 'execution', frozenPolicy: { adapter: 'codex' },
+      })
+      registry.transitionRun(run.runId, 'admitted', 'claiming')
+      registry.transitionRun(run.runId, 'claiming', 'claimed', {
+        claimId: claimed.data.claim.id,
+        claimVersion: claimed.data.claim.version,
+        claimTaskVersion: claimed.data.task.version,
+      })
+      registry.transitionRun(run.runId, 'claimed', 'preparing_workspace')
+      registry.transitionRun(run.runId, 'preparing_workspace', 'starting_harness', { workspace: {
+        mode: workspace.mode, root: workspace.root, temporaryParent: workspace.temporaryParent,
+        repositoryPath: workspace.repositoryPath, source: workspace.source,
+        baseRevision: workspace.baseRevision, branch: workspace.branch,
+      } })
+      registry.transitionRun(run.runId, 'starting_harness', 'running_harness', {
+        runtimeSessionId: 'completed-codex-session',
+      })
+      const proposal: ExecutionProposal = {
+        schemaVersion: 1, kind: 'execution', runId: run.runId, claimId: claimed.data.claim.id,
+        taskNumber: 21, recommendation: 'complete', summary: 'Recovered.', changedPaths: ['README.md'],
+        verification: [{ command: 'true', outcome: 'passed', summary: 'passed' }],
+        criteria: [{ criterionId: criterion.id, criterionRevision: 1, outcome: 'passed', evidence: 'verified' }],
+        limitations: [],
+      }
+      const harnessResult: HarnessRunResult = {
+        adapterId: 'codex', adapterVersion: 'post-result-test', runtimeSessionId: 'completed-codex-session',
+        model: { provider: 'openai-codex', model: 'gpt-5.6-sol', reasoning: 'high' },
+        terminalState: 'completed', proposal, usage: {},
+        eventSummary: { total: 0, byType: {}, toolCalls: {}, toolErrors: {} },
+      }
+      registry.recordEffectIntent(run.runId, 'harness_result', `${run.runId}-result`, {})
+      registry.observeEffect(run.runId, 'harness_result', {
+        terminalState: 'completed', runtimeSessionId: 'completed-codex-session',
+        result: harnessResult,
+      })
+      registry.transitionRun(run.runId, 'running_harness', 'validating', {
+        checkpoint: 'harness_result_observed',
+      })
+      if (recoveryState === 'delivering') {
+        registry.transitionRun(run.runId, 'validating', 'delivering', { checkpoint: 'delivery_intent' })
+        registry.recordEffectIntent(run.runId, 'repository_delivery', `${run.runId}-delivery`, {})
+        registry.observeEffect(run.runId, 'repository_delivery', {
+          codeChangeUrl: 'https://github.com/wolfhead/pactline/pull/54',
+          revision: 'd'.repeat(40),
+          branch: workspace.branch!,
+        })
+      }
+      let harnessCalls = 0
+      let deliveryCalls = 0
+      const capabilities: HarnessCapabilities = {
+        nativeTools: true, structuredResult: true, eventStream: true, cancellation: true, sessionResume: true,
+        sandboxModes: ['workspace_write'], supportedStages: ['execution'],
+      }
+      const adapter: HarnessAdapter = {
+        id: 'codex', version: 'post-result-test',
+        probe: async () => capabilities,
+        run: () => { harnessCalls += 1; return Promise.reject(new Error('must not run Harness after result persistence')) },
+        resume: () => { harnessCalls += 1; return Promise.reject(new Error('must not resume Harness after result persistence')) },
+      }
+      const route = { adapterId: 'codex', model: 'gpt-5.6-sol', reasoning: 'high', promptVersion: 'm5.2', resultContractVersion: 1 }
+      const registryPath = registry.path
+      registry.close()
+      const reopened = await FleetRegistry.open(registryPath)
+      const coordinator = new ClaimStageRunCoordinator({
+        registry: reopened, client, clientSessionId: 'recovery-service',
+        materializer: {
+          materialize: () => Promise.reject(new Error('not used')),
+          resume: () => Promise.resolve({
+            definition,
+            router: new StaticRuntimeRouter([adapter], {
+              execution: route, correction: route, review: route, resolution_analysis: route,
+            }),
+            deadline: '2026-08-17T00:00:00Z',
+            prepareWorkspace: async () => workspace,
+            publishDelivery: async () => {
+              deliveryCalls += 1
+              return {
+                repository: definition.repository,
+                codeChangeUrl: 'https://github.com/wolfhead/pactline/pull/54',
+                revision: 'd'.repeat(40),
+                branch: workspace.branch!,
+              }
+            },
+          }),
+        },
+      })
+
+      await expect(coordinator.recover(run.runId, new AbortController().signal)).resolves.toEqual({ kind: 'completed' })
+      expect(harnessCalls).toBe(0)
+      expect(deliveryCalls).toBe(recoveryState === 'validating' ? 1 : 0)
+      expect(client.activity).toBe('available')
+      expect(reopened.getRun(run.runId)).toMatchObject({ state: 'completed', checkpoint: 'settlement_observed' })
+      expect(reopened.getEffect(run.runId, 'pactline_settlement')).toMatchObject({ status: 'observed' })
+      reopened.close()
+    },
+  )
+
+  it('replays the exact settlement intent for an active settling Run without resuming Harness', async () => {
+    const { registry, fleet } = await fixture()
+    const client = new InMemoryPactlineClient(21, [{ id: 'criterion-1', revision: 1 }])
+    const claimed = await client.claimTask(21, 1, 'execution', {
+      sessionId: 'first-service', idempotencyKey: 'claim',
+    })
+    const run = registry.admitRun(fleet.id, {
+      taskNumber: 21, taskVersion: 1, stage: 'execution', frozenPolicy: { adapter: 'codex' },
+    })
+    registry.transitionRun(run.runId, 'admitted', 'claiming')
+    registry.transitionRun(run.runId, 'claiming', 'claimed', {
+      claimId: claimed.data.claim.id,
+      claimVersion: claimed.data.claim.version,
+      claimTaskVersion: claimed.data.task.version,
+    })
+    registry.transitionRun(run.runId, 'claimed', 'preparing_workspace')
+    registry.transitionRun(run.runId, 'preparing_workspace', 'starting_harness', { workspace: persistedWorkspace() })
+    registry.transitionRun(run.runId, 'starting_harness', 'running_harness', {
+      runtimeSessionId: 'completed-codex-session',
+    })
+    registry.recordEffectIntent(run.runId, 'harness_result', `${run.runId}-result`, {})
+    const proposal = unableProposal(run.runId, claimed.data.claim.id)
+    registry.observeEffect(run.runId, 'harness_result', {
+      terminalState: 'completed', runtimeSessionId: 'completed-codex-session',
+      result: { proposal },
+    })
+    registry.transitionRun(run.runId, 'running_harness', 'validating')
+    registry.transitionRun(run.runId, 'validating', 'settling', { checkpoint: 'settlement_intent' })
+    registry.recordEffectIntent(run.runId, 'pactline_settlement', `${run.runId}-settle`, {
+      stage: 'execution', taskVersion: claimed.data.task.version, proposal,
+    })
+    let resumeCalls = 0
+    const coordinator = new ClaimStageRunCoordinator({
+      registry, client, clientSessionId: 'recovery-service',
+      materializer: {
+        materialize: () => Promise.reject(new Error('not used')),
+        resume: () => { resumeCalls += 1; return Promise.reject(new Error('must not resume during settlement')) },
+      },
+    })
+
+    await expect(coordinator.recover(run.runId, new AbortController().signal)).resolves.toMatchObject({ kind: 'released' })
+    expect(resumeCalls).toBe(0)
+    expect(client.activity).toBe('available')
+    expect(client.mutations.filter(item => item.operation === 'release')).toEqual([
+      expect.objectContaining({ idempotencyKey: `${run.runId}-settle-release` }),
+    ])
+    expect(registry.getRun(run.runId)).toMatchObject({
+      state: 'released',
+      checkpoint: 'settlement_observed',
+    })
+    expect(registry.getEffect(run.runId, 'pactline_settlement')).toMatchObject({ status: 'observed' })
+    expect(registry.listRunEvents(run.runId)).toContainEqual(expect.objectContaining({
+      eventType: 'run.recovery_decided',
+      payload: expect.objectContaining({
+        state: 'settling', claimAuthority: 'active', claimIdentityMatches: true,
+        hasSettlementIntent: true, decision: 'replay_settlement',
+      }),
+    }))
     registry.close()
   })
 
@@ -309,11 +671,19 @@ describe('ClaimStageRunCoordinator', () => {
       claimId: claimed.data.claim.id, claimVersion: 1, claimTaskVersion: claimed.data.task.version,
     })
     registry.transitionRun(run.runId, 'claimed', 'preparing_workspace')
-    registry.transitionRun(run.runId, 'preparing_workspace', 'starting_harness')
+    registry.transitionRun(run.runId, 'preparing_workspace', 'starting_harness', { workspace: persistedWorkspace() })
     registry.transitionRun(run.runId, 'starting_harness', 'running_harness', { runtimeSessionId: 'deepseek-session' })
+    registry.recordEffectIntent(run.runId, 'harness_result', `${run.runId}-result`, {})
+    const proposal = unableProposal(run.runId, claimed.data.claim.id)
+    registry.observeEffect(run.runId, 'harness_result', {
+      terminalState: 'completed', runtimeSessionId: 'deepseek-session',
+      result: { proposal },
+    })
     registry.transitionRun(run.runId, 'running_harness', 'validating')
     registry.transitionRun(run.runId, 'validating', 'settling')
-    registry.recordEffectIntent(run.runId, 'pactline_settlement', `${run.runId}-settle`, {})
+    registry.recordEffectIntent(run.runId, 'pactline_settlement', `${run.runId}-settle`, {
+      stage: 'execution', taskVersion: claimed.data.task.version, proposal,
+    })
     let resumeCalls = 0
     const coordinator = new ClaimStageRunCoordinator({
       registry, client, clientSessionId: 'recovery',
@@ -323,7 +693,7 @@ describe('ClaimStageRunCoordinator', () => {
       },
     })
 
-    await expect(coordinator.recover(registry.getRun(run.runId)!, new AbortController().signal)).resolves.toMatchObject({ kind: 'released' })
+    await expect(coordinator.recover(run.runId, new AbortController().signal)).resolves.toMatchObject({ kind: 'released' })
     expect(resumeCalls).toBe(0)
     expect(registry.getRun(run.runId)).toMatchObject({ state: 'released', checkpoint: 'settlement_reconciled' })
     expect(registry.getEffect(run.runId, 'pactline_settlement')).toMatchObject({ status: 'observed' })
