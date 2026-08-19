@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Download, ExternalLink, File, FileImage, FileText, Paperclip, Trash2, Upload } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import MarkdownContent from '@/components/markdown/MarkdownContent'
 import {
   completeTaskAttachmentUpload,
   createTaskAttachmentUpload,
@@ -171,17 +170,8 @@ export default function AttachmentSection({
         </div>
       )}
       {selected?.preview_kind === 'markdown' && (
-        <article className="prose prose-sm max-w-none rounded-lg border border-border bg-surface px-5 py-4 text-fg">
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            skipHtml
-            components={{
-              img: ({ alt }) => <span className="text-fg-muted">[外部图片已隐藏{alt ? `：${alt}` : ''}]</span>,
-              a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer">{children}</a>,
-            }}
-          >
-            {markdown}
-          </ReactMarkdown>
+        <article className="rounded-lg border border-border bg-surface px-5 py-4">
+          <MarkdownContent source={markdown} variant="document" />
         </article>
       )}
       {error && <p className="text-sm text-danger">{error}</p>}

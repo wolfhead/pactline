@@ -37,7 +37,8 @@ test('review Claim cannot accept until current-cycle acceptance evidence passes'
   await checklist.getByRole('button', { name: '检查' }).click()
   await checklist.getByPlaceholder('检查证据或原因').fill('Verified by Playwright')
   await checklist.getByRole('button', { name: '记录' }).click()
-  await expect(checklist.getByText(/通过：Verified by Playwright/)).toBeVisible()
+  await expect(checklist.getByText('验收 · 通过', { exact: true })).toBeVisible()
+  await expect(checklist.getByText('Verified by Playwright', { exact: true })).toBeVisible()
 
   await workflow.getByRole('button', { name: '接受并完成' }).click()
   await workflow.getByLabel('接受并完成').fill('Acceptance evidence satisfies the current review cycle')

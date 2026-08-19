@@ -91,6 +91,22 @@ describe('TaskDetail', () => {
     expect(screen.getByLabelText('里程碑')).toBeVisible()
   })
 
+  it('renders Task brief fields as Markdown with explicit editing controls', async () => {
+    vi.mocked(tasksApi.getTask).mockResolvedValue({
+      ...TASK,
+      context: '## Incident context\n\n- Reproduced in staging',
+      expected_result: '**Stable** release',
+    })
+
+    renderDetail()
+
+    expect(await screen.findByRole('heading', { name: 'Incident context', level: 2 })).toBeVisible()
+    expect(screen.getByText('Reproduced in staging').closest('li')).not.toBeNull()
+    expect(screen.getByText('Stable').closest('strong')).not.toBeNull()
+    expect(screen.getByRole('button', { name: '编辑背景 / 问题' })).toBeVisible()
+    expect(screen.getByRole('button', { name: '编辑期望结果' })).toBeVisible()
+  })
+
   it('marks a backlog Task ready through the workflow command and reloads it', async () => {
     const readyTask: Task = { ...TASK, version: 2, phase: 'ready', activity: 'available' }
     vi.mocked(workflowApi.markTaskReady).mockResolvedValue({
@@ -132,23 +148,26 @@ describe('TaskDetail', () => {
 		submission: {
 			id: '44444444-4444-4444-8444-444444444444', thread_id: TASK.main_thread_id,
 			kind: 'work_submission', author: executionClaim.claimed_by,
-			body: '实现与测试完成。', mentioned_user_ids: [], version: 1,
+		body: '## 完成\n\n实现与测试完成。', mentioned_user_ids: [], version: 1,
 			created_at: '', updated_at: '',
 		},
 	})
 
-	renderDetail()
-	await screen.findByText(TASK.title)
+		renderDetail()
+		await screen.findByText(TASK.title)
 	expect(screen.getByRole('button', { name: '记录工作' })).toBeVisible()
 	expect(screen.getByRole('button', { name: '完成执行，进入验收' })).toBeVisible()
 
-	fireEvent.click(screen.getByRole('button', { name: '记录工作' }))
-	fireEvent.change(screen.getByLabelText('记录工作'), { target: { value: '实现与测试完成。' } })
-	fireEvent.click(screen.getByRole('button', { name: '确认' }))
+		fireEvent.click(screen.getByRole('button', { name: '记录工作' }))
+		const workflow = screen.getByRole('region', { name: '任务工作流' })
+		fireEvent.change(within(workflow).getByLabelText('记录工作'), { target: { value: '## 完成\n\n实现与测试完成。' } })
+		fireEvent.click(within(workflow).getByRole('tab', { name: '预览' }))
+		expect(within(workflow).getByRole('heading', { name: '完成', level: 2 })).toBeVisible()
+		fireEvent.click(screen.getByRole('button', { name: '确认' }))
 
-	await waitFor(() => expect(workflowApi.recordTaskWorkSubmission).toHaveBeenCalledWith(
-		142, 3, executionClaim, '实现与测试完成。',
-	))
+		await waitFor(() => expect(workflowApi.recordTaskWorkSubmission).toHaveBeenCalledWith(
+			142, 3, executionClaim, '## 完成\n\n实现与测试完成。',
+		))
 	expect(workflowApi.completeTaskExecution).not.toHaveBeenCalled()
   })
 
@@ -176,6 +195,53 @@ describe('TaskDetail', () => {
       'message',
     ))
     expect(await screen.findByText('补充复现日志。')).toBeVisible()
+  })
+
+  it('renders stored Thread bodies as GitHub-Flavored Markdown', async () => {
+    vi.mocked(workflowApi.listThreadItems).mockResolvedValue([{
+      id: '55555555-5555-4555-8555-555555555555',
+      thread_id: MAIN_THREAD.id,
+      kind: 'work_submission',
+      author: { type: 'agent', ref: 'api-token/codex' },
+      body: '## Verification\n\n- TypeScript passed\n- Playwright passed',
+      mentioned_user_ids: [],
+      version: 1,
+      created_at: '2026-08-13T01:30:00Z',
+      updated_at: '2026-08-13T01:30:00Z',
+    }])
+
+    renderDetail()
+
+    expect(await screen.findByRole('heading', { name: 'Verification', level: 2 })).toBeVisible()
+    expect(screen.getByText('TypeScript passed').closest('li')).not.toBeNull()
+  })
+
+  it('renders merged Issue requests and conclusions as Markdown', async () => {
+    vi.mocked(workflowApi.listThreadItems).mockResolvedValue([{
+      id: '66666666-6666-4666-8666-666666666666',
+      thread_id: MAIN_THREAD.id,
+      kind: 'issue_resolution',
+      author: { type: 'system' },
+      issue_resolution: {
+        issue_thread_id: '77777777-7777-4777-8777-777777777777',
+        issue_type: 'decision_required',
+        request: '### Decision needed\n\nChoose the rollout strategy.',
+        resolution: '**Approved:** use the staged rollout.',
+        opened_by: { type: 'agent', ref: 'api-token/codex' },
+        resolved_by: { type: 'user', user_id: 'u1' },
+        opened_at: '2026-08-13T01:00:00Z',
+        resolved_at: '2026-08-13T02:00:00Z',
+      },
+      mentioned_user_ids: [],
+      version: 1,
+      created_at: '2026-08-13T02:00:00Z',
+      updated_at: '2026-08-13T02:00:00Z',
+    }])
+
+    renderDetail()
+
+    expect(await screen.findByRole('heading', { name: 'Decision needed', level: 3 })).toBeVisible()
+    expect(screen.getByText('Approved:').closest('strong')).not.toBeNull()
   })
 
   it('posts an immutable progress Item through the same Main Thread composer', async () => {

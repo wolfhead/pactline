@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Check, Hand, Play, RotateCcw, Send, XCircle } from 'lucide-react'
+import MarkdownComposer from '@/components/markdown/MarkdownComposer'
 import {
   acceptTask,
   cancelTask,
@@ -228,9 +229,7 @@ export default function TaskWorkflowPanel({
 
       {pendingAction && (
         <div className="mt-3 grid gap-2 rounded-md bg-surface-subtle p-3">
-          <label className="text-xs font-medium text-fg" htmlFor="workflow-action-body">
-            {ACTION_LABELS[pendingAction]}
-          </label>
+          <p className="text-xs font-medium text-fg">{ACTION_LABELS[pendingAction]}</p>
           {pendingAction === 'request_resolution' && (
             <select
               aria-label="Issue 类型"
@@ -242,12 +241,13 @@ export default function TaskWorkflowPanel({
               <option value="dependency_required">需要解决依赖项</option>
             </select>
           )}
-          <textarea
-            id="workflow-action-body"
+          <MarkdownComposer
+            value={body}
+            onChange={setBody}
+            ariaLabel={ACTION_LABELS[pendingAction]}
             rows={3}
             autoFocus
-            value={body}
-            onChange={(event) => setBody(event.target.value)}
+            disabled={busy}
             placeholder={pendingAction === 'resolve_issue'
               ? '写明最终结论或依赖解决结果'
               : pendingAction === 'record_work'
@@ -255,7 +255,6 @@ export default function TaskWorkflowPanel({
                 : pendingAction === 'complete_execution'
                   ? '概括本轮完整交付；确认后将进入验收'
                   : '写明原因、交接内容或结果摘要'}
-            className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none"
           />
           <div className="flex justify-end gap-2">
             <button type="button" onClick={() => setPendingAction(null)} className="px-3 py-1.5 text-xs font-medium text-fg-muted">取消</button>

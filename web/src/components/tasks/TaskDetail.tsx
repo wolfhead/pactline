@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link2, XIcon } from 'lucide-react'
+import MarkdownEditableField from '@/components/markdown/MarkdownEditableField'
 import AcceptanceChecklist from '@/components/projects/AcceptanceChecklist'
 import ActivityLog from './ActivityLog'
 import AttachmentSection from './AttachmentSection'
@@ -49,11 +50,11 @@ interface TaskDetailProps {
 
 /**
  * Detail content for one task — no dialog, page chrome, or back link of its
- * own. The task brief is edited exactly where it is read (see
- * InlineEditable). Every property commits the instant it changes —
- * optimistic update, then reconciled against whatever the server actually
- * persisted, reverting visibly with a reason if it refuses. Archiving does
- * not ask first; it offers an undo instead.
+ * own. Fields are edited exactly where they are read. Compact properties
+ * commit immediately, while Markdown-rich brief fields use explicit save and
+ * cancel controls. Optimistic updates are reconciled against whatever the
+ * server actually persisted, reverting visibly with a reason if it refuses.
+ * Archiving does not ask first; it offers an undo instead.
  */
 export default function TaskDetail({
   number,
@@ -493,40 +494,27 @@ export default function TaskDetail({
         onPatch={(patch) => patchOptimistic(patch, {})}
       />
 
-      <section className="flex flex-col gap-3 border-t border-border pt-4">
-        <div>
-          <h3 className="text-xs font-medium text-fg-muted">背景 / 问题</h3>
-          <InlineEditable
-            value={task.context}
-            onCommit={(next) => patchOptimistic({ context: next }, { context: next })}
-            multiline
-            placeholder="补充为什么需要做，以及当前遇到的问题…"
-            ariaLabel="任务背景"
-            className="mt-1 text-sm text-fg"
-          />
-        </div>
-        <div>
-          <h3 className="text-xs font-medium text-fg-muted">期望结果</h3>
-          <InlineEditable
-            value={task.expected_result}
-            onCommit={(next) => patchOptimistic({ expected_result: next }, { expected_result: next })}
-            multiline
-            placeholder="补充完成后应该达到的状态…"
-            ariaLabel="任务期望结果"
-            className="mt-1 text-sm text-fg"
-          />
-        </div>
-        <div>
-          <h3 className="text-xs font-medium text-fg-muted">补充说明</h3>
-          <InlineEditable
-            value={task.description}
-            onCommit={(next) => patchOptimistic({ description: next }, { description: next })}
-            multiline
-            placeholder="可选：补充约束、参考资料或实现提示…"
-            ariaLabel="任务补充说明"
-            className="mt-1 text-sm text-fg"
-          />
-        </div>
+      <section className="flex flex-col gap-4 border-t border-border pt-4">
+        <MarkdownEditableField
+          label="背景 / 问题"
+          value={task.context}
+          onCommit={(next) => patchOptimistic({ context: next }, { context: next })}
+          placeholder="补充为什么需要做，以及当前遇到的问题…"
+          required
+        />
+        <MarkdownEditableField
+          label="期望结果"
+          value={task.expected_result}
+          onCommit={(next) => patchOptimistic({ expected_result: next }, { expected_result: next })}
+          placeholder="补充完成后应该达到的状态…"
+          required
+        />
+        <MarkdownEditableField
+          label="补充说明"
+          value={task.description}
+          onCommit={(next) => patchOptimistic({ description: next }, { description: next })}
+          placeholder="可选：补充约束、参考资料或实现提示…"
+        />
       </section>
 
       <AcceptanceChecklist

@@ -13,7 +13,7 @@ describe('AcceptanceChecklist', () => {
           id: 'criterion-1',
           version: 1,
           criterion: 'The release test passes',
-          verification_instructions: 'Run make e2e',
+          verification_instructions: '### Verification steps\n\n- Run `make e2e`',
           revision: 1,
           position: 0,
           current_check: {
@@ -21,7 +21,7 @@ describe('AcceptanceChecklist', () => {
             criterion_id: 'criterion-1',
             criterion_revision: 1,
             outcome: 'passed',
-            evidence: 'Playwright passed',
+            evidence: '**Playwright** passed',
             checker_type: 'agent',
             checked_by_user_id: null,
             purpose: 'execution_verification',
@@ -35,7 +35,10 @@ describe('AcceptanceChecklist', () => {
       />,
     )
 
-    expect(screen.getByText('执行自检 · 通过：Playwright passed')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Verification steps', level: 3 })).toBeVisible()
+    expect(screen.getByText('make e2e').closest('code')).not.toBeNull()
+    expect(screen.getByText('Playwright').closest('strong')).not.toBeNull()
+    expect(screen.getByText('执行自检 · 通过')).toBeVisible()
   })
 
   it('submits one addressable criterion check with evidence', async () => {
@@ -61,14 +64,16 @@ describe('AcceptanceChecklist', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '检查' }))
     fireEvent.change(screen.getByPlaceholderText('检查证据或原因'), {
-      target: { value: 'Playwright: 18 passed' },
+      target: { value: '**Playwright**: 18 passed' },
     })
+    fireEvent.click(screen.getByRole('tab', { name: '预览' }))
+    expect(screen.getByText('Playwright').closest('strong')).not.toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '记录' }))
 
     expect(onCheck).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'criterion-1', revision: 3 }),
       'passed',
-      'Playwright: 18 passed',
+      '**Playwright**: 18 passed',
     )
   })
 

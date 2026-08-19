@@ -80,7 +80,8 @@ test('a long-lived Project plans and completes an evidence-backed Milestone', as
   await checklist.getByRole('button', { name: '检查' }).click()
   await checklist.getByPlaceholder('检查证据或原因').fill('Verified by Playwright')
   await checklist.getByRole('button', { name: '记录' }).click()
-  await expect(checklist.getByText(/通过：Verified by Playwright/)).toBeVisible()
+  await expect(checklist.getByText('通过', { exact: true })).toBeVisible()
+  await expect(checklist.getByText('Verified by Playwright', { exact: true })).toBeVisible()
 
   await page.getByRole('button', { name: '里程碑详情', exact: true }).click()
   await page.getByRole('button', { name: '完成', exact: true }).click()

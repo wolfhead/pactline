@@ -22,12 +22,23 @@ test('task attachments: preview Markdown inline and HTML in an isolated page', a
   await fileInput.setInputFiles({
     name: 'decision.md',
     mimeType: 'text/markdown',
-    buffer: Buffer.from('# Decision\n\nUse the staged rollout.'),
+    buffer: Buffer.from(`# Decision
+
+- [x] Use the staged rollout.
+
+| Stage | Owner |
+| --- | --- |
+| Test | Release team |
+
+![Remote diagram](https://tracker.example/diagram.png)`),
   })
   await expect(attachments.getByText('decision.md', { exact: true })).toBeVisible()
   await attachments.getByText('decision.md', { exact: true }).click()
   await expect(attachments.getByRole('heading', { name: 'Decision' })).toBeVisible()
   await expect(attachments.getByText('Use the staged rollout.', { exact: true })).toBeVisible()
+  await expect(attachments.getByRole('table')).toBeVisible()
+  await expect(attachments.getByText('[外部图片已隐藏：Remote diagram]')).toBeVisible()
+  await expect(attachments.locator('img[alt="Remote diagram"]')).toHaveCount(0)
 
   await fileInput.setInputFiles({
     name: 'prototype.html',

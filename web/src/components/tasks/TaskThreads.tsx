@@ -8,6 +8,8 @@ import {
   updateThreadMessage,
 } from '@/api/task-workflow'
 import { listProjectMembers } from '@/api/projects'
+import MarkdownComposer from '@/components/markdown/MarkdownComposer'
+import MarkdownContent from '@/components/markdown/MarkdownContent'
 import { useIdentity } from '@/identity'
 import type { TaskThread, TaskThreadItem } from '@/task-types'
 
@@ -190,12 +192,11 @@ export default function TaskThreads({
                 </div>
                 {editingID === item.id ? (
                   <div className="mt-1 grid gap-2">
-                    <textarea
-                      rows={3}
-                      aria-label="编辑消息"
+                    <MarkdownComposer
                       value={editingBody}
-                      onChange={(event) => setEditingBody(event.target.value)}
-                      className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-fg"
+                      onChange={setEditingBody}
+                      ariaLabel="编辑消息"
+                      rows={3}
                     />
                     <div className="flex gap-2">
                       <button type="button" disabled={busy} onClick={() => void saveEdit(item)} className="rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-white">保存</button>
@@ -206,8 +207,14 @@ export default function TaskThreads({
                   <p className="mt-1 text-sm italic text-fg-subtle">消息已删除</p>
                 ) : item.issue_resolution ? (
                   <div className="mt-1 border-l border-secondary pl-3 text-sm text-fg">
-                    <p><span className="text-fg-muted">问题：</span>{item.issue_resolution.request}</p>
-                    <p className="mt-1"><span className="text-fg-muted">结论：</span>{item.issue_resolution.resolution}</p>
+                    <div className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-x-2">
+                      <span className="text-fg-muted">问题</span>
+                      <MarkdownContent source={item.issue_resolution.request} />
+                    </div>
+                    <div className="mt-2 grid grid-cols-[2.5rem_minmax(0,1fr)] gap-x-2">
+                      <span className="text-fg-muted">结论</span>
+                      <MarkdownContent source={item.issue_resolution.resolution} />
+                    </div>
                     {threads.some(({ id }) => id === item.issue_resolution?.issue_thread_id) && (
                       <button
                         type="button"
@@ -219,7 +226,9 @@ export default function TaskThreads({
                     )}
                   </div>
                 ) : (
-                  <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-fg">{item.body}</p>
+                  <div className="mt-1">
+                    <MarkdownContent source={item.body ?? ''} />
+                  </div>
                 )}
                 {ownedMessage && editingID !== item.id && (
                   <div className="mt-1 flex gap-2">
@@ -249,14 +258,16 @@ export default function TaskThreads({
               </select>
             </label>
           )}
-          <textarea
-            rows={2}
-            aria-label="向当前 Thread 发送消息"
-            value={body}
-            onChange={(event) => setBody(event.target.value)}
-            placeholder="补充上下文、进展或讨论…"
-            className="min-w-0 basis-56 flex-1 rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none"
-          />
+          <div className="min-w-0 basis-64 flex-1">
+            <MarkdownComposer
+              value={body}
+              onChange={setBody}
+              ariaLabel="向当前 Thread 发送消息"
+              placeholder="补充上下文、进展或讨论…"
+              rows={3}
+              disabled={busy}
+            />
+          </div>
           <button type="submit" disabled={!body.trim() || busy} aria-label="发送消息" className="flex size-9 shrink-0 items-center justify-center rounded-md bg-accent text-white disabled:opacity-50">
             <Send className="size-4" aria-hidden="true" />
           </button>
