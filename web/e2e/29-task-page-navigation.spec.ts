@@ -32,7 +32,10 @@ const TASK = {
   due_date: null,
   project: { id: '00000000-0000-4000-8000-000000000012', number: 12, name: 'Launch' },
   milestone: { id: '00000000-0000-4000-8000-000000000099', name: 'Release' },
-  labels: [],
+  labels: [
+    { id: '00000000-0000-4000-8000-000000000201', name: 'Mobile readiness verification' },
+    { id: '00000000-0000-4000-8000-000000000202', name: 'UnbrokenLabelNameThatMustWrapWithinThePropertyColumn' },
+  ],
   parent: null,
   children: [],
   dependencies: [],
@@ -143,7 +146,7 @@ async function openTaskAndReturn(page: import('@playwright/test').Page, source: 
   await page.goto(source)
   await page.getByRole('link', { name: TASK.title, exact: true }).click()
   await expect(page).toHaveURL('/tasks/142')
-  await expect(page.getByRole('heading', { name: TASK.title, exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: TASK.title, exact: true, level: 1 })).toBeVisible()
   await expect(page.getByRole('dialog')).toHaveCount(0)
 
   await page.goBack()
@@ -167,7 +170,7 @@ test('standalone Task navigation preserves all three collection sources and resp
   )
 
   await page.goto('/tasks/142')
-  await expect(page.getByRole('heading', { name: TASK.title, exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: TASK.title, exact: true, level: 1 })).toBeVisible()
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await testInfo.attach('task-page-desktop', {
     body: await page.screenshot(),
@@ -175,9 +178,18 @@ test('standalone Task navigation preserves all three collection sources and resp
   })
 
   await page.setViewportSize({ width: 390, height: 844 })
-  await expect(page.getByRole('heading', { name: TASK.title, exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: TASK.title, exact: true, level: 1 })).toBeVisible()
   await expect(page.getByRole('dialog')).toHaveCount(0)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  const properties = page.locator('[data-task-properties]')
+  const labels = page.getByRole('button', { name: '标签' })
+  await expect(labels).toContainText('UnbrokenLabelNameThatMustWrapWithinThePropertyColumn')
+  expect(await labels.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+  expect(await properties.evaluate((element) => (
+    [...element.querySelectorAll<HTMLElement>('*')].every((child) => (
+      child.getBoundingClientRect().right <= element.getBoundingClientRect().right + 1
+    ))
+  ))).toBe(true)
   await testInfo.attach('task-page-mobile', {
     body: await page.screenshot(),
     contentType: 'image/png',

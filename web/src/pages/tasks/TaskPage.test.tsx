@@ -52,9 +52,9 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-function renderPage(state?: unknown) {
+function renderPage(state?: unknown, pathname = '/tasks/142') {
   return render(
-    <MemoryRouter initialEntries={[{ pathname: '/tasks/142', state }]}>
+    <MemoryRouter initialEntries={[{ pathname, state }]}>
       <Routes>
         <Route path="/tasks/:number" element={<TaskPage />} />
       </Routes>
@@ -71,7 +71,18 @@ describe('TaskPage', () => {
     expect(tasksApi.getTask).toHaveBeenCalledWith(142)
     expect(tasksApi.listTasks).not.toHaveBeenCalled()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: TASK.title, level: 1 })).toBeVisible()
   })
+
+  it.each(['/tasks/1e2', '/tasks/0x8e', '/tasks/142.5', '/tasks/-142'])(
+    'rejects a non-decimal route segment at %s without loading a task',
+    async (pathname) => {
+      renderPage(undefined, pathname)
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('任务编号无效。')
+      expect(tasksApi.getTask).not.toHaveBeenCalled()
+    },
+  )
 
   it('renders a page-level not-found state', async () => {
     vi.mocked(tasksApi.getTask).mockRejectedValue(

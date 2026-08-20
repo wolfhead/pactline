@@ -8,7 +8,7 @@ export default function TaskPage() {
   const { number } = useParams()
   const location = useLocation()
   const { users } = useIdentity()
-  const parsedNumber = Number(number)
+  const parsedNumber = number !== undefined && /^\d+$/.test(number) ? Number(number) : NaN
   const taskNumber = Number.isSafeInteger(parsedNumber) && parsedNumber > 0
     ? parsedNumber
     : null
@@ -36,6 +36,7 @@ export default function TaskPage() {
             number={taskNumber}
             users={users}
             onPatched={() => {}}
+            headingLevel={1}
           />
         )}
       </div>
