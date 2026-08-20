@@ -66,7 +66,7 @@ export default function TaskDetail({
   const { me } = useIdentity()
 
   const [task, setTask] = useState<Task | null>(null)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<Error | null>(null)
   const [fieldError, setFieldError] = useState('')
   const [allLabels, setAllLabels] = useState<Label[]>([])
   const [acceptanceCriteria, setAcceptanceCriteria] = useState<AcceptanceCriterion[]>([])
@@ -111,7 +111,7 @@ export default function TaskDetail({
     if (!Number.isFinite(number)) return
     setTask(null)
     setAcceptanceCriteria([])
-    setError('')
+    setError(null)
     // Everything else on screen belongs to the task being replaced, not the
     // one arriving. A failed-update message raised against A would otherwise
     // read as B's failure; worse, A's archive undo toast would stay up over B
@@ -128,7 +128,7 @@ export default function TaskDetail({
       })
       .catch((err) => {
         if (cancelled) return
-        setError(String((err as Error).message))
+        setError(err instanceof Error ? err : new Error(String(err)))
       })
     return () => {
       cancelled = true
@@ -321,19 +321,23 @@ export default function TaskDetail({
   }
 
   if (error) {
+    const notFound = error instanceof ProblemError && error.status === 404
     return (
-      <p className="p-4 text-sm text-danger">
-        加载失败：{error}{' '}
+      <section role="alert" className="p-5 text-sm text-danger">
+        <h1 className="text-base font-semibold">{notFound ? '找不到任务' : '任务加载失败'}</h1>
+        <p className="mt-1">
+          {notFound ? '这个任务不存在，或你无权查看。' : error.message}
+        </p>
         <button type="button" className="underline" onClick={() => setReloadToken((t) => t + 1)}>
           重试
         </button>
-      </p>
+      </section>
     )
   }
-  if (!task) return <p className="p-4 text-sm text-fg-muted">正在加载任务…</p>
+  if (!task) return <p role="status" className="p-5 text-sm text-fg-muted">正在加载任务…</p>
 
   return (
-    <div className="flex flex-col gap-4 p-4">
+    <article className="flex min-w-0 flex-col gap-4 p-4 sm:p-5">
       {/* A screen-reader-only heading: the shell wrapping this content (a
           third column, a Sheet, a full page) may or may not supply its own
           accessible name, and TaskDetail can't assume which — this gives
@@ -389,6 +393,12 @@ export default function TaskDetail({
             撤销
           </button>
         </div>
+      )}
+
+      {task.archived_at && (
+        <p role="status" className="rounded-md border border-border bg-surface-subtle px-3 py-2 text-sm text-fg-muted">
+          此任务已归档，仍可查看完整内容。
+        </p>
       )}
 
       <div className="flex items-baseline gap-3">
@@ -479,7 +489,7 @@ export default function TaskDetail({
         onChanged={() => reloadTaskAndAcceptance(task.number)}
       />
 
-		<TaskCodeChanges
+      <TaskCodeChanges
         task={task}
         onChanged={() => reloadTaskAndAcceptance(task.number)}
       />
@@ -543,6 +553,6 @@ export default function TaskDetail({
         taskVersion={task.version}
       />
       <ActivityLog task={task} />
-    </div>
+    </article>
   )
 }

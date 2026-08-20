@@ -42,4 +42,31 @@ describe('useTaskCollection', () => {
       }),
     ))
   })
+
+  it('reloads the saved number of cursor pages when a collection remounts', async () => {
+    vi.mocked(tasksApi.listLabels).mockResolvedValue([])
+    vi.mocked(tasksApi.listTasks)
+      .mockResolvedValueOnce({
+        items: [{ id: 'task-1', number: 1 } as never],
+        next_cursor: 'page-2',
+        has_more: true,
+      })
+      .mockResolvedValueOnce({
+        items: [{ id: 'task-2', number: 2 } as never],
+        has_more: false,
+      })
+
+    const { result } = renderHook(() => useTaskCollection({}, 'user-1', {
+      initialPageCount: 2,
+    }))
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(tasksApi.listTasks).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      cursor: undefined,
+    }))
+    expect(tasksApi.listTasks).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      cursor: 'page-2',
+    }))
+    expect(result.current.tasks.map((task) => task.number)).toEqual([1, 2])
+  })
 })

@@ -51,8 +51,27 @@ export interface TaskCollectionController {
 export function useTaskCollection(
   baseQuery: TaskListParams,
   identityKey: string | undefined,
+  options: {
+    initialFilters?: TaskFilters
+    initialPageCount?: number
+    onFiltersChange?: (filters: TaskFilters) => void
+    onPageCountChange?: (pageCount: number) => void
+  } = {},
 ): TaskCollectionController {
-  const [filters, setFilters] = useState<TaskFilters>(DEFAULT_FILTERS)
+  const [filters, setFiltersState] = useState<TaskFilters>(
+    () => options.initialFilters ?? DEFAULT_FILTERS,
+  )
+  const onFiltersChangeRef = useRef(options.onFiltersChange)
+  onFiltersChangeRef.current = options.onFiltersChange
+  const onPageCountChangeRef = useRef(options.onPageCountChange)
+  onPageCountChangeRef.current = options.onPageCountChange
+  const pageCountRef = useRef(options.initialPageCount ?? 1)
+
+  function setFilters(next: TaskFilters) {
+    pageCountRef.current = 1
+    setFiltersState(next)
+    onFiltersChangeRef.current?.(next)
+  }
   const [labels, setLabels] = useState<Label[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [nextCursor, setNextCursor] = useState<string>()
@@ -107,13 +126,22 @@ export function useTaskCollection(
     setLoading(true)
     setError('')
     let cancelled = false
-    listTasks(buildQuery())
-      .then((result) => {
-        if (cancelled) return
-        setTasks(result.items)
-        setNextCursor(result.next_cursor)
-        setHasMore(result.has_more)
-      })
+    async function loadSavedPages() {
+      const loaded: Task[] = []
+      let cursor: string | undefined
+      let result: Awaited<ReturnType<typeof listTasks>> | undefined
+      for (let page = 0; page < pageCountRef.current; page += 1) {
+        result = await listTasks(buildQuery(cursor))
+        loaded.push(...result.items)
+        cursor = result.next_cursor
+        if (!result.has_more || !cursor) break
+      }
+      if (cancelled || !result) return
+      setTasks(loaded)
+      setNextCursor(result.next_cursor)
+      setHasMore(result.has_more)
+    }
+    loadSavedPages()
       .catch((cause) => {
         if (!cancelled) setError(String((cause as Error).message))
       })
@@ -138,6 +166,8 @@ export function useTaskCollection(
       setTasks((current) => [...current, ...result.items])
       setNextCursor(result.next_cursor)
       setHasMore(result.has_more)
+      pageCountRef.current += 1
+      onPageCountChangeRef.current?.(pageCountRef.current)
     } catch (cause) {
       if (liveQueryRef.current === requestKey) {
         setError(String((cause as Error).message))

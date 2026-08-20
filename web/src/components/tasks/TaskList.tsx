@@ -2,6 +2,7 @@ import type { Tier } from '@/hooks/useBreakpoint'
 import { PHASE_LABELS, TASK_PHASES, type Task, type TaskPatchBody, type UserRef } from '@/task-types'
 import { orderTasksWithChildren } from './task-hierarchy'
 import TaskRow from './TaskRow'
+import type { TaskNavigationState } from './task-navigation'
 
 interface TaskListProps {
   tasks: Task[]
@@ -15,6 +16,7 @@ interface TaskListProps {
   // non-default sort is active and this degrades to one flat list.
   grouped: boolean
   taskHref?: (task: Task) => string
+  taskLinkState?: TaskNavigationState
   onPatch: (task: Task, patch: TaskPatchBody, optimistic: Partial<Task>) => void
   onArchive: (task: Task) => void
   onRestore: (task: Task) => void
@@ -35,6 +37,7 @@ export default function TaskList({
   rowErrors,
   grouped,
   taskHref = (task) => `/tasks/${task.number}`,
+  taskLinkState,
   onPatch,
   onArchive,
   onRestore,
@@ -49,6 +52,7 @@ export default function TaskList({
         users={users}
         error={rowErrors[task.number]}
         href={taskHref(task)}
+        linkState={taskLinkState}
         onPatch={onPatch}
         onArchive={onArchive}
         onRestore={onRestore}

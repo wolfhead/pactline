@@ -33,8 +33,13 @@ import ProjectMembersPanel from '@/components/projects/ProjectMembersPanel'
 import ProjectAgentConversationsPanel from '@/components/projects/ProjectAgentConversationsPanel'
 import ProjectRepositoryAccessPanel from '@/components/projects/ProjectRepositoryAccessPanel'
 import TaskCollection from '@/components/tasks/TaskCollection'
-import TaskInspector from '@/components/tasks/TaskInspector'
 import { useTaskCollection } from '@/components/tasks/useTaskCollection'
+import {
+  searchParamsWithTaskFilters,
+  searchParamsWithTaskPageCount,
+  taskFiltersFromSearchParams,
+  taskPageCountFromSearchParams,
+} from '@/components/tasks/task-collection-search'
 import { useTaskComposer } from '@/components/tasks/TaskComposer'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useIdentity } from '@/identity'
@@ -775,35 +780,24 @@ function ProjectTaskCollection({
     milestone_id: milestoneID,
     backlog_only: backlogOnly || undefined,
   }), [backlogOnly, milestoneID, projectNumber])
-  const collection = useTaskCollection(query, me?.id)
-  const selectedValue = Number(searchParams.get('task'))
-  const selectedNumber = Number.isInteger(selectedValue) && selectedValue > 0
-    ? selectedValue
-    : null
-  const selectedTask = selectedNumber === null
-    ? null
-    : collection.tasks.find((task) => task.number === selectedNumber) ?? null
-
-  function taskHref(taskNumber: number) {
-    const next = new URLSearchParams(searchParams)
-    next.set('task', String(taskNumber))
-    return `?${next.toString()}`
-  }
-
-  function closeTaskInspector() {
-    const next = new URLSearchParams(searchParams)
-    next.delete('task')
-    setSearchParams(next, { replace: true })
-  }
-
+  const initialFilters = useMemo(() => taskFiltersFromSearchParams(searchParams), []) // eslint-disable-line react-hooks/exhaustive-deps
+  const initialPageCount = useMemo(() => taskPageCountFromSearchParams(searchParams), []) // eslint-disable-line react-hooks/exhaustive-deps
+  const collection = useTaskCollection(query, me?.id, {
+    initialFilters,
+    initialPageCount,
+    onFiltersChange: (filters) => {
+      setSearchParams(searchParamsWithTaskFilters(searchParams, filters), { replace: true })
+    },
+    onPageCountChange: (pageCount) => {
+      setSearchParams(searchParamsWithTaskPageCount(searchParams, pageCount), { replace: true })
+    },
+  })
   return (
     <>
       <TaskCollection
         controller={collection}
         tier={tier}
         users={users}
-        selectedNumber={selectedNumber}
-        taskHref={(task) => taskHref(task.number)}
         allowGantt={!backlogOnly}
         empty={empty}
         actions={canCreate && !isReadOnly && (
@@ -820,13 +814,6 @@ function ProjectTaskCollection({
             新建任务
           </button>
         )}
-      />
-      <TaskInspector
-        number={selectedNumber}
-        users={users}
-        syncedTask={selectedTask}
-        onPatched={collection.replaceTask}
-        onClose={closeTaskInspector}
       />
     </>
   )

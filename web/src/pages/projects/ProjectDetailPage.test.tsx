@@ -141,7 +141,7 @@ describe('ProjectDetailPage', () => {
     expect(screen.getByRole('button', { name: '编辑项目' })).toBeVisible()
   })
 
-  it('prioritizes milestone tasks and opens their inspector in context', async () => {
+  it('prioritizes milestone tasks and links to their standalone page', async () => {
     vi.mocked(projectsApi.getProject).mockResolvedValue(MILESTONE_DETAIL)
     render(
       <MemoryRouter initialEntries={['/projects/12/milestones/m1']}>
@@ -150,6 +150,7 @@ describe('ProjectDetailPage', () => {
             path="/projects/:number/milestones/:milestoneID"
             element={<ProjectDetailPage view="milestones" />}
           />
+          <Route path="/tasks/:number" element={<h1>Standalone task route</h1>} />
         </Routes>
       </MemoryRouter>,
     )
@@ -167,13 +168,12 @@ describe('ProjectDetailPage', () => {
     })
     expect(taskLink).toHaveAttribute(
       'href',
-      '/projects/12/milestones/m1?task=501',
+      '/tasks/501',
     )
 
     fireEvent.click(taskLink)
 
-    expect(await screen.findByRole('dialog')).toBeVisible()
-    expect(screen.getByRole('heading', { name: 'Polish compact project workspace' }))
-      .toBeVisible()
+    expect(await screen.findByRole('heading', { name: 'Standalone task route' })).toBeVisible()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })
