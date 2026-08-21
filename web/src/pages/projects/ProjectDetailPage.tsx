@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { flushSync } from 'react-dom'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ChevronDown, ListChecks, Plus } from 'lucide-react'
@@ -43,7 +43,7 @@ import {
 import { useTaskComposer } from '@/components/tasks/TaskComposer'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useIdentity } from '@/identity'
-import type { UserRef } from '@/task-types'
+import type { Task, UserRef } from '@/task-types'
 import { cn } from '@/lib/utils'
 
 type ProjectView = 'workspace' | 'milestone'
@@ -81,15 +81,18 @@ export default function ProjectDetailPage({ view = 'workspace' }: { view?: Proje
   const [projectDetailsOpen, setProjectDetailsOpen] = useState(false)
   const [editingProject, setEditingProject] = useState(false)
   const [mutationPending, setMutationPending] = useState(false)
+  const reloadRequestRef = useRef(0)
   const isPlatformAdmin = actor?.platform_role === 'ADMIN' && !impersonation
 
   const reload = useCallback(async () => {
+    const requestID = ++reloadRequestRef.current
     setError('')
     try {
       const [loaded, loadedMemberships] = await Promise.all([
         getProject(number),
         listProjectMembers(number),
       ])
+      if (requestID !== reloadRequestRef.current) return
       // Dependent versioned actions may become clickable as soon as reload
       // resolves. Commit the new aggregate versions before returning so a
       // fast follow-up action never submits the stale ETags from the previous
@@ -99,11 +102,25 @@ export default function ProjectDetailPage({ view = 'workspace' }: { view?: Proje
         setMemberships(loadedMemberships)
       })
     } catch (reason) {
-      setError((reason as Error).message)
+      if (requestID === reloadRequestRef.current) {
+        setError((reason as Error).message)
+      }
     }
   }, [number])
 
-  useEffect(() => { void reload() }, [reload, me?.id])
+  useEffect(() => {
+    void reload()
+    return () => {
+      reloadRequestRef.current += 1
+    }
+  }, [reload, me?.id])
+
+  const addAggregateTask = useCallback((task: Task) => {
+    setDetail((current) => current && ({
+      ...current,
+      tasks: [task, ...current.tasks.filter((candidate) => candidate.id !== task.id)],
+    }))
+  }, [])
 
   async function mutate(operation: () => Promise<unknown>): Promise<boolean> {
     setError('')
@@ -277,8 +294,9 @@ export default function ProjectDetailPage({ view = 'workspace' }: { view?: Proje
               defaultOwnerID={me?.id ?? project.creator.id}
               onMutate={mutate}
               onReload={reload}
+              onTaskCreated={addAggregateTask}
             />
-            <Backlog detail={detail} users={projectUsers} />
+            <Backlog detail={detail} users={projectUsers} onTaskCreated={addAggregateTask} />
           </>
         )}
         {view === 'milestone' && (
@@ -291,6 +309,7 @@ export default function ProjectDetailPage({ view = 'workspace' }: { view?: Proje
             defaultOwnerID={me?.id ?? project.creator.id}
             onMutate={mutate}
             onReload={reload}
+            onTaskCreated={addAggregateTask}
           />
         )}
       </div>
@@ -301,9 +320,11 @@ export default function ProjectDetailPage({ view = 'workspace' }: { view?: Proje
 function Backlog({
   detail,
   users,
+  onTaskCreated,
 }: {
   detail: ProjectDetail
   users: UserRef[]
+  onTaskCreated: (task: Task) => void
 }) {
   return (
     <section className="min-h-[32rem] flex-1 overflow-hidden rounded-xl border border-border bg-surface">
@@ -318,6 +339,7 @@ function Backlog({
         backlogOnly
         aggregateTasks={detail.tasks}
         users={users}
+        onTaskCreated={onTaskCreated}
         empty="Backlog 为空。创建任务来记录尚未排入里程碑的工作。"
       />
     </section>
@@ -326,6 +348,7 @@ function Backlog({
 
 function Milestones({
   detail, selected, adding, setAdding, users, defaultOwnerID, onMutate, onReload,
+  onTaskCreated,
 }: {
   detail: ProjectDetail
   selected?: Milestone
@@ -335,6 +358,7 @@ function Milestones({
   defaultOwnerID: string
   onMutate: (operation: () => Promise<unknown>) => Promise<boolean>
   onReload: () => Promise<void>
+  onTaskCreated: (task: Task) => void
 }) {
   const project = detail.project
   const [editingMilestone, setEditingMilestone] = useState(false)
@@ -581,6 +605,7 @@ function Milestones({
             milestoneID={selected.id}
             aggregateTasks={detail.tasks}
             users={users}
+            onTaskCreated={onTaskCreated}
             canCreate={selected.status === 'planned' || selected.status === 'active'}
             empty="还没有任务归入此里程碑。"
           />
@@ -649,12 +674,24 @@ function Milestones({
       </div>
       {adding && (
         <form onSubmit={submit} className="grid gap-3 rounded-lg border border-border bg-surface-raised p-4 md:grid-cols-2">
-          <input name="name" required placeholder="里程碑名称" className="rounded-md border border-border-strong bg-surface px-3 py-2" />
-          <select name="owner_id" defaultValue={defaultOwnerID} className="rounded-md border border-border-strong bg-surface px-3 py-2">
-            {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
-          </select>
-          <textarea name="outcome" required placeholder="可验证的阶段成果" className="rounded-md border border-border-strong bg-surface px-3 py-2 md:col-span-2" />
-          <input name="target_date" type="date" className="rounded-md border border-border-strong bg-surface px-3 py-2" />
+          <label className="grid gap-1 text-sm font-medium text-fg">
+            里程碑名称
+            <input name="name" required className="rounded-md border border-border-strong bg-surface px-3 py-2 font-normal" />
+          </label>
+          <label className="grid gap-1 text-sm font-medium text-fg">
+            负责人
+            <select name="owner_id" defaultValue={defaultOwnerID} className="rounded-md border border-border-strong bg-surface px-3 py-2 font-normal">
+              {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+            </select>
+          </label>
+          <label className="grid gap-1 text-sm font-medium text-fg md:col-span-2">
+            阶段成果
+            <textarea name="outcome" required className="rounded-md border border-border-strong bg-surface px-3 py-2 font-normal" />
+          </label>
+          <label className="grid gap-1 text-sm font-medium text-fg">
+            目标日期
+            <input name="target_date" type="date" className="rounded-md border border-border-strong bg-surface px-3 py-2 font-normal" />
+          </label>
           <button className="rounded-md bg-accent px-3 py-2 text-sm text-white">创建</button>
         </form>
       )}
@@ -746,6 +783,7 @@ function ProjectTaskCollection({
   backlogOnly = false,
   aggregateTasks,
   users,
+  onTaskCreated,
   canCreate = true,
   empty,
 }: {
@@ -754,6 +792,7 @@ function ProjectTaskCollection({
   backlogOnly?: boolean
   aggregateTasks: ProjectDetail['tasks']
   users: UserRef[]
+  onTaskCreated: (task: Task) => void
   canCreate?: boolean
   empty: string
 }) {
@@ -794,7 +833,6 @@ function ProjectTaskCollection({
         controller={collection}
         tier={tier}
         users={users}
-        allowGantt={!backlogOnly}
         empty={empty}
         actions={canCreate && !isReadOnly && (
           <button
@@ -802,7 +840,10 @@ function ProjectTaskCollection({
             onClick={() => openTaskComposer({
               projectNumber,
               milestoneID,
-              onCreated: collection.prependTask,
+              onCreated: (task) => {
+                collection.prependTask(task)
+                onTaskCreated(task)
+              },
             })}
             className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-fg shadow-[0_4px_12px_rgb(37_99_235/0.16)]"
           >

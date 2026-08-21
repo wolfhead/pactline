@@ -59,8 +59,8 @@ test('a long-lived Project plans and completes an evidence-backed Milestone', as
   await expect(page.getByRole('paragraph').filter({ hasText: 'Edited durable Project context' })).toBeVisible()
 
   await page.getByRole('button', { name: '新建里程碑' }).click()
-  await page.getByPlaceholder('里程碑名称').fill('API ready')
-  await page.getByPlaceholder('可验证的阶段成果').fill('The Project-first workflow is verified')
+  await page.getByLabel('里程碑名称').fill('API ready')
+  await page.getByLabel('阶段成果').fill('The Project-first workflow is verified')
   await page.getByRole('button', { name: '创建', exact: true }).click()
 
   await page.getByRole('link', { name: /API ready/ }).click()

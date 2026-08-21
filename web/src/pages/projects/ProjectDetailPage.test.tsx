@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { Link, MemoryRouter, Route, Routes } from 'react-router-dom'
 import ProjectDetailPage from './ProjectDetailPage'
 import * as acceptanceApi from '@/api/acceptance'
 import * as projectsApi from '@/api/projects'
@@ -11,8 +11,9 @@ import type { Task } from '@/task-types'
 vi.mock('@/api/projects')
 vi.mock('@/api/acceptance')
 vi.mock('@/api/tasks')
+const openTaskComposer = vi.hoisted(() => vi.fn())
 vi.mock('@/components/tasks/TaskComposer', () => ({
-  useTaskComposer: () => ({ openTaskComposer: vi.fn() }),
+  useTaskComposer: () => ({ openTaskComposer }),
 }))
 vi.mock('@/identity', () => ({
   useIdentity: () => ({
@@ -170,6 +171,25 @@ describe('ProjectDetailPage', () => {
     expect(tasksApi.listTasks).not.toHaveBeenCalled()
   })
 
+  it('preserves the Backlog Gantt view', async () => {
+    vi.mocked(projectsApi.getProject).mockResolvedValue({
+      ...DETAIL,
+      tasks: [{ ...TASK, milestone: null }],
+    })
+    render(
+      <MemoryRouter initialEntries={['/projects/12?view=gantt']}>
+        <Routes>
+          <Route path="/projects/:number" element={<ProjectDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: '项目 Backlog' })
+    expect(screen.getByRole('button', { name: '甘特' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '列表' })).toHaveAttribute('aria-pressed', 'false')
+    expect(tasksApi.listTasks).not.toHaveBeenCalled()
+  })
+
   it('keeps low-frequency Project details collapsed until requested', async () => {
     render(
       <MemoryRouter initialEntries={['/projects/12']}>
@@ -187,6 +207,35 @@ describe('ProjectDetailPage', () => {
 
     expect(screen.getByText('Long-lived workspace')).toBeVisible()
     expect(screen.getByRole('button', { name: '编辑项目' })).toBeVisible()
+  })
+
+  it('ignores a stale Project response after navigating to another Project', async () => {
+    let resolveFirstProject!: (detail: ProjectDetail) => void
+    const firstProject = new Promise<ProjectDetail>((resolve) => {
+      resolveFirstProject = resolve
+    })
+    const currentDetail: ProjectDetail = {
+      ...DETAIL,
+      project: { ...DETAIL.project, id: 'p2', number: 13, name: 'Current Project' },
+    }
+    vi.mocked(projectsApi.getProject).mockImplementation((projectNumber) => (
+      projectNumber === 12 ? firstProject : Promise.resolve(currentDetail)
+    ))
+    render(
+      <MemoryRouter initialEntries={['/projects/12']}>
+        <Link to="/projects/13">Open current Project</Link>
+        <Routes>
+          <Route path="/projects/:number" element={<ProjectDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('link', { name: 'Open current Project' }))
+    expect(await screen.findByRole('heading', { name: 'Current Project' })).toBeVisible()
+    await act(async () => resolveFirstProject(DETAIL))
+
+    expect(screen.getByRole('heading', { name: 'Current Project' })).toBeVisible()
+    expect(screen.queryByRole('heading', { name: 'Launch' })).not.toBeInTheDocument()
   })
 
   it('prioritizes current milestones and keeps terminal milestones accessible', async () => {
@@ -290,5 +339,26 @@ describe('ProjectDetailPage', () => {
 
     expect(await screen.findByRole('heading', { name: 'Standalone task route' })).toBeVisible()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('updates Milestone task counts when the task composer creates a task', async () => {
+    vi.mocked(projectsApi.getProject).mockResolvedValue(MILESTONE_DETAIL)
+    render(
+      <MemoryRouter initialEntries={['/projects/12/milestones/m1']}>
+        <Routes>
+          <Route
+            path="/projects/:number/milestones/:milestoneID"
+            element={<ProjectDetailPage view="milestone" />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('0/1 完成')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: '新建任务' }))
+    const onCreated = openTaskComposer.mock.calls.at(-1)?.[0].onCreated as (task: Task) => void
+    act(() => onCreated({ ...TASK, id: 'task-502', number: 502, title: 'Second task' }))
+
+    expect(screen.getByText('0/2 完成')).toBeVisible()
   })
 })
