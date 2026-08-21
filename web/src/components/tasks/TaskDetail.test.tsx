@@ -175,6 +175,7 @@ describe('TaskDetail', () => {
 		await waitFor(() => expect(workflowApi.recordTaskWorkSubmission).toHaveBeenCalledWith(
 			142, 3, executionClaim, '## 完成\n\n实现与测试完成。',
 		))
+	await waitFor(() => expect(workflowApi.listThreadItems).toHaveBeenCalledTimes(2))
 	expect(workflowApi.completeTaskExecution).not.toHaveBeenCalled()
   })
 

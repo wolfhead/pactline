@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { Link2, XIcon } from 'lucide-react'
 import MarkdownEditableField from '@/components/markdown/MarkdownEditableField'
 import AcceptanceChecklist from '@/components/projects/AcceptanceChecklist'
-import ActivityLog from './ActivityLog'
 import AttachmentSection from './AttachmentSection'
 import InlineEditable from './InlineEditable'
 import AssigneeControl from './controls/AssigneeControl'
@@ -81,6 +80,7 @@ export default function TaskDetail({
   const [allLabels, setAllLabels] = useState<Label[]>([])
   const [acceptanceCriteria, setAcceptanceCriteria] = useState<AcceptanceCriterion[]>([])
   const [reloadToken, setReloadToken] = useState(0)
+  const [timelineRefresh, setTimelineRefresh] = useState(0)
   const [undoMessage, setUndoMessage] = useState<string | null>(null)
   const undoTimerRef = useRef<number | null>(null)
   const undoActionRef = useRef<(() => void) | null>(null)
@@ -284,6 +284,7 @@ export default function TaskDetail({
       onPatched(latest)
       setAcceptanceCriteria(criteria)
       setFieldError('')
+      setTimelineRefresh((value) => value + 1)
     }
   }
 
@@ -553,6 +554,7 @@ export default function TaskDetail({
         taskNumber={task.number}
         projectNumber={task.project.number}
         taskVersion={task.version}
+        refreshKey={timelineRefresh}
       />
     </div>
   )
@@ -597,11 +599,8 @@ export default function TaskDetail({
             <section aria-label="任务附件" className="min-w-0 border-t border-border pt-6">
               {attachments}
             </section>
-            <section aria-label="任务讨论" className="min-w-0 border-t border-border pt-6">
+            <section aria-label="任务协作记录" className="min-w-0 border-t border-border pt-6">
               {threads}
-            </section>
-            <section aria-label="任务历史" className="min-w-0 border-t border-border pt-6">
-              <ActivityLog task={task} />
             </section>
           </section>
 
@@ -658,7 +657,6 @@ export default function TaskDetail({
       </p>
       {attachments}
       {threads}
-      <ActivityLog task={task} />
     </article>
   )
 }

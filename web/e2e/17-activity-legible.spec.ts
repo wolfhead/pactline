@@ -3,18 +3,15 @@ import { switchIdentity } from './support/identity'
 import { USERS } from './support/config'
 
 /**
- * Scenario: activity is legible and live. After a priority change and an
- * assignee change, the activity log names what changed in readable Chinese
- * prose, not raw enum strings or bare user UUIDs — and it appears without a
- * reload.
+ * Scenario: Task changes remain legible and live inside the unified work
+ * timeline. After a priority and assignee change, the timeline names the
+ * actor and change without raw enum strings or user UUIDs, and it updates
+ * without a reload.
  *
- * FIXED (was a documented bug in the e2e report): ActivityLog.tsx's fetch
- * effect used to depend on `[task.number, me?.id]` only, so an on-page
- * status/assignee change (which mutates task.status/task.assignee, not
- * task.number) never re-triggered it. It now also depends on
- * `task.updated_at`, which every server-confirmed mutation bumps.
+ * TaskThreads refetches its two auxiliary sources from task.version changes;
+ * it does not poll either source.
  */
-test('activity log reads as legible prose and updates live after a priority change and an assignee change', async ({
+test('work timeline keeps Task changes legible and updates them without polling', async ({
   page,
   uniqueTitle,
   trackTask,
@@ -28,13 +25,12 @@ test('activity log reads as legible prose and updates live after a priority chan
   await page.goto(`/tasks/${task.number}`)
   await switchIdentity(page, USERS.leadB.id)
 
-  // ActivityLog carries role="region" + aria-label="历史记录", so the block
-  // is addressed by name rather than by climbing out of its own heading.
-  const activitySection = page.getByRole('region', { name: '历史记录' })
+  const timeline = page.getByRole('region', { name: '工作时间线' })
   await expect(
-    activitySection.getByText(`${actorName} 创建了任务，初始状态为「待办」`, { exact: true }),
+    timeline.getByText('创建了任务，初始状态为「待办」', { exact: true }),
   ).toBeVisible()
-  await expect(activitySection.getByText(/将状态从/)).not.toBeVisible()
+  await expect(timeline.getByText('你', { exact: true }).first()).toBeVisible()
+  await expect(timeline.getByText(/将状态从/)).not.toBeVisible()
 
   const isPatch = (res: import('@playwright/test').Response) =>
     res.url().endsWith(`/api/v1/tasks/${task.number}`) && res.request().method() === 'PATCH'
@@ -45,10 +41,9 @@ test('activity log reads as legible prose and updates live after a priority chan
   await expect(page.getByRole('combobox', { name: '优先级', exact: true })).toHaveText(/高/)
   await priorityPatch
 
-  // No reload: the new entry must appear purely from the activity fetch
-  // re-firing off the task's own updated_at.
+  // No reload: the Task version change triggers an on-demand timeline refresh.
   await expect(
-    activitySection.getByText(`${actorName} 将优先级从「无优先级」改为「高」`, { exact: true }),
+    timeline.getByText('将优先级从「无优先级」改为「高」', { exact: true }),
   ).toBeVisible()
 
   const assigneePatch = page.waitForResponse(isPatch)
@@ -58,6 +53,6 @@ test('activity log reads as legible prose and updates live after a priority chan
   await assigneePatch
 
   await expect(
-    activitySection.getByText(`${actorName} 将负责人从「未分配」改为「${actorName}」`, { exact: true }),
+    timeline.getByText(`将负责人从「未分配」改为「${actorName}」`, { exact: true }),
   ).toBeVisible()
 })
