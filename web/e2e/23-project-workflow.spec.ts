@@ -48,6 +48,8 @@ test('a long-lived Project plans and completes an evidence-backed Milestone', as
   expect(memberRequests.length).toBeLessThanOrEqual(2)
   expect(workspaceRequests.filter((path) => path.startsWith(`/api/v1/projects/${project.number}/milestones/`)))
     .toHaveLength(0)
+  expect(workspaceRequests.filter((path) => path === '/api/v1/tasks'))
+    .toHaveLength(0)
 
   await page.getByRole('button', { name: '项目详情', exact: true }).click()
   await page.getByRole('button', { name: '编辑项目', exact: true }).click()
@@ -102,7 +104,7 @@ test('a long-lived Project plans and completes an evidence-backed Milestone', as
   await checklist.getByRole('button', { name: '检查' }).click()
   await checklist.getByPlaceholder('检查证据或原因').fill('Verified by Playwright')
   await checklist.getByRole('button', { name: '记录' }).click()
-  await expect(checklist.getByText('通过', { exact: true })).toBeVisible()
+  await expect(checklist.locator('p', { hasText: /^通过$/ })).toBeVisible()
   await expect(checklist.getByText('Verified by Playwright', { exact: true })).toBeVisible()
 
   await page.getByRole('button', { name: '里程碑详情', exact: true }).click()

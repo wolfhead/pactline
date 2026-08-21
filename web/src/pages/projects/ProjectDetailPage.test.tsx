@@ -145,6 +145,10 @@ describe('ProjectDetailPage', () => {
   })
 
   it('renders the canonical workspace in Project, Milestones, Backlog order', async () => {
+    vi.mocked(projectsApi.getProject).mockResolvedValue({
+      ...DETAIL,
+      tasks: [{ ...TASK, milestone: null }],
+    })
     render(
       <MemoryRouter initialEntries={['/projects/12']}>
         <Routes>
@@ -162,6 +166,8 @@ describe('ProjectDetailPage', () => {
       .toBe(Node.DOCUMENT_POSITION_FOLLOWING)
     expect(screen.queryByText('需要关注')).not.toBeInTheDocument()
     expect(screen.queryByText('最近动态')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: TASK.title })).toBeVisible()
+    expect(tasksApi.listTasks).not.toHaveBeenCalled()
   })
 
   it('keeps low-frequency Project details collapsed until requested', async () => {
@@ -209,7 +215,7 @@ describe('ProjectDetailPage', () => {
     expect(cancelled).toHaveAttribute('href', '/projects/12/milestones/m-cancelled')
     expect(projectsApi.getProject).toHaveBeenCalledTimes(1)
     expect(projectsApi.listProjectMembers).toHaveBeenCalledTimes(1)
-    expect(tasksApi.listTasks).toHaveBeenCalledTimes(1)
+    expect(tasksApi.listTasks).not.toHaveBeenCalled()
   })
 
   it('explains the next step when milestones and Backlog are empty', async () => {

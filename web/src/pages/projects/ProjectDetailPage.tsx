@@ -316,6 +316,7 @@ function Backlog({
       <ProjectTaskCollection
         projectNumber={detail.project.number}
         backlogOnly
+        aggregateTasks={detail.tasks}
         users={users}
         empty="Backlog 为空。创建任务来记录尚未排入里程碑的工作。"
       />
@@ -578,6 +579,7 @@ function Milestones({
           <ProjectTaskCollection
             projectNumber={project.number}
             milestoneID={selected.id}
+            aggregateTasks={detail.tasks}
             users={users}
             canCreate={selected.status === 'planned' || selected.status === 'active'}
             empty="还没有任务归入此里程碑。"
@@ -742,6 +744,7 @@ function ProjectTaskCollection({
   projectNumber,
   milestoneID,
   backlogOnly = false,
+  aggregateTasks,
   users,
   canCreate = true,
   empty,
@@ -749,6 +752,7 @@ function ProjectTaskCollection({
   projectNumber: number
   milestoneID?: string
   backlogOnly?: boolean
+  aggregateTasks: ProjectDetail['tasks']
   users: UserRef[]
   canCreate?: boolean
   empty: string
@@ -762,11 +766,21 @@ function ProjectTaskCollection({
     milestone_id: milestoneID,
     backlog_only: backlogOnly || undefined,
   }), [backlogOnly, milestoneID, projectNumber])
+  const initialTasks = useMemo(() => aggregateTasks
+    .filter((task) => (
+      !task.archived_at
+      && (milestoneID ? task.milestone?.id === milestoneID : true)
+      && (backlogOnly ? !task.milestone : true)
+    ))
+    .sort((left, right) => (
+      right.created_at.localeCompare(left.created_at) || right.number - left.number
+    )), [aggregateTasks, backlogOnly, milestoneID])
   const initialFilters = useMemo(() => taskFiltersFromSearchParams(searchParams), []) // eslint-disable-line react-hooks/exhaustive-deps
   const initialPageCount = useMemo(() => taskPageCountFromSearchParams(searchParams), []) // eslint-disable-line react-hooks/exhaustive-deps
   const collection = useTaskCollection(query, me?.id, {
     initialFilters,
     initialPageCount,
+    initialTasks,
     onFiltersChange: (filters) => {
       setSearchParams(searchParamsWithTaskFilters(searchParams, filters), { replace: true })
     },
