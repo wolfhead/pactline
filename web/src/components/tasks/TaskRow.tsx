@@ -8,6 +8,7 @@ import DueDateControl from './controls/DueDateControl'
 import PriorityControl from './controls/PriorityControl'
 import RowActionsMenu from './RowActionsMenu'
 import PhaseBadge from './PhaseBadge'
+import type { TaskNavigationState } from './task-navigation'
 
 interface TaskRowProps {
   task: Task
@@ -16,6 +17,7 @@ interface TaskRowProps {
   users: UserRef[]
   error?: string
   href?: string
+  linkState?: TaskNavigationState
   onPatch: (task: Task, patch: TaskPatchBody, optimistic: Partial<Task>) => void
   onArchive: (task: Task) => void
   onRestore: (task: Task) => void
@@ -42,6 +44,7 @@ export default function TaskRow({
   users,
   error,
   href = `/tasks/${task.number}`,
+  linkState,
   onPatch,
   onArchive,
   onRestore,
@@ -98,6 +101,7 @@ export default function TaskRow({
       onArchive={() => onArchive(task)}
       onRestore={() => onRestore(task)}
       onCopyLink={handleCopyLink}
+      linkState={linkState}
     />
   )
 
@@ -125,6 +129,7 @@ export default function TaskRow({
         <div className="flex items-start justify-between gap-2">
           <Link
             to={href}
+            state={linkState}
             className={cn(
               'flex min-h-11 min-w-0 flex-1 items-center gap-1.5 text-sm font-medium',
               task.parent && 'pl-3',
@@ -190,6 +195,7 @@ export default function TaskRow({
       </span>
       <Link
         to={href}
+        state={linkState}
         className={cn(
           'min-w-0 flex-1 truncate text-sm',
           task.parent && 'pl-2',

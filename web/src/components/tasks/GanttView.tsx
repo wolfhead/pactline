@@ -12,6 +12,7 @@ import {
 } from '@/task-types'
 import { orderTasksWithChildren } from './task-hierarchy'
 import type { TaskCollectionController } from './useTaskCollection'
+import type { TaskNavigationState } from './task-navigation'
 
 const DAY_WIDTH = 36
 const ROW_HEIGHT = 56
@@ -154,11 +155,13 @@ export default function GanttView({
   tier,
   selectedNumber,
   taskHref = (task) => `/tasks/${task.number}`,
+  taskLinkState,
 }: {
   controller: TaskCollectionController
   tier: Tier
   selectedNumber: number | null
   taskHref?: (task: Task) => string
+  taskLinkState?: TaskNavigationState
 }) {
   const tasks = useMemo(() => orderTasksWithChildren(controller.tasks), [controller.tasks])
   const labelWidth = tier === 'phone' ? 220 : tier === 'md' ? 272 : 320
@@ -503,6 +506,7 @@ export default function GanttView({
                   <TaskPreview task={task}>
                     <Link
                       to={taskHref(task)}
+                      state={taskLinkState}
                       className="block truncate text-sm font-medium text-fg hover:text-accent focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent/30"
                     >
                       {task.title}
@@ -589,6 +593,7 @@ export default function GanttView({
                     <TaskPreview task={task}>
                       <Link
                         to={taskHref(task)}
+                        state={taskLinkState}
                         draggable={false}
                         aria-label={`${task.title}，${rangeLabel(range, dueOnly)}`}
                         className={cn(

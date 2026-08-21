@@ -71,7 +71,7 @@ function renderAt(path: string) {
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/tasks" element={<TaskListPage />} />
-        <Route path="/tasks/:number" element={<TaskListPage />} />
+        <Route path="/tasks/:number" element={<h1>Standalone task route</h1>} />
       </Routes>
     </MemoryRouter>,
   )
@@ -85,79 +85,28 @@ describe('TaskListPage', () => {
     expect(screen.queryByRole('complementary', { name: '任务详情' })).not.toBeInTheDocument()
   })
 
-  it('shows a bounded, closable inspector after selection at xl', async () => {
+  it('opens a task at its standalone URL without a dialog', async () => {
     setWidth(1440)
-    renderAt('/tasks/142')
-    await screen.findAllByText('修复竞价超时')
-    expect(screen.getByRole('dialog')).toHaveClass('sm:max-w-[52rem]')
-    expect(screen.queryByRole('complementary', { name: '任务详情' }))
-      .not.toBeInTheDocument()
+    renderAt('/tasks')
+    fireEvent.click(await screen.findByRole('link', { name: '修复竞价超时' }))
 
-    fireEvent.click(screen.getByRole('button', { name: '关闭' }))
-    await waitFor(() =>
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
-    )
+    expect(await screen.findByRole('heading', { name: 'Standalone task route' })).toBeVisible()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('uses the same detail dialog below xl', async () => {
-    setWidth(1120)
-    renderAt('/tasks/142')
-    // At lg the detail slides over the list instead of taking a column.
-    expect(await screen.findByRole('dialog')).toBeVisible()
-    // ... over a list that is still mounted underneath it, at unchanged
-    // width. Swapping the list out for the Sheet would lose scroll position
-    // and filters the moment a task is opened.
-    await waitFor(() => expect(screen.getAllByRole('listitem', { hidden: true }).length).toBeGreaterThan(0))
-  })
-
-  it('keeps the list mounted while the detail is open', async () => {
+  it('keeps ownership and filter state in the collection URL', async () => {
     setWidth(1440)
-    renderAt('/tasks/142')
-    // Keeping the collection mounted preserves filters and scroll position
-    // while the inspector temporarily covers it.
-    await waitFor(() =>
-      expect(screen.getAllByRole('listitem', { hidden: true }).length).toBeGreaterThan(0),
-    )
-  })
+    renderAt('/tasks?ownership=created&q=timeout&sort=number&order=asc')
 
-  it('reflects a detail-side change in the list without refetching', async () => {
-    setWidth(1440)
-    vi.mocked(tasksApi.updateTask).mockResolvedValue({ ...TASK, priority: 'urgent' })
-    renderAt('/tasks/142')
-    await screen.findAllByText('修复竞价超时')
-
-    const listCalls = vi.mocked(tasksApi.listTasks).mock.calls.length
-    fireEvent.click(screen.getByRole('combobox', { name: '优先级' }))
-    fireEvent.click(await screen.findByRole('option', { name: '紧急' }))
-
-    await waitFor(() =>
-      expect(screen.getByRole('combobox', {
-        name: '任务 #142 优先级',
-        hidden: true,
-      })).toHaveTextContent('紧急'),
-    )
-    // Shared state, not a re-fetch: the list must not hit the API again.
-    expect(vi.mocked(tasksApi.listTasks).mock.calls.length).toBe(listCalls)
-  })
-
-  it('keeps the updated collection value after the inspector closes', async () => {
-    setWidth(1440)
-    vi.mocked(tasksApi.updateTask).mockResolvedValue({ ...TASK, priority: 'urgent' })
-    renderAt('/tasks/142')
-    await screen.findAllByText('修复竞价超时')
-    expect(screen.getByRole('combobox', { name: '优先级' })).toHaveTextContent('无优先级')
-
-    const listCalls = vi.mocked(tasksApi.listTasks).mock.calls.length
-    fireEvent.click(screen.getByRole('combobox', { name: '优先级' }))
-    fireEvent.click(await screen.findByRole('option', { name: '紧急' }))
-    fireEvent.click(screen.getByRole('button', { name: '关闭' }))
-
-    await waitFor(() =>
-      expect(screen.getByRole('combobox', { name: '任务 #142 优先级' }))
-        .toHaveTextContent('紧急'),
-    )
-    expect(vi.mocked(tasksApi.listTasks).mock.calls.length).toBe(listCalls)
-    expect(vi.mocked(tasksApi.getTask).mock.calls.length).toBe(1)
+    await screen.findByRole('link', { name: '修复竞价超时' })
+    expect(screen.getByRole('button', { name: '我创建的' })).toHaveClass('bg-surface')
+    expect(screen.getByRole('textbox', { name: '搜索任务' })).toHaveValue('timeout')
+    expect(tasksApi.listTasks).toHaveBeenCalledWith(expect.objectContaining({
+      creator_id: 'u1',
+      q: 'timeout',
+      sort: 'number',
+      order: 'asc',
+    }))
   })
 
   it('reverts an optimistic row change and explains why when the server refuses it', async () => {

@@ -34,6 +34,9 @@ const UNDO_WINDOW_MS = 6000
 interface TaskDetailProps {
   number: number
   users: UserRef[]
+  // Standalone pages own the document's primary heading; embedded details
+  // remain a subsection of their surrounding collection or overlay.
+  headingLevel?: 1 | 2
   // The caller's own copy of this task, when it has one. This is the other
   // half of `onPatched`: the seam has to run both ways or the two views
   // diverge while the inspector is open.
@@ -62,11 +65,12 @@ export default function TaskDetail({
   syncedTask,
   onPatched,
   onClose,
+  headingLevel = 2,
 }: TaskDetailProps) {
   const { me } = useIdentity()
 
   const [task, setTask] = useState<Task | null>(null)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<Error | null>(null)
   const [fieldError, setFieldError] = useState('')
   const [allLabels, setAllLabels] = useState<Label[]>([])
   const [acceptanceCriteria, setAcceptanceCriteria] = useState<AcceptanceCriterion[]>([])
@@ -111,7 +115,7 @@ export default function TaskDetail({
     if (!Number.isFinite(number)) return
     setTask(null)
     setAcceptanceCriteria([])
-    setError('')
+    setError(null)
     // Everything else on screen belongs to the task being replaced, not the
     // one arriving. A failed-update message raised against A would otherwise
     // read as B's failure; worse, A's archive undo toast would stay up over B
@@ -128,7 +132,7 @@ export default function TaskDetail({
       })
       .catch((err) => {
         if (cancelled) return
-        setError(String((err as Error).message))
+        setError(err instanceof Error ? err : new Error(String(err)))
       })
     return () => {
       cancelled = true
@@ -321,26 +325,32 @@ export default function TaskDetail({
   }
 
   if (error) {
+    const notFound = error instanceof ProblemError && error.status === 404
     return (
-      <p className="p-4 text-sm text-danger">
-        加载失败：{error}{' '}
+      <section role="alert" className="p-5 text-sm text-danger">
+        <h1 className="text-base font-semibold">{notFound ? '找不到任务' : '任务加载失败'}</h1>
+        <p className="mt-1">
+          {notFound ? '这个任务不存在，或你无权查看。' : error.message}
+        </p>
         <button type="button" className="underline" onClick={() => setReloadToken((t) => t + 1)}>
           重试
         </button>
-      </p>
+      </section>
     )
   }
-  if (!task) return <p className="p-4 text-sm text-fg-muted">正在加载任务…</p>
+  if (!task) return <p role="status" className="p-5 text-sm text-fg-muted">正在加载任务…</p>
+
+  const TaskHeading = `h${headingLevel}` as const
 
   return (
-    <div className="flex flex-col gap-4 p-4">
+    <article className="flex min-w-0 flex-col gap-4 p-4 sm:p-5">
       {/* A screen-reader-only heading: the shell wrapping this content (a
           third column, a Sheet, a full page) may or may not supply its own
           accessible name, and TaskDetail can't assume which — this gives
           the pane one regardless. The visible, interactive title lives in
           the InlineEditable input below; this is not a second, competing
           display of it. */}
-      <h2 className="sr-only">{task.title}</h2>
+      <TaskHeading className="sr-only">{task.title}</TaskHeading>
       <div className="flex items-center justify-between gap-2">
         {task.archived_at ? (
           <button
@@ -391,6 +401,12 @@ export default function TaskDetail({
         </div>
       )}
 
+      {task.archived_at && (
+        <p role="status" className="rounded-md border border-border bg-surface-subtle px-3 py-2 text-sm text-fg-muted">
+          此任务已归档，仍可查看完整内容。
+        </p>
+      )}
+
       <div className="flex items-baseline gap-3">
         <span className="shrink-0 font-mono text-xs text-fg-muted">#{task.number}</span>
         <InlineEditable
@@ -421,7 +437,7 @@ export default function TaskDetail({
 
       <div
         data-task-properties
-        className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 [&_[data-property-control]]:text-sm [&_[data-slot=select-trigger]]:justify-start"
+        className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 [&_[data-property-control]]:h-auto [&_[data-property-control]]:min-h-8 [&_[data-property-control]]:min-w-0 [&_[data-property-control]]:max-w-full [&_[data-property-control]]:whitespace-normal [&_[data-property-control]]:text-left [&_[data-property-control]]:text-sm [&_[data-property-control]>span]:min-w-0 [&_[data-property-control]>span]:[overflow-wrap:anywhere] [&_[data-slot=select-trigger]]:justify-start [&_[data-slot=select-value]]:line-clamp-none [&_[data-slot=select-value]]:whitespace-normal [&_[data-slot=select-value]]:[overflow-wrap:anywhere]"
       >
         <div className="contents">
           <span className="text-sm text-fg-muted">优先级</span>
@@ -479,7 +495,7 @@ export default function TaskDetail({
         onChanged={() => reloadTaskAndAcceptance(task.number)}
       />
 
-		<TaskCodeChanges
+      <TaskCodeChanges
         task={task}
         onChanged={() => reloadTaskAndAcceptance(task.number)}
       />
@@ -543,6 +559,6 @@ export default function TaskDetail({
         taskVersion={task.version}
       />
       <ActivityLog task={task} />
-    </div>
+    </article>
   )
 }

@@ -2,12 +2,7 @@ import { test, expect } from './support/task-fixtures'
 import { switchIdentity } from './support/identity'
 import { USERS } from './support/config'
 
-/**
- * Task detail uses one modal inspector at every breakpoint. The collection
- * remains mounted underneath so closing the inspector restores the exact
- * list context rather than navigating to a separate detail page.
- */
-test('task detail uses one closable inspector while preserving the list', async ({
+test('task detail uses one full page at every breakpoint', async ({
   page,
   uniqueTitle,
   trackTask,
@@ -25,28 +20,23 @@ test('task detail uses one closable inspector while preserving the list', async 
   await page.goto(`/tasks/${task.number}`)
   await switchIdentity(page, USERS.engineerC.id)
 
-  const inspector = page.getByRole('dialog', { name: '任务详情' })
-  await expect(inspector.getByRole('heading', { name: title, exact: true })).toBeVisible()
-  await expect(page.locator('[role="listitem"]').first()).toBeAttached()
+  await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.locator('[role="listitem"]')).toHaveCount(0)
 
-  // The same inspector contract remains stable across desktop breakpoints.
+  // The same full-page contract remains stable across desktop breakpoints.
   await page.setViewportSize({ width: 1280, height: 820 })
-  await expect(inspector.getByRole('heading', { name: title, exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible()
 
-  // Closing returns to the full list and clears the selected-task URL.
-  await page.getByRole('button', { name: '关闭', exact: true }).click()
+  await page.getByRole('link', { name: '返回任务集合' }).click()
   await expect(page).toHaveURL(/\/tasks$/)
-  await expect(inspector).toHaveCount(0)
 
   await page.goto(`/tasks/${task.number}`)
   await page.setViewportSize({ width: 1120, height: 820 })
-  await expect(inspector).toBeVisible()
-  await expect(page.locator('[role="listitem"]').first()).toBeAttached()
+  await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
 
-  // Portaled property controls stay inside the inspector's accessibility
-  // boundary instead of being hidden by modal isolation.
-  await inspector
-    .getByRole('button', { name: '截止日期' }).click()
+  await page.getByRole('button', { name: '截止日期' }).click()
   await expect(page.getByRole('dialog', { name: '选择截止日期' })).toBeVisible()
 })
 
@@ -89,7 +79,7 @@ test('the phone header keeps account controls tucked away and task creation visi
   ).toBeVisible()
 })
 
-test('opening a task from deep in the list keeps the list position', async ({
+test('returning from a task restores a deep list position', async ({
   page,
   uniqueTitle,
   trackTask,
@@ -119,7 +109,8 @@ test('opening a task from deep in the list keeps the list position', async ({
 
   await deep.click()
   await expect(page).toHaveURL(new RegExp(`/tasks/${made[0].number}$`))
-  // The list never unmounted, so its scroll offset survives untouched.
+  await page.getByRole('link', { name: '返回任务集合' }).click()
+  await expect(page).toHaveURL(/\/tasks$/)
   const after = await page.evaluate(() => document.querySelector('[data-task-list]')!.scrollTop)
   expect(after).toBe(before)
 })

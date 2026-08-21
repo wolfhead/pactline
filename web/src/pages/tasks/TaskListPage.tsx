@@ -1,9 +1,14 @@
 import { useMemo, useState } from 'react'
 import { Plus } from 'lucide-react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import TaskCollection from '@/components/tasks/TaskCollection'
-import TaskInspector from '@/components/tasks/TaskInspector'
 import { useTaskCollection } from '@/components/tasks/useTaskCollection'
+import {
+  searchParamsWithTaskFilters,
+  searchParamsWithTaskPageCount,
+  taskFiltersFromSearchParams,
+  taskPageCountFromSearchParams,
+} from '@/components/tasks/task-collection-search'
 import { useTaskComposer } from '@/components/tasks/TaskComposer'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useIdentity } from '@/identity'
@@ -11,27 +16,36 @@ import { useIdentity } from '@/identity'
 export default function TaskListPage() {
   const { me, users, isReadOnly } = useIdentity()
   const { openTaskComposer } = useTaskComposer()
-  const navigate = useNavigate()
   const tier = useBreakpoint()
-  const { number } = useParams()
-  const [ownershipView, setOwnershipView] = useState<'assigned' | 'created'>('assigned')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [ownershipView, setOwnershipViewState] = useState<'assigned' | 'created'>(
+    searchParams.get('ownership') === 'created' ? 'created' : 'assigned',
+  )
 
-  const parsed = number === undefined ? NaN : Number(number)
-  const selected = Number.isInteger(parsed) ? parsed : null
+  function setOwnershipView(next: 'assigned' | 'created') {
+    setOwnershipViewState(next)
+    const updated = new URLSearchParams(searchParams)
+    if (next === 'created') updated.set('ownership', next)
+    else updated.delete('ownership')
+    setSearchParams(updated, { replace: true })
+  }
   const baseQuery = useMemo(() => (
     ownershipView === 'assigned'
       ? { assignee: me?.id }
       : { creator_id: me?.id }
   ), [me?.id, ownershipView])
-  const collection = useTaskCollection(baseQuery, me?.id)
-  const selectedTask = selected === null
-    ? null
-    : (collection.tasks.find((task) => task.number === selected) ?? null)
-
-  function closeDetail() {
-    navigate('/tasks')
-  }
-
+  const initialFilters = useMemo(() => taskFiltersFromSearchParams(searchParams), []) // eslint-disable-line react-hooks/exhaustive-deps
+  const initialPageCount = useMemo(() => taskPageCountFromSearchParams(searchParams), []) // eslint-disable-line react-hooks/exhaustive-deps
+  const collection = useTaskCollection(baseQuery, me?.id, {
+    initialFilters,
+    initialPageCount,
+    onFiltersChange: (filters) => {
+      setSearchParams(searchParamsWithTaskFilters(searchParams, filters), { replace: true })
+    },
+    onPageCountChange: (pageCount) => {
+      setSearchParams(searchParamsWithTaskPageCount(searchParams, pageCount), { replace: true })
+    },
+  })
   return (
     <div className="flex h-full min-h-0">
       <div className="flex min-w-0 flex-1 flex-col">
@@ -83,18 +97,9 @@ export default function TaskListPage() {
           controller={collection}
           users={users}
           tier={tier}
-          selectedNumber={selected}
           empty="没有任务。使用“新建任务”补充背景和期望结果后创建。"
         />
       </div>
-
-      <TaskInspector
-        number={selected}
-        users={users}
-        syncedTask={selectedTask}
-        onPatched={collection.replaceTask}
-        onClose={closeDetail}
-      />
     </div>
   )
 }

@@ -35,11 +35,11 @@ export default function ProjectControl({
     <>
       <div className="contents">
         <span className="text-sm text-fg-muted">项目</span>
-        <div className="grid max-w-64 grid-cols-[1rem_minmax(0,1fr)] items-center gap-1.5">
+        <div className="grid min-w-0 max-w-full grid-cols-[1rem_minmax(0,1fr)] items-center gap-1.5">
           <span aria-hidden="true" />
           <span
             id="task-project"
-            className="min-w-0 px-2 py-1.5 text-sm text-fg"
+            className="min-w-0 px-2 py-1.5 text-sm text-fg [overflow-wrap:anywhere]"
             title="任务创建后不能移到其他项目"
           >
             #{project.number} {project.name}
@@ -48,7 +48,7 @@ export default function ProjectControl({
       </div>
       <div className="contents">
         <label htmlFor="task-milestone" className="text-sm text-fg-muted">里程碑</label>
-        <div className="grid max-w-64 grid-cols-[1rem_minmax(0,1fr)] items-center gap-1.5">
+        <div className="grid min-w-0 max-w-full grid-cols-[1rem_minmax(0,1fr)] items-center gap-1.5">
           <span aria-hidden="true" />
           <select
             id="task-milestone"
