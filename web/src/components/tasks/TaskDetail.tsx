@@ -14,6 +14,7 @@ import TaskRelations from './TaskRelations'
 import TaskThreads from './TaskThreads'
 import TaskWorkflowPanel from './TaskWorkflowPanel'
 import TaskCodeChanges from './TaskCodeChanges'
+import PhaseBadge from './PhaseBadge'
 import { archiveTask, getTask, listLabels, restoreTask, updateTask } from '@/api/tasks'
 import {
   checkTaskCriterionThroughClaim,
@@ -49,6 +50,9 @@ interface TaskDetailProps {
   onPatched: (task: Task) => void
   // Only the inspector shell owns navigation and therefore the close action.
   onClose?: () => void
+  // The standalone route gives the same task state a page-scale information
+  // architecture. The inspector keeps its compact, linear presentation.
+  variant?: 'inspector' | 'page'
 }
 
 /**
@@ -66,8 +70,10 @@ export default function TaskDetail({
   onPatched,
   onClose,
   headingLevel = 2,
+  variant = 'inspector',
 }: TaskDetailProps) {
   const { me } = useIdentity()
+  const TaskHeading = `h${headingLevel}` as const
 
   const [task, setTask] = useState<Task | null>(null)
   const [error, setError] = useState<Error | null>(null)
@@ -328,7 +334,7 @@ export default function TaskDetail({
     const notFound = error instanceof ProblemError && error.status === 404
     return (
       <section role="alert" className="p-5 text-sm text-danger">
-        <h1 className="text-base font-semibold">{notFound ? '找不到任务' : '任务加载失败'}</h1>
+        <TaskHeading className="text-base font-semibold">{notFound ? '找不到任务' : '任务加载失败'}</TaskHeading>
         <p className="mt-1">
           {notFound ? '这个任务不存在，或你无权查看。' : error.message}
         </p>
@@ -340,48 +346,43 @@ export default function TaskDetail({
   }
   if (!task) return <p role="status" className="p-5 text-sm text-fg-muted">正在加载任务…</p>
 
-  const TaskHeading = `h${headingLevel}` as const
+  const actionControls = (
+    <div className={variant === 'page'
+      ? 'flex shrink-0 items-center justify-end gap-2'
+      : 'flex w-full items-center justify-between gap-2'}>
+      {task.archived_at ? (
+        <button
+          type="button"
+          className="rounded-md border border-border-strong px-3 py-2 text-xs font-medium text-fg hover:bg-surface-subtle"
+          onClick={handleRestore}
+        >
+          恢复
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="rounded-md px-3 py-2 text-xs font-medium text-fg-muted hover:bg-surface-subtle hover:text-fg"
+          onClick={handleArchive}
+        >
+          归档
+        </button>
+      )}
+      {onClose && (
+        <button
+          type="button"
+          aria-label="关闭"
+          data-read-only-allowed="true"
+          onClick={onClose}
+          className="flex size-8 items-center justify-center rounded-md text-fg-muted hover:bg-surface-subtle hover:text-fg"
+        >
+          <XIcon className="size-4" aria-hidden="true" />
+        </button>
+      )}
+    </div>
+  )
 
-  return (
-    <article className="flex min-w-0 flex-col gap-4 p-4 sm:p-5">
-      {/* A screen-reader-only heading: the shell wrapping this content (a
-          third column, a Sheet, a full page) may or may not supply its own
-          accessible name, and TaskDetail can't assume which — this gives
-          the pane one regardless. The visible, interactive title lives in
-          the InlineEditable input below; this is not a second, competing
-          display of it. */}
-      <TaskHeading className="sr-only">{task.title}</TaskHeading>
-      <div className="flex items-center justify-between gap-2">
-        {task.archived_at ? (
-          <button
-            type="button"
-            className="text-xs text-fg-muted hover:text-fg"
-            onClick={handleRestore}
-          >
-            恢复
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="text-xs text-fg-muted hover:text-fg"
-            onClick={handleArchive}
-          >
-            归档
-          </button>
-        )}
-        {onClose && (
-          <button
-            type="button"
-            aria-label="关闭"
-            data-read-only-allowed="true"
-            onClick={onClose}
-            className="flex size-7 items-center justify-center rounded-md text-fg-muted hover:bg-surface-subtle hover:text-fg"
-          >
-            <XIcon className="size-4" aria-hidden="true" />
-          </button>
-        )}
-      </div>
-
+  const feedback = (
+    <>
       {undoMessage && (
         <div
           role="status"
@@ -400,25 +401,11 @@ export default function TaskDetail({
           </button>
         </div>
       )}
-
       {task.archived_at && (
         <p role="status" className="rounded-md border border-border bg-surface-subtle px-3 py-2 text-sm text-fg-muted">
           此任务已归档，仍可查看完整内容。
         </p>
       )}
-
-      <div className="flex items-baseline gap-3">
-        <span className="shrink-0 font-mono text-xs text-fg-muted">#{task.number}</span>
-        <InlineEditable
-          value={task.title}
-          onCommit={(next) => patchOptimistic({ title: next }, { title: next })}
-          ariaLabel="任务标题"
-          className="flex-1 text-base font-semibold text-fg"
-        />
-      </div>
-
-      {task.archived_at && <p className="text-sm text-fg-muted">此任务已归档。</p>}
-
       {task.blocked && (
         <div
           role="status"
@@ -432,107 +419,116 @@ export default function TaskDetail({
           </span>
         </div>
       )}
-
       {fieldError && <p role="alert" className="text-sm text-danger">{fieldError}</p>}
+    </>
+  )
 
-      <div
-        data-task-properties
-        className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 [&_[data-property-control]]:h-auto [&_[data-property-control]]:min-h-8 [&_[data-property-control]]:min-w-0 [&_[data-property-control]]:max-w-full [&_[data-property-control]]:whitespace-normal [&_[data-property-control]]:text-left [&_[data-property-control]]:text-sm [&_[data-property-control]>span]:min-w-0 [&_[data-property-control]>span]:[overflow-wrap:anywhere] [&_[data-slot=select-trigger]]:justify-start [&_[data-slot=select-value]]:line-clamp-none [&_[data-slot=select-value]]:whitespace-normal [&_[data-slot=select-value]]:[overflow-wrap:anywhere]"
-      >
-        <div className="contents">
-          <span className="text-sm text-fg-muted">优先级</span>
-          <PriorityControl
-            value={task.priority}
-            onChange={(priority) => patchOptimistic({ priority }, { priority })}
-            ariaLabel="优先级"
-          />
-        </div>
-        <div className="contents">
-          <span className="text-sm text-fg-muted">负责人</span>
-          <AssigneeControl
-            value={task.assignee?.id ?? null}
-            users={users}
-            onChange={(id) => {
-              const assignee = id ? (users.find((u) => u.id === id) ?? null) : null
-              patchOptimistic({ assignee_id: id }, { assignee })
-            }}
-            ariaLabel="负责人"
-          />
-        </div>
-        <div className="contents">
-          <span className="text-sm text-fg-muted">开始日期</span>
-          <DueDateControl
-            value={task.start_date ?? null}
-            onChange={(start) => patchOptimistic({ start_date: start }, { start_date: start })}
-            ariaLabel="开始日期"
-            emptyLabel="无开始"
-            pickerLabel="选择开始日期"
-          />
-        </div>
-        <div className="contents">
-          <span className="text-sm text-fg-muted">截止日期</span>
-          <DueDateControl
-            value={task.due_date}
-            onChange={(due) => patchOptimistic({ due_date: due }, { due_date: due })}
-            ariaLabel="截止日期"
-          />
-        </div>
-        <div className="contents">
-          <span className="text-sm text-fg-muted">标签</span>
-          <LabelControl value={task.labels} all={allLabels} onChange={toggleLabels} ariaLabel="标签" />
-        </div>
-        <ProjectControl
-          project={task.project}
-          milestone={task.milestone ?? null}
-          onMilestoneChange={(milestone) => {
-            patchOptimistic({ milestone_id: milestone?.id ?? null }, { milestone })
-          }}
+  const properties = (
+    <div
+      data-task-properties
+      className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 [&_[data-property-control]]:h-auto [&_[data-property-control]]:min-h-8 [&_[data-property-control]]:min-w-0 [&_[data-property-control]]:max-w-full [&_[data-property-control]]:whitespace-normal [&_[data-property-control]]:text-left [&_[data-property-control]]:text-sm [&_[data-property-control]>span]:min-w-0 [&_[data-property-control]>span]:[overflow-wrap:anywhere] [&_[data-slot=select-trigger]]:justify-start [&_[data-slot=select-value]]:line-clamp-none [&_[data-slot=select-value]]:whitespace-normal [&_[data-slot=select-value]]:[overflow-wrap:anywhere]"
+    >
+      <div className="contents">
+        <span className="text-sm text-fg-muted">优先级</span>
+        <PriorityControl
+          value={task.priority}
+          onChange={(priority) => patchOptimistic({ priority }, { priority })}
+          ariaLabel="优先级"
         />
       </div>
-
-      <TaskWorkflowPanel
-        task={task}
-        onChanged={() => reloadTaskAndAcceptance(task.number)}
-      />
-
-      <TaskCodeChanges
-        task={task}
-        onChanged={() => reloadTaskAndAcceptance(task.number)}
-      />
-
-      <TaskRelations
-        task={{
-          ...task,
-          children: task.children ?? [],
-          dependencies: task.dependencies ?? [],
-          dependents: task.dependents ?? [],
+      <div className="contents">
+        <span className="text-sm text-fg-muted">负责人</span>
+        <AssigneeControl
+          value={task.assignee?.id ?? null}
+          users={users}
+          onChange={(id) => {
+            const assignee = id ? (users.find((u) => u.id === id) ?? null) : null
+            patchOptimistic({ assignee_id: id }, { assignee })
+          }}
+          ariaLabel="负责人"
+        />
+      </div>
+      <div className="contents">
+        <span className="text-sm text-fg-muted">开始日期</span>
+        <DueDateControl
+          value={task.start_date ?? null}
+          onChange={(start) => patchOptimistic({ start_date: start }, { start_date: start })}
+          ariaLabel="开始日期"
+          emptyLabel="无开始"
+          pickerLabel="选择开始日期"
+        />
+      </div>
+      <div className="contents">
+        <span className="text-sm text-fg-muted">截止日期</span>
+        <DueDateControl
+          value={task.due_date}
+          onChange={(due) => patchOptimistic({ due_date: due }, { due_date: due })}
+          ariaLabel="截止日期"
+        />
+      </div>
+      <div className="contents">
+        <span className="text-sm text-fg-muted">标签</span>
+        <LabelControl value={task.labels} all={allLabels} onChange={toggleLabels} ariaLabel="标签" />
+      </div>
+      <ProjectControl
+        project={task.project}
+        milestone={task.milestone ?? null}
+        onMilestoneChange={(milestone) => {
+          patchOptimistic({ milestone_id: milestone?.id ?? null }, { milestone })
         }}
-        onPatch={(patch) => patchOptimistic(patch, {})}
       />
+    </div>
+  )
 
-      <section className="flex flex-col gap-4 border-t border-border pt-4">
-        <MarkdownEditableField
-          label="背景 / 问题"
-          value={task.context}
-          onCommit={(next) => patchOptimistic({ context: next }, { context: next })}
-          placeholder="补充为什么需要做，以及当前遇到的问题…"
-          required
-        />
-        <MarkdownEditableField
-          label="期望结果"
-          value={task.expected_result}
-          onCommit={(next) => patchOptimistic({ expected_result: next }, { expected_result: next })}
-          placeholder="补充完成后应该达到的状态…"
-          required
-        />
-        <MarkdownEditableField
-          label="补充说明"
-          value={task.description}
-          onCommit={(next) => patchOptimistic({ description: next }, { description: next })}
-          placeholder="可选：补充约束、参考资料或实现提示…"
-        />
-      </section>
-
+  const workflow = (
+    <TaskWorkflowPanel
+      task={task}
+      onChanged={() => reloadTaskAndAcceptance(task.number)}
+    />
+  )
+  const codeChanges = (
+    <TaskCodeChanges
+      task={task}
+      onChanged={() => reloadTaskAndAcceptance(task.number)}
+    />
+  )
+  const relations = (
+    <TaskRelations
+      task={{
+        ...task,
+        children: task.children ?? [],
+        dependencies: task.dependencies ?? [],
+        dependents: task.dependents ?? [],
+      }}
+      onPatch={(patch) => patchOptimistic(patch, {})}
+    />
+  )
+  const brief = (
+    <section data-task-brief aria-label="任务说明" className="flex min-w-0 flex-col gap-6">
+      <MarkdownEditableField
+        label="背景 / 问题"
+        value={task.context}
+        onCommit={(next) => patchOptimistic({ context: next }, { context: next })}
+        placeholder="补充为什么需要做，以及当前遇到的问题…"
+        required
+      />
+      <MarkdownEditableField
+        label="期望结果"
+        value={task.expected_result}
+        onCommit={(next) => patchOptimistic({ expected_result: next }, { expected_result: next })}
+        placeholder="补充完成后应该达到的状态…"
+        required
+      />
+      <MarkdownEditableField
+        label="补充说明"
+        value={task.description}
+        onCommit={(next) => patchOptimistic({ description: next }, { description: next })}
+        placeholder="可选：补充约束、参考资料或实现提示…"
+      />
+    </section>
+  )
+  const acceptance = (
+    <div data-task-acceptance>
       <AcceptanceChecklist
         title="验收标准"
         criteria={acceptanceCriteria}
@@ -541,23 +537,127 @@ export default function TaskDetail({
         onUpdate={editAcceptanceCriterion}
         onRemove={removeAcceptanceCriterion}
       />
-
-      <p className="text-xs text-fg-muted">
-        创建者：{task.creator.name} · 创建于 {new Date(task.created_at).toLocaleString()}
-      </p>
-
-      <AttachmentSection
-        taskNumber={task.number}
-        taskVersion={task.version}
-        readOnly={Boolean(task.archived_at)}
-        onTaskChanged={() => reloadTaskAndAcceptance(task.number)}
-      />
-
+    </div>
+  )
+  const attachments = (
+    <AttachmentSection
+      taskNumber={task.number}
+      taskVersion={task.version}
+      readOnly={Boolean(task.archived_at)}
+      onTaskChanged={() => reloadTaskAndAcceptance(task.number)}
+    />
+  )
+  const threads = (
+    <div data-task-thread>
       <TaskThreads
         taskNumber={task.number}
         projectNumber={task.project.number}
         taskVersion={task.version}
       />
+    </div>
+  )
+
+  if (variant === 'page') {
+    return (
+      <article className="min-w-0 px-4 pb-12 pt-6 sm:px-6 lg:px-8">
+        <header role="region" aria-label="任务页标题" className="min-w-0 border-b border-border pb-6">
+          <TaskHeading className="sr-only">{task.title}</TaskHeading>
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 text-xs text-fg-muted">
+            <span className="font-mono">#{task.number}</span>
+            <span>{task.project.name}</span>
+            {task.milestone && <span>· {task.milestone.name}</span>}
+          </div>
+          <div className="mt-2 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <InlineEditable
+              value={task.title}
+              onCommit={(next) => patchOptimistic({ title: next }, { title: next })}
+              ariaLabel="任务标题"
+              className="min-w-0 flex-1 text-2xl font-semibold leading-tight tracking-tight text-fg sm:text-3xl"
+            />
+            {actionControls}
+          </div>
+          <div className="mt-3 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+            <PhaseBadge phase={task.phase} activity={task.activity} />
+            <p className="min-w-0 text-sm text-fg-muted">
+              负责人：<span className="font-medium text-fg">{task.assignee?.name ?? '未分配'}</span>
+            </p>
+            <p className="text-xs text-fg-muted">
+              创建者：{task.creator.name} · {new Date(task.created_at).toLocaleString()}
+            </p>
+          </div>
+          <div className="mt-4 grid gap-2">{feedback}</div>
+        </header>
+
+        <div className="mt-8 grid min-w-0 gap-10 lg:grid-cols-[minmax(0,1fr)_19rem]">
+          <section role="region" aria-label="任务正文" className="grid min-w-0 max-w-[75ch] content-start gap-8">
+            {brief}
+            <section aria-label="任务验收" className="min-w-0 border-t border-border pt-6">
+              {acceptance}
+            </section>
+            <section aria-label="任务附件" className="min-w-0 border-t border-border pt-6">
+              {attachments}
+            </section>
+            <section aria-label="任务讨论" className="min-w-0 border-t border-border pt-6">
+              {threads}
+            </section>
+            <section aria-label="任务历史" className="min-w-0 border-t border-border pt-6">
+              <ActivityLog task={task} />
+            </section>
+          </section>
+
+          <aside
+            data-task-sidebar
+            aria-label="任务属性与交付"
+            className="min-w-0 border-t border-border pt-6 lg:sticky lg:top-20 lg:self-start lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0"
+          >
+            <div className="grid min-w-0 gap-6">
+              <section aria-label="当前工作" className="min-w-0">
+                {workflow}
+              </section>
+              <section aria-labelledby="task-properties-title" className="min-w-0 border-t border-border pt-5">
+                <h2 id="task-properties-title" className="mb-3 text-sm font-semibold text-fg">属性</h2>
+                {properties}
+              </section>
+              <section aria-label="代码交付" className="min-w-0">
+                {codeChanges}
+              </section>
+              <section aria-label="任务关系" className="min-w-0 border-t border-border pt-5">
+                {relations}
+              </section>
+            </div>
+          </aside>
+        </div>
+      </article>
+    )
+  }
+
+  return (
+    <article className="flex min-w-0 flex-col gap-4 p-4 sm:p-5">
+      {/* The inspector owns no visible heading; its editable title remains the
+          visual label while this heading names the surrounding pane. */}
+      <TaskHeading className="sr-only">{task.title}</TaskHeading>
+      <div className="flex items-center justify-between gap-2">{actionControls}</div>
+      {feedback}
+      <div className="flex items-baseline gap-3">
+        <span className="shrink-0 font-mono text-xs text-fg-muted">#{task.number}</span>
+        <InlineEditable
+          value={task.title}
+          onCommit={(next) => patchOptimistic({ title: next }, { title: next })}
+          ariaLabel="任务标题"
+          className="flex-1 text-base font-semibold text-fg"
+        />
+      </div>
+      {properties}
+      {workflow}
+      {codeChanges}
+      {relations}
+      <div className="border-t border-border pt-4">{brief}</div>
+      {acceptance}
+      <p className="text-xs text-fg-muted">
+        创建者：{task.creator.name} · 创建于 {new Date(task.created_at).toLocaleString()}
+      </p>
+      {attachments}
+      {threads}
       <ActivityLog task={task} />
     </article>
   )

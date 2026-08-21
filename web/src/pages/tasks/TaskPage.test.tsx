@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import TaskPage from './TaskPage'
 import * as acceptanceApi from '@/api/acceptance'
@@ -62,9 +62,15 @@ function renderPage(state?: unknown, pathname = '/tasks/142') {
   )
 }
 
+function withinOrder(container: HTMLElement, firstSelector: string, secondSelector: string) {
+  const first = container.querySelector(firstSelector)
+  const second = container.querySelector(secondSelector)
+  return Boolean(first && second && (first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING))
+}
+
 describe('TaskPage', () => {
   it('loads a task directly by route number without fetching a collection', async () => {
-    renderPage()
+    const { container } = renderPage()
 
     expect(screen.getByRole('status')).toHaveTextContent('正在加载任务')
     expect(await screen.findByText(TASK.title)).toBeVisible()
@@ -72,6 +78,68 @@ describe('TaskPage', () => {
     expect(tasksApi.listTasks).not.toHaveBeenCalled()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: TASK.title, level: 1 })).toBeVisible()
+
+    const pageHeader = screen.getByRole('region', { name: '任务页标题' })
+    const body = screen.getByRole('region', { name: '任务正文' })
+    const sidebar = screen.getByRole('complementary', { name: '任务属性与交付' })
+    expect(pageHeader).toBeVisible()
+    expect(body).toBeVisible()
+    expect(sidebar).toBeVisible()
+    expect(withinOrder(container, '[data-task-brief]', '[data-task-acceptance]')).toBe(true)
+    expect(withinOrder(container, '[data-task-acceptance]', '[data-task-thread]')).toBe(true)
+    expect(withinOrder(container, '[data-task-thread]', '[data-task-sidebar]')).toBe(true)
+  })
+
+  it('keeps title editing local to the page and commits through the versioned Task mutation', async () => {
+    const updated = { ...TASK, version: 2, title: 'Updated standalone task page' }
+    vi.mocked(tasksApi.updateTask).mockResolvedValue(updated)
+    renderPage()
+
+    const title = await screen.findByRole('textbox', { name: '任务标题' })
+    fireEvent.change(title, { target: { value: updated.title } })
+    fireEvent.blur(title)
+
+    await waitFor(() => expect(tasksApi.updateTask).toHaveBeenCalledWith(
+      TASK.number,
+      TASK.version,
+      { title: updated.title },
+    ))
+    expect(title).toHaveValue(updated.title)
+  })
+
+  it('reloads the winning Task version after an inline version conflict', async () => {
+    const latest = { ...TASK, version: 2, title: 'Title from another actor' }
+    vi.mocked(tasksApi.getTask)
+      .mockResolvedValueOnce(TASK)
+      .mockResolvedValueOnce(latest)
+    vi.mocked(tasksApi.updateTask).mockRejectedValue(
+      new ProblemError(412, 'VERSION_CONFLICT', 'request-conflict'),
+    )
+    renderPage()
+
+    const title = await screen.findByRole('textbox', { name: '任务标题' })
+    fireEvent.change(title, { target: { value: 'Local losing title' } })
+    fireEvent.blur(title)
+
+    expect(await screen.findByText(
+      '内容已被其他用户或 Agent 更新，已加载最新版本。',
+    )).toBeVisible()
+    expect(title).toHaveValue(latest.title)
+  })
+
+  it('offers an inline undo after archiving and restores the same Task', async () => {
+    const archived = { ...TASK, version: 2, archived_at: '2026-08-20T01:00:00Z' }
+    const restored = { ...TASK, version: 3 }
+    vi.mocked(tasksApi.archiveTask).mockResolvedValue(archived)
+    vi.mocked(tasksApi.restoreTask).mockResolvedValue(restored)
+    renderPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: '归档' }))
+    expect(await screen.findByText('已归档任务。')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: '撤销' }))
+
+    await waitFor(() => expect(tasksApi.restoreTask).toHaveBeenCalledWith(TASK.number, archived.version))
+    expect(await screen.findByRole('button', { name: '归档' })).toBeVisible()
   })
 
   it.each(['/tasks/1e2', '/tasks/0x8e', '/tasks/142.5', '/tasks/-142'])(
