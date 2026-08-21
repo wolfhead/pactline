@@ -26,7 +26,7 @@ export default function TaskPage() {
           返回任务集合
         </Link>
       </header>
-      <div className="mx-auto w-full min-w-0 max-w-5xl">
+      <div className="mx-auto w-full min-w-0 max-w-6xl">
         {taskNumber === null ? (
           <section role="alert" className="p-5 text-sm text-danger">
             任务编号无效。
@@ -37,6 +37,7 @@ export default function TaskPage() {
             users={users}
             onPatched={() => {}}
             headingLevel={1}
+            variant="page"
           />
         )}
       </div>

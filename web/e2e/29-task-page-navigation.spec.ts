@@ -18,8 +18,8 @@ const TASK = {
   number: 142,
   version: 1,
   title: 'Standalone navigation task',
-  context: 'This task loads independently from every collection.',
-  expected_result: 'Navigation returns to its exact source.',
+  context: '## Why this matters\n\nThis task loads independently from every collection while preserving a readable line length for a deliberately long explanation.\n\n- Direct links remain stable\n- Collection context remains recoverable',
+  expected_result: 'Navigation returns to its exact source, and the complete task remains operable without turning into a wide form.',
   description: '',
   phase: 'backlog',
   activity: null,
@@ -160,7 +160,7 @@ async function openTaskAndReturn(page: import('@playwright/test').Page, source: 
 
 test('standalone Task navigation preserves all three collection sources and responsive page flow', async ({ page }, testInfo) => {
   await mockApplication(page)
-  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.setViewportSize({ width: 1440, height: 1000 })
 
   await openTaskAndReturn(page, '/tasks?ownership=created&q=Standalone&sort=number&order=asc')
   await openTaskAndReturn(page, '/projects/12/backlog?priority=high&q=Standalone')
@@ -172,6 +172,19 @@ test('standalone Task navigation preserves all three collection sources and resp
   await page.goto('/tasks/142')
   await expect(page.getByRole('heading', { name: TASK.title, exact: true, level: 1 })).toBeVisible()
   await expect(page.getByRole('dialog')).toHaveCount(0)
+  const pageHeader = page.getByRole('region', { name: '任务页标题' })
+  const taskBody = page.getByRole('region', { name: '任务正文' })
+  const taskSidebar = page.getByRole('complementary', { name: '任务属性与交付' })
+  await expect(pageHeader).toContainText('待规划')
+  await expect(pageHeader).toContainText(`负责人：${USER.name}`)
+  await expect(taskBody).toBeVisible()
+  await expect(taskSidebar).toBeVisible()
+  await expect(page.getByRole('region', { name: '当前工作' })).toBeVisible()
+  expect(await taskBody.evaluate((element) => element.getBoundingClientRect().width)).toBeLessThanOrEqual(780)
+  expect(await taskSidebar.evaluate((element) => getComputedStyle(element).position)).toBe('sticky')
+  expect(await page.getByText('任务阶段', { exact: true }).evaluate(
+    (element) => element.getBoundingClientRect().bottom <= window.innerHeight,
+  )).toBe(true)
   await testInfo.attach('task-page-desktop', {
     body: await page.screenshot(),
     contentType: 'image/png',
@@ -181,6 +194,20 @@ test('standalone Task navigation preserves all three collection sources and resp
   await expect(page.getByRole('heading', { name: TASK.title, exact: true, level: 1 })).toBeVisible()
   await expect(page.getByRole('dialog')).toHaveCount(0)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  expect(await page.locator('[data-task-brief]').evaluate((brief) => {
+    const acceptance = document.querySelector('[data-task-acceptance]')
+    const thread = document.querySelector('[data-task-thread]')
+    const sidebar = document.querySelector('[data-task-sidebar]')
+    if (!acceptance || !thread || !sidebar) return false
+    return Boolean(
+      (brief.compareDocumentPosition(acceptance) & Node.DOCUMENT_POSITION_FOLLOWING)
+      && (acceptance.compareDocumentPosition(thread) & Node.DOCUMENT_POSITION_FOLLOWING)
+      && (thread.compareDocumentPosition(sidebar) & Node.DOCUMENT_POSITION_FOLLOWING)
+    )
+  })).toBe(true)
+  await expect(page.getByRole('button', { name: '编辑背景 / 问题' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '编辑期望结果' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '归档' })).toBeVisible()
   const properties = page.locator('[data-task-properties]')
   const labels = page.getByRole('button', { name: '标签' })
   await expect(labels).toContainText('UnbrokenLabelNameThatMustWrapWithinThePropertyColumn')
@@ -190,6 +217,7 @@ test('standalone Task navigation preserves all three collection sources and resp
       child.getBoundingClientRect().right <= element.getBoundingClientRect().right + 1
     ))
   ))).toBe(true)
+  expect(await taskSidebar.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
   await testInfo.attach('task-page-mobile', {
     body: await page.screenshot(),
     contentType: 'image/png',
