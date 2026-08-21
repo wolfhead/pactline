@@ -5,7 +5,7 @@ import ProjectDetailPage from './ProjectDetailPage'
 import * as acceptanceApi from '@/api/acceptance'
 import * as projectsApi from '@/api/projects'
 import * as tasksApi from '@/api/tasks'
-import type { ProjectDetail } from '@/api/projects'
+import type { Milestone, ProjectDetail } from '@/api/projects'
 import type { Task } from '@/task-types'
 
 vi.mock('@/api/projects')
@@ -88,6 +88,42 @@ const MILESTONE_DETAIL: ProjectDetail = {
   tasks: [TASK],
 }
 
+function milestone(
+  id: string,
+  name: string,
+  status: Milestone['status'],
+  position: number,
+): Milestone {
+  return {
+    id,
+    project_id: 'p1',
+    version: 1,
+    name,
+    outcome: `${name} outcome`,
+    description: '',
+    owner_id: 'u1',
+    status,
+    target_date: null,
+    position,
+    completed_at: status === 'completed' ? '2026-07-30T00:00:00Z' : null,
+    cancelled_at: status === 'cancelled' ? '2026-07-30T00:00:00Z' : null,
+    created_at: '',
+    updated_at: '',
+    acceptance_criteria: [],
+  }
+}
+
+const STATUS_DETAIL: ProjectDetail = {
+  ...DETAIL,
+  milestones: [
+    milestone('m-completed', 'Completed delivery', 'completed', 2),
+    milestone('m-planned', 'Planned delivery', 'planned', 1),
+    milestone('m-cancelled', 'Cancelled delivery', 'cancelled', 3),
+    milestone('m-active', 'Active delivery', 'active', 0),
+  ],
+  tasks: [{ ...TASK, milestone: { id: 'm-active', name: 'Active delivery' } }],
+}
+
 describe('ProjectDetailPage', () => {
   beforeEach(() => {
     vi.mocked(projectsApi.getProject).mockResolvedValue(DETAIL)
@@ -108,25 +144,31 @@ describe('ProjectDetailPage', () => {
     vi.clearAllMocks()
   })
 
-  it('shows the Project-first shell and deterministic attention view', async () => {
+  it('renders the canonical workspace in Project, Milestones, Backlog order', async () => {
     render(
-      <MemoryRouter initialEntries={['/projects/12/overview']}>
+      <MemoryRouter initialEntries={['/projects/12']}>
         <Routes>
-          <Route path="/projects/:number/overview" element={<ProjectDetailPage view="overview" />} />
+          <Route path="/projects/:number" element={<ProjectDetailPage />} />
         </Routes>
       </MemoryRouter>,
     )
-    expect(await screen.findByRole('heading', { name: 'Launch' })).toBeVisible()
-    expect(screen.getByRole('navigation', { name: '项目视图' })).toBeVisible()
-    expect(screen.getByText('逾期里程碑')).toBeVisible()
-    expect(screen.getByText('Backlog 0 项')).toBeVisible()
+    const projectHeading = await screen.findByRole('heading', { name: 'Launch' })
+    const milestonesHeading = screen.getByRole('heading', { name: '里程碑' })
+    const backlogHeading = screen.getByRole('heading', { name: '项目 Backlog' })
+
+    expect(projectHeading.compareDocumentPosition(milestonesHeading))
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(milestonesHeading.compareDocumentPosition(backlogHeading))
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(screen.queryByText('需要关注')).not.toBeInTheDocument()
+    expect(screen.queryByText('最近动态')).not.toBeInTheDocument()
   })
 
   it('keeps low-frequency Project details collapsed until requested', async () => {
     render(
-      <MemoryRouter initialEntries={['/projects/12/overview']}>
+      <MemoryRouter initialEntries={['/projects/12']}>
         <Routes>
-          <Route path="/projects/:number/overview" element={<ProjectDetailPage view="overview" />} />
+          <Route path="/projects/:number" element={<ProjectDetailPage />} />
         </Routes>
       </MemoryRouter>,
     )
@@ -141,6 +183,73 @@ describe('ProjectDetailPage', () => {
     expect(screen.getByRole('button', { name: '编辑项目' })).toBeVisible()
   })
 
+  it('prioritizes current milestones and keeps terminal milestones accessible', async () => {
+    vi.mocked(projectsApi.getProject).mockResolvedValue(STATUS_DETAIL)
+    render(
+      <MemoryRouter initialEntries={['/projects/12']}>
+        <Routes>
+          <Route path="/projects/:number" element={<ProjectDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('link', { name: /Active delivery/ })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Planned delivery/ })).toBeVisible()
+
+    const completed = screen.getByRole('link', { name: /Completed delivery/ })
+    const cancelled = screen.getByRole('link', { name: /Cancelled delivery/ })
+    expect(completed).not.toBeVisible()
+    expect(cancelled).not.toBeVisible()
+
+    fireEvent.click(screen.getByText('已结束里程碑 · 2'))
+
+    expect(completed).toBeVisible()
+    expect(cancelled).toBeVisible()
+    expect(completed).toHaveAttribute('href', '/projects/12/milestones/m-completed')
+    expect(cancelled).toHaveAttribute('href', '/projects/12/milestones/m-cancelled')
+    expect(projectsApi.getProject).toHaveBeenCalledTimes(1)
+    expect(projectsApi.listProjectMembers).toHaveBeenCalledTimes(1)
+    expect(tasksApi.listTasks).toHaveBeenCalledTimes(1)
+  })
+
+  it('explains the next step when milestones and Backlog are empty', async () => {
+    vi.mocked(tasksApi.listTasks).mockResolvedValue({ items: [], has_more: false })
+    render(
+      <MemoryRouter initialEntries={['/projects/12']}>
+        <Routes>
+          <Route path="/projects/:number" element={<ProjectDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('还没有里程碑。创建里程碑来规划下一阶段交付。'))
+      .toBeVisible()
+    expect(await screen.findByText('Backlog 为空。创建任务来记录尚未排入里程碑的工作。'))
+      .toBeVisible()
+    expect(screen.getAllByRole('button', { name: '新建任务' })).toHaveLength(1)
+  })
+
+  it('explains how to continue when every milestone has ended', async () => {
+    vi.mocked(projectsApi.getProject).mockResolvedValue({
+      ...DETAIL,
+      milestones: STATUS_DETAIL.milestones.filter((item) => (
+        item.status === 'completed' || item.status === 'cancelled'
+      )),
+    })
+    render(
+      <MemoryRouter initialEntries={['/projects/12']}>
+        <Routes>
+          <Route path="/projects/:number" element={<ProjectDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText(
+      '当前没有进行中或计划中的里程碑。可以新建里程碑，或从已结束里程碑中重新开启。',
+    )).toBeVisible()
+    expect(screen.getByText('已结束里程碑 · 2')).toBeVisible()
+  })
+
   it('prioritizes milestone tasks and links to their standalone page', async () => {
     vi.mocked(projectsApi.getProject).mockResolvedValue(MILESTONE_DETAIL)
     render(
@@ -148,7 +257,7 @@ describe('ProjectDetailPage', () => {
         <Routes>
           <Route
             path="/projects/:number/milestones/:milestoneID"
-            element={<ProjectDetailPage view="milestones" />}
+            element={<ProjectDetailPage view="milestone" />}
           />
           <Route path="/tasks/:number" element={<h1>Standalone task route</h1>} />
         </Routes>

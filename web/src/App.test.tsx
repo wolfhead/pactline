@@ -27,6 +27,15 @@ vi.mock('./components/tasks/TaskComposer', () => ({
   TaskComposerProvider: ({ children }: { children: React.ReactNode }) => children,
   useTaskComposer: () => ({ openTaskComposer: vi.fn() }),
 }))
+vi.mock('./pages/projects/ProjectDetailPage', async () => {
+  const { useLocation } = await import('react-router-dom')
+  return {
+    default: () => {
+      const location = useLocation()
+      return <h1>Project workspace at {location.pathname}</h1>
+    },
+  }
+})
 
 const approved = {
   id: 'u1', name: 'Admin', email: 'admin@example.test', avatar_url: null,
@@ -108,5 +117,25 @@ describe('standalone Task route identity boundaries', () => {
     fireEvent.click(mutation, { detail: 0 })
     expect(taskMutation).not.toHaveBeenCalled()
     expect(mutation).toHaveAttribute('inert')
+  })
+})
+
+describe('Project workspace routes', () => {
+  it('uses the canonical Project URL and redirects the legacy overview URL', async () => {
+    setIdentity({})
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/projects/12']}><App /></MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('heading', { name: 'Project workspace at /projects/12' }))
+      .toBeVisible()
+
+    unmount()
+    render(
+      <MemoryRouter initialEntries={['/projects/12/overview']}><App /></MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('heading', { name: 'Project workspace at /projects/12' }))
+      .toBeVisible()
   })
 })

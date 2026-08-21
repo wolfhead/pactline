@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { flushSync } from 'react-dom'
-import { Link, NavLink, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ChevronDown, ListChecks, Plus } from 'lucide-react'
 import {
   addProjectMember,
@@ -46,7 +46,7 @@ import { useIdentity } from '@/identity'
 import type { UserRef } from '@/task-types'
 import { cn } from '@/lib/utils'
 
-type ProjectView = 'overview' | 'milestones' | 'backlog'
+type ProjectView = 'workspace' | 'milestone'
 
 const MILESTONE_LABELS = {
   planned: '计划中',
@@ -70,7 +70,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   milestone_reopened: '重新开启了里程碑',
 }
 
-export default function ProjectDetailPage({ view = 'overview' }: { view?: ProjectView }) {
+export default function ProjectDetailPage({ view = 'workspace' }: { view?: ProjectView }) {
   const number = Number(useParams().number)
   const selectedMilestoneID = useParams().milestoneID
   const { me, users, actor, impersonation } = useIdentity()
@@ -138,7 +138,6 @@ export default function ProjectDetailPage({ view = 'overview' }: { view?: Projec
   const projectUsers = memberships
     .filter((membership) => membership.active)
     .map((membership) => membership.user)
-  const base = `/projects/${project.number}`
   const selectedMilestone = selectedMilestoneID
     ? detail.milestones.find((item) => item.id === selectedMilestoneID)
     : undefined
@@ -152,24 +151,6 @@ export default function ProjectDetailPage({ view = 'overview' }: { view?: Projec
             <h1 className="truncate text-lg font-semibold">{project.name}</h1>
             {project.archived_at && <span className="shrink-0 rounded-full bg-surface-subtle px-2 py-1 text-xs">已归档</span>}
           </div>
-          <nav aria-label="项目视图" className="order-last flex w-full gap-1 sm:order-none sm:w-auto">
-          {([
-            ['overview', '整体视图'],
-            ['milestones', '里程碑'],
-            ['backlog', 'Backlog'],
-          ] as const).map(([key, label]) => (
-            <NavLink
-              key={key}
-              to={`${base}/${key}`}
-              className={({ isActive }) => cn(
-                '-mb-px border-b-2 px-3 py-2.5 text-sm',
-                isActive ? 'border-accent font-medium text-accent' : 'border-transparent text-fg-muted',
-              )}
-            >
-              {label}
-            </NavLink>
-          ))}
-          </nav>
           <button
             type="button"
             aria-expanded={projectDetailsOpen}
@@ -284,11 +265,23 @@ export default function ProjectDetailPage({ view = 'overview' }: { view?: Projec
 
       <div className={cn(
         'flex min-h-0 flex-1 flex-col gap-4 p-4 sm:p-5',
-        view === 'overview' && 'mx-auto w-full max-w-7xl',
+        view === 'workspace' && 'mx-auto w-full max-w-7xl',
       )}>
-        {view === 'overview' && <Overview detail={detail} users={projectUsers} />}
-        {view === 'backlog' && <Backlog detail={detail} users={projectUsers} />}
-        {view === 'milestones' && (
+        {view === 'workspace' && (
+          <>
+            <Milestones
+              detail={detail}
+              adding={addingMilestone}
+              setAdding={setAddingMilestone}
+              users={projectUsers}
+              defaultOwnerID={me?.id ?? project.creator.id}
+              onMutate={mutate}
+              onReload={reload}
+            />
+            <Backlog detail={detail} users={projectUsers} />
+          </>
+        )}
+        {view === 'milestone' && (
           <Milestones
             detail={detail}
             selected={selectedMilestone}
@@ -302,81 +295,6 @@ export default function ProjectDetailPage({ view = 'overview' }: { view?: Projec
         )}
       </div>
     </div>
-  )
-}
-
-function Overview({ detail, users }: { detail: ProjectDetail; users: Array<{ id: string; name: string }> }) {
-  const today = new Date().toISOString().slice(0, 10)
-  const liveTasks = detail.tasks.filter((task) => !task.archived_at)
-  const unfinished = liveTasks.filter((task) => !['done', 'cancelled'].includes(task.phase))
-  const active = detail.milestones.filter((item) => item.status === 'active')
-  const activeIDs = new Set(active.map((item) => item.id))
-  const attention = [
-    ['逾期里程碑', active.filter((item) => item.target_date && item.target_date < today).length],
-    ['逾期任务', unfinished.filter((task) => task.due_date && task.due_date < today).length],
-    ['活跃里程碑中的未分配任务', unfinished.filter((task) => !task.assignee && task.milestone && activeIDs.has(task.milestone.id)).length],
-    ['待验收任务', liveTasks.filter((task) => task.phase === 'in_review').length],
-    ['任务已结束但验收未完成的里程碑', active.filter((milestone) => {
-      const tasks = liveTasks.filter((task) => task.milestone?.id === milestone.id)
-      const tasksConcluded = tasks.length > 0 && tasks.every((task) => ['done', 'cancelled'].includes(task.phase))
-      const acceptanceIncomplete = milestone.acceptance_criteria.some((criterion) => !['passed', 'waived'].includes(criterion.current_check?.outcome ?? ''))
-      return tasksConcluded && acceptanceIncomplete
-    }).length],
-    ['高优先级 Backlog', liveTasks.filter((task) => !task.milestone && ['high', 'urgent'].includes(task.priority) && !['done', 'cancelled'].includes(task.phase)).length],
-  ] as const
-  const backlogCount = liveTasks.filter((task) => !task.milestone).length
-
-  return (
-    <>
-      <section>
-        <h2 className="mb-3 text-lg font-semibold">需要关注</h2>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {attention.map(([label, count]) => (
-            <div key={label} className={cn('rounded-lg border p-4', count ? 'border-warning/40 bg-warning/5' : 'border-border bg-surface-raised')}>
-              <p className="text-sm text-fg-muted">{label}</p>
-              <p className="mt-2 text-2xl font-semibold">{count}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-      <section>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">活跃里程碑</h2>
-          <span className="text-sm text-fg-muted">Backlog {backlogCount} 项</span>
-        </div>
-        {active.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border p-6 text-sm text-fg-muted">当前没有活跃里程碑。</div>
-        ) : (
-          <div className="grid gap-3 lg:grid-cols-2">
-            {active.map((milestone) => {
-              const tasks = liveTasks.filter((task) => task.milestone?.id === milestone.id)
-              const concluded = tasks.filter((task) => ['done', 'cancelled'].includes(task.phase)).length
-              const inReview = tasks.filter((task) => task.phase === 'in_review').length
-              const overdue = tasks.filter(
-                (task) => !['done', 'cancelled'].includes(task.phase)
-                  && Boolean(task.due_date && task.due_date < today),
-              ).length
-              const satisfied = milestone.acceptance_criteria.filter((criterion) => ['passed', 'waived'].includes(criterion.current_check?.outcome ?? '')).length
-              return (
-                <Link key={milestone.id} to={`/projects/${detail.project.number}/milestones/${milestone.id}`} className="rounded-lg border border-border bg-surface-raised p-4 hover:border-accent/40">
-                  <h3 className="font-semibold">{milestone.name}</h3>
-                  <p className="mt-1 text-sm text-fg-muted">{milestone.outcome}</p>
-                  <div className="mt-3 flex flex-wrap gap-3 text-xs text-fg-muted">
-                    <span>负责人：{users.find((user) => user.id === milestone.owner_id)?.name ?? '未知'}</span>
-                    <span>目标：{milestone.target_date ?? '未设置'}</span>
-                    <span>任务：{concluded}/{tasks.length}</span>
-                    <span>待评审：{inReview}</span>
-                    <span>逾期：{overdue}</span>
-                    <span>验收：{satisfied}/{milestone.acceptance_criteria.length}</span>
-                  </div>
-                </Link>
-              )
-            })}
-          </div>
-        )}
-      </section>
-      <ActivityFeed activity={detail.activity} users={users} milestones={detail.milestones} />
-    </>
   )
 }
 
@@ -399,7 +317,7 @@ function Backlog({
         projectNumber={detail.project.number}
         backlogOnly
         users={users}
-        empty="Backlog 为空。"
+        empty="Backlog 为空。创建任务来记录尚未排入里程碑的工作。"
       />
     </section>
   )
@@ -472,8 +390,8 @@ function Milestones({
       <section className="flex min-h-0 flex-1 flex-col gap-3">
         <div className="rounded-lg border border-border bg-surface px-4 py-3">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <Link to={`/projects/${project.number}/milestones`} className="shrink-0 text-sm text-accent">
-              ← 里程碑
+            <Link to={`/projects/${project.number}`} className="shrink-0 text-sm text-accent">
+              ← 项目交付
             </Link>
             <h2 className="min-w-0 flex-1 truncate text-base font-semibold">{selected.name}</h2>
             <span className="shrink-0 text-xs text-fg-muted">
@@ -669,16 +587,62 @@ function Milestones({
     )
   }
 
-  const groups = [
+  const currentGroups = [
     ['active', '进行中'],
     ['planned', '计划中'],
+  ] as const
+  const terminalGroups = [
     ['completed', '已完成'],
     ['cancelled', '已取消'],
   ] as const
+  const currentCount = detail.milestones.filter((item) => (
+    item.status === 'active' || item.status === 'planned'
+  )).length
+  const terminalCount = detail.milestones.length - currentCount
+  const milestoneCards = (items: Milestone[]) => (
+    <div className="grid gap-3 lg:grid-cols-2">
+      {[...items].sort((left, right) => left.position - right.position).map((milestone) => {
+        const tasks = detail.tasks.filter((task) => (
+          !task.archived_at && task.milestone?.id === milestone.id
+        ))
+        const concluded = tasks.filter((task) => (
+          task.phase === 'done' || task.phase === 'cancelled'
+        )).length
+        const accepted = milestone.acceptance_criteria.filter((criterion) => (
+          criterion.current_check?.outcome === 'passed'
+          || criterion.current_check?.outcome === 'waived'
+        )).length
+        return (
+          <Link
+            key={milestone.id}
+            to={`/projects/${project.number}/milestones/${milestone.id}`}
+            className="rounded-lg border border-border bg-surface-raised p-4 transition hover:border-accent/40 hover:shadow-[0_4px_16px_rgb(23_43_61/0.06)]"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <h4 className="font-semibold">{milestone.name}</h4>
+              <span className="shrink-0 rounded-full bg-accent-subtle px-2 py-1 text-xs font-medium text-accent">
+                {MILESTONE_LABELS[milestone.status]}
+              </span>
+            </div>
+            <p className="mt-1 text-sm text-fg-muted">{milestone.outcome}</p>
+            <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-fg-muted">
+              <span>负责人：{users.find((user) => user.id === milestone.owner_id)?.name ?? '未知'}</span>
+              <span>目标：{milestone.target_date ?? '未设置'}</span>
+              <span>任务：{concluded}/{tasks.length}</span>
+              <span>验收：{accepted}/{milestone.acceptance_criteria.length}</span>
+            </div>
+          </Link>
+        )
+      })}
+    </div>
+  )
   return (
     <section className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">里程碑</h2>
+        <div>
+          <h2 className="text-lg font-semibold">里程碑</h2>
+          <p className="mt-1 text-sm text-fg-muted">当前交付优先显示，已结束的里程碑保留在次级分组中。</p>
+        </div>
         <button type="button" onClick={() => setAdding(!adding)} className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white">新建里程碑</button>
       </div>
       {adding && (
@@ -692,24 +656,42 @@ function Milestones({
           <button className="rounded-md bg-accent px-3 py-2 text-sm text-white">创建</button>
         </form>
       )}
-      {groups.map(([status, label]) => {
+      {currentCount === 0 && (
+        <div className="rounded-lg border border-dashed border-border p-6 text-sm text-fg-muted">
+          {detail.milestones.length === 0
+            ? '还没有里程碑。创建里程碑来规划下一阶段交付。'
+            : '当前没有进行中或计划中的里程碑。可以新建里程碑，或从已结束里程碑中重新开启。'}
+        </div>
+      )}
+      {currentGroups.map(([status, label]) => {
         const items = detail.milestones.filter((item) => item.status === status)
         if (!items.length) return null
         return (
           <div key={status}>
             <h3 className="mb-2 text-sm font-medium text-fg-muted">{label} · {items.length}</h3>
-            <div className="grid gap-3 lg:grid-cols-2">
-              {items.map((milestone) => (
-                <Link key={milestone.id} to={`/projects/${project.number}/milestones/${milestone.id}`} className="rounded-lg border border-border bg-surface-raised p-4 hover:border-accent/40">
-                  <h4 className="font-semibold">{milestone.name}</h4>
-                  <p className="mt-1 text-sm text-fg-muted">{milestone.outcome}</p>
-                  <p className="mt-2 text-xs text-fg-muted">负责人：{users.find((user) => user.id === milestone.owner_id)?.name ?? '未知'} · 目标：{milestone.target_date ?? '未设置'}</p>
-                </Link>
-              ))}
-            </div>
+            {milestoneCards(items)}
           </div>
         )
       })}
+      {terminalCount > 0 && (
+        <details className="rounded-lg border border-border bg-surface-subtle/50 px-4 py-3">
+          <summary className="cursor-pointer text-sm font-medium text-fg-muted">
+            已结束里程碑 · {terminalCount}
+          </summary>
+          <div className="mt-4 flex flex-col gap-4">
+            {terminalGroups.map(([status, label]) => {
+              const items = detail.milestones.filter((item) => item.status === status)
+              if (!items.length) return null
+              return (
+                <div key={status}>
+                  <h3 className="mb-2 text-sm font-medium text-fg-muted">{label} · {items.length}</h3>
+                  {milestoneCards(items)}
+                </div>
+              )
+            })}
+          </div>
+        </details>
+      )}
     </section>
   )
 }

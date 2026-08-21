@@ -1,4 +1,5 @@
 import { test, expect } from './support/task-fixtures'
+import type { Request } from '@playwright/test'
 import { switchIdentity } from './support/identity'
 import { USERS } from './support/config'
 
@@ -25,7 +26,29 @@ test('a long-lived Project plans and completes an evidence-backed Milestone', as
   const project = await (await createProjectResponse).json() as { id: string; number: number }
   trackProject(project.id)
 
-  await expect(page).toHaveURL(`/projects/${project.number}/overview`)
+  await expect(page).toHaveURL(`/projects/${project.number}`)
+  const workspaceRequests: string[] = []
+  const recordWorkspaceRequest = (request: Request) => {
+    if (request.method() === 'GET') workspaceRequests.push(new URL(request.url()).pathname)
+  }
+  page.on('request', recordWorkspaceRequest)
+  await page.reload()
+  await page.waitForLoadState('networkidle')
+  page.off('request', recordWorkspaceRequest)
+
+  const aggregateRequests = workspaceRequests.filter(
+    (path) => path === `/api/v1/projects/${project.number}`,
+  )
+  const memberRequests = workspaceRequests.filter(
+    (path) => path === `/api/v1/projects/${project.number}/members`,
+  )
+  expect(aggregateRequests.length).toBeGreaterThan(0)
+  expect(aggregateRequests.length).toBeLessThanOrEqual(2)
+  expect(memberRequests.length).toBeGreaterThan(0)
+  expect(memberRequests.length).toBeLessThanOrEqual(2)
+  expect(workspaceRequests.filter((path) => path.startsWith(`/api/v1/projects/${project.number}/milestones/`)))
+    .toHaveLength(0)
+
   await page.getByRole('button', { name: '项目详情', exact: true }).click()
   await page.getByRole('button', { name: '编辑项目', exact: true }).click()
   await page.getByLabel('项目说明').fill('Edited durable Project context')
@@ -33,7 +56,6 @@ test('a long-lived Project plans and completes an evidence-backed Milestone', as
   await expect(page.getByLabel('项目说明')).not.toBeVisible()
   await expect(page.getByRole('paragraph').filter({ hasText: 'Edited durable Project context' })).toBeVisible()
 
-  await page.getByRole('link', { name: '里程碑', exact: true }).click()
   await page.getByRole('button', { name: '新建里程碑' }).click()
   await page.getByPlaceholder('里程碑名称').fill('API ready')
   await page.getByPlaceholder('可验证的阶段成果').fill('The Project-first workflow is verified')
@@ -87,7 +109,7 @@ test('a long-lived Project plans and completes an evidence-backed Milestone', as
   await page.getByRole('button', { name: '完成', exact: true }).click()
   await expect(page.getByText(/状态：已完成/)).toBeVisible()
 
-  await page.getByRole('link', { name: '整体视图' }).click()
+  await page.getByRole('link', { name: '← 项目交付' }).click()
   await page.getByRole('button', { name: '项目详情', exact: true }).click()
   await page.getByRole('button', { name: '归档项目', exact: true }).click()
   await expect(page.getByText('已归档', { exact: true })).toBeVisible()
