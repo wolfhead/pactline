@@ -73,6 +73,7 @@ export default function TaskDetail({
   variant = 'inspector',
 }: TaskDetailProps) {
   const { me } = useIdentity()
+  const TaskHeading = `h${headingLevel}` as const
 
   const [task, setTask] = useState<Task | null>(null)
   const [error, setError] = useState<Error | null>(null)
@@ -333,7 +334,7 @@ export default function TaskDetail({
     const notFound = error instanceof ProblemError && error.status === 404
     return (
       <section role="alert" className="p-5 text-sm text-danger">
-        <h1 className="text-base font-semibold">{notFound ? '找不到任务' : '任务加载失败'}</h1>
+        <TaskHeading className="text-base font-semibold">{notFound ? '找不到任务' : '任务加载失败'}</TaskHeading>
         <p className="mt-1">
           {notFound ? '这个任务不存在，或你无权查看。' : error.message}
         </p>
@@ -345,7 +346,6 @@ export default function TaskDetail({
   }
   if (!task) return <p role="status" className="p-5 text-sm text-fg-muted">正在加载任务…</p>
 
-  const TaskHeading = `h${headingLevel}` as const
   const actionControls = (
     <div className={variant === 'page'
       ? 'flex shrink-0 items-center justify-end gap-2'

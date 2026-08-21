@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode, type SyntheticEvent } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { FolderKanban, LayoutList, LogOut, Menu, Plus, User } from 'lucide-react'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
@@ -14,6 +14,18 @@ const BOTTOM_TABS = [
   { to: '/projects', label: '项目', icon: FolderKanban, end: false },
 ] as const
 
+const WRITE_CONTROL_SELECTOR = [
+  'button',
+  'input',
+  'textarea',
+  'select',
+  '[contenteditable="true"]',
+  '[draggable="true"]',
+  '[role="combobox"]',
+  '[data-write-control="true"]',
+].join(', ')
+const READ_ONLY_ALLOWED_SELECTOR = '[data-read-only-allowed="true"]'
+
 // One shell, four arrangements — not four code paths. Navigation is a
 // permanent column at lg and up, a drawer at md, and a bottom tab bar on a
 // phone, because a permanent sidebar and a 44px-tall thumb target cannot both
@@ -22,6 +34,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const { actor, subject, impersonation, isReadOnly, logout, endImpersonation } = useIdentity()
   const { openTaskComposer } = useTaskComposer()
   const tier = useBreakpoint()
+  const contentRef = useRef<HTMLElement>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [meOpen, setMeOpen] = useState(false)
 
@@ -29,6 +42,54 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const showDrawer = tier === 'md'
   const showBottomTabs = tier === 'phone'
   const showAdminLinks = actor?.platform_role === 'ADMIN' && !impersonation
+
+  useLayoutEffect(() => {
+    const boundary = contentRef.current
+    if (!boundary || !isReadOnly) return
+
+    const guardedControls = new Set<HTMLElement>()
+    const syncGuardedControls = () => {
+      boundary.querySelectorAll<HTMLElement>(WRITE_CONTROL_SELECTOR).forEach((control) => {
+        const isAllowed = control.closest(READ_ONLY_ALLOWED_SELECTOR) !== null
+        if (isAllowed) {
+          if (guardedControls.delete(control)) control.removeAttribute('inert')
+          return
+        }
+        if (!control.hasAttribute('inert')) {
+          control.setAttribute('inert', '')
+          guardedControls.add(control)
+        }
+      })
+    }
+
+    syncGuardedControls()
+    const observer = new MutationObserver(syncGuardedControls)
+    observer.observe(boundary, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: [
+        'contenteditable',
+        'data-read-only-allowed',
+        'data-write-control',
+        'draggable',
+        'role',
+      ],
+    })
+
+    return () => {
+      observer.disconnect()
+      guardedControls.forEach((control) => control.removeAttribute('inert'))
+    }
+  }, [isReadOnly])
+
+  function blockReadOnlyInteraction(event: SyntheticEvent<HTMLElement>) {
+    if (!isReadOnly || !(event.target instanceof Element)) return
+    if (event.target.closest(READ_ONLY_ALLOWED_SELECTOR)) return
+    if (event.type !== 'submit' && !event.target.closest(WRITE_CONTROL_SELECTOR)) return
+    event.preventDefault()
+    event.stopPropagation()
+  }
 
   const accountControls = (
     <div className="flex min-w-0 items-center gap-2">
@@ -98,7 +159,17 @@ export default function AppShell({ children }: { children: ReactNode }) {
             <NavSidebar />
           </div>
         )}
-        <main className="min-w-0 flex-1 overflow-y-auto" data-read-only={isReadOnly || undefined}>{children}</main>
+        <main
+          ref={contentRef}
+          className="min-w-0 flex-1 overflow-y-auto"
+          data-read-only={isReadOnly || undefined}
+          onClickCapture={blockReadOnlyInteraction}
+          onInputCapture={blockReadOnlyInteraction}
+          onKeyDownCapture={blockReadOnlyInteraction}
+          onSubmitCapture={blockReadOnlyInteraction}
+        >
+          {children}
+        </main>
       </div>
 
       {showBottomTabs && (

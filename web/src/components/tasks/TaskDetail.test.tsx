@@ -69,6 +69,13 @@ function renderDetail(onPatched = vi.fn()) {
 }
 
 describe('TaskDetail', () => {
+  it('uses the requested heading level when the inspector fails to load', async () => {
+    vi.mocked(tasksApi.getTask).mockRejectedValue(new Error('Network unavailable'))
+    renderDetail()
+
+    expect(await screen.findByRole('heading', { name: '任务加载失败', level: 2 })).toBeVisible()
+  })
+
   it('shows command-driven phase state without status or execution-mode editors', async () => {
     renderDetail()
     await screen.findByText(TASK.title)

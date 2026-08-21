@@ -1,12 +1,26 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import App from './App'
 import { useIdentity } from './identity'
 
 vi.mock('./identity', () => ({ useIdentity: vi.fn() }))
+const taskMutation = vi.hoisted(() => vi.fn())
 vi.mock('./pages/tasks/TaskPage', () => ({
-  default: () => <h1>Protected standalone Task page</h1>,
+  default: () => (
+    <>
+      <h1>Protected standalone Task page</h1>
+      <button
+        type="button"
+        onClick={taskMutation}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') taskMutation()
+        }}
+      >
+        Archive task
+      </button>
+    </>
+  ),
 }))
 vi.mock('./components/tasks/NavSidebar', () => ({ default: () => <nav>Navigation</nav> }))
 vi.mock('./components/tasks/TaskComposer', () => ({
@@ -72,7 +86,7 @@ describe('standalone Task route identity boundaries', () => {
       .not.toBeInTheDocument()
   })
 
-  it('keeps the Task route inside impersonation read-only protection', () => {
+  it('keeps the Task route behaviorally read-only during impersonation', () => {
     const member = { ...approved, id: 'u2', name: 'Member', platform_role: 'MEMBER' as const }
     setIdentity({
       subject: member,
@@ -88,5 +102,11 @@ describe('standalone Task route identity boundaries', () => {
     expect(screen.getByRole('heading', { name: 'Protected standalone Task page' })).toBeVisible()
     expect(screen.getByText('管理员 Admin 正以 Member 身份只读查看')).toBeVisible()
     expect(screen.getByRole('main')).toHaveAttribute('data-read-only', 'true')
+
+    const mutation = screen.getByRole('button', { name: 'Archive task' })
+    fireEvent.keyDown(mutation, { key: 'Enter' })
+    fireEvent.click(mutation, { detail: 0 })
+    expect(taskMutation).not.toHaveBeenCalled()
+    expect(mutation).toHaveAttribute('inert')
   })
 })
