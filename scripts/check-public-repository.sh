@@ -3,6 +3,9 @@ set -eu
 
 failures=0
 
+# Fleet uses this reserved identity for synthetic workspace commits and fixtures.
+synthetic_fleet_email="fleet@example.invalid"
+
 report_files() {
 	label=$1
 	files=$2
@@ -46,14 +49,14 @@ report_files "Restricted paths remain in reachable Git history:" "$history_path_
 
 email_findings=$(
 	git grep -nI -E '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' -- . 2>/dev/null |
-		awk -F: '
+		awk -F: -v synthetic_fleet_email="$synthetic_fleet_email" '
 			{
 				file = $1
 				text = $0
 				sub(/^[^:]*:[0-9]+:/, "", text)
 				while (match(text, /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/)) {
 					email = substr(text, RSTART, RLENGTH)
-					if (email != "fleet@example.invalid" && email !~ /@(example\.com|example\.test|users\.noreply\.github\.com)$/) {
+					if (email != synthetic_fleet_email && email !~ /@(example\.com|example\.test|users\.noreply\.github\.com)$/) {
 						print file
 					}
 					text = substr(text, RSTART + RLENGTH)
@@ -86,7 +89,10 @@ github_committer_email="noreply${at_sign}github.com"
 author_findings=$(
 	git log --all --format='%ae%x09%ce%x09%s' |
 		sort -u |
-		awk -F '	' -v github_committer_email="$github_committer_email" '
+		awk -F '	' \
+			-v github_committer_email="$github_committer_email" \
+			-v synthetic_fleet_email="$synthetic_fleet_email" '
+			$1 == synthetic_fleet_email { next }
 			$1 ~ /@users\.noreply\.github\.com$/ { next }
 			$2 == github_committer_email &&
 				$3 ~ /^Merge [0-9a-f]+ into [0-9a-f]+$/ { next }
