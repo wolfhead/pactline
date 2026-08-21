@@ -33,6 +33,17 @@ keywords = [
     '''SESSION_SECRET[=:][ \t]*["']?(cGxheXdyaWdodC1zZXNzaW9uLXNlY3JldC0zMi1ieXQ=|playwright-session-secret-32-byt|playwright-development-session-secret)''',
   ]
 
+  [[rules.allowlists]]
+  description = "Known synthetic DeepSeek credential fixture"
+  condition = "AND"
+  regexTarget = "match"
+  paths = [
+    '''^fleet/tests/adapters/deepseek-credential\.test\.ts$''',
+  ]
+  regexes = [
+    '''DEEPSEEK_API_KEY:[ \t]*model-only-value''',
+  ]
+
 [[rules]]
 id = "lark-application-identifier"
 description = "Lark application identifier must remain outside the public repository"

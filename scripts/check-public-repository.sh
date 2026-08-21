@@ -53,7 +53,7 @@ email_findings=$(
 				sub(/^[^:]*:[0-9]+:/, "", text)
 				while (match(text, /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/)) {
 					email = substr(text, RSTART, RLENGTH)
-					if (email !~ /@(example\.com|example\.test|users\.noreply\.github\.com)$/) {
+					if (email != "fleet@example.invalid" && email !~ /@(example\.com|example\.test|users\.noreply\.github\.com)$/) {
 						print file
 					}
 					text = substr(text, RSTART + RLENGTH)
