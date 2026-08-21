@@ -81,25 +81,27 @@ local_path_findings=$(
 )
 report_files "Machine-specific or deployment paths are present in tracked content:" "$local_path_findings"
 
-# Pull request workflows run against a GitHub-generated test merge. Its author
-# identity is controlled by GitHub, while the committer and subject identify
-# the synthetic commit. Branch commits must still use a GitHub noreply address.
+# Pull request workflows and update-branch operations create GitHub-authored
+# merge commits. Their committer and two-parent shape identify the synthetic
+# merge even when GitHub supplies the account email as author metadata. Branch
+# commits must still use a GitHub noreply or the reserved Fleet identity.
 at_sign=@
 github_committer_email="noreply${at_sign}github.com"
 author_findings=$(
-	git log --all --format='%ae%x09%ce%x09%s' |
+	git log --all --format='%ae%x09%ce%x09%P%x09%s' |
 		sort -u |
 		awk -F '	' \
 			-v github_committer_email="$github_committer_email" \
 			-v synthetic_fleet_email="$synthetic_fleet_email" '
 			$1 == synthetic_fleet_email { next }
 			$1 ~ /@users\.noreply\.github\.com$/ { next }
+			$2 == github_committer_email && split($3, parents, " ") == 2 { next }
 			$2 == github_committer_email &&
-				$3 ~ /^Merge [0-9a-f]+ into [0-9a-f]+$/ { next }
+				$4 ~ /^Merge [0-9a-f]+ into [0-9a-f]+$/ { next }
 			$2 == github_committer_email &&
-				$3 ~ /^Merge pull request #[0-9]+ from [A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]+$/ { next }
+				$4 ~ /^Merge pull request #[0-9]+ from [A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]+$/ { next }
 			$2 == github_committer_email &&
-				$3 ~ / \(#[0-9]+\)$/ { next }
+				$4 ~ / \(#[0-9]+\)$/ { next }
 			{ print "non-public-author-email" }
 		' |
 		sort -u
