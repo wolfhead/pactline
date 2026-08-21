@@ -80,6 +80,15 @@ beforeEach(() => {
         body: 'Original message',
       })]
     }
+    if (threadID === RESOLVED_ISSUE.id) {
+      return [item({
+        id: 'resolved-message-owned',
+        thread_id: RESOLVED_ISSUE.id,
+        kind: 'message',
+        created_at: '2026-08-20T10:02:00Z',
+        body: 'Resolved Issue message',
+      })]
+    }
     return []
   })
 })
@@ -170,8 +179,78 @@ describe('TaskThreads', () => {
     ))
 
     fireEvent.click(screen.getByRole('tab', { name: '已解决 · 依赖 2' }))
+    const resolvedMessage = await screen.findByText('Resolved Issue message')
+    const resolvedArticle = resolvedMessage.closest('article')!
+    expect(within(resolvedArticle).queryByRole('button', { name: '编辑' })).not.toBeInTheDocument()
+    expect(within(resolvedArticle).queryByRole('button', { name: '删除' })).not.toBeInTheDocument()
+    expect(within(resolvedArticle).queryByRole('button', { name: '回复' })).not.toBeInTheDocument()
     expect(await screen.findByText('Issue 已解决，内容保持不可变；结论已合并到 Main Thread。')).toBeVisible()
     expect(screen.queryByRole('textbox', { name: '向当前 Thread 发送消息' })).not.toBeInTheDocument()
+  })
+
+  it('recovers from send, edit, and delete failures without losing the pending action', async () => {
+    const edited = item({
+      id: 'message-owned',
+      thread_id: MAIN_THREAD.id,
+      kind: 'message',
+      created_at: '2026-08-20T10:00:00Z',
+      body: 'Edited after retry',
+      version: 2,
+    })
+    const deleted = { ...edited, body: undefined, version: 3, deleted_at: '2026-08-20T10:04:00Z' }
+    vi.mocked(workflowApi.createThreadMessage)
+      .mockRejectedValueOnce(new Error('send unavailable'))
+      .mockResolvedValueOnce(item({
+        id: 'progress-after-retry',
+        thread_id: MAIN_THREAD.id,
+        kind: 'progress',
+        created_at: '2026-08-20T10:01:00Z',
+        body: 'Send after retry',
+      }))
+    vi.mocked(workflowApi.updateThreadMessage)
+      .mockRejectedValueOnce(new Error('save unavailable'))
+      .mockResolvedValueOnce(edited)
+    vi.mocked(workflowApi.deleteThreadMessage)
+      .mockRejectedValueOnce(new Error('delete unavailable'))
+      .mockResolvedValueOnce(deleted)
+    renderThreads()
+
+    const composer = await screen.findByRole('textbox', { name: '向当前 Thread 发送消息' })
+    fireEvent.change(screen.getByLabelText('Thread Item 类型'), { target: { value: 'progress' } })
+    fireEvent.change(composer, { target: { value: 'Send after retry' } })
+    fireEvent.click(screen.getByRole('button', { name: '发送消息' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('发送失败：send unavailable')
+    expect(composer).toHaveValue('Send after retry')
+    fireEvent.click(screen.getByRole('button', { name: '发送消息' }))
+    expect(await screen.findByText('Send after retry')).toBeVisible()
+    expect(composer).toHaveValue('')
+    expect(workflowApi.createThreadMessage).toHaveBeenLastCalledWith(
+      MAIN_THREAD.id,
+      'Send after retry',
+      'progress',
+    )
+
+    const originalArticle = screen.getByText('Original message').closest('article')!
+    fireEvent.click(within(originalArticle).getByRole('button', { name: '编辑' }))
+    const editComposer = screen.getByRole('textbox', { name: '编辑消息' })
+    fireEvent.change(editComposer, { target: { value: 'Edited after retry' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('保存失败：save unavailable')
+    expect(editComposer).toHaveValue('Edited after retry')
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: '编辑消息' })).not.toBeInTheDocument())
+    expect(screen.getByText('Edited after retry')).toBeVisible()
+
+    const editedArticle = screen.getByText('Edited after retry').closest('article')!
+    fireEvent.click(within(editedArticle).getByRole('button', { name: '删除' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('删除失败：delete unavailable')
+    expect(screen.getByText('Edited after retry')).toBeVisible()
+    fireEvent.click(within(editedArticle).getByRole('button', { name: '删除' }))
+    expect(await screen.findByText('消息已删除')).toBeVisible()
+
+    expect(workflowApi.createThreadMessage).toHaveBeenCalledTimes(2)
+    expect(workflowApi.updateThreadMessage).toHaveBeenCalledTimes(2)
+    expect(workflowApi.deleteThreadMessage).toHaveBeenCalledTimes(2)
   })
 
   it('keeps activity available when the Thread source fails and retries only the failed source', async () => {

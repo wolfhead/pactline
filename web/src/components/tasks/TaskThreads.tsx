@@ -320,7 +320,8 @@ export default function TaskThreads({
         <ol className="relative grid gap-3 before:absolute before:bottom-3 before:left-[0.8125rem] before:top-3 before:w-px before:bg-border">
           {timeline.map((timelineItem) => {
             const item = timelineItem.threadItem
-            const ownedMessage = item?.kind === 'message'
+            const ownedMessage = canPost
+              && item?.kind === 'message'
               && item.author.type === 'user'
               && item.author.user_id === me?.id
               && !item.deleted_at

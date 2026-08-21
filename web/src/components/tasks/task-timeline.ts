@@ -40,8 +40,6 @@ export const THREAD_KIND_LABELS: Record<TaskThreadItemKind, string> = {
   system_event: '系统事件',
 }
 
-const DUPLICATE_WINDOW_MS = 10_000
-
 const THREAD_KINDS_BY_ACTIVITY_FIELD: Record<string, ReadonlySet<TaskThreadItemKind>> = {
   status: new Set(['system_event', 'execution_completed', 'review_outcome', 'issue_resolution']),
   phase: new Set(['system_event', 'execution_completed', 'review_outcome', 'issue_resolution']),
@@ -88,10 +86,11 @@ function actorFromActivity(
 function threadCoversActivity(activity: Activity, threadItems: TaskThreadItem[]): boolean {
   const matchingKinds = THREAD_KINDS_BY_ACTIVITY_FIELD[activity.field]
   if (!matchingKinds) return false
-  const activityTime = dateValue(activity.created_at)
+  const activityTime = Date.parse(activity.created_at)
+  if (Number.isNaN(activityTime)) return false
   return threadItems.some((item) => (
     matchingKinds.has(item.kind)
-    && Math.abs(dateValue(item.created_at) - activityTime) <= DUPLICATE_WINDOW_MS
+    && Date.parse(item.created_at) === activityTime
   ))
 }
 

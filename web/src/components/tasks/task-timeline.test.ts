@@ -121,4 +121,28 @@ describe('buildTaskTimeline', () => {
 
     expect(timeline.map(({ id }) => id)).toContain('activity:later-status')
   })
+
+  it('keeps distinct workflow events that occur within ten seconds of each other', () => {
+    const timeline = buildTaskTimeline({
+      userNameById: {},
+      threadItems: [threadItem({
+        id: 'claim-started',
+        kind: 'system_event',
+        created_at: '2026-08-20T10:00:00Z',
+        body: 'execution Claim started',
+      })],
+      activity: [activity({
+        id: 'status-changed',
+        field: 'status',
+        created_at: '2026-08-20T10:00:09Z',
+        old_value: 'todo',
+        new_value: 'in_progress',
+      })],
+    })
+
+    expect(timeline.map(({ id }) => id)).toEqual([
+      'thread:claim-started',
+      'activity:status-changed',
+    ])
+  })
 })
