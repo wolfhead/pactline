@@ -144,9 +144,15 @@ export function createThreadMessage(
   body: string,
   kind: 'message' | 'progress' = 'message',
   mentionedUserIDs: string[] = [],
+  replyToItemID?: string,
 ): Promise<TaskThreadItem> {
   return v1Post<TaskThreadItem>(`/api/v1/threads/${threadID}/items`, {
-    body: { kind, body, mentioned_user_ids: mentionedUserIDs },
+    body: {
+      kind,
+      body,
+      mentioned_user_ids: mentionedUserIDs,
+      ...(replyToItemID ? { reply_to_item_id: replyToItemID } : {}),
+    },
   }).then(({ value }) => value)
 }
 
