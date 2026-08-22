@@ -52,6 +52,7 @@ describe('FleetObservationProjector', () => {
     registry.observeEffect(run.runId, 'harness_result', {
       terminalState: 'success', runtimeSessionId: 'session-41',
       result: { reasoning: 'must-not-project', prompt: 'must-not-project' },
+      baseline: { head: 'a'.repeat(40), changedPaths: [], porcelain: '' },
     })
     registry.recordEffectIntent(run.runId, 'repository_delivery', `${run.runId}-delivery`, {})
     registry.observeEffect(run.runId, 'repository_delivery', {

@@ -114,6 +114,7 @@ if (operation === 'commit') {
   registry.recordEffectIntent(run.runId, 'harness_result', `${run.runId}-result`, {})
   registry.observeEffect(run.runId, 'harness_result', {
     terminalState: 'completed', runtimeSessionId: 'session-21', result: { proposal },
+    baseline: { head: revision, changedPaths: [], porcelain: '' },
   })
   registry.transitionRun(run.runId, 'running_harness', 'validating')
   registry.transitionRun(run.runId, 'validating', 'delivering')
@@ -140,6 +141,45 @@ if (operation === 'commit') {
 }
 
 describe('PluginRunMaterializer recovery', () => {
+  it('retires persisted Task runtime only after Pactline reports done or cancelled', async () => {
+    const { registry, run, workspace } = await setup()
+    registry.bindTaskWorkspace(5, 21, workspace)
+    const materializer = new PluginRunMaterializer({
+      adapters: () => [], environment: { PATH: process.env.PATH }, registry,
+    })
+    const activeClient = {
+      showTask: async () => ({ data: { task: { phase: 'in_review' } } }),
+    }
+    const terminalClient = {
+      showTask: async () => ({ data: { task: { phase: 'cancelled' } } }),
+    }
+
+    await expect(materializer.retireTerminalTasks(activeClient as never, 'service')).resolves.toBe(0)
+    expect(registry.getTaskRuntime(5, 21)).toBeDefined()
+    await expect(materializer.retireTerminalTasks(terminalClient as never, 'service')).resolves.toBe(0)
+    registry.transitionRun(run.runId, 'delivering', 'quarantined', { disposition: 'test terminal' })
+    await expect(materializer.retireTerminalTasks(terminalClient as never, 'service')).resolves.toBe(1)
+    expect(registry.getTaskRuntime(5, 21)).toBeUndefined()
+    await expect(readFile(join(workspace.repositoryPath, 'README.md'), 'utf8')).rejects.toThrow()
+    registry.close()
+  })
+
+  it('finishes Task runtime retirement after a crash removed the workspace first', async () => {
+    const { registry, run, workspace } = await setup()
+    registry.bindTaskWorkspace(5, 21, workspace)
+    registry.transitionRun(run.runId, 'delivering', 'quarantined', { disposition: 'test terminal' })
+    await rm(workspace.root, { recursive: true, force: false })
+    const materializer = new PluginRunMaterializer({
+      adapters: () => [], environment: { PATH: process.env.PATH }, registry,
+    })
+
+    await expect(materializer.retireTerminalTasks({
+      showTask: async () => ({ data: { task: { phase: 'done' } } }),
+    } as never, 'service')).resolves.toBe(1)
+    expect(registry.getTaskRuntime(5, 21)).toBeUndefined()
+    registry.close()
+  })
+
   it('reconciles a committed local revision instead of invoking commit again', async () => {
     const { registry, run, workspace, reopen, operations } = await setup()
     registry.recordEffectIntent(run.runId, 'git_commit', `${run.runId}-commit`, {})

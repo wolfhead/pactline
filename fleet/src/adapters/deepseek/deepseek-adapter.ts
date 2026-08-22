@@ -1,7 +1,7 @@
-import { access, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { createHash } from 'node:crypto'
-import { dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import type {
@@ -90,6 +90,14 @@ function positiveInteger(value: unknown): number | undefined {
 function runtimeSessionId(runId: string): string {
   const digest = createHash('sha256').update(runId).digest('hex').slice(0, 24)
   return `pactline-fleet-${digest}`
+}
+
+function taskSessionRoot(workspace: string): string {
+  const parent = dirname(workspace)
+  const taskRoot = basename(workspace) === 'repository' && basename(parent).startsWith('pactline-fleet-')
+    ? parent
+    : workspace
+  return join(taskRoot, '.deepseek-sessions')
 }
 
 /** Preserve ordinary build/runtime variables but remove ambient Harness state and credentials except the selected model key. */
@@ -290,7 +298,7 @@ export class DeepSeekHarnessAdapter implements HarnessAdapter {
       structuredResult: true,
       eventStream: true,
       cancellation: true,
-      sessionResume: false,
+      sessionResume: true,
       sandboxModes: ['read_only', 'workspace_write'],
       supportedStages: ['execution', 'review', 'correction', 'resolution_analysis'],
     }
@@ -338,7 +346,26 @@ export class DeepSeekHarnessAdapter implements HarnessAdapter {
     }
   }
 
-  async run(request: HarnessRunRequest, observer: HarnessRunObserver, signal: AbortSignal): Promise<HarnessRunResult> {
+  run(request: HarnessRunRequest, observer: HarnessRunObserver, signal: AbortSignal): Promise<HarnessRunResult> {
+    return this.execute(request, observer, signal)
+  }
+
+  resume(
+    runtimeSessionIdValue: string,
+    request: HarnessRunRequest,
+    observer: HarnessRunObserver,
+    signal: AbortSignal,
+  ): Promise<HarnessRunResult> {
+    if (runtimeSessionIdValue.trim() === '') return Promise.reject(new Error('DeepSeek runtime Session ID is required'))
+    return this.execute(request, observer, signal, runtimeSessionIdValue)
+  }
+
+  private async execute(
+    request: HarnessRunRequest,
+    observer: HarnessRunObserver,
+    signal: AbortSignal,
+    resumeSessionId?: string,
+  ): Promise<HarnessRunResult> {
     if (signal.aborted) throw signal.reason
     if (request.policy.model !== REQUIRED_MODEL || request.policy.reasoning !== REQUIRED_REASONING) {
       throw new Error(`DeepSeek Harness Adapter requires ${REQUIRED_MODEL} with reasoning=max during M2`)
@@ -352,7 +379,9 @@ export class DeepSeekHarnessAdapter implements HarnessAdapter {
     const privateRoot = await mkdtemp(join(tmpdir(), 'pactline-fleet-deepseek-'))
     const schemaPath = join(privateRoot, 'result-schema.json')
     await writeFile(schemaPath, `${JSON.stringify(request.resultSchema)}\n`, { mode: 0o600 })
-    const sessionId = runtimeSessionId(request.runId)
+    const sessionRoot = taskSessionRoot(request.workspace)
+    await mkdir(sessionRoot, { recursive: true, mode: 0o700 })
+    const sessionId = resumeSessionId ?? runtimeSessionId(request.runId)
     const launch: DeepSeekRuntimeLaunch = {
       command: paths.command,
       args: paths.args,
@@ -362,7 +391,7 @@ export class DeepSeekHarnessAdapter implements HarnessAdapter {
         DSH_CORDIS_CONFIG: paths.config,
         DSH_CWD: request.workspace,
         DSH_PERMISSION_MODE: request.sandbox === 'read_only' ? 'read-only' : 'workspace-write',
-        DSH_SESSION_ROOT: join(privateRoot, 'sessions'),
+        DSH_SESSION_ROOT: sessionRoot,
         DSH_SYSTEM_PROMPT: systemPrompt(request),
         PACTLINE_FLEET_RESULT_SCHEMA_PATH: schemaPath,
         ...(credential === undefined ? {} : { DEEPSEEK_API_KEY: credential }),

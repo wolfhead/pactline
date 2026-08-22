@@ -15,6 +15,48 @@ afterEach(async () => {
 })
 
 describe('FleetRegistry', () => {
+  it('persists one isolated Workspace and native Session per Task role', async () => {
+    const parent = await mkdtemp(join(tmpdir(), 'fleet-registry-task-runtime-'))
+    directories.push(parent)
+    const state = await ensurePrivateDirectory(join(parent, 'state'))
+    const path = join(state, 'fleet.sqlite3')
+    const registry = await FleetRegistry.open(path)
+    const workspace = {
+      mode: 'execution' as const,
+      root: join(parent, 'project-5-task-19'),
+      temporaryParent: parent,
+      repositoryPath: join(parent, 'project-5-task-19', 'repository'),
+      source: 'https://github.com/wolfhead/pactline',
+      baseRevision: 'a'.repeat(40),
+      branch: 'fleet/task/19',
+    }
+
+    registry.bindTaskWorkspace(5, 19, workspace)
+    registry.bindTaskRoleSession(5, 19, 'implementer', {
+      adapterId: 'codex', runtimeSessionId: 'codex-task-19',
+    })
+    registry.bindTaskRoleSession(5, 19, 'reviewer', {
+      adapterId: 'deepseek', runtimeSessionId: 'deepseek-task-19',
+    })
+    expect(() => registry.bindTaskWorkspace(5, 20, workspace)).toThrow('already belongs to another Task')
+    registry.close()
+
+    const reopened = await FleetRegistry.open(path)
+    expect(reopened.getTaskRuntime(5, 19)).toEqual({
+      projectNumber: 5,
+      taskNumber: 19,
+      workspace,
+      sessions: {
+        implementer: { adapterId: 'codex', runtimeSessionId: 'codex-task-19' },
+        reviewer: { adapterId: 'deepseek', runtimeSessionId: 'deepseek-task-19' },
+      },
+    })
+    expect(reopened.getTaskRuntime(5, 20)).toBeUndefined()
+    reopened.retireTaskRuntime(5, 19)
+    expect(reopened.getTaskRuntime(5, 19)).toBeUndefined()
+    reopened.close()
+  })
+
   it('persists a stable service identity with private file permissions', async () => {
     const parent = await mkdtemp(join(tmpdir(), 'fleet-registry-id-'))
     directories.push(parent)
@@ -412,6 +454,7 @@ describe('FleetRegistry', () => {
     registry.observeEffect(run.runId, 'harness_result', {
       terminalState: 'completed', runtimeSessionId: 'session-61',
       result: { proposal: { kind: 'execution', recommendation: 'complete' } },
+      baseline: { head: 'a'.repeat(40), changedPaths: [], porcelain: '' },
     })
     registry.transitionRun(run.runId, 'running_harness', 'validating')
     await reopenAt(run.runId, 'validating')

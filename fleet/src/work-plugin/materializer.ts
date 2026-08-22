@@ -1,3 +1,4 @@
+import { lstat } from 'node:fs/promises'
 import type { HarnessAdapter, HarnessStage } from '../core/harness-adapter.js'
 import { StaticRuntimeRouter } from '../core/runtime-router.js'
 import type { RuntimeRoute, RuntimeRoutes } from '../core/runtime-router.js'
@@ -16,6 +17,7 @@ import {
 } from '../repository/workspace.js'
 import type { FleetWorkspace, RepositoryRevision } from '../repository/workspace.js'
 import type { FleetFaultInjector, FleetRunMaterializer, MaterializedFleetRun } from '../scheduler/run-coordinator.js'
+import type { PactlineCLI } from '../pactline/client.js'
 import {
   ExecutableFleetWorkPlugin,
   frozenPluginPolicy,
@@ -75,11 +77,26 @@ export class PluginRunMaterializer implements FleetRunMaterializer {
     return Promise.resolve(this.fromFrozen(run, signal, workspaceFromRecord(run.workspace)))
   }
 
-  async cleanupRecovered(run: FleetRun): Promise<void> {
-    if (run.workspace === undefined) return
-    const workspace = workspaceFromRecord(run.workspace)
-    await verifyWorkspace(workspace, this.options.environment)
-    await removeWorkspace(workspace)
+  async retireTerminalTasks(
+    client: Pick<PactlineCLI, 'showTask'>,
+    sessionId: string,
+    signal?: AbortSignal,
+  ): Promise<number> {
+    let retired = 0
+    for (const runtime of this.options.registry.listTaskRuntimes()) {
+      if (this.options.registry.listNonTerminalRuns().some(run =>
+        run.projectNumber === runtime.projectNumber && run.taskNumber === runtime.taskNumber)) continue
+      const packet = await client.showTask(runtime.taskNumber, 1, { sessionId, ...(signal === undefined ? {} : { signal }) })
+      const rawTask = packet.data.task
+      if (typeof rawTask !== 'object' || rawTask === null || Array.isArray(rawTask)) {
+        throw new Error('Pactline Task cleanup packet is invalid')
+      }
+      const phase = String((rawTask as Record<string, unknown>).phase ?? '')
+      if (phase !== 'done' && phase !== 'cancelled') continue
+      await this.retireRuntime(runtime.projectNumber, runtime.taskNumber, runtime.workspace)
+      retired += 1
+    }
+    return retired
   }
 
   private fromFrozen(run: FleetRun, signal: AbortSignal, recoveredWorkspace?: FleetWorkspace): MaterializedFleetRun {
@@ -106,24 +123,27 @@ export class PluginRunMaterializer implements FleetRunMaterializer {
           revision: policy.definition.candidate!.revision,
         }
       : policy.definition.base
-    let activeWorkspace = recoveredWorkspace
+    const taskRuntime = this.options.registry.getTaskRuntime(run.projectNumber, run.taskNumber)
+    let activeWorkspace = recoveredWorkspace ?? taskRuntime?.workspace
     return {
       definition: policy.definition,
       router,
       deadline: new Date(this.now().getTime() + 30 * 60_000).toISOString(),
       prepareWorkspace: async () => {
-        if (recoveredWorkspace !== undefined) {
-          await verifyWorkspace(recoveredWorkspace, this.options.environment)
-          return recoveredWorkspace
+        if (activeWorkspace !== undefined) {
+          await verifyWorkspace(activeWorkspace, this.options.environment)
+          return activeWorkspace
         }
         activeWorkspace = await prepareWorkspace({
           input,
-          mode,
+          mode: 'execution',
           runId: run.runId,
           branchPrefix: `fleet/${run.fleetId}/`,
           temporaryDirectory: policy.workspaceRoot,
           environment: this.options.environment,
+          taskIdentity: { projectNumber: run.projectNumber, taskNumber: run.taskNumber },
         })
+        this.options.registry.bindTaskWorkspace(run.projectNumber, run.taskNumber, activeWorkspace)
         return activeWorkspace
       },
       ...(mode === 'review' ? {} : {
@@ -216,8 +236,23 @@ export class PluginRunMaterializer implements FleetRunMaterializer {
           return delivery
         },
       }),
-      cleanup: async workspace => { await removeWorkspace(workspace) },
+      retireTask: async workspace => {
+        await this.retireRuntime(run.projectNumber, run.taskNumber, workspace)
+      },
     }
+  }
+
+  private async retireRuntime(projectNumber: number, taskNumber: number, workspace: FleetWorkspace): Promise<void> {
+    try {
+      await removeWorkspace(workspace)
+    } catch (error) {
+      const rootStillExists = await lstat(workspace.root).then(() => true).catch((statError: unknown) => {
+        if (typeof statError === 'object' && statError !== null && 'code' in statError && statError.code === 'ENOENT') return false
+        throw statError
+      })
+      if (rootStillExists) throw error
+    }
+    this.options.registry.retireTaskRuntime(projectNumber, taskNumber)
   }
 
   private async reconcileCommit(

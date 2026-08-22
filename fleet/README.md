@@ -159,7 +159,7 @@ discovered candidate and bounded Pactline Task packet. It must return a complete
 base ref and 40-character revision, provider identity, allowed paths, fixed
 verification commands, and criterion IDs/revisions. Review definitions also
 return the frozen delivery candidate. The three delivery operations receive the
-verified proposal, Git observation, disposable workspace, and preceding
+verified proposal, Git observation, Task-scoped workspace, and preceding
 observed facts. `commit` and `push` return the exact revision and branch;
 `open-code-change` returns a validated `RepositoryDelivery` containing the
 actual PR/MR URL, revision, and branch. Fleet persists intent and observation

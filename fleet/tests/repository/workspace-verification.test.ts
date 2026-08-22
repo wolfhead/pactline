@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -68,6 +68,32 @@ describe('disposable workspace and coordinator verification', () => {
     expect(() => assertProposalMatchesObservation({ ...proposal, changedPaths: ['other.txt'] }, { git, commands }, {
       baseHead: revision, allowedPaths: ['README.md'],
     })).toThrow('changed paths')
+  })
+
+  it('reopens the deterministic Workspace for one Task without sharing it with another Task', async () => {
+    const first = await prepareWorkspace({
+      input: { source: origin, ref: 'refs/heads/main', revision },
+      mode: 'execution', runId: 'task-19-first', temporaryDirectory: directory,
+      taskIdentity: { projectNumber: 5, taskNumber: 19 },
+    })
+    workspaces.push(first)
+    await writeFile(join(first.repositoryPath, 'continuity.txt'), 'retained\n')
+
+    const resumed = await prepareWorkspace({
+      input: { source: origin, ref: 'refs/heads/main', revision },
+      mode: 'execution', runId: 'task-19-second', temporaryDirectory: directory,
+      taskIdentity: { projectNumber: 5, taskNumber: 19 },
+    })
+    const other = await prepareWorkspace({
+      input: { source: origin, ref: 'refs/heads/main', revision },
+      mode: 'execution', runId: 'task-20-first', temporaryDirectory: directory,
+      taskIdentity: { projectNumber: 5, taskNumber: 20 },
+    })
+    workspaces.push(other)
+
+    expect(resumed.root).toBe(first.root)
+    await expect(readFile(join(resumed.repositoryPath, 'continuity.txt'), 'utf8')).resolves.toBe('retained\n')
+    expect(other.root).not.toBe(first.root)
   })
 
   it('rejects changes outside the path allowlist', async () => {

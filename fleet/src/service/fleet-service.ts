@@ -37,6 +37,7 @@ interface PactlinePreflightClient {
 export interface FleetSchedulingRuntime {
   readonly scheduler: Pick<FairFleetScheduler, 'cycle' | 'beginDrain' | 'waitForActive' | 'activeRunCount'>
   readonly reconciler: Pick<FleetRunReconciler, 'reconcile'>
+  readonly maintain?: (signal?: AbortSignal) => Promise<void>
 }
 
 export interface FleetServiceOptions {
@@ -98,7 +99,7 @@ function probeRequest(requirement: AdapterRequirement): HarnessProbeRequest {
     requireStructuredResult: true,
     requireEventStream: true,
     requireCancellation: true,
-    requireSessionResume: false,
+    requireSessionResume: true,
   }
 }
 
@@ -118,6 +119,7 @@ function validateCapabilities(
   if (!capabilities.structuredResult) missing.push('structuredResult')
   if (!capabilities.eventStream) missing.push('eventStream')
   if (!capabilities.cancellation) missing.push('cancellation')
+  if (!capabilities.sessionResume) missing.push('sessionResume')
   if (missing.length > 0) {
     throw new Error(`Harness Adapter ${adapterId} is missing: ${missing.join(', ')}`)
   }
@@ -284,7 +286,14 @@ export class FleetService {
     if (!this.started || this.stopping !== undefined) throw new Error('Fleet Service is not accepting scheduler cycles')
     if (this.schedulingRuntime === undefined) throw new Error('Fleet Service has no scheduling runtime')
     if (this.schedulingCycle !== undefined) return await this.schedulingCycle
-    this.schedulingCycle = this.schedulingRuntime.scheduler.cycle(undefined, waitForAdmitted)
+    this.schedulingCycle = (async () => {
+      try {
+        await this.schedulingRuntime!.maintain?.()
+      } catch (error) {
+        this.logger.log('warn', 'fleet.task_runtime.maintenance_failed', { error: message(error) })
+      }
+      return await this.schedulingRuntime!.scheduler.cycle(undefined, waitForAdmitted)
+    })()
     try {
       const result = await this.schedulingCycle
       if (this.registry !== undefined && this.healthStore !== undefined) {
@@ -389,6 +398,10 @@ export class FleetService {
           () => this.manager.snapshot,
           sessionId,
         ),
+        maintain: async signal => {
+          const retired = await materializer.retireTerminalTasks(pactline, sessionId, signal)
+          if (retired > 0) this.logger.log('info', 'fleet.task_runtime.retired', { count: retired })
+        },
       }
       created = true
     }

@@ -1,5 +1,5 @@
 import { constants } from 'node:fs'
-import { access, lstat, mkdtemp, realpath, rm } from 'node:fs/promises'
+import { access, lstat, mkdir, mkdtemp, realpath, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { spawn } from 'node:child_process'
@@ -31,6 +31,10 @@ export interface PrepareWorkspaceOptions {
   readonly branchPrefix?: string
   readonly temporaryDirectory?: string
   readonly environment?: NodeJS.ProcessEnv
+  readonly taskIdentity?: {
+    readonly projectNumber: number
+    readonly taskNumber: number
+  }
 }
 
 function safeEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
@@ -72,7 +76,7 @@ async function assertContained(root: string, target: string): Promise<void> {
   const resolvedRoot = await realpath(root)
   const resolvedTarget = await realpath(target)
   const relation = relative(resolvedRoot, resolvedTarget)
-  if (relation === '' || relation.startsWith('..') || isAbsolute(relation)) throw new Error('Repository escaped its disposable workspace root')
+  if (relation === '' || relation.startsWith('..') || isAbsolute(relation)) throw new Error('Repository escaped its Task Workspace root')
 }
 
 export async function verifyWorkspace(workspace: FleetWorkspace, environment: NodeJS.ProcessEnv = process.env): Promise<void> {
@@ -147,10 +151,34 @@ export async function prepareWorkspace(options: PrepareWorkspaceOptions): Promis
     if (!isAbsolute(options.input.source)) throw new Error('Repository source must be a credential-free URL or absolute local test path')
   }
   const parent = resolve(options.temporaryDirectory ?? tmpdir())
-  const root = await mkdtemp(join(parent, 'pactline-fleet-'))
+  if (options.taskIdentity !== undefined
+    && (!Number.isSafeInteger(options.taskIdentity.projectNumber) || options.taskIdentity.projectNumber < 1
+      || !Number.isSafeInteger(options.taskIdentity.taskNumber) || options.taskIdentity.taskNumber < 1)) {
+    throw new Error('Task Workspace identity must use positive Project and Task numbers')
+  }
+  const root = options.taskIdentity === undefined
+    ? await mkdtemp(join(parent, 'pactline-fleet-'))
+    : join(parent, `pactline-fleet-project-${String(options.taskIdentity.projectNumber)}-task-${String(options.taskIdentity.taskNumber)}`)
   const repositoryPath = join(root, 'repository')
   const environment = safeEnvironment(options.environment ?? process.env)
+  const taskBranch = options.taskIdentity === undefined
+    ? undefined
+    : `fleet/project-${String(options.taskIdentity.projectNumber)}/task-${String(options.taskIdentity.taskNumber)}`
+  if (options.taskIdentity !== undefined && await exists(root)) {
+    const workspace: FleetWorkspace = options.mode === 'execution'
+      ? {
+          mode: 'execution', root, temporaryParent: parent, repositoryPath,
+          source: options.input.source, baseRevision: options.input.revision, branch: taskBranch!,
+        }
+      : {
+          mode: 'review', root, temporaryParent: parent, repositoryPath,
+          source: options.input.source, baseRevision: options.input.revision,
+        }
+    await verifyWorkspace(workspace, options.environment)
+    return workspace
+  }
   try {
+    if (options.taskIdentity !== undefined) await mkdir(root, { mode: 0o700 })
     await runGit(['init', '--quiet', repositoryPath], root, environment)
     await runGit(['remote', 'add', 'origin', options.input.source], repositoryPath, environment)
     await runGit(['fetch', '--quiet', '--no-tags', '--depth=1', 'origin', options.input.ref], repositoryPath, environment)
@@ -160,7 +188,7 @@ export async function prepareWorkspace(options: PrepareWorkspaceOptions): Promis
     if (options.mode === 'execution') {
       const prefix = options.branchPrefix ?? 'fleet/run/'
       if (!prefix.endsWith('/') || prefix.includes('..') || /[~^:?*[\\\s]/.test(prefix)) throw new Error('branchPrefix is unsafe')
-      const branch = `${prefix}${options.runId}`
+      const branch = taskBranch ?? `${prefix}${options.runId}`
       await runGit(['checkout', '--quiet', '-b', branch, fetched], repositoryPath, environment)
       workspace = { mode: 'execution', root, temporaryParent: parent, repositoryPath, source: options.input.source, baseRevision: fetched, branch }
     } else {

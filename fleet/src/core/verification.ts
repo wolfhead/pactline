@@ -154,7 +154,11 @@ function verificationEqual(proposed: readonly VerificationProposal[], observed: 
 export function assertProposalMatchesObservation(
   proposal: ExecutionProposal | ReviewProposal,
   observation: VerificationObservation,
-  options: { readonly baseHead: string; readonly allowedPaths: readonly string[] },
+  options: {
+    readonly baseHead: string
+    readonly allowedPaths: readonly string[]
+    readonly reviewBaseline?: GitObservation
+  },
 ): void {
   if (!verificationEqual(proposal.verification, observation.commands)) {
     throw new Error('Harness-reported verification does not match Fleet observation')
@@ -167,7 +171,10 @@ export function assertProposalMatchesObservation(
     }
     return
   }
-  if (observation.git.head !== options.baseHead || observation.git.changedPaths.length > 0 || observation.git.porcelain !== '') {
+  const baseline = options.reviewBaseline ?? { head: options.baseHead, changedPaths: [], porcelain: '' }
+  if (observation.git.head !== baseline.head
+    || JSON.stringify(observation.git.changedPaths) !== JSON.stringify(baseline.changedPaths)
+    || observation.git.porcelain !== baseline.porcelain) {
     throw new Error('Review workspace mutation blocks settlement')
   }
 }

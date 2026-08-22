@@ -31,8 +31,9 @@ import type {
 } from '../run/external-effect.js'
 import { preparePrivateFile } from '../service/state-directory.js'
 import type { RunRecoveryDecision, RunRecoveryFacts } from '../run/recovery.js'
+import type { FleetWorkspace } from '../repository/workspace.js'
 
-const SCHEMA_VERSION = 3
+const SCHEMA_VERSION = 4
 
 export type { FleetRun, FleetRunAdmission, FleetRunRecord, FleetRunStage, FleetRunState, FleetRunUpdate } from '../run/run.js'
 export type {
@@ -92,6 +93,20 @@ export interface FleetRunListOptions {
   readonly before?: string
 }
 
+export type TaskRole = 'implementer' | 'reviewer'
+
+export interface TaskRoleSessionBinding {
+  readonly adapterId: string
+  readonly runtimeSessionId: string
+}
+
+export interface FleetTaskRuntime {
+  readonly projectNumber: number
+  readonly taskNumber: number
+  readonly workspace: FleetWorkspace
+  readonly sessions: Partial<Record<TaskRole, TaskRoleSessionBinding>>
+}
+
 interface FleetRow {
   readonly fleet_id: string
   readonly project_number: number
@@ -138,6 +153,18 @@ interface EventRow {
   readonly event_type: string
   readonly payload_json: string
   readonly created_at: string
+}
+
+interface TaskRuntimeRow {
+  readonly project_number: number
+  readonly task_number: number
+  readonly workspace_json: string
+}
+
+interface TaskRoleSessionRow {
+  readonly role: TaskRole
+  readonly adapter_id: string
+  readonly runtime_session_id: string
 }
 
 function parseJSON(value: string | null, name: string): Readonly<Record<string, unknown>> | undefined {
@@ -309,6 +336,38 @@ function migrate(database: Database.Database): void {
       database.prepare(
         'INSERT INTO local_schema_migrations(version, applied_at) VALUES (?, ?)',
       ).run(3, new Date().toISOString())
+    })()
+  }
+  if (!applied.includes(4)) {
+    database.transaction(() => {
+      database.exec(`
+        CREATE TABLE task_runtimes (
+          project_number INTEGER NOT NULL,
+          task_number INTEGER NOT NULL,
+          workspace_root TEXT NOT NULL UNIQUE,
+          workspace_json TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY(project_number, task_number)
+        );
+
+        CREATE TABLE task_role_sessions (
+          project_number INTEGER NOT NULL,
+          task_number INTEGER NOT NULL,
+          role TEXT NOT NULL CHECK (role IN ('implementer', 'reviewer')),
+          adapter_id TEXT NOT NULL,
+          runtime_session_id TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY(project_number, task_number, role),
+          UNIQUE(adapter_id, runtime_session_id),
+          FOREIGN KEY(project_number, task_number)
+            REFERENCES task_runtimes(project_number, task_number) ON DELETE CASCADE
+        );
+      `)
+      database.prepare(
+        'INSERT INTO local_schema_migrations(version, applied_at) VALUES (?, ?)',
+      ).run(4, new Date().toISOString())
     })()
   }
 }
@@ -716,6 +775,111 @@ export class FleetRegistry {
       ORDER BY updated_at DESC, run_id DESC
       LIMIT ?
     `).all(...parameters, limit).map(row => runRecord(row, this.listEffects(row.run_id)))
+  }
+
+  bindTaskWorkspace(
+    projectNumber: number,
+    taskNumber: number,
+    workspace: FleetWorkspace,
+    now: Date = new Date(),
+  ): FleetTaskRuntime {
+    this.assertOpen()
+    const timestamp = now.toISOString()
+    const encoded = JSON.stringify(workspace)
+    this.database.transaction(() => {
+      const current = this.database.prepare<[number, number], TaskRuntimeRow>(`
+        SELECT project_number, task_number, workspace_json
+        FROM task_runtimes WHERE project_number = ? AND task_number = ?
+      `).get(projectNumber, taskNumber)
+      if (current !== undefined) {
+        if (current.workspace_json !== encoded) throw new Error('Task Workspace binding is immutable')
+        return
+      }
+      const owner = this.database.prepare<[string], { project_number: number; task_number: number }>(`
+        SELECT project_number, task_number FROM task_runtimes WHERE workspace_root = ?
+      `).get(workspace.root)
+      if (owner !== undefined) throw new Error('Task Workspace already belongs to another Task')
+      this.database.prepare(`
+        INSERT INTO task_runtimes(
+          project_number, task_number, workspace_root, workspace_json, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `).run(projectNumber, taskNumber, workspace.root, encoded, timestamp, timestamp)
+    })()
+    return this.getTaskRuntime(projectNumber, taskNumber)!
+  }
+
+  bindTaskRoleSession(
+    projectNumber: number,
+    taskNumber: number,
+    role: TaskRole,
+    binding: TaskRoleSessionBinding,
+    now: Date = new Date(),
+  ): FleetTaskRuntime {
+    this.assertOpen()
+    if (binding.adapterId.trim() === '' || binding.runtimeSessionId.trim() === '') {
+      throw new Error('Task role Session binding is invalid')
+    }
+    const current = this.database.prepare<[number, number, TaskRole], TaskRoleSessionRow>(`
+      SELECT role, adapter_id, runtime_session_id FROM task_role_sessions
+      WHERE project_number = ? AND task_number = ? AND role = ?
+    `).get(projectNumber, taskNumber, role)
+    if (current !== undefined) {
+      if (current.adapter_id !== binding.adapterId || current.runtime_session_id !== binding.runtimeSessionId) {
+        throw new Error('Task role Session binding is immutable')
+      }
+      return this.getTaskRuntime(projectNumber, taskNumber)!
+    }
+    if (this.getTaskRuntime(projectNumber, taskNumber) === undefined) {
+      throw new Error('Task Workspace must be bound before its role Sessions')
+    }
+    const timestamp = now.toISOString()
+    this.database.prepare(`
+      INSERT INTO task_role_sessions(
+        project_number, task_number, role, adapter_id, runtime_session_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(projectNumber, taskNumber, role, binding.adapterId, binding.runtimeSessionId, timestamp, timestamp)
+    return this.getTaskRuntime(projectNumber, taskNumber)!
+  }
+
+  getTaskRuntime(projectNumber: number, taskNumber: number): FleetTaskRuntime | undefined {
+    this.assertOpen()
+    const row = this.database.prepare<[number, number], TaskRuntimeRow>(`
+      SELECT project_number, task_number, workspace_json
+      FROM task_runtimes WHERE project_number = ? AND task_number = ?
+    `).get(projectNumber, taskNumber)
+    if (row === undefined) return undefined
+    const workspace = parseJSON(row.workspace_json, 'Task Workspace') as unknown as FleetWorkspace
+    const sessions: Partial<Record<TaskRole, TaskRoleSessionBinding>> = {}
+    for (const session of this.database.prepare<[number, number], TaskRoleSessionRow>(`
+      SELECT role, adapter_id, runtime_session_id FROM task_role_sessions
+      WHERE project_number = ? AND task_number = ? ORDER BY role
+    `).all(projectNumber, taskNumber)) {
+      sessions[session.role] = {
+        adapterId: session.adapter_id,
+        runtimeSessionId: session.runtime_session_id,
+      }
+    }
+    return {
+      projectNumber: row.project_number,
+      taskNumber: row.task_number,
+      workspace,
+      sessions,
+    }
+  }
+
+  listTaskRuntimes(): readonly FleetTaskRuntime[] {
+    this.assertOpen()
+    return this.database.prepare<[], TaskRuntimeRow>(`
+      SELECT project_number, task_number, workspace_json
+      FROM task_runtimes ORDER BY project_number, task_number
+    `).all().map(row => this.getTaskRuntime(row.project_number, row.task_number)!)
+  }
+
+  retireTaskRuntime(projectNumber: number, taskNumber: number): void {
+    this.assertOpen()
+    this.database.prepare(
+      'DELETE FROM task_runtimes WHERE project_number = ? AND task_number = ?',
+    ).run(projectNumber, taskNumber)
   }
 
   healthCheck(): boolean {
