@@ -25,6 +25,7 @@ export interface FrozenWorkPluginPolicy {
   readonly workspaceRoot: string
   readonly pactlineTokenEnv: string
   readonly gitCredentialReference?: string
+  readonly codeChangeCredentialReference?: string
 }
 
 interface PluginEnvelope {
@@ -97,9 +98,13 @@ function validateDefinition(value: unknown, candidate: FleetWorkCandidate): Flee
   let deliveryCandidate: FleetWorkDefinition['candidate']
   if (item.candidate !== undefined) {
     const raw = record(item.candidate, 'work definition candidate')
+    const candidateRepository = repositoryIdentity(raw.repository)
+    if (JSON.stringify(candidateRepository) !== JSON.stringify(repository)) {
+      throw new Error('work definition candidate must belong to the one admitted repository')
+    }
     deliveryCandidate = {
       ...validateRepositoryDelivery({
-        repository,
+        repository: candidateRepository,
         codeChangeUrl: string(raw.codeChangeUrl, 'candidate.codeChangeUrl'),
         revision: string(raw.revision, 'candidate.revision'),
         branch: string(raw.branch, 'candidate.branch'),
@@ -107,7 +112,12 @@ function validateDefinition(value: unknown, candidate: FleetWorkCandidate): Flee
       ref: string(raw.ref, 'candidate.ref'),
     }
   }
-  if (candidate.stage === 'review' && deliveryCandidate === undefined) throw new Error('review work definition requires a frozen delivery candidate')
+  if ((candidate.stage === 'review' || candidate.stage === 'correction') && deliveryCandidate === undefined) {
+    throw new Error(`${candidate.stage} work definition requires a frozen delivery candidate`)
+  }
+  if (deliveryCandidate !== undefined && deliveryCandidate.ref !== `refs/heads/${deliveryCandidate.branch}`) {
+    throw new Error('work definition candidate ref must match its delivery branch')
+  }
   const allowedPaths = stringList(item.allowedPaths, 'work definition allowedPaths')
   if (allowedPaths.some(path => path.startsWith('/') || path.includes('..') || path === '.git' || path.startsWith('.git/'))) {
     throw new Error('work definition allowedPaths must be safe repository-relative paths')
@@ -131,7 +141,7 @@ export function workPluginEnvironment(
   gitCredentialReference?: string,
 ): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = {}
-  for (const key of ['PATH', 'HOME', 'TMPDIR', 'TMP', 'TEMP', 'LANG', 'LC_ALL', 'TZ', 'SSH_AUTH_SOCK', 'SSL_CERT_FILE', 'SSL_CERT_DIR']) {
+  for (const key of ['PATH', 'TMPDIR', 'TMP', 'TEMP', 'LANG', 'LC_ALL', 'TZ', 'SSL_CERT_FILE', 'SSL_CERT_DIR']) {
     if (source[key] !== undefined) environment[key] = source[key]
   }
   if (gitCredentialReference !== undefined && /^[A-Za-z_][A-Za-z0-9_]*$/.test(gitCredentialReference)
@@ -147,7 +157,7 @@ export class ExecutableFleetWorkPlugin {
   ) {}
 
   invoke(
-    operation: 'resolve' | 'commit' | 'push' | 'open-code-change',
+    operation: 'resolve' | 'open-code-change',
     input: Readonly<Record<string, unknown>>,
     signal: AbortSignal,
   ): Promise<unknown> {
@@ -213,7 +223,7 @@ export class ExecutableWorkDefinitionResolver implements WorkDefinitionResolver 
       workPluginEnvironment(
         this.environment,
         snapshot.config.service.pactline.tokenEnv,
-        current.credentials.git,
+        current.credentials.codeChange,
       ),
     )
     const definition = validateDefinition(await plugin.invoke('resolve', {
@@ -222,7 +232,7 @@ export class ExecutableWorkDefinitionResolver implements WorkDefinitionResolver 
       candidate,
       taskPacket: packet.data,
       projectNumber: candidate.projectNumber,
-      gitCredentialReference: current.credentials.git,
+      codeChangeCredentialReference: current.credentials.codeChange,
     }, signal), candidate)
     const policy: FrozenWorkPluginPolicy = {
       definition,
@@ -231,6 +241,7 @@ export class ExecutableWorkDefinitionResolver implements WorkDefinitionResolver 
       workspaceRoot: current.workspaceRoot,
       pactlineTokenEnv: snapshot.config.service.pactline.tokenEnv,
       ...(current.credentials.git === undefined ? {} : { gitCredentialReference: current.credentials.git }),
+      ...(current.credentials.codeChange === undefined ? {} : { codeChangeCredentialReference: current.credentials.codeChange }),
     }
     return {
       admission: {
@@ -250,7 +261,7 @@ export function frozenPluginPolicy(run: FleetRun): FrozenWorkPluginPolicy {
   const candidate: FleetWorkCandidate = {
     fleetId: run.fleetId,
     projectNumber: run.projectNumber,
-    stage: run.stage === 'review' ? 'review' : 'execution',
+    stage: run.stage,
     task: {
       id: 'frozen', number: run.taskNumber, title: 'frozen', version: run.taskVersion,
     },
@@ -272,15 +283,28 @@ export function frozenPluginPolicy(run: FleetRun): FrozenWorkPluginPolicy {
     workspaceRoot: string(policy.workspaceRoot, 'workspaceRoot'),
     pactlineTokenEnv: string(policy.pactlineTokenEnv, 'pactlineTokenEnv'),
     ...(policy.gitCredentialReference === undefined ? {} : { gitCredentialReference: string(policy.gitCredentialReference, 'gitCredentialReference') }),
+    ...(policy.codeChangeCredentialReference === undefined ? {} : {
+      codeChangeCredentialReference: string(policy.codeChangeCredentialReference, 'codeChangeCredentialReference'),
+    }),
   }
 }
 
-export function validatePluginDelivery(value: unknown): RepositoryDelivery {
+export function validatePluginDelivery(
+  value: unknown,
+  expected?: { readonly baseRef: string; readonly existingCodeChangeUrl?: string },
+): RepositoryDelivery {
   const item = record(value, 'work plugin delivery')
-  return validateRepositoryDelivery({
+  const delivery = validateRepositoryDelivery({
     repository: repositoryIdentity(item.repository),
     codeChangeUrl: string(item.codeChangeUrl, 'delivery.codeChangeUrl'),
     revision: string(item.revision, 'delivery.revision'),
     branch: string(item.branch, 'delivery.branch'),
   })
+  if (expected !== undefined && string(item.baseRef, 'delivery.baseRef') !== expected.baseRef) {
+    throw new Error('Fleet work plugin code change uses the wrong base ref')
+  }
+  if (expected?.existingCodeChangeUrl !== undefined && delivery.codeChangeUrl !== expected.existingCodeChangeUrl) {
+    throw new Error('Fleet correction must update the existing code change')
+  }
+  return delivery
 }

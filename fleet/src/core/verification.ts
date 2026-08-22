@@ -177,6 +177,9 @@ export function assertProposalMatchesObservation(
     throw new Error('Harness-reported verification does not match Fleet observation')
   }
   if (proposal.kind === 'execution') {
+    if (observation.git.head !== options.baseHead) {
+      throw new Error('Harness must leave commits to Fleet delivery authority')
+    }
     assertAllowedPaths(observation.git.changedPaths, options.allowedPaths)
     const reported = [...proposal.changedPaths].sort()
     if (JSON.stringify(reported) !== JSON.stringify(observation.git.changedPaths)) {

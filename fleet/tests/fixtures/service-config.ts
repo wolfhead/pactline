@@ -45,7 +45,8 @@ fleets:
       correction: { adapter: codex, model: gpt-5.6-sol }
       resolutionAnalysis: { adapter: codex, model: gpt-5.6-sol }
     credentials:
-      git: local-test-git
+      git: LOCAL_TEST_GIT
+      codeChange: LOCAL_TEST_CODE_CHANGE
 ${second}
 `
 }

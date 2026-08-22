@@ -176,11 +176,16 @@ describe('DeepSeekHarnessAdapter', () => {
   it('scrubs ambient service credentials while forwarding only the DeepSeek credential', () => {
     const env = deepSeekChildEnvironment({
       PATH: '/bin', GITHUB_TOKEN: 'github-secret', PACTLINE_TOKEN: 'pactline-secret',
-      DEEPSEEK_API_KEY: 'deepseek-secret', DSH_HOME: '/private/harness-home', BUILD_FLAG: '1',
+      DEEPSEEK_API_KEY: 'deepseek-secret', DSH_HOME: '/private/harness-home',
+      SSH_AUTH_SOCK: '/tmp/agent.sock', BUILD_FLAG: '1',
     }, { DSH_CWD: '/tmp/work' })
-    expect(env).toMatchObject({ PATH: '/bin', BUILD_FLAG: '1', DEEPSEEK_API_KEY: 'deepseek-secret', DSH_CWD: '/tmp/work' })
+    expect(env).toMatchObject({
+      PATH: '/bin', BUILD_FLAG: '1', DEEPSEEK_API_KEY: 'deepseek-secret', DSH_CWD: '/tmp/work',
+      GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0',
+    })
     expect(env).not.toHaveProperty('GITHUB_TOKEN')
     expect(env).not.toHaveProperty('PACTLINE_TOKEN')
     expect(env).not.toHaveProperty('DSH_HOME')
+    expect(env).not.toHaveProperty('SSH_AUTH_SOCK')
   })
 })

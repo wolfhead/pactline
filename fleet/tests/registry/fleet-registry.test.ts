@@ -154,7 +154,7 @@ describe('FleetRegistry', () => {
     }
 
     expect((await readFile(path)).includes(Buffer.from(secret))).toBe(false)
-    expect((await readFile(path)).includes(Buffer.from('local-test-git'))).toBe(true)
+    expect((await readFile(path)).includes(Buffer.from('LOCAL_TEST_GIT'))).toBe(true)
   })
 
   it('atomically replaces the local Fleet ID for one Project', async () => {

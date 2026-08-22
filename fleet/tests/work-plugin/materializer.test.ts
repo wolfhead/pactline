@@ -46,20 +46,19 @@ const log = process.argv[2]
 const operation = process.argv.at(-1)
 appendFileSync(log, operation + '\\n')
 if (operation === 'commit') {
-  execFileSync('git', ['add', 'README.md'], { cwd: request.workspace })
-  execFileSync('git', ['-c', 'user.name=Fleet Test', '-c', 'user.email=fleet@example.invalid', 'commit', '-m', 'delivery'], { cwd: request.workspace })
-  const revision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: request.workspace, encoding: 'utf8' }).trim()
-  const branch = execFileSync('git', ['branch', '--show-current'], { cwd: request.workspace, encoding: 'utf8' }).trim()
-  process.stdout.write(JSON.stringify({ ok: true, data: { revision, branch } }))
+  execFileSync('git', ['push', 'origin', 'HEAD:refs/heads/main'], { cwd: request.workspace })
+  process.exit(91)
 } else if (operation === 'push') {
-  execFileSync('git', ['push', 'origin', 'HEAD:refs/heads/' + request.commit.branch], { cwd: request.workspace })
-  process.stdout.write(JSON.stringify({ ok: true, data: request.commit }))
+  execFileSync('git', ['push', 'origin', 'HEAD:refs/heads/main'], { cwd: request.workspace })
+  process.exit(92)
 } else {
+  if ('workspace' in request || 'source' in request.definition.base || process.env.LOCAL_TEST_GIT) process.exit(93)
   process.stdout.write(JSON.stringify({ ok: true, data: {
     repository: request.definition.repository,
     codeChangeUrl: 'https://github.com/wolfhead/pactline/pull/77',
     revision: request.push.revision,
-    branch: request.push.branch
+    branch: request.push.branch,
+    baseRef: request.definition.base.ref
   } }))
 }
 `)
@@ -91,6 +90,7 @@ if (operation === 'commit') {
   const workspace = await prepareWorkspace({
     input: definition.base, mode: 'execution', runId: run.runId,
     branchPrefix: 'fleet/first/', temporaryDirectory: join(directory, 'work'),
+    taskIdentity: { projectNumber: 5, taskNumber: 21 },
   })
   await writeFile(join(workspace.repositoryPath, 'README.md'), 'implemented\n')
   registry.transitionRun(run.runId, 'admitted', 'claiming')
@@ -141,6 +141,22 @@ if (operation === 'commit') {
 }
 
 describe('PluginRunMaterializer recovery', () => {
+  it('owns commit and push while keeping the base ref unchanged', async () => {
+    const { origin, revision: baseRevision, workspace, reopen, operations } = await setup()
+
+    const recovery = await reopen()
+    const delivery = await recovery.invoke()
+    const baseAfter = (await exec('git', ['ls-remote', '--refs', origin, 'refs/heads/main'])).stdout.split(/\s+/)[0]
+    const deliveryAfter = (await exec('git', ['ls-remote', '--refs', origin, `refs/heads/${workspace.branch!}`])).stdout.split(/\s+/)[0]
+
+    expect(workspace.branch).toBe('fleet/project-5/task-21')
+    expect(baseAfter).toBe(baseRevision)
+    expect(deliveryAfter).toBe(delivery.revision)
+    expect(delivery.branch).toBe(workspace.branch)
+    expect(await operations()).toEqual(['open-code-change'])
+    recovery.registry.close()
+  })
+
   it('materializes review-first work with both admitted base and candidate revisions', async () => {
     const { directory, origin, plugin, log, definition, registry, workspace, revision } = await setup()
     await exec('git', ['-C', workspace.repositoryPath, 'add', 'README.md'])
@@ -227,7 +243,7 @@ describe('PluginRunMaterializer recovery', () => {
 
     const recovery = await reopen()
     await expect(recovery.invoke()).resolves.toMatchObject({ codeChangeUrl: expect.stringContaining('/pull/77') })
-    expect(await operations()).toEqual(['push', 'open-code-change'])
+    expect(await operations()).toEqual(['open-code-change'])
     expect(recovery.registry.getEffect(run.runId, 'git_commit')).toMatchObject({ status: 'observed' })
     recovery.registry.close()
   })

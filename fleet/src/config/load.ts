@@ -18,7 +18,7 @@ const DEFAULT_PROMPT_VERSION = 'v1'
 const DEFAULT_RESULT_CONTRACT_VERSION = 1
 const FLEET_ID = /^[a-z0-9][a-z0-9._-]{0,63}$/
 const ENVIRONMENT_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
-const CREDENTIAL_REFERENCE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
+const CREDENTIAL_REFERENCE = ENVIRONMENT_NAME
 
 function record(value: unknown, path: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -134,11 +134,17 @@ function routing(
 function credentials(value: unknown, path: string): FleetDefinitionConfig['credentials'] {
   if (value === undefined) return {}
   const input = record(value, path)
-  knownKeys(input, ['git'], path)
-  if (input.git === undefined) return {}
-  const git = nonEmpty(input.git, `${path}.git`)
-  if (!CREDENTIAL_REFERENCE.test(git)) throw new Error(`${path}.git is not a valid credential reference`)
-  return { git }
+  knownKeys(input, ['git', 'codeChange'], path)
+  const git = input.git === undefined ? undefined : nonEmpty(input.git, `${path}.git`)
+  const codeChange = input.codeChange === undefined ? undefined : nonEmpty(input.codeChange, `${path}.codeChange`)
+  if (git !== undefined && !CREDENTIAL_REFERENCE.test(git)) throw new Error(`${path}.git is not a valid credential reference`)
+  if (codeChange !== undefined && !CREDENTIAL_REFERENCE.test(codeChange)) {
+    throw new Error(`${path}.codeChange is not a valid credential reference`)
+  }
+  return {
+    ...(git === undefined ? {} : { git }),
+    ...(codeChange === undefined ? {} : { codeChange }),
+  }
 }
 
 function workPlugin(value: unknown, path: string): FleetDefinitionConfig['workPlugin'] {

@@ -37,4 +37,5 @@ fleets:
         model: gpt-5.6-sol
         reasoning: high
     credentials:
-      git: pactline-development-git
+      git: PACTLINE_FLEET_GIT_TOKEN
+      codeChange: PACTLINE_FLEET_CODE_CHANGE_TOKEN

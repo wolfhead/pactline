@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { parseFleetConfig } from '../../src/config/load.js'
-import { ExecutableWorkDefinitionResolver } from '../../src/work-plugin/executable-plugin.js'
+import { ExecutableWorkDefinitionResolver, validatePluginDelivery } from '../../src/work-plugin/executable-plugin.js'
 import { serviceConfigYAML } from '../fixtures/service-config.js'
 
 const directories: string[] = []
@@ -13,6 +13,24 @@ afterEach(async () => {
 })
 
 describe('executable Fleet work plugin', () => {
+  it('requires the admitted base and existing code change during correction', () => {
+    const value = {
+      repository: { provider: 'github', host: 'github.com', owner: 'wolfhead', name: 'pactline' },
+      codeChangeUrl: 'https://github.com/wolfhead/pactline/pull/77',
+      revision: 'a'.repeat(40), branch: 'fleet/project-5/task-20', baseRef: 'refs/heads/main',
+    }
+
+    expect(validatePluginDelivery(value, {
+      baseRef: 'refs/heads/main', existingCodeChangeUrl: value.codeChangeUrl,
+    })).toMatchObject({ codeChangeUrl: value.codeChangeUrl, branch: value.branch })
+    expect(() => validatePluginDelivery({ ...value, baseRef: 'refs/heads/release' }, {
+      baseRef: 'refs/heads/main', existingCodeChangeUrl: value.codeChangeUrl,
+    })).toThrow('wrong base ref')
+    expect(() => validatePluginDelivery({ ...value, codeChangeUrl: 'https://github.com/wolfhead/pactline/pull/78' }, {
+      baseRef: 'refs/heads/main', existingCodeChangeUrl: value.codeChangeUrl,
+    })).toThrow('update the existing code change')
+  })
+
   it('resolves and freezes explicit work authority without forwarding model or Pactline credentials', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'fleet-work-plugin-test-'))
     directories.push(directory)
@@ -21,7 +39,8 @@ describe('executable Fleet work plugin', () => {
 let input = ''
 for await (const chunk of process.stdin) input += chunk
 const request = JSON.parse(input)
-if (process.env.TEST_PACTLINE_TOKEN || process.env.PACTLINE_TOKEN || process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY) process.exit(9)
+if (process.env.TEST_PACTLINE_TOKEN || process.env.PACTLINE_TOKEN || process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY || process.env.LOCAL_TEST_GIT) process.exit(9)
+if (process.env.LOCAL_TEST_CODE_CHANGE !== 'code-change-only') process.exit(10)
 const criterion = request.taskPacket.criteria[0]
 process.stdout.write(JSON.stringify({ ok: true, data: {
   caseId: 'plugin-test', taskNumber: request.candidate.task.number, taskVersion: request.candidate.task.version,
@@ -42,6 +61,7 @@ process.stdout.write(JSON.stringify({ ok: true, data: {
       {
         PATH: process.env.PATH,
         TEST_PACTLINE_TOKEN: 'not-real', PACTLINE_TOKEN: 'not-real', DEEPSEEK_API_KEY: 'not-real', OPENAI_API_KEY: 'not-real',
+        LOCAL_TEST_GIT: 'git-write', LOCAL_TEST_CODE_CHANGE: 'code-change-only',
       },
       'plugin-test',
     )

@@ -134,6 +134,24 @@ describe('disposable workspace and coordinator verification', () => {
     })).toThrow('outside the allowlist')
   })
 
+  it('rejects execution Harness commits so only Fleet owns delivery history', async () => {
+    const workspace = await prepare('execution')
+    await writeFile(join(workspace.repositoryPath, 'README.md'), 'committed by harness\n')
+    await run('git', ['-C', workspace.repositoryPath, 'add', 'README.md'])
+    await run('git', ['-C', workspace.repositoryPath, '-c', 'user.name=Harness', '-c', 'user.email=harness@example.invalid', 'commit', '--quiet', '-m', 'unauthorized'])
+    const git = await observeGit(workspace.repositoryPath, workspace.baseRevision)
+    const commands = await runFixedVerification(workspace.repositoryPath, ['true'])
+    const proposal: ExecutionProposal = {
+      schemaVersion: 1, kind: 'execution', runId: 'execution-commit', claimId: 'claim-commit', taskNumber: 1,
+      recommendation: 'complete', summary: 'Committed directly.', changedPaths: ['README.md'],
+      verification: [{ command: 'true', outcome: 'passed', summary: 'passed' }], criteria: [], limitations: [],
+    }
+
+    expect(() => assertProposalMatchesObservation(proposal, { git, commands }, {
+      baseHead: revision, allowedPaths: ['README.md'],
+    })).toThrow('leave commits to Fleet delivery authority')
+  })
+
   it('uses detached review state and blocks settlement after any mutation', async () => {
     const workspace = await prepare('review')
     const clean = await observeGit(workspace.repositoryPath, workspace.baseRevision)

@@ -9,7 +9,6 @@ import type {
 } from '../registry/fleet-registry.js'
 import { FleetRegistry } from '../registry/fleet-registry.js'
 import {
-  observeRemoteRevision,
   observeWorkspaceRevision,
   decodeFleetWorkspace,
   prepareWorkspace,
@@ -17,6 +16,7 @@ import {
   verifyWorkspace,
 } from '../repository/workspace.js'
 import type { FleetWorkspace, RepositoryRevision } from '../repository/workspace.js'
+import { commitDelivery, pushDelivery, verifyPublishedDelivery } from '../repository/publisher.js'
 import type { FleetFaultInjector, FleetRunMaterializer, MaterializedFleetRun } from '../scheduler/run-coordinator.js'
 import type { PactlineCLI } from '../pactline/client.js'
 import {
@@ -98,18 +98,18 @@ export class PluginRunMaterializer implements FleetRunMaterializer {
     const pluginEnvironment = workPluginEnvironment(
       this.options.environment,
       policy.pactlineTokenEnv,
-      policy.gitCredentialReference,
+      policy.codeChangeCredentialReference,
     )
     const plugin = new ExecutableFleetWorkPlugin(policy.plugin, pluginEnvironment)
     const mode = run.stage === 'review' ? 'review' : 'execution'
     const input: RepositoryRevision = policy.definition.base
-    const candidate = mode === 'review'
-      ? {
+    const candidate = run.stage === 'execution'
+      ? undefined
+      : {
           source: policy.definition.base.source,
           ref: policy.definition.candidate!.ref,
           revision: policy.definition.candidate!.revision,
         }
-      : undefined
     const taskRuntime = this.options.registry.getTaskRuntime(run.projectNumber, run.taskNumber)
     let activeWorkspace = recoveredWorkspace ?? taskRuntime?.workspace
     return {
@@ -137,22 +137,35 @@ export class PluginRunMaterializer implements FleetRunMaterializer {
       ...(mode === 'review' ? {} : {
         deliveryOwnsCheckpoints: true,
         publishDelivery: async (dispatch, proposal, observation) => {
-          const baseRequest = {
+          if (activeWorkspace === undefined || activeWorkspace.branch === undefined) {
+            throw new Error('Fleet delivery has no Task Workspace branch')
+          }
+          const deliveryRef = `refs/heads/${activeWorkspace.branch}`
+          if (policy.definition.candidate !== undefined
+            && policy.definition.candidate.branch !== activeWorkspace.branch) {
+            throw new Error('Fleet correction candidate does not use the stable Task delivery ref')
+          }
+          const codeChangeRequest = {
             schemaVersion: 1,
             run: {
-            runId: run.runId,
-            fleetId: run.fleetId,
-            projectNumber: run.projectNumber,
-            taskNumber: run.taskNumber,
-            taskVersion: dispatch.taskVersion,
-            claimId: dispatch.claimId,
-            stage: run.stage,
+              runId: run.runId,
+              fleetId: run.fleetId,
+              projectNumber: run.projectNumber,
+              taskNumber: run.taskNumber,
+              taskVersion: dispatch.taskVersion,
+              claimId: dispatch.claimId,
+              stage: run.stage,
             },
-            definition: policy.definition,
-            workspace: dispatch.request.workspace,
+            definition: {
+              caseId: policy.definition.caseId,
+              taskNumber: policy.definition.taskNumber,
+              taskVersion: policy.definition.taskVersion,
+              repository: policy.definition.repository,
+              base: { ref: policy.definition.base.ref, revision: policy.definition.base.revision },
+              ...(policy.definition.candidate === undefined ? {} : { candidate: policy.definition.candidate }),
+            },
             proposal,
             observation,
-            gitCredentialReference: policy.gitCredentialReference,
           }
           const priorCommit = this.options.registry.getEffect(run.runId, 'git_commit')
           this.commitEffect(run.runId, {
@@ -162,9 +175,15 @@ export class PluginRunMaterializer implements FleetRunMaterializer {
           const commitRecord = recordedCommit?.status === 'observed'
             ? deliveryStep(recordedCommit.observation, 'recorded commit')
             : priorCommit?.status === 'intended'
-              ? await this.reconcileCommit(activeWorkspace, policy.definition.base.revision)
-                ?? deliveryStep(await plugin.invoke('commit', { ...baseRequest, operation: 'commit' }, signal), 'commit')
-              : deliveryStep(await plugin.invoke('commit', { ...baseRequest, operation: 'commit' }, signal), 'commit')
+              ? await this.reconcileCommit(
+                  activeWorkspace,
+                  policy.definition.candidate?.revision ?? policy.definition.base.revision,
+                ) ?? await commitDelivery(
+                  activeWorkspace, policy.definition.allowedPaths, run.taskNumber, this.options.environment,
+                )
+              : await commitDelivery(
+                  activeWorkspace, policy.definition.allowedPaths, run.taskNumber, this.options.environment,
+                )
           if (recordedCommit?.status !== 'observed') {
             await this.options.faultInjector?.('after_commit_before_persistence', run)
             this.commitEffect(run.runId, { type: 'observation', kind: 'git_commit', observation: commitRecord })
@@ -176,18 +195,29 @@ export class PluginRunMaterializer implements FleetRunMaterializer {
             type: 'intent', kind: 'git_push', idempotencyKey: `${run.runId}-push`, intent: commitRecord,
           })
           const recordedPush = this.options.registry.getEffect(run.runId, 'git_push')
+          const deliveryAuthority = {
+            remote: policy.definition.base.source,
+            baseRef: policy.definition.base.ref,
+            baseRevision: policy.definition.base.revision,
+            deliveryRef,
+            ...(policy.definition.candidate === undefined ? {} : {
+              priorDeliveryRevision: policy.definition.candidate.revision,
+            }),
+          }
           const push = recordedPush?.status === 'observed'
-            ? deliveryStep(recordedPush.observation, 'recorded push')
+            ? await verifyPublishedDelivery(
+                activeWorkspace,
+                { ...deliveryStep(recordedPush.observation, 'recorded push') },
+                deliveryAuthority,
+                this.gitCredential(policy),
+                this.options.environment,
+              )
             : priorPush?.status === 'intended'
-              ? await this.reconcilePush(activeWorkspace, commitRecord)
-                ?? deliveryStep(await plugin.invoke('push', {
-                  ...baseRequest, operation: 'push', commit: commitRecord,
-                }, signal), 'push')
-              : deliveryStep(await plugin.invoke('push', {
-                  ...baseRequest, operation: 'push', commit: commitRecord,
-                }, signal), 'push')
+              ? await this.reconcilePush(activeWorkspace, commitRecord, deliveryAuthority, this.gitCredential(policy))
+                ?? await pushDelivery(activeWorkspace, commitRecord, deliveryAuthority, this.gitCredential(policy), this.options.environment)
+              : await pushDelivery(activeWorkspace, commitRecord, deliveryAuthority, this.gitCredential(policy), this.options.environment)
           if (push.revision !== commitRecord.revision || push.branch !== commitRecord.branch) {
-            throw new Error('Fleet work plugin push changed the committed revision or branch')
+            throw new Error('Fleet push changed the committed revision or branch')
           }
           if (recordedPush?.status !== 'observed') {
             await this.options.faultInjector?.('after_push_before_persistence', run)
@@ -206,8 +236,13 @@ export class PluginRunMaterializer implements FleetRunMaterializer {
           const delivery = recordedCodeChange?.status === 'observed'
             ? deliveryFromObservation(policy.definition.repository, recordedCodeChange.observation)
             : validatePluginDelivery(await plugin.invoke('open-code-change', {
-                ...baseRequest, operation: 'open-code-change', commit: commitRecord, push,
-              }, signal))
+                ...codeChangeRequest, operation: 'open-code-change', commit: commitRecord, push,
+              }, signal), {
+                baseRef: policy.definition.base.ref,
+                ...(policy.definition.candidate === undefined ? {} : {
+                  existingCodeChangeUrl: policy.definition.candidate.codeChangeUrl,
+                }),
+              })
           if (delivery.revision !== push.revision || delivery.branch !== push.branch) {
             throw new Error('Fleet work plugin code change changed the pushed revision or branch')
           }
@@ -225,6 +260,15 @@ export class PluginRunMaterializer implements FleetRunMaterializer {
         },
       }),
     }
+  }
+
+  private gitCredential(policy: ReturnType<typeof frozenPluginPolicy>): string | undefined {
+    if (policy.gitCredentialReference === undefined) return undefined
+    const credential = this.options.environment[policy.gitCredentialReference]
+    if (credential === undefined || credential === '') {
+      throw new Error(`Fleet Git credential is unavailable: ${policy.gitCredentialReference}`)
+    }
+    return credential
   }
 
   private async retireRuntime(projectNumber: number, taskNumber: number, workspace: FleetWorkspace): Promise<void> {
@@ -253,13 +297,17 @@ export class PluginRunMaterializer implements FleetRunMaterializer {
 
   private async reconcilePush(
     workspace: FleetWorkspace | undefined,
-    commit: { readonly revision: string; readonly branch: string },
-  ): Promise<{ readonly revision: string; readonly branch: string } | undefined> {
+    commit: Parameters<typeof verifyPublishedDelivery>[1],
+    authority: Parameters<typeof verifyPublishedDelivery>[2],
+    credential: string | undefined,
+  ): Promise<Parameters<typeof verifyPublishedDelivery>[1] | undefined> {
     if (workspace === undefined) throw new Error('Push recovery has no persisted workspace')
-    const remoteRevision = await observeRemoteRevision(workspace, commit.branch, this.options.environment)
-    if (remoteRevision === undefined) return undefined
-    if (remoteRevision !== commit.revision) throw new Error('Recovered remote branch contradicts the committed revision')
-    return commit
+    try {
+      return await verifyPublishedDelivery(workspace, commit, authority, credential, this.options.environment)
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Fleet delivery ref does not match the committed revision') return undefined
+      throw error
+    }
   }
 
   private commitEffect(runId: string, effect: FleetExternalEffectDecision): FleetExternalEffectRecord {

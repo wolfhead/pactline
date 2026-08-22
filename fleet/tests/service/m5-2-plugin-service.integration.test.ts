@@ -98,7 +98,6 @@ describe('M5.2 plugin-backed resident scheduling', () => {
     await exec('git', ['-C', seed, 'remote', 'add', 'origin', origin])
     await exec('git', ['-C', seed, 'push', '--quiet', 'origin', 'main'])
     await writeFile(plugin, `#!/usr/bin/env node
-import { execFileSync } from 'node:child_process'
 let input = ''; for await (const chunk of process.stdin) input += chunk
 const request = JSON.parse(input)
 const operation = process.argv.at(-1)
@@ -109,18 +108,10 @@ if (operation === 'resolve') {
     repository: { provider: 'github', host: 'github.com', owner: 'wolfhead', name: 'pactline' },
     allowedPaths: ['README.md'], verificationCommands: ['true'], criteria: [{ id: 'criterion-1', revision: 1 }]
   } }))
-} else if (operation === 'commit') {
-  execFileSync('git', ['add', 'README.md'], { cwd: request.workspace })
-  execFileSync('git', ['-c', 'user.name=Fleet Test', '-c', 'user.email=fleet@example.invalid', 'commit', '-m', 'delivery'], { cwd: request.workspace })
-  const revision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: request.workspace, encoding: 'utf8' }).trim()
-  const branch = execFileSync('git', ['branch', '--show-current'], { cwd: request.workspace, encoding: 'utf8' }).trim()
-  process.stdout.write(JSON.stringify({ ok: true, data: { revision, branch } }))
-} else if (operation === 'push') {
-  process.stdout.write(JSON.stringify({ ok: true, data: request.commit }))
 } else {
   process.stdout.write(JSON.stringify({ ok: true, data: {
     repository: request.definition.repository, codeChangeUrl: 'https://github.com/wolfhead/pactline/pull/52',
-    revision: request.push.revision, branch: request.push.branch
+    revision: request.push.revision, branch: request.push.branch, baseRef: request.definition.base.ref
   } }))
 }
 `)
@@ -159,7 +150,13 @@ if (operation === 'resolve') {
     const checkpoints: FleetCrashCheckpoint[] = []
     const service = new FleetService(configPath, {
       adapters: [adapter], logger: new NullFleetLogger(),
-      environment: { ...process.env, TEST_PACTLINE_TOKEN: 'not-real', FAKE_PACTLINE_STATE: statePath },
+      environment: {
+        ...process.env,
+        TEST_PACTLINE_TOKEN: 'not-real',
+        FAKE_PACTLINE_STATE: statePath,
+        LOCAL_TEST_GIT: 'not-real',
+        LOCAL_TEST_CODE_CHANGE: 'not-real',
+      },
       faultInjector: checkpoint => { checkpoints.push(checkpoint) },
     })
     await service.start()
