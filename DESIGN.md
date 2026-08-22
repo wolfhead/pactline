@@ -256,6 +256,56 @@ collection. Filters, selection, loading, errors, pagination, and mutations must
 keep the same placement and behavior unless the renderer requires a genuinely
 different interaction.
 
+### Production Task and Project Paths
+
+The production surfaces use one canonical route and information architecture
+for each delivery context. Prototype variants and route-level UI switchers are
+not part of the product.
+
+- **My Work → Task:** `/tasks` opens a Task at `/tasks/:number`. The return
+  action restores the exact collection query, including ownership, filters,
+  sorting, pagination, and view state.
+- **Project → Backlog Task:** `/projects/:number` is the Project's default
+  delivery workspace. It presents the Project header, Milestones, then the
+  structural Project Backlog. A Backlog Task opens the same standalone Task
+  route and returns to the exact Project workspace query.
+- **Project → Milestone → Task:**
+  `/projects/:number/milestones/:milestoneID` presents Milestone context,
+  acceptance, and its Task collection. Opening and returning from a Task
+  preserves that Milestone collection state.
+
+`/projects/:number/overview`, `/milestones`, and `/backlog` are compatibility
+redirects to the canonical Project workspace, not separate production
+variants.
+
+The standalone Task page is a complete document, never a dialog. Desktop uses
+a readable main column for context, expected result, acceptance, and the
+unified Thread timeline, plus a sticky property and delivery column. Phones
+keep the same capabilities in one scrollable document ordered as brief,
+acceptance, Thread, then properties and delivery. Editing stays inline on both
+sizes.
+
+### Milestone Progress Rail
+
+Every Milestone card ends with a full-width progress rail. It uses the fixed
+light Glacier Blue + Teal palette and maps Task lifecycle phases as follows:
+
+- `done` → Confluence Teal (`done`)
+- `in_progress` → Glacier Signal Blue (`in_progress`)
+- `in_review` → Review Ochre (`in_review`)
+- `backlog | ready` → Strong Control Stroke (`waiting`)
+- `cancelled` and archived Tasks → excluded from the eligible total
+
+Completion percentage is `done / eligible`; an empty Milestone reports zero
+Tasks rather than implying completion. Visible counts and one complete
+accessible name repeat the phase totals, so neither meaning nor progress
+depends on color alone.
+
+Only the blue `in_progress` segment may carry a slow directional sheen. The
+segment keeps a stable measured width, completed and review segments remain
+still, and `prefers-reduced-motion: reduce` removes the animation while
+preserving the same colors, counts, and accessible name.
+
 ## Elevation & Depth
 
 The system is layered, not carded. Canvas tone, white work surfaces, spacing,

@@ -184,11 +184,11 @@ describe('TaskPage', () => {
 
   it('accepts only known in-app collection return paths', async () => {
     const { unmount } = renderPage({
-      taskSource: '/projects/12/backlog?phase=ready&q=release',
+      taskSource: '/projects/12?phase=ready&q=release',
     })
     expect(screen.getByRole('link', { name: '返回任务集合' })).toHaveAttribute(
       'href',
-      '/projects/12/backlog?phase=ready&q=release',
+      '/projects/12?phase=ready&q=release',
     )
 
     unmount()
