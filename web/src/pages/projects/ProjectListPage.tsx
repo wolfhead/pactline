@@ -32,7 +32,7 @@ export default function ProjectListPage() {
         name: String(data.get('name') ?? ''),
         description: String(data.get('description') ?? ''),
       })
-      navigate(`/projects/${project.number}/overview`)
+      navigate(`/projects/${project.number}`)
     } catch (reason) {
       setError((reason as Error).message)
     }
@@ -81,7 +81,7 @@ export default function ProjectListPage() {
       ) : (
         <div className="grid gap-3 lg:grid-cols-2">
           {projects.map((project) => (
-            <Link key={project.id} to={`/projects/${project.number}/overview`} className="rounded-lg border border-border bg-surface-raised p-4 shadow-[0_1px_3px_rgb(23_43_61/0.05)] transition hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-md">
+            <Link key={project.id} to={`/projects/${project.number}`} className="rounded-lg border border-border bg-surface-raised p-4 shadow-[0_1px_3px_rgb(23_43_61/0.05)] transition hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-md">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-mono text-xs text-fg-muted">#{project.number}</p>

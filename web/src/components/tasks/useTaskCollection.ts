@@ -54,6 +54,7 @@ export function useTaskCollection(
   options: {
     initialFilters?: TaskFilters
     initialPageCount?: number
+    initialTasks?: Task[]
     onFiltersChange?: (filters: TaskFilters) => void
     onPageCountChange?: (pageCount: number) => void
   } = {},
@@ -66,6 +67,10 @@ export function useTaskCollection(
   const onPageCountChangeRef = useRef(options.onPageCountChange)
   onPageCountChangeRef.current = options.onPageCountChange
   const pageCountRef = useRef(options.initialPageCount ?? 1)
+  const canUseInitialTasks = options.initialTasks !== undefined
+    && (options.initialPageCount ?? 1) === 1
+    && JSON.stringify(options.initialFilters ?? DEFAULT_FILTERS) === JSON.stringify(DEFAULT_FILTERS)
+  const initialTasksRef = useRef(options.initialTasks)
 
   function setFilters(next: TaskFilters) {
     pageCountRef.current = 1
@@ -73,10 +78,10 @@ export function useTaskCollection(
     onFiltersChangeRef.current?.(next)
   }
   const [labels, setLabels] = useState<Label[]>([])
-  const [tasks, setTasks] = useState<Task[]>([])
+  const [tasks, setTasks] = useState<Task[]>(options.initialTasks ?? [])
   const [nextCursor, setNextCursor] = useState<string>()
   const [hasMore, setHasMore] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!canUseInitialTasks)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState('')
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({})
@@ -87,6 +92,9 @@ export function useTaskCollection(
     () => JSON.stringify({ baseQuery: baseQueryKey, filters }),
     [baseQueryKey, filters],
   )
+  const initialQueryKeyRef = useRef(queryKey)
+  const initialIdentityKeyRef = useRef(identityKey)
+  const hasDepartedInitialQueryRef = useRef(false)
 
   const hasActiveFilters =
     filters.phases.length > 0 ||
@@ -123,6 +131,21 @@ export function useTaskCollection(
   }, [identityKey])
 
   useEffect(() => {
+    if (
+      canUseInitialTasks
+      && !hasDepartedInitialQueryRef.current
+      && queryKey === initialQueryKeyRef.current
+      && identityKey === initialIdentityKeyRef.current
+      && reloadToken === 0
+    ) {
+      setTasks(initialTasksRef.current ?? [])
+      setNextCursor(undefined)
+      setHasMore(false)
+      setLoading(false)
+      setError('')
+      return
+    }
+    hasDepartedInitialQueryRef.current = true
     setLoading(true)
     setError('')
     let cancelled = false
@@ -151,7 +174,13 @@ export function useTaskCollection(
     return () => {
       cancelled = true
     }
-  }, [queryKey, identityKey, reloadToken, buildQuery])
+  }, [
+    buildQuery,
+    canUseInitialTasks,
+    identityKey,
+    queryKey,
+    reloadToken,
+  ])
 
   const liveQueryRef = useRef('')
   liveQueryRef.current = `${queryKey}|${identityKey ?? ''}|${reloadToken}`

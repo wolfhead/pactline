@@ -11,6 +11,32 @@ afterEach(() => {
 })
 
 describe('useTaskCollection', () => {
+  it('uses aggregate tasks initially and fetches when explicitly reloaded', async () => {
+    vi.mocked(tasksApi.listLabels).mockResolvedValue([])
+    vi.mocked(tasksApi.listTasks).mockResolvedValue({ items: [], has_more: false })
+    const initialTask = { id: 'task-1', number: 1 } as never
+
+    const { result } = renderHook(() => useTaskCollection({
+      project_number: 7,
+      backlog_only: true,
+    }, 'user-1', {
+      initialTasks: [initialTask],
+    }))
+
+    expect(result.current.loading).toBe(false)
+    expect(result.current.tasks).toEqual([initialTask])
+    expect(tasksApi.listTasks).not.toHaveBeenCalled()
+
+    act(() => result.current.reload())
+
+    await waitFor(() => expect(tasksApi.listTasks).toHaveBeenCalledWith(
+      expect.objectContaining({
+        project_number: 7,
+        backlog_only: true,
+      }),
+    ))
+  })
+
   it('preserves the collection scope until an explicit filter overrides it', async () => {
     vi.mocked(tasksApi.listLabels).mockResolvedValue([])
     vi.mocked(tasksApi.listTasks).mockResolvedValue({ items: [], has_more: false })

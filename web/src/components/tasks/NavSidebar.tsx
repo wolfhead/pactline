@@ -235,7 +235,7 @@ export default function NavSidebar({ onNavigate }: { onNavigate?: () => void }) 
           {visibleProjects.map((project) => (
             <Link
               key={project.id}
-              to={`/projects/${project.number}/overview`}
+              to={`/projects/${project.number}`}
               onClick={onNavigate}
               title={project.name}
               aria-current={project.number === projectNumber ? 'page' : undefined}
