@@ -354,7 +354,18 @@ export async function replaySettlement(
   if (intent.stage !== context.stage || intent.taskVersion !== context.taskVersion) {
     throw new Error('Persisted settlement intent does not match the active Claim context')
   }
-  return intent.stage === 'execution'
-    ? settleExecution(client, intent.proposal as ExecutionProposal, context, intent.delivery)
-    : settleReview(client, intent.proposal as ReviewProposal, context)
+  if (intent.stage === 'review') {
+    return settleReview(client, intent.proposal as ReviewProposal, context)
+  }
+  const packet = await client.showClaim(context.claimId, 100, context)
+  const currentVersion = activeSettlementVersion(packet.data, context)
+  if (currentVersion !== context.taskVersion && currentVersion !== context.taskVersion + 1) {
+    throw new Error('Persisted execution settlement advanced the Task unexpectedly')
+  }
+  return settleExecution(
+    client,
+    intent.proposal as ExecutionProposal,
+    { ...context, taskVersion: currentVersion },
+    intent.delivery,
+  )
 }

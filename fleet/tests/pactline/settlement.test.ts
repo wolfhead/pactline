@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { PactlineCallOptions } from '../../src/pactline/client.js'
 import { PactlineClientError } from '../../src/pactline/client.js'
-import { settleExecution, settleReview } from '../../src/pactline/settlement.js'
+import { replaySettlement, settleExecution, settleReview } from '../../src/pactline/settlement.js'
 import type { ExecutionProposal, ReviewProposal } from '../../src/core/harness-result.js'
 import type { PactlineClaimMutationResult, PactlineCodeChangeMutationResult, PactlineOperation } from '../../src/pactline/types.js'
 import { InMemoryPactlineClient } from '../contract/in-memory-pactline.js'
@@ -91,6 +91,27 @@ async function activeExecution(client: InMemoryPactlineClient) {
 }
 
 describe('Pactline settlement reconciliation', () => {
+  it('replays a persisted settlement after the delivery link already advanced the Task', async () => {
+    const client = new InMemoryPactlineClient(31, [], { phase: 'ready', activity: 'available' })
+    const claim = await activeExecution(client)
+    const admittedVersion = client.version
+    await client.linkCodeChange(claim.id, admittedVersion, delivery.codeChangeUrl, {
+      sessionId: 'fleet', idempotencyKey: 'lost-link',
+    })
+
+    const settled = await replaySettlement(client, {
+      stage: 'execution', taskVersion: admittedVersion,
+      proposal: executionProposal(claim.id), delivery,
+    }, {
+      taskNumber: 31, claimId: claim.id, taskVersion: admittedVersion,
+      stage: 'execution', sessionId: 'fleet', idempotencyKey: 'persisted-settlement',
+    })
+
+    expect(settled.task.phase).toBe('in_review')
+    expect(client.codeChanges).toEqual(new Set([delivery.codeChangeUrl]))
+    expect(client.mainThreadItems).toHaveLength(1)
+  })
+
   it('reuses one delivery link through request changes, correction, and second review', async () => {
     const client = new InMemoryPactlineClient(31, [], { phase: 'ready', activity: 'available' })
     const execution = await activeExecution(client)
