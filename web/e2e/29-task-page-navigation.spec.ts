@@ -47,6 +47,15 @@ const TASK = {
   archived_at: null,
 }
 
+const BACKLOG_TASK = {
+  ...TASK,
+  id: '00000000-0000-4000-8000-000000000143',
+  number: 143,
+  title: 'Standalone backlog navigation task',
+  main_thread_id: '00000000-0000-4000-8000-000000001143',
+  milestone: null,
+}
+
 const MILESTONE = {
   id: TASK.milestone.id,
   project_id: TASK.project.id,
@@ -77,10 +86,10 @@ const PROJECT_DETAIL = {
     created_at: TASK.created_at,
     updated_at: TASK.updated_at,
     completed_tasks: 0,
-    eligible_tasks: 1,
+    eligible_tasks: 2,
   },
   milestones: [MILESTONE],
-  tasks: [TASK],
+  tasks: [TASK, BACKLOG_TASK],
   activity: [],
 }
 
@@ -106,6 +115,10 @@ async function mockApplication(page: import('@playwright/test').Page) {
       await json(TASK, { ETag: '"1"' })
       return
     }
+    if (url.pathname === '/api/v1/tasks/143') {
+      await json(BACKLOG_TASK, { ETag: '"1"' })
+      return
+    }
     if (url.pathname === '/api/v1/projects/12') {
       await json(PROJECT_DETAIL, { ETag: '"1"' })
       return
@@ -119,18 +132,23 @@ async function mockApplication(page: import('@playwright/test').Page) {
       return
     }
     if (url.pathname === '/api/v1/tasks') {
-      await json({ items: [TASK] })
+      const items = url.searchParams.get('backlog_only') === 'true'
+        ? [BACKLOG_TASK]
+        : url.searchParams.has('milestone_id')
+          ? [TASK]
+          : [TASK, BACKLOG_TASK]
+      await json({ items })
       return
     }
     if (url.pathname === '/api/v1/labels') {
       await json({ items: [] })
       return
     }
-    if (url.pathname === '/api/v1/tasks/142/code-changes') {
+    if (/^\/api\/v1\/tasks\/(142|143)\/code-changes$/.test(url.pathname)) {
       await json({ active_links: [] })
       return
     }
-    if (url.pathname.startsWith('/api/v1/tasks/142/')) {
+    if (/^\/api\/v1\/tasks\/(142|143)\//.test(url.pathname)) {
       await json({ items: [] })
       return
     }
@@ -142,17 +160,21 @@ async function mockApplication(page: import('@playwright/test').Page) {
   })
 }
 
-async function openTaskAndReturn(page: import('@playwright/test').Page, source: string) {
+async function openTaskAndReturn(
+  page: import('@playwright/test').Page,
+  source: string,
+  task = TASK,
+) {
   await page.goto(source)
-  await page.getByRole('link', { name: TASK.title, exact: true }).click()
-  await expect(page).toHaveURL('/tasks/142')
-  await expect(page.getByRole('heading', { name: TASK.title, exact: true, level: 1 })).toBeVisible()
+  await page.getByRole('link', { name: task.title, exact: true }).click()
+  await expect(page).toHaveURL(`/tasks/${task.number}`)
+  await expect(page.getByRole('heading', { name: task.title, exact: true, level: 1 })).toBeVisible()
   await expect(page.getByRole('dialog')).toHaveCount(0)
 
   await page.goBack()
   await expect(page).toHaveURL(source)
   await page.goForward()
-  await expect(page).toHaveURL('/tasks/142')
+  await expect(page).toHaveURL(`/tasks/${task.number}`)
 
   await page.getByRole('link', { name: '返回任务集合' }).click()
   await expect(page).toHaveURL(source)
@@ -163,7 +185,11 @@ test('standalone Task navigation preserves all three collection sources and resp
   await page.setViewportSize({ width: 1440, height: 1000 })
 
   await openTaskAndReturn(page, '/tasks?ownership=created&q=Standalone&sort=number&order=asc')
-  await openTaskAndReturn(page, '/projects/12/backlog?priority=high&q=Standalone')
+  await openTaskAndReturn(
+    page,
+    '/projects/12?priority=high&q=Standalone',
+    BACKLOG_TASK,
+  )
   await openTaskAndReturn(
     page,
     `/projects/12/milestones/${MILESTONE.id}?phase=backlog&view=gantt`,

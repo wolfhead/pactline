@@ -8,6 +8,7 @@ export interface TaskNavigationState {
 
 const KNOWN_COLLECTION_PATHS = [
   /^\/tasks$/,
+  /^\/projects\/[1-9]\d*$/,
   /^\/projects\/[1-9]\d*\/backlog$/,
   /^\/projects\/[1-9]\d*\/milestones\/[A-Za-z0-9-]+$/,
 ]
