@@ -138,7 +138,7 @@ if (operation === 'commit') {
     return { registry: reopened, invoke }
   }
   const operations = async () => (await readFile(log, 'utf8').catch(() => '')).trim().split('\n').filter(Boolean)
-  return { directory, origin, plugin, log, definition, registry, run, workspace, revision, reopen, operations }
+  return { directory, origin, seed, plugin, log, definition, registry, run, workspace, revision, reopen, operations }
 }
 
 async function setupCorrection(options: {
@@ -312,6 +312,31 @@ describe('PluginRunMaterializer recovery', () => {
     await expect(exec('git', ['-C', workspace.repositoryPath, 'merge-base', '--is-ancestor', candidateRevision, delivery.revision])).resolves.toBeDefined()
     expect((await exec('git', ['ls-remote', '--refs', origin, `refs/heads/${workspace.branch!}`])).stdout.split(/\s+/)[0]).toBe(delivery.revision)
     expect((await exec('git', ['ls-remote', '--refs', origin, 'refs/heads/main'])).stdout.split(/\s+/)[0]).toBe(baseRevision)
+    expect(await operations()).toEqual(['open-code-change'])
+    registry.close()
+  })
+
+  it('updates the existing correction delivery after the base ref advances', async () => {
+    const {
+      origin, seed, revision: baseRevision, registry, workspace,
+      candidate, candidateRevision, invoke, operations,
+    } = await setupCorrection({
+      afterCandidate: async workspacePath => { await writeFile(join(workspacePath, 'README.md'), 'corrected after base progress\n') },
+    })
+    await writeFile(join(seed, 'base-progress.txt'), 'unrelated upstream progress\n')
+    await exec('git', ['-C', seed, 'add', 'base-progress.txt'])
+    await exec('git', ['-C', seed, '-c', 'user.name=Fleet Test', '-c', 'user.email=fleet@example.invalid', 'commit', '--quiet', '-m', 'base progress'])
+    const advancedBaseRevision = (await exec('git', ['-C', seed, 'rev-parse', 'HEAD'])).stdout.trim()
+    await exec('git', ['-C', seed, 'push', '--quiet', 'origin', 'main'])
+
+    const delivery = await invoke()
+
+    expect(workspace.baseRevision).toBe(baseRevision)
+    expect(advancedBaseRevision).not.toBe(baseRevision)
+    expect((await exec('git', ['ls-remote', '--refs', origin, 'refs/heads/main'])).stdout.split(/\s+/)[0]).toBe(advancedBaseRevision)
+    expect((await exec('git', ['ls-remote', '--refs', origin, candidate.ref])).stdout.split(/\s+/)[0]).toBe(delivery.revision)
+    await expect(exec('git', ['-C', workspace.repositoryPath, 'merge-base', '--is-ancestor', candidateRevision, delivery.revision])).resolves.toBeDefined()
+    expect(delivery.codeChangeUrl).toBe(candidate.codeChangeUrl)
     expect(await operations()).toEqual(['open-code-change'])
     registry.close()
   })
