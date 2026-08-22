@@ -140,6 +140,10 @@ export class PluginRunMaterializer implements FleetRunMaterializer {
           if (activeWorkspace === undefined || activeWorkspace.branch === undefined) {
             throw new Error('Fleet delivery has no Task Workspace branch')
           }
+          if (activeWorkspace.source !== policy.definition.base.source
+            || activeWorkspace.baseRevision !== policy.definition.base.revision) {
+            throw new Error('Fleet Task Workspace does not match the admitted repository revision')
+          }
           const deliveryRef = `refs/heads/${activeWorkspace.branch}`
           if (policy.definition.candidate !== undefined
             && policy.definition.candidate.branch !== activeWorkspace.branch) {
@@ -168,6 +172,9 @@ export class PluginRunMaterializer implements FleetRunMaterializer {
             observation,
           }
           const priorCommit = this.options.registry.getEffect(run.runId, 'git_commit')
+          const reusableCandidate = priorCommit === undefined && policy.definition.candidate !== undefined
+            ? await this.reusableCandidateCommit(activeWorkspace, policy.definition.candidate)
+            : undefined
           this.commitEffect(run.runId, {
             type: 'intent', kind: 'git_commit', idempotencyKey: `${run.runId}-commit`, intent: {},
           })
@@ -178,12 +185,13 @@ export class PluginRunMaterializer implements FleetRunMaterializer {
               ? await this.reconcileCommit(
                   activeWorkspace,
                   policy.definition.candidate?.revision ?? policy.definition.base.revision,
+                  policy.definition.candidate !== undefined,
                 ) ?? await commitDelivery(
                   activeWorkspace, policy.definition.allowedPaths, run.taskNumber, this.options.environment,
                 )
-              : await commitDelivery(
-                  activeWorkspace, policy.definition.allowedPaths, run.taskNumber, this.options.environment,
-                )
+              : reusableCandidate ?? await commitDelivery(
+                activeWorkspace, policy.definition.allowedPaths, run.taskNumber, this.options.environment,
+              )
           if (recordedCommit?.status !== 'observed') {
             await this.options.faultInjector?.('after_commit_before_persistence', run)
             this.commitEffect(run.runId, { type: 'observation', kind: 'git_commit', observation: commitRecord })
@@ -212,6 +220,11 @@ export class PluginRunMaterializer implements FleetRunMaterializer {
                 this.gitCredential(policy),
                 this.options.environment,
               )
+            : policy.definition.candidate !== undefined
+                && commitRecord.revision === policy.definition.candidate.revision
+              ? await verifyPublishedDelivery(
+                  activeWorkspace, commitRecord, deliveryAuthority, this.gitCredential(policy), this.options.environment,
+                )
             : priorPush?.status === 'intended'
               ? await this.reconcilePush(activeWorkspace, commitRecord, deliveryAuthority, this.gitCredential(policy))
                 ?? await pushDelivery(activeWorkspace, commitRecord, deliveryAuthority, this.gitCredential(policy), this.options.environment)
@@ -287,12 +300,28 @@ export class PluginRunMaterializer implements FleetRunMaterializer {
   private async reconcileCommit(
     workspace: FleetWorkspace | undefined,
     baseRevision: string,
+    reuseCleanBase = false,
   ): Promise<{ readonly revision: string; readonly branch: string } | undefined> {
     if (workspace === undefined) throw new Error('Commit recovery has no persisted workspace')
     const observed = await observeWorkspaceRevision(workspace, this.options.environment)
-    if (observed.revision === baseRevision) return undefined
+    if (observed.revision === baseRevision) {
+      return reuseCleanBase && observed.clean
+        ? { revision: observed.revision, branch: observed.branch }
+        : undefined
+    }
     if (!observed.clean) throw new Error('Recovered committed workspace also contains uncommitted changes')
     return { revision: observed.revision, branch: observed.branch }
+  }
+
+  private async reusableCandidateCommit(
+    workspace: FleetWorkspace,
+    candidate: NonNullable<ReturnType<typeof frozenPluginPolicy>['definition']['candidate']>,
+  ): Promise<{ readonly revision: string; readonly branch: string } | undefined> {
+    const observed = await observeWorkspaceRevision(workspace, this.options.environment)
+    if (observed.revision !== candidate.revision || observed.branch !== candidate.branch) {
+      throw new Error('Fleet correction candidate does not match the Task Workspace HEAD')
+    }
+    return observed.clean ? { revision: observed.revision, branch: observed.branch } : undefined
   }
 
   private async reconcilePush(

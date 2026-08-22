@@ -123,7 +123,10 @@ describe('Pactline settlement reconciliation', () => {
     const firstReview = await activeReview(client)
     await settleReview(client, {
       ...proposal(firstReview.id), recommendation: 'request_changes', summary: 'Correction required.',
-      findings: [{ path: 'README.md', line: 1, severity: 'major', explanation: 'Update the delivery.' }],
+      findings: [{
+        path: 'README.md', line: 1, severity: 'high', category: 'correctness',
+        evidence: 'Baseline text.', explanation: 'Update the delivery.',
+      }],
     }, {
       taskNumber: 31, claimId: firstReview.id, taskVersion: client.version,
       stage: 'review', sessionId: 'fleet', idempotencyKey: 'first-review',
