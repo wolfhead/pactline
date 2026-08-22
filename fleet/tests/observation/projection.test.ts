@@ -48,6 +48,15 @@ describe('FleetObservationProjector', () => {
       state: 'claiming', claimAuthority: { kind: 'not_read' },
       sessionResumable: false, hasSettlementIntent: false,
     }, { kind: 'reconcile_claim' }, new Date('2026-08-16T10:01:02.000Z'))
+    registry.recordVerificationMismatch(run.runId, {
+      stage: 'execution', role: 'implementer', details: [{
+        category: 'test_failure', command: 'npm test',
+        harness: { outcome: 'passed', summary: 'token=must-not-project' },
+        fleet: { outcome: 'failed', exitCode: 1, summary: 'Bearer must-not-project' },
+      }, ...Array.from({ length: 69 }, (_, index) => ({
+        category: 'parse_mismatch' as const, command: `extra-${String(index)}`,
+      }))],
+    }, new Date('2026-08-16T10:01:03.000Z'))
     registry.recordEffectIntent(run.runId, 'harness_result', `${run.runId}-result`, {})
     registry.observeEffect(run.runId, 'harness_result', {
       terminalState: 'success', runtimeSessionId: 'session-41',
@@ -66,10 +75,19 @@ describe('FleetObservationProjector', () => {
     })])
     const detail = projector.run(run.runId)!.data
     expect(detail.timeline.map(item => item.title)).toEqual([
-      'Run admitted', 'Run entered claiming', 'Recovery chose reconcile claim',
+      'Run admitted', 'Run entered claiming', 'Recovery chose reconcile claim', 'Verification mismatch recorded',
     ])
-    expect(detail.timeline.at(-1)).toMatchObject({
+    expect(detail.timeline.at(-2)).toMatchObject({
       kind: 'run.recovery_decided', state: 'claiming', detail: 'Claim authority: not read',
+    })
+    expect(detail.verificationMismatch).toMatchObject({
+      at: '2026-08-16T10:01:03.000Z', stage: 'execution', role: 'implementer', detailsOmitted: 6,
+    })
+    expect(detail.verificationMismatch?.details).toHaveLength(64)
+    expect(detail.verificationMismatch?.details[0]).toEqual({
+      category: 'test_failure', command: 'npm test',
+      harness: { outcome: 'passed', summary: 'token=[REDACTED]' },
+      fleet: { outcome: 'failed', exitCode: 1, summary: 'Bearer [REDACTED]' },
     })
     expect(detail.effects).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'harness_result', detail: { terminalState: 'success', runtimeSessionId: 'session-41' } }),

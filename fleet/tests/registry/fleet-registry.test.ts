@@ -15,6 +15,30 @@ afterEach(async () => {
 })
 
 describe('FleetRegistry', () => {
+  it('bounds persisted verification differences and records the omitted count', async () => {
+    const parent = await mkdtemp(join(tmpdir(), 'fleet-registry-verification-'))
+    directories.push(parent)
+    const state = await ensurePrivateDirectory(join(parent, 'state'))
+    const configPath = join(parent, 'fleet.yml')
+    const source = serviceConfigYAML({ stateDirectory: state, firstWorkspace: join(parent, 'work') })
+    const registry = await FleetRegistry.open(join(state, 'fleet.sqlite3'))
+    registry.recordConfiguration(parseFleetConfig(source, configPath, { knownAdapterIds: ['codex'] }))
+    const run = registry.admitRun('first', {
+      taskNumber: 22, taskVersion: 1, stage: 'execution', frozenPolicy: {},
+    })
+    registry.recordVerificationMismatch(run.runId, {
+      stage: 'execution', role: 'implementer',
+      details: Array.from({ length: 70 }, (_, index) => ({
+        category: 'parse_mismatch' as const, command: `command-${String(index)}`,
+      })),
+    })
+
+    const event = registry.listRunEvents(run.runId).find(item => item.eventType === 'run.verification_mismatch')
+    expect(event?.payload.details).toHaveLength(64)
+    expect(event?.payload.detailsOmitted).toBe(6)
+    registry.close()
+  })
+
   it('persists one isolated Workspace and native Session per Task role', async () => {
     const parent = await mkdtemp(join(tmpdir(), 'fleet-registry-task-runtime-'))
     directories.push(parent)

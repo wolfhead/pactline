@@ -2,7 +2,7 @@ import type { StaticRuntimeRouter } from '../core/runtime-router.js'
 import { continueClaimStageAfterHarness, runClaimStage } from '../core/claim-stage.js'
 import type { ClaimStageClient, ClaimStageOptions, ClaimWorkflowStage } from '../core/claim-stage.js'
 import type { HarnessRunResult } from '../core/harness-result.js'
-import { decodeGitObservation } from '../core/verification.js'
+import { decodeGitObservation, VerificationMismatchError } from '../core/verification.js'
 import type { FleetWorkDefinition } from '../core/work-definition.js'
 import { PactlineClientError } from '../pactline/client.js'
 import { replaySettlement } from '../pactline/settlement.js'
@@ -430,12 +430,14 @@ export class ClaimStageRunCoordinator implements ScheduledRunExecutor {
         return { kind: 'contention', reason: (error as PactlineClientError).pactlineError!.code }
       }
       const current = this.currentRun(run.runId)
+      this.recordVerificationMismatch(current, error)
       const ambiguous = hasAmbiguousExternalEffect(this.options.registry.listEffects(run.runId))
+      const reason = error instanceof VerificationMismatchError ? 'verification_mismatch' : safeReason(error)
       const outcome = ambiguous
-        ? this.quarantine(current, `ambiguous_external_effect: ${safeReason(error)}`)
+        ? this.quarantine(current, `ambiguous_external_effect: ${reason}`)
         : current.claimId === undefined
           ? this.releaseLocal(current, 'failed_before_claim')
-          : await this.releaseKnownClaim(current, safeReason(error), signal)
+          : await this.releaseKnownClaim(current, reason, signal)
       return outcome
     }
   }
@@ -658,7 +660,10 @@ export class ClaimStageRunCoordinator implements ScheduledRunExecutor {
         : { kind: 'completed' }
     } catch (error) {
       if (error instanceof FleetInjectedCrash) throw error
-      return this.quarantine(this.currentRun(run.runId), `post_result_recovery_failed:${safeReason(error)}`)
+      const current = this.currentRun(run.runId)
+      this.recordVerificationMismatch(current, error)
+      const reason = error instanceof VerificationMismatchError ? 'verification_mismatch' : safeReason(error)
+      return this.quarantine(current, `post_result_recovery_failed:${reason}`)
     }
   }
 
@@ -725,6 +730,15 @@ export class ClaimStageRunCoordinator implements ScheduledRunExecutor {
 
   private async inject(checkpoint: FleetCrashCheckpoint, run: FleetRun): Promise<void> {
     await this.options.faultInjector?.(checkpoint, this.currentRun(run.runId))
+  }
+
+  private recordVerificationMismatch(run: FleetRun, error: unknown): void {
+    if (!(error instanceof VerificationMismatchError) || run.stage === undefined) return
+    this.options.registry.recordVerificationMismatch(run.runId, {
+      stage: run.stage,
+      role: taskRole(run.stage),
+      details: error.details,
+    })
   }
 
   private decide(runId: string, decision: Omit<FleetRunDecision, 'expected'>): FleetRun {

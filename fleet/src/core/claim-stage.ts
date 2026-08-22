@@ -5,7 +5,7 @@ import type {
   ProposalValidationContext,
   ReviewProposal,
 } from './harness-result.js'
-import { proposalResultSchema, validateHarnessProposal } from './harness-result.js'
+import { assertHarnessProposalCanSettle, decodeHarnessProposal, proposalResultSchema } from './harness-result.js'
 import { HarnessEventCollector } from './events.js'
 import { promptPolicy } from './prompt-policy.js'
 import type { AdmittedRuntime, StaticRuntimeRouter } from './runtime-router.js'
@@ -297,7 +297,7 @@ async function finishClaimStage(
   validationContext: ProposalValidationContext,
   baseline: GitObservation,
 ): Promise<ClaimStageResult> {
-  const proposal = validateHarnessProposal(harnessResult.proposal, validationContext)
+  const proposal = decodeHarnessProposal(harnessResult.proposal, validationContext)
   if (proposal.kind === 'resolution_analysis') throw new Error('Resolution analysis cannot directly settle a Pactline Claim')
 
   const afterAgent = await observeGit(workspace.repositoryPath, workspace.baseRevision)
@@ -317,6 +317,7 @@ async function finishClaimStage(
       ...(proposal.kind === 'review' ? { reviewBaseline: baseline } : {}),
     })
   }
+  assertHarnessProposalCanSettle(proposal, validationContext)
   if (proposal.kind === 'review') await assertReviewFindingsExist(workspace.repositoryPath, proposal)
   await options.validateObservation?.(dispatch, proposal, observation)
 

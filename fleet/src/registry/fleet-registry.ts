@@ -33,6 +33,7 @@ import { preparePrivateFile } from '../service/state-directory.js'
 import type { RunRecoveryDecision, RunRecoveryFacts } from '../run/recovery.js'
 import { decodeFleetWorkspace } from '../repository/workspace.js'
 import type { FleetWorkspace } from '../repository/workspace.js'
+import type { VerificationMismatchDetail } from '../core/verification.js'
 
 const SCHEMA_VERSION = 4
 
@@ -698,6 +699,40 @@ export class FleetRegistry {
       decision: decision.kind,
       ...('reason' in decision ? { reason: decision.reason } : {}),
       ...('terminal' in decision ? { terminal: decision.terminal } : {}),
+    }, now.toISOString())
+  }
+
+  /** Retain one bounded verification discrepancy in the existing Run evidence ledger. */
+  recordVerificationMismatch(
+    runId: string,
+    facts: {
+      readonly stage: FleetRunStage
+      readonly role: TaskRole
+      readonly details: readonly VerificationMismatchDetail[]
+    },
+    now: Date = new Date(),
+  ): void {
+    this.assertOpen()
+    if (this.getRun(runId) === undefined) throw new Error(`Fleet Run does not exist: ${runId}`)
+    const details = facts.details.slice(0, 64).map(detail => {
+      const harnessPaths = detail.harnessChangedPaths?.slice(0, 64)
+      const fleetPaths = detail.fleetChangedPaths?.slice(0, 64)
+      return {
+        ...detail,
+        ...(harnessPaths === undefined ? {} : { harnessChangedPaths: harnessPaths }),
+        ...(fleetPaths === undefined ? {} : { fleetChangedPaths: fleetPaths }),
+        ...((detail.harnessChangedPaths?.length ?? 0) <= 64 ? {} : {
+          harnessChangedPathsOmitted: (detail.harnessChangedPathsOmitted ?? 0) + detail.harnessChangedPaths!.length - 64,
+        }),
+        ...((detail.fleetChangedPaths?.length ?? 0) <= 64 ? {} : {
+          fleetChangedPathsOmitted: (detail.fleetChangedPathsOmitted ?? 0) + detail.fleetChangedPaths!.length - 64,
+        }),
+      }
+    })
+    this.appendEvent(runId, 'run.verification_mismatch', {
+      ...facts,
+      details,
+      ...(facts.details.length <= 64 ? {} : { detailsOmitted: facts.details.length - 64 }),
     }, now.toISOString())
   }
 

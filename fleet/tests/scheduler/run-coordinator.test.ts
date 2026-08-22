@@ -87,6 +87,109 @@ function unableProposal(runId: string, claimId: string): ExecutionProposal {
 }
 
 describe('ClaimStageRunCoordinator', () => {
+  it('retains structured mismatch evidence and resumes the same Task runtime on the next Run', async () => {
+    const { directory, origin, revision, registry, fleet } = await fixture()
+    const criterion = { id: 'criterion-1', revision: 1 }
+    const client = new InMemoryPactlineClient(21, [criterion])
+    const definition: FleetWorkDefinition = {
+      caseId: 'verification-mismatch-recovery', taskNumber: 21, taskVersion: 1,
+      base: { source: origin, ref: 'refs/heads/main', revision },
+      repository: { provider: 'github', host: 'github.com', owner: 'wolfhead', name: 'pactline' },
+      allowedPaths: ['README.md'], verificationCommands: ['grep -q good README.md'], criteria: [criterion],
+    }
+    const workspace = await prepareWorkspace({
+      input: definition.base, mode: 'execution', runId: 'task-21-mismatch', temporaryDirectory: directory,
+      taskIdentity: { projectNumber: 5, taskNumber: 21 },
+    })
+    registry.bindTaskWorkspace(5, 21, workspace)
+    const capabilities: HarnessCapabilities = {
+      nativeTools: true, structuredResult: true, eventStream: true, cancellation: true, sessionResume: true,
+      sandboxModes: ['workspace_write'], supportedStages: ['execution', 'correction'],
+    }
+    let resumeCalls = 0
+    const result = (request: HarnessRunRequest, outcome: 'passed' | 'failed' | 'missing'): HarnessRunResult => ({
+      adapterId: 'replay', adapterVersion: 'mismatch-test', runtimeSessionId: 'retained-session',
+      model: { provider: 'replay', model: 'quality', reasoning: 'max' }, terminalState: 'completed',
+      proposal: {
+        schemaVersion: 1, kind: 'execution', runId: request.runId, claimId: request.claimId,
+        taskNumber: 21, recommendation: 'complete', summary: 'Verification result.',
+        changedPaths: ['README.md'],
+        verification: outcome === 'missing' ? [] : [{ command: 'grep -q good README.md', outcome, summary: outcome }],
+        criteria: [{ criterionId: criterion.id, criterionRevision: 1, outcome: 'passed', evidence: 'verified' }],
+        limitations: [],
+      },
+      usage: {}, eventSummary: { total: 0, byType: {}, toolCalls: {}, toolErrors: {} },
+    })
+    const adapter: HarnessAdapter = {
+      id: 'replay', version: 'mismatch-test', probe: async () => capabilities,
+      async run(request, observer) {
+        await observer.onSessionStarted({ runtimeSessionId: 'retained-session' })
+        await writeFile(join(request.workspace, 'README.md'), 'good from first Run\n')
+        return result(request, 'missing')
+      },
+      async resume(runtimeSessionId, request, observer) {
+        resumeCalls += 1
+        expect(runtimeSessionId).toBe('retained-session')
+        await observer.onSessionStarted({ runtimeSessionId })
+        await writeFile(join(request.workspace, 'README.md'), 'good after mismatch\n')
+        return result(request, resumeCalls === 1 ? 'failed' : 'passed')
+      },
+    }
+    const coordinator = new ClaimStageRunCoordinator({
+      registry, client, clientSessionId: 'fleet-service-test',
+      materializer: {
+        materialize: async () => ({
+          definition, router: new StaticRuntimeRouter([adapter], routes()),
+          deadline: '2099-08-17T00:00:00Z', prepareWorkspace: async () => workspace,
+          publishDelivery: async () => ({
+            repository: definition.repository, codeChangeUrl: 'https://github.com/wolfhead/pactline/pull/90',
+            revision: 'b'.repeat(40), branch: workspace.branch!,
+          }),
+        }),
+      },
+    })
+    const first = registry.admitRun(fleet.id, {
+      taskNumber: 21, taskVersion: client.version, stage: 'execution', frozenPolicy: { definition, route: routes().execution },
+    })
+
+    await expect(coordinator.execute(first.runId, new AbortController().signal)).resolves.toEqual({
+      kind: 'released', reason: 'verification_mismatch',
+    })
+    expect(registry.getRun(first.runId)).toMatchObject({ state: 'released', disposition: 'verification_mismatch' })
+    expect(registry.listRunEvents(first.runId)).toContainEqual(expect.objectContaining({
+      eventType: 'run.verification_mismatch',
+      payload: expect.objectContaining({
+        stage: 'execution', role: 'implementer',
+        details: [expect.objectContaining({ category: 'parse_mismatch', command: 'grep -q good README.md' })],
+      }),
+    }))
+    expect(registry.getTaskRuntime(5, 21)).toMatchObject({
+      workspace: { root: workspace.root },
+      sessions: { implementer: { runtimeSessionId: 'retained-session' } },
+    })
+
+    const second = registry.admitRun(fleet.id, {
+      taskNumber: 21, taskVersion: client.version, stage: 'execution', frozenPolicy: { definition, route: routes().execution },
+    })
+    await expect(coordinator.execute(second.runId, new AbortController().signal)).resolves.toEqual({
+      kind: 'released', reason: 'verification_mismatch',
+    })
+    expect(registry.listRunEvents(second.runId)).toContainEqual(expect.objectContaining({
+      eventType: 'run.verification_mismatch',
+      payload: expect.objectContaining({
+        details: [expect.objectContaining({ category: 'result_mismatch', command: 'grep -q good README.md' })],
+      }),
+    }))
+
+    const third = registry.admitRun(fleet.id, {
+      taskNumber: 21, taskVersion: client.version, stage: 'execution', frozenPolicy: { definition, route: routes().execution },
+    })
+    await expect(coordinator.execute(third.runId, new AbortController().signal)).resolves.toEqual({ kind: 'completed' })
+    expect(resumeCalls).toBe(2)
+    expect(client.phase).toBe('in_review')
+    registry.close()
+  })
+
   it('resumes the Task implementer Session across a new Run and Claim without replacing the Workspace', async () => {
     const { directory, origin, revision, registry, fleet } = await fixture()
     const criterion = { id: 'criterion-1', revision: 1 }
