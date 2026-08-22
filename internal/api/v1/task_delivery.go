@@ -143,7 +143,7 @@ func taskCodeChangeMutationResponse(
 		Etag:       generated.NewOptString(formatETag(mutation.Task.Version)),
 		XRequestID: generated.NewOptString(baseapi.RequestIDFromContext(ctx)),
 		Response: generated.TaskCodeChangeMutation{
-			Task: taskWorkflowFromDomain(mutation.Task), CodeChange: codeChange,
+			Task: taskWorkflowFromDomain(mutation.Task), CodeChange: codeChange, Changed: mutation.Changed,
 		},
 	}, nil
 }

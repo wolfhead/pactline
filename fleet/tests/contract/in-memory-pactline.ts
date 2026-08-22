@@ -27,6 +27,8 @@ export interface MutationRecord {
 export class InMemoryPactlineClient implements ClaimStageClient {
   readonly mutations: MutationRecord[] = []
   readonly checks: Array<{ criterionId: string; outcome: PactlineCheckOutcome }> = []
+  readonly codeChanges = new Set<string>()
+  readonly mainThreadItems: Array<{ kind: string; body: string; task_stage_claim_id: string }> = []
   phase: string
   activity: string
   version: number
@@ -84,13 +86,18 @@ export class InMemoryPactlineClient implements ClaimStageClient {
   linkCodeChange(claimId: string, taskVersion: number, url: string, options: PactlineCallOptions): Promise<PactlineOperation<PactlineCodeChangeMutationResult>> {
     this.assertActive(claimId, taskVersion)
     this.record('link', options, taskVersion)
-    this.version += 1
-    return Promise.resolve({ data: { task: this.workflow(), code_change: { url } } })
+    const changed = !this.codeChanges.has(url)
+    if (changed) {
+      this.codeChanges.add(url)
+      this.version += 1
+    }
+    return Promise.resolve({ data: { task: this.workflow(), code_change: { url }, changed } })
   }
 
-  submitClaim(claimId: string, taskVersion: number, _message: string, options: PactlineCallOptions): Promise<PactlineOperation<PactlineClaimMutationResult>> {
+  submitClaim(claimId: string, taskVersion: number, message: string, options: PactlineCallOptions): Promise<PactlineOperation<PactlineClaimMutationResult>> {
     const claim = this.assertActive(claimId, taskVersion)
     this.record('submit', options, taskVersion)
+    this.mainThreadItems.push({ kind: 'work_submission', body: message, task_stage_claim_id: claimId })
     return Promise.resolve({ data: this.mutation(claim) })
   }
 
@@ -157,6 +164,7 @@ export class InMemoryPactlineClient implements ClaimStageClient {
       task: { id: `task-${String(this.taskNumber)}`, number: this.taskNumber, title: 'Fleet test Task', version: this.version, phase: this.phase, activity: this.activity },
       criteria: this.criteria.map(item => ({ ...item })),
       ...(claim === undefined ? {} : { claim: { ...claim } }),
+      main_thread: { items: this.mainThreadItems.map(item => ({ ...item })) },
     }
   }
 

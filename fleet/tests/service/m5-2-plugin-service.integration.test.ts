@@ -64,7 +64,7 @@ else if (command[0] === 'task' && command[1] === 'claim') {
 else if (command[0] === 'claim' && command[1] === 'show') ok(packet())
 else if (command[0] === 'claim' && command[1] === 'verify') ok({ recorded: true })
 else if (command[0] === 'claim' && command[1] === 'change') {
-  state.version += 1; writeFileSync(statePath, JSON.stringify(state)); ok({ task: workflow(), code_change: { id: 'change-1' } })
+  state.version += 1; writeFileSync(statePath, JSON.stringify(state)); ok({ task: workflow(), code_change: { id: 'change-1' }, changed: true })
 } else if (command[0] === 'claim' && command[1] === 'submit') ok({ task: workflow(), claim: claim() })
 else if (command[0] === 'claim' && command[1] === 'complete') {
   state.phase = 'in_review'; state.activity = 'available'; state.claimStatus = 'completed'

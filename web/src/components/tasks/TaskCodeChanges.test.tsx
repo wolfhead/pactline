@@ -68,6 +68,7 @@ describe("TaskCodeChanges", () => {
         main_thread_id: "thread-1",
       },
       code_change: LINK,
+      changed: true,
     });
   });
 

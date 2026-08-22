@@ -136,7 +136,11 @@ never needed by a CLI or delegated repository worker.
 
 During an owned execution Claim, a person or Agent may link or unlink several
 Pull Requests or Merge Requests from the Task's authorized repositories. These commands
-preserve Claim ownership and Claim version while incrementing Task version.
+preserve Claim ownership and Claim version while incrementing Task version. Linking an
+already-active normalized code-change URL through the current execution Claim is an
+explicit `changed: false` success: it preserves the original link provenance, Task
+version, activity history, and delivery count. Other Claim, repository, and lifecycle
+conflicts remain errors.
 Work submission remains repeatable and does not freeze the set. A review Claim
 cannot edit delivery links.
 

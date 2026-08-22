@@ -26,6 +26,7 @@ type TaskCodeChangeWithRepository struct {
 type TaskCodeChangeMutation struct {
 	Task       TaskWorkflowSnapshot
 	CodeChange TaskCodeChangeWithRepository
+	Changed    bool
 }
 
 type TaskCodeChangeStore struct{ db *DB }
@@ -146,6 +147,29 @@ func (s *TaskCodeChangeStore) Link(
 		repository.PathLookupKey != reference.Repository.PathLookupKey {
 		return TaskCodeChangeMutation{}, fmt.Errorf("%w: code change does not belong to the Project repository", domain.ErrConflict)
 	}
+	existing, err := scanTaskCodeChangeWithRepository(tx.QueryRow(ctx, taskCodeChangeSelect+`
+		WHERE code_change.task_id=$1
+		  AND code_change.project_repository_id=$2
+		  AND code_change.kind=$3
+		  AND code_change.change_number=$4
+		  AND code_change.unlinked_at IS NULL
+		FOR UPDATE`, task.TaskID, repository.ID, reference.Kind, reference.ChangeNumber))
+	if err == nil {
+		if existing.CodeChange.WebURL != reference.WebURL {
+			return TaskCodeChangeMutation{}, fmt.Errorf(
+				"%w: code-change identity is already linked with a different normalized URL", domain.ErrConflict,
+			)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return TaskCodeChangeMutation{}, fmt.Errorf("commit existing Task code change link: %w", err)
+		}
+		return TaskCodeChangeMutation{
+			Task: task.TaskWorkflowSnapshot, CodeChange: existing, Changed: false,
+		}, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return TaskCodeChangeMutation{}, err
+	}
 	link := domain.TaskCodeChange{
 		ID: uuid.New(), TaskID: task.TaskID, ProjectID: task.ProjectID,
 		ProjectRepositoryID: repository.ID,
@@ -196,6 +220,7 @@ func (s *TaskCodeChangeStore) Link(
 	return TaskCodeChangeMutation{
 		Task:       task.TaskWorkflowSnapshot,
 		CodeChange: TaskCodeChangeWithRepository{CodeChange: link, Repository: repository},
+		Changed:    true,
 	}, nil
 }
 
@@ -273,7 +298,7 @@ func (s *TaskCodeChangeStore) Unlink(
 	if err := tx.Commit(ctx); err != nil {
 		return TaskCodeChangeMutation{}, fmt.Errorf("commit Task code change unlink: %w", err)
 	}
-	return TaskCodeChangeMutation{Task: task.TaskWorkflowSnapshot, CodeChange: item}, nil
+	return TaskCodeChangeMutation{Task: task.TaskWorkflowSnapshot, CodeChange: item, Changed: true}, nil
 }
 
 func (s *TaskCodeChangeStore) UpdateProviderEvidence(

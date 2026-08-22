@@ -3242,12 +3242,15 @@ components:
     TaskCodeChangeMutation:
       type: object
       additionalProperties: false
-      required: [task, code_change]
+      required: [task, code_change, changed]
       properties:
         task:
           $ref: "#/components/schemas/TaskWorkflow"
         code_change:
           $ref: "#/components/schemas/TaskCodeChange"
+        changed:
+          type: boolean
+          description: True when the active delivery set changed; false for an existing identical link.
     TaskThreadItem:
       type: object
       additionalProperties: false

@@ -147,13 +147,20 @@ func TestV1RepositoryDeliveryConnectsProjectAgentExecutionAndReviewSnapshot(t *t
 	decodeJSON(t, claimed, &execution)
 
 	codeChangeURL := repositoryURL + "/-/merge_requests/42"
-	linked := doBearerMutation(
+	linkHeaders := http.Header{
+		"If-Match":                   {`"3"`},
+		"Idempotency-Key":            {"delivery-link-replay-" + uuid.NewString()},
+		"Pactline-Client-Kind":       {"api-test"},
+		"Pactline-Client-Session-ID": {"delivery-link-session"},
+	}
+	linked := doBearerRequest(
 		t, handler, http.MethodPost,
 		fmt.Sprintf("/api/v1/claims/%s/code-changes", execution.Claim.ID),
-		issued.Token, http.Header{"If-Match": {`"3"`}},
+		issued.Token, linkHeaders,
 		map[string]any{"code_change_url": codeChangeURL},
 	)
 	require.Equal(t, http.StatusCreated, linked.Code, linked.Body.String())
+	linkedBody := linked.Body.String()
 	var linkMutation struct {
 		Task       workflowJSON `json:"task"`
 		CodeChange struct {
@@ -162,12 +169,48 @@ func TestV1RepositoryDeliveryConnectsProjectAgentExecutionAndReviewSnapshot(t *t
 			ChangeNumber int64     `json:"change_number"`
 			WebURL       string    `json:"web_url"`
 		} `json:"code_change"`
+		Changed bool `json:"changed"`
 	}
 	decodeJSON(t, linked, &linkMutation)
 	require.Equal(t, int64(4), linkMutation.Task.Version)
 	require.Equal(t, execution.Claim.Version, int64(1))
 	require.Equal(t, "merge_request", linkMutation.CodeChange.Kind)
 	require.Equal(t, codeChangeURL, linkMutation.CodeChange.WebURL)
+	require.True(t, linkMutation.Changed)
+
+	replayed := doBearerRequest(
+		t, handler, http.MethodPost,
+		fmt.Sprintf("/api/v1/claims/%s/code-changes", execution.Claim.ID),
+		issued.Token, linkHeaders,
+		map[string]any{"code_change_url": codeChangeURL},
+	)
+	require.Equal(t, http.StatusCreated, replayed.Code, replayed.Body.String())
+	require.Equal(t, "true", replayed.Header().Get("Idempotency-Replayed"))
+	require.JSONEq(t, linkedBody, replayed.Body.String())
+
+	duplicate := doBearerMutation(
+		t, handler, http.MethodPost,
+		fmt.Sprintf("/api/v1/claims/%s/code-changes", execution.Claim.ID),
+		issued.Token, http.Header{"If-Match": {`"4"`}},
+		map[string]any{"code_change_url": codeChangeURL},
+	)
+	require.Equal(t, http.StatusCreated, duplicate.Code, duplicate.Body.String())
+	var duplicateMutation struct {
+		Task       workflowJSON `json:"task"`
+		CodeChange struct {
+			ID uuid.UUID `json:"id"`
+		} `json:"code_change"`
+		Changed bool `json:"changed"`
+	}
+	decodeJSON(t, duplicate, &duplicateMutation)
+	require.False(t, duplicateMutation.Changed)
+	require.Equal(t, int64(4), duplicateMutation.Task.Version)
+	require.Equal(t, linkMutation.CodeChange.ID, duplicateMutation.CodeChange.ID)
+	var linkActivities int
+	require.NoError(t, db.Pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM task_activity WHERE task_id=$1 AND field='code_changes'`, task.ID,
+	).Scan(&linkActivities))
+	require.Equal(t, 1, linkActivities)
 	githubCodeChangeURL := githubRepositoryURL + "/pull/17"
 	githubLinked := doBearerMutation(
 		t, handler, http.MethodPost,
@@ -284,6 +327,49 @@ func TestV1RepositoryDeliveryConnectsProjectAgentExecutionAndReviewSnapshot(t *t
 	}
 	decodeJSON(t, reviewLink, &reviewProblem)
 	require.Equal(t, "INVALID_TRANSITION", reviewProblem.Code)
+
+	changesRequested := doWithHeaders(
+		t, handler, http.MethodPost,
+		fmt.Sprintf("/api/v1/claims/%s/request-changes", reviewClaim.Claim.ID),
+		userA, http.Header{"If-Match": {`"8"`}}, map[string]any{"body": "Please correct the delivery."},
+	)
+	require.Equal(t, http.StatusOK, changesRequested.Code, changesRequested.Body.String())
+	correctionClaimed := doWithHeaders(
+		t, handler, http.MethodPost, taskPath+"/claims", userA,
+		http.Header{"If-Match": {`"9"`}}, map[string]any{},
+	)
+	require.Equal(t, http.StatusCreated, correctionClaimed.Code, correctionClaimed.Body.String())
+	var correction stageClaimCommandJSON
+	decodeJSON(t, correctionClaimed, &correction)
+	require.Equal(t, "execution", correction.Claim.Stage)
+	correctionLink := doWithHeaders(
+		t, handler, http.MethodPost,
+		fmt.Sprintf("/api/v1/claims/%s/code-changes", correction.Claim.ID),
+		userA, http.Header{"If-Match": {`"10"`}}, map[string]any{"code_change_url": codeChangeURL},
+	)
+	require.Equal(t, http.StatusCreated, correctionLink.Code, correctionLink.Body.String())
+	var correctionMutation struct {
+		Task       workflowJSON `json:"task"`
+		CodeChange struct {
+			ID                   uuid.UUID `json:"id"`
+			LinkedThroughClaimID uuid.UUID `json:"linked_through_claim_id"`
+		} `json:"code_change"`
+		Changed bool `json:"changed"`
+	}
+	decodeJSON(t, correctionLink, &correctionMutation)
+	require.False(t, correctionMutation.Changed)
+	require.Equal(t, int64(10), correctionMutation.Task.Version)
+	require.Equal(t, linkMutation.CodeChange.ID, correctionMutation.CodeChange.ID)
+	require.Equal(t, execution.Claim.ID, correctionMutation.CodeChange.LinkedThroughClaimID,
+		"a no-op must preserve the original link provenance")
+
+	wrongClaimLink := doBearerMutation(
+		t, handler, http.MethodPost,
+		fmt.Sprintf("/api/v1/claims/%s/code-changes", execution.Claim.ID),
+		issued.Token, http.Header{"If-Match": {`"10"`}},
+		map[string]any{"code_change_url": codeChangeURL},
+	)
+	require.Equal(t, http.StatusConflict, wrongClaimLink.Code, wrongClaimLink.Body.String())
 }
 
 func TestV1RepositoryDeliveryCompletesWithoutRepositoryConnection(t *testing.T) {
