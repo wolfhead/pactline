@@ -11,6 +11,7 @@ import { FleetRegistry } from '../../src/registry/fleet-registry.js'
 import { prepareWorkspace } from '../../src/repository/workspace.js'
 import { ensurePrivateDirectory } from '../../src/service/state-directory.js'
 import { PluginRunMaterializer } from '../../src/work-plugin/materializer.js'
+import type { PluginRunMaterializerOptions } from '../../src/work-plugin/materializer.js'
 import { serviceConfigYAML } from '../fixtures/service-config.js'
 
 const exec = promisify(execFile)
@@ -143,6 +144,7 @@ if (operation === 'commit') {
 async function setupCorrection(options: {
   readonly candidate?: (candidate: NonNullable<FleetWorkDefinition['candidate']>) => NonNullable<FleetWorkDefinition['candidate']>
   readonly afterCandidate?: (workspacePath: string) => Promise<void>
+  readonly faultInjector?: PluginRunMaterializerOptions['faultInjector']
 } = {}) {
   const fixture = await setup()
   const { directory, plugin, log, definition, registry, run, workspace } = fixture
@@ -173,6 +175,7 @@ async function setupCorrection(options: {
   })
   const materializer = new PluginRunMaterializer({
     adapters: () => [], environment: { PATH: process.env.PATH }, registry,
+    ...(options.faultInjector === undefined ? {} : { faultInjector: options.faultInjector }),
   })
   const invoke = async () => {
     const materialized = await materializer.materialize(correctionRun, new AbortController().signal)
@@ -323,6 +326,35 @@ describe('PluginRunMaterializer recovery', () => {
     })
 
     await expect(invoke()).rejects.toThrow('candidate does not match the Task Workspace HEAD')
+    expect(await operations()).toEqual([])
+    registry.close()
+  })
+
+  it.each([
+    ['dirty Workspace', async (workspacePath: string) => {
+      await writeFile(join(workspacePath, 'unexpected.txt'), 'unexpected\n')
+    }, 'requires a clean Task Workspace'],
+    ['different Workspace HEAD', async (workspacePath: string) => {
+      await writeFile(join(workspacePath, 'unexpected.txt'), 'unexpected\n')
+      await exec('git', ['-C', workspacePath, 'add', 'unexpected.txt'])
+      await exec('git', ['-C', workspacePath, '-c', 'user.name=Fleet Test', '-c', 'user.email=fleet@example.invalid', 'commit', '--quiet', '-m', 'unexpected'])
+    }, 'does not match the Task Workspace HEAD'],
+  ])('rejects a reused candidate commit checkpoint with a %s', async (_case, mutate, message) => {
+    let injectCrash = true
+    const { registry, correctionRun, workspace, candidateRevision, invoke, operations } = await setupCorrection({
+      faultInjector: checkpoint => {
+        if (checkpoint !== 'after_commit_persistence_before_push' || !injectCrash) return
+        injectCrash = false
+        throw new Error('injected checkpoint crash')
+      },
+    })
+    await expect(invoke()).rejects.toThrow('injected checkpoint crash')
+    expect(registry.getEffect(correctionRun.runId, 'git_commit')).toMatchObject({
+      status: 'observed', observation: { revision: candidateRevision, branch: workspace.branch },
+    })
+    await mutate(workspace.repositoryPath)
+
+    await expect(invoke()).rejects.toThrow(message)
     expect(await operations()).toEqual([])
     registry.close()
   })

@@ -192,6 +192,10 @@ export class PluginRunMaterializer implements FleetRunMaterializer {
               : reusableCandidate ?? await commitDelivery(
                 activeWorkspace, policy.definition.allowedPaths, run.taskNumber, this.options.environment,
               )
+          if (policy.definition.candidate !== undefined
+            && commitRecord.revision === policy.definition.candidate.revision) {
+            await this.verifyReusedCandidateCommit(activeWorkspace, policy.definition.candidate)
+          }
           if (recordedCommit?.status !== 'observed') {
             await this.options.faultInjector?.('after_commit_before_persistence', run)
             this.commitEffect(run.runId, { type: 'observation', kind: 'git_commit', observation: commitRecord })
@@ -322,6 +326,17 @@ export class PluginRunMaterializer implements FleetRunMaterializer {
       throw new Error('Fleet correction candidate does not match the Task Workspace HEAD')
     }
     return observed.clean ? { revision: observed.revision, branch: observed.branch } : undefined
+  }
+
+  private async verifyReusedCandidateCommit(
+    workspace: FleetWorkspace,
+    candidate: NonNullable<ReturnType<typeof frozenPluginPolicy>['definition']['candidate']>,
+  ): Promise<void> {
+    const observed = await observeWorkspaceRevision(workspace, this.options.environment)
+    if (observed.revision !== candidate.revision || observed.branch !== candidate.branch) {
+      throw new Error('Fleet reused correction candidate does not match the Task Workspace HEAD')
+    }
+    if (!observed.clean) throw new Error('Fleet reused correction candidate requires a clean Task Workspace')
   }
 
   private async reconcilePush(
