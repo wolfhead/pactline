@@ -101,7 +101,6 @@ describe('ClaimStageRunCoordinator', () => {
       input: definition.base, mode: 'execution', runId: 'task-21-original', temporaryDirectory: directory,
       taskIdentity: { projectNumber: 5, taskNumber: 21 },
     })
-    await writeFile(join(workspace.repositoryPath, 'README.md'), 'retained implementation\n')
     registry.bindTaskWorkspace(5, 21, workspace)
     registry.bindTaskRoleSession(5, 21, 'implementer', {
       adapterId: 'replay', runtimeSessionId: 'implementer-task-21',
@@ -117,6 +116,7 @@ describe('ClaimStageRunCoordinator', () => {
       async resume(runtimeSessionId, request, observer) {
         resumedSession = runtimeSessionId
         await observer.onSessionStarted({ runtimeSessionId })
+        await writeFile(join(request.workspace, 'README.md'), 'retained implementation\n')
         return {
           adapterId: 'replay', adapterVersion: 'task-runtime-test', runtimeSessionId,
           model: { provider: 'replay', model: 'quality', reasoning: 'max' }, terminalState: 'completed',
@@ -159,7 +159,7 @@ describe('ClaimStageRunCoordinator', () => {
     registry.close()
   })
 
-  it('uses a separate reviewer Session in the retained Workspace and retires it only when the Task is done', async () => {
+  it('uses a separate reviewer Session and leaves terminal retirement to maintenance', async () => {
     const { directory, origin, revision, registry, fleet } = await fixture()
     const criterion = { id: 'criterion-1', revision: 1 }
     const client = new InMemoryPactlineClient(21, [criterion], { phase: 'in_review' })
@@ -217,18 +217,15 @@ describe('ClaimStageRunCoordinator', () => {
         materialize: async () => ({
           definition, router: new StaticRuntimeRouter([adapter], routes()),
           deadline: '2099-08-17T00:00:00Z', prepareWorkspace: async () => workspace,
-          retireTask: async value => {
-            await removeWorkspace(value)
-            registry.retireTaskRuntime(5, 21)
-          },
         }),
       },
     })
 
     await expect(coordinator.execute(run.runId, new AbortController().signal)).resolves.toEqual({ kind: 'completed' })
     expect(client.phase).toBe('done')
-    expect(registry.getTaskRuntime(5, 21)).toBeUndefined()
-    await expect(readFile(join(workspace.repositoryPath, 'README.md'), 'utf8')).rejects.toThrow()
+    expect(registry.getTaskRuntime(5, 21)).toBeDefined()
+    await expect(readFile(join(workspace.repositoryPath, 'README.md'), 'utf8')).resolves.toBe('review candidate\n')
+    await removeWorkspace(workspace)
     registry.close()
   })
 

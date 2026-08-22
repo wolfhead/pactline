@@ -2,7 +2,7 @@ import type { StaticRuntimeRouter } from '../core/runtime-router.js'
 import { continueClaimStageAfterHarness, runClaimStage } from '../core/claim-stage.js'
 import type { ClaimStageClient, ClaimStageOptions, ClaimWorkflowStage } from '../core/claim-stage.js'
 import type { HarnessRunResult } from '../core/harness-result.js'
-import type { GitObservation } from '../core/verification.js'
+import { decodeGitObservation } from '../core/verification.js'
 import type { FleetWorkDefinition } from '../core/work-definition.js'
 import { PactlineClientError } from '../pactline/client.js'
 import { replaySettlement } from '../pactline/settlement.js'
@@ -27,7 +27,6 @@ export interface MaterializedFleetRun {
   readonly publishDelivery?: ClaimStageOptions['publishDelivery']
   readonly deliveryOwnsCheckpoints?: boolean
   readonly validateObservation?: ClaimStageOptions['validateObservation']
-  readonly retireTask?: (workspace: FleetWorkspace) => Promise<void>
 }
 
 export interface FleetRunMaterializer {
@@ -95,26 +94,12 @@ function workspaceRecord(workspace: FleetWorkspace): Readonly<Record<string, unk
   }
 }
 
-function gitObservation(value: unknown): GitObservation {
-  const item = record(value)
-  if (typeof item.head !== 'string' || !/^[a-f0-9]{40}$/.test(item.head)
-    || !Array.isArray(item.changedPaths) || item.changedPaths.some(path => typeof path !== 'string')
-    || typeof item.porcelain !== 'string') {
-    throw new Error('Persisted Harness baseline is invalid')
-  }
-  return { head: item.head, changedPaths: item.changedPaths as string[], porcelain: item.porcelain }
-}
-
 function safeReason(error: unknown): string {
   return sanitizeHealthDiagnostic(error instanceof Error ? error.message : String(error)).slice(0, 2_000)
 }
 
 function taskRole(stage: ClaimWorkflowStage): TaskRole {
   return stage === 'review' ? 'reviewer' : 'implementer'
-}
-
-function taskIsTerminal(result: PactlineClaimMutationResult): boolean {
-  return result.task.phase === 'done' || result.task.phase === 'cancelled'
 }
 
 /** Bridges one scheduled Run into the finite Claim-stage Core with durable callbacks. */
@@ -430,9 +415,6 @@ export class ClaimStageRunCoordinator implements ScheduledRunExecutor {
           })
         },
       })
-      if (workspace !== undefined && taskIsTerminal(result.settlement)) {
-        await materialized.retireTask?.(workspace)
-      }
       return result.settlement.claim.status === 'released'
         ? { kind: 'released', reason: result.settlement.claim.outcome ?? 'released' }
         : { kind: 'completed' }
@@ -600,7 +582,7 @@ export class ClaimStageRunCoordinator implements ScheduledRunExecutor {
       }
       const workspace = await materialized.prepareWorkspace(signal)
       const harnessResult = record(resultEffect.observation.result) as unknown as HarnessRunResult
-      const baseline = gitObservation(resultEffect.observation.baseline)
+      const baseline = decodeGitObservation(resultEffect.observation.baseline)
       let settlementDelivery: RepositoryDelivery | undefined
       const result = await continueClaimStageAfterHarness({
         client: this.options.client,
@@ -671,7 +653,6 @@ export class ClaimStageRunCoordinator implements ScheduledRunExecutor {
           this.persistSettlement(this.currentRun(run.runId), settlement)
         },
       })
-      if (taskIsTerminal(result.settlement)) await materialized.retireTask?.(workspace)
       return result.settlement.claim.status === 'released'
         ? { kind: 'released', reason: result.settlement.claim.outcome ?? 'released' }
         : { kind: 'completed' }

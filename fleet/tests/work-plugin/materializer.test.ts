@@ -137,10 +137,49 @@ if (operation === 'commit') {
     return { registry: reopened, invoke }
   }
   const operations = async () => (await readFile(log, 'utf8').catch(() => '')).trim().split('\n').filter(Boolean)
-  return { registry, run, workspace, revision, reopen, operations }
+  return { directory, origin, plugin, log, definition, registry, run, workspace, revision, reopen, operations }
 }
 
 describe('PluginRunMaterializer recovery', () => {
+  it('materializes review-first work with both admitted base and candidate revisions', async () => {
+    const { directory, origin, plugin, log, definition, registry, workspace, revision } = await setup()
+    await exec('git', ['-C', workspace.repositoryPath, 'add', 'README.md'])
+    await exec('git', ['-C', workspace.repositoryPath, '-c', 'user.name=Fleet Test', '-c', 'user.email=fleet@example.invalid', 'commit', '--quiet', '-m', 'candidate'])
+    const candidateRevision = (await exec('git', ['-C', workspace.repositoryPath, 'rev-parse', 'HEAD'])).stdout.trim()
+    await exec('git', ['-C', workspace.repositoryPath, 'push', '--quiet', 'origin', 'HEAD:refs/heads/candidate'])
+    const reviewDefinition: FleetWorkDefinition = {
+      ...definition,
+      taskNumber: 22,
+      candidate: {
+        repository: definition.repository,
+        codeChangeUrl: 'https://github.com/wolfhead/pactline/pull/88',
+        revision: candidateRevision,
+        branch: 'candidate',
+        ref: 'refs/heads/candidate',
+      },
+    }
+    const reviewRun = registry.admitRun('first', {
+      taskNumber: 22, taskVersion: 1, stage: 'review',
+      frozenPolicy: {
+        definition: reviewDefinition,
+        route: { adapter: 'codex', model: 'test', promptVersion: 'm5.2', resultContractVersion: 1 },
+        plugin: { executable: plugin, args: [log], timeoutMs: 30_000 },
+        workspaceRoot: join(directory, 'work'),
+        pactlineTokenEnv: 'TEST_PACTLINE_TOKEN',
+      },
+    })
+    const materializer = new PluginRunMaterializer({
+      adapters: () => [], environment: { PATH: process.env.PATH }, registry,
+    })
+    const materialized = await materializer.materialize(reviewRun, new AbortController().signal)
+    const reviewWorkspace = await materialized.prepareWorkspace(new AbortController().signal)
+
+    expect(reviewWorkspace.baseRevision).toBe(revision)
+    expect((await exec('git', ['-C', reviewWorkspace.repositoryPath, 'rev-parse', 'HEAD'])).stdout.trim()).toBe(candidateRevision)
+    await expect(exec('git', ['-C', reviewWorkspace.repositoryPath, 'cat-file', '-e', `${revision}^{commit}`])).resolves.toBeDefined()
+    registry.close()
+  })
+
   it('retires persisted Task runtime only after Pactline reports done or cancelled', async () => {
     const { registry, run, workspace } = await setup()
     registry.bindTaskWorkspace(5, 21, workspace)

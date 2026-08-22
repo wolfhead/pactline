@@ -19,6 +19,19 @@ export interface GitObservation {
   readonly porcelain: string
 }
 
+export function decodeGitObservation(value: unknown): GitObservation {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('Git observation must be an object')
+  }
+  const item = value as Record<string, unknown>
+  if (typeof item.head !== 'string' || !/^[a-f0-9]{40}$/.test(item.head)
+    || !Array.isArray(item.changedPaths) || item.changedPaths.some(path => typeof path !== 'string')
+    || typeof item.porcelain !== 'string') {
+    throw new Error('Git observation is invalid')
+  }
+  return { head: item.head, changedPaths: item.changedPaths as string[], porcelain: item.porcelain }
+}
+
 export interface VerificationObservation {
   readonly git: GitObservation
   readonly commands: readonly CommandObservation[]

@@ -57,6 +57,29 @@ describe('FleetRegistry', () => {
     reopened.close()
   })
 
+  it('rejects an invalid Task Workspace before it reaches persisted runtime state', async () => {
+    const parent = await mkdtemp(join(tmpdir(), 'fleet-registry-invalid-runtime-'))
+    directories.push(parent)
+    const state = await ensurePrivateDirectory(join(parent, 'state'))
+    const registry = await FleetRegistry.open(join(state, 'fleet.sqlite3'))
+    expect(() => registry.bindTaskWorkspace(5, 19, {
+      mode: 'execution', root: '', temporaryParent: '/tmp', repositoryPath: '/tmp/repository',
+      source: '/tmp/origin.git', baseRevision: 'not-a-revision', branch: '',
+    })).toThrow('Task Workspace')
+    expect(registry.getTaskRuntime(5, 19)).toBeUndefined()
+    registry.bindTaskWorkspace(5, 19, {
+      mode: 'execution', root: join(parent, 'pactline-fleet-project-5-task-19'),
+      temporaryParent: parent, repositoryPath: join(parent, 'pactline-fleet-project-5-task-19', 'repository'),
+      source: '/tmp/origin.git', baseRevision: 'a'.repeat(40), branch: 'fleet/project-5/task-19',
+    })
+    const database = new Database(registry.path)
+    database.prepare('UPDATE task_runtimes SET workspace_json = ? WHERE project_number = 5 AND task_number = 19')
+      .run('{"mode":"execution"}')
+    database.close()
+    expect(() => registry.getTaskRuntime(5, 19)).toThrow('Task Workspace')
+    registry.close()
+  })
+
   it('persists a stable service identity with private file permissions', async () => {
     const parent = await mkdtemp(join(tmpdir(), 'fleet-registry-id-'))
     directories.push(parent)

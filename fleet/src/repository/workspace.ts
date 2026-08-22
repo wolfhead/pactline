@@ -26,6 +26,7 @@ export interface FleetWorkspace {
 
 export interface PrepareWorkspaceOptions {
   readonly input: RepositoryRevision
+  readonly candidate?: RepositoryRevision
   readonly mode: WorkspaceMode
   readonly runId: string
   readonly branchPrefix?: string
@@ -34,6 +35,36 @@ export interface PrepareWorkspaceOptions {
   readonly taskIdentity?: {
     readonly projectNumber: number
     readonly taskNumber: number
+  }
+}
+
+export function decodeFleetWorkspace(value: unknown): FleetWorkspace {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('Task Workspace record must be an object')
+  }
+  const item = value as Record<string, unknown>
+  const string = (key: string): string => {
+    const field = item[key]
+    if (typeof field !== 'string' || field.trim() === '') throw new Error(`Task Workspace ${key} is invalid`)
+    return field
+  }
+  const mode = item.mode
+  if (mode !== 'execution' && mode !== 'review') throw new Error('Task Workspace mode is invalid')
+  const baseRevision = string('baseRevision')
+  if (!/^[a-f0-9]{40}$/.test(baseRevision)) throw new Error('Task Workspace base revision is invalid')
+  const branch = item.branch
+  if (mode === 'execution' && (typeof branch !== 'string' || branch.trim() === '')) {
+    throw new Error('Task Workspace execution branch is invalid')
+  }
+  if (branch !== undefined && typeof branch !== 'string') throw new Error('Task Workspace branch is invalid')
+  return {
+    mode,
+    root: string('root'),
+    temporaryParent: string('temporaryParent'),
+    repositoryPath: string('repositoryPath'),
+    source: string('source'),
+    baseRevision,
+    ...(typeof branch === 'string' ? { branch } : {}),
   }
 }
 
@@ -143,6 +174,12 @@ export async function prepareWorkspace(options: PrepareWorkspaceOptions): Promis
   if (!RUN_ID_PATTERN.test(options.runId)) throw new Error('runId must be a lowercase branch-safe identifier')
   if (!/^[a-f0-9]{40}$/.test(options.input.revision)) throw new Error('Repository revision must be a lowercase 40-character Git SHA')
   if (options.input.source.trim() === '' || options.input.ref.trim() === '') throw new Error('Repository source and ref must be non-empty')
+  if (options.candidate !== undefined) {
+    if (!/^[a-f0-9]{40}$/.test(options.candidate.revision)
+      || options.candidate.ref.trim() === '' || options.candidate.source !== options.input.source) {
+      throw new Error('Candidate revision must belong to the admitted repository')
+    }
+  }
   try {
     const source = new URL(options.input.source)
     if (source.username !== '' || source.password !== '') throw new Error('Repository source must not contain credentials')
@@ -184,15 +221,21 @@ export async function prepareWorkspace(options: PrepareWorkspaceOptions): Promis
     await runGit(['fetch', '--quiet', '--no-tags', '--depth=1', 'origin', options.input.ref], repositoryPath, environment)
     const fetched = await runGit(['rev-parse', 'FETCH_HEAD'], repositoryPath, environment)
     if (fetched !== options.input.revision) throw new Error('Fetched revision does not match the admitted input')
+    let checkoutRevision = fetched
+    if (options.candidate !== undefined) {
+      await runGit(['fetch', '--quiet', '--no-tags', '--depth=1', 'origin', options.candidate.ref], repositoryPath, environment)
+      checkoutRevision = await runGit(['rev-parse', 'FETCH_HEAD'], repositoryPath, environment)
+      if (checkoutRevision !== options.candidate.revision) throw new Error('Fetched revision does not match the admitted candidate')
+    }
     let workspace: FleetWorkspace
     if (options.mode === 'execution') {
       const prefix = options.branchPrefix ?? 'fleet/run/'
       if (!prefix.endsWith('/') || prefix.includes('..') || /[~^:?*[\\\s]/.test(prefix)) throw new Error('branchPrefix is unsafe')
       const branch = taskBranch ?? `${prefix}${options.runId}`
-      await runGit(['checkout', '--quiet', '-b', branch, fetched], repositoryPath, environment)
+      await runGit(['checkout', '--quiet', '-b', branch, checkoutRevision], repositoryPath, environment)
       workspace = { mode: 'execution', root, temporaryParent: parent, repositoryPath, source: options.input.source, baseRevision: fetched, branch }
     } else {
-      await runGit(['checkout', '--quiet', '--detach', fetched], repositoryPath, environment)
+      await runGit(['checkout', '--quiet', '--detach', checkoutRevision], repositoryPath, environment)
       workspace = { mode: 'review', root, temporaryParent: parent, repositoryPath, source: options.input.source, baseRevision: fetched }
     }
     await verifyWorkspace(workspace, options.environment)

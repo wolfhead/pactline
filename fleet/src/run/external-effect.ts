@@ -1,5 +1,6 @@
 import type { FleetRunStage } from './run.js'
 import type { ExecutionProposal, ReviewProposal } from '../core/harness-result.js'
+import { decodeGitObservation } from '../core/verification.js'
 import type { GitObservation } from '../core/verification.js'
 import type { RepositoryDelivery } from '../repository/delivery.js'
 import { validateRepositoryDelivery } from '../repository/delivery.js'
@@ -130,11 +131,12 @@ function revisionBranch(value: Readonly<Record<string, unknown>>): boolean {
 }
 
 function gitObservation(value: unknown): boolean {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
-  const item = value as Readonly<Record<string, unknown>>
-  return typeof item.head === 'string' && /^[a-f0-9]{40}$/.test(item.head)
-    && Array.isArray(item.changedPaths) && item.changedPaths.every(path => typeof path === 'string')
-    && typeof item.porcelain === 'string'
+  try {
+    decodeGitObservation(value)
+    return true
+  } catch {
+    return false
+  }
 }
 
 function validSettlementIntent(value: Readonly<Record<string, unknown>>): boolean {

@@ -96,6 +96,29 @@ describe('disposable workspace and coordinator verification', () => {
     expect(other.root).not.toBe(first.root)
   })
 
+  it('prepares a review-first Task Workspace with both base and candidate revisions', async () => {
+    const candidateSeed = join(directory, 'candidate-seed')
+    await run('git', ['clone', '--quiet', origin, candidateSeed])
+    await writeFile(join(candidateSeed, 'README.md'), 'candidate\n')
+    await run('git', ['-C', candidateSeed, 'add', 'README.md'])
+    await run('git', ['-C', candidateSeed, '-c', 'user.name=Fleet Test', '-c', 'user.email=fleet@example.invalid', 'commit', '--quiet', '-m', 'candidate'])
+    const candidateRevision = (await run('git', ['-C', candidateSeed, 'rev-parse', 'HEAD'])).stdout.trim()
+    await run('git', ['-C', candidateSeed, 'push', '--quiet', 'origin', 'HEAD:refs/heads/candidate'])
+
+    const review = await prepareWorkspace({
+      input: { source: origin, ref: 'refs/heads/main', revision },
+      candidate: { source: origin, ref: 'refs/heads/candidate', revision: candidateRevision },
+      mode: 'execution', runId: 'task-21-review-first', temporaryDirectory: directory,
+      taskIdentity: { projectNumber: 5, taskNumber: 21 },
+    })
+    workspaces.push(review)
+
+    expect((await run('git', ['-C', review.repositoryPath, 'rev-parse', 'HEAD'])).stdout.trim()).toBe(candidateRevision)
+    await expect(run('git', ['-C', review.repositoryPath, 'cat-file', '-e', `${revision}^{commit}`])).resolves.toBeDefined()
+    expect((await run('git', ['-C', review.repositoryPath, 'diff', '--name-only', `${revision}..${candidateRevision}`])).stdout.trim()).toBe('README.md')
+    expect(review.baseRevision).toBe(revision)
+  })
+
   it('rejects changes outside the path allowlist', async () => {
     const workspace = await prepare('execution')
     await writeFile(join(workspace.repositoryPath, 'outside.txt'), 'unexpected\n')

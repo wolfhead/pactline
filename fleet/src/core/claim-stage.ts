@@ -161,9 +161,6 @@ function assertInitialWorkspace(options: ClaimStageOptions, workspace: FleetWork
     return
   }
   if (options.resumeRuntimeSessionId !== undefined) {
-    if (changedPaths.length === 0) {
-      throw new Error('Execution resume requires its changed retained workspace')
-    }
     assertAllowedPaths(changedPaths, options.definition.allowedPaths)
     return
   }

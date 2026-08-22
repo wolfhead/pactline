@@ -11,6 +11,7 @@ import { FleetRegistry } from '../registry/fleet-registry.js'
 import {
   observeRemoteRevision,
   observeWorkspaceRevision,
+  decodeFleetWorkspace,
   prepareWorkspace,
   removeWorkspace,
   verifyWorkspace,
@@ -31,21 +32,6 @@ function routes(route: RuntimeRoute): RuntimeRoutes {
     review: route,
     correction: route,
     resolution_analysis: route,
-  }
-}
-
-function workspaceFromRecord(value: Readonly<Record<string, unknown>>): FleetWorkspace {
-  const required = ['mode', 'root', 'temporaryParent', 'repositoryPath', 'source', 'baseRevision'] as const
-  for (const key of required) if (typeof value[key] !== 'string' || String(value[key]).trim() === '') throw new Error('Frozen Fleet workspace is invalid')
-  if (!['execution', 'review'].includes(String(value.mode))) throw new Error('Frozen Fleet workspace mode is invalid')
-  return {
-    mode: value.mode as FleetWorkspace['mode'],
-    root: String(value.root),
-    temporaryParent: String(value.temporaryParent),
-    repositoryPath: String(value.repositoryPath),
-    source: String(value.source),
-    baseRevision: String(value.baseRevision),
-    ...(typeof value.branch === 'string' ? { branch: value.branch } : {}),
   }
 }
 
@@ -74,7 +60,7 @@ export class PluginRunMaterializer implements FleetRunMaterializer {
 
   resume(run: FleetRun, signal: AbortSignal): Promise<MaterializedFleetRun | undefined> {
     if (run.workspace === undefined || run.runtimeSessionId === undefined) return Promise.resolve(undefined)
-    return Promise.resolve(this.fromFrozen(run, signal, workspaceFromRecord(run.workspace)))
+    return Promise.resolve(this.fromFrozen(run, signal, decodeFleetWorkspace(run.workspace)))
   }
 
   async retireTerminalTasks(
@@ -83,9 +69,9 @@ export class PluginRunMaterializer implements FleetRunMaterializer {
     signal?: AbortSignal,
   ): Promise<number> {
     let retired = 0
+    const activeTasks = new Set(this.options.registry.listNonTerminalRuns().map(run => `${String(run.projectNumber)}:${String(run.taskNumber)}`))
     for (const runtime of this.options.registry.listTaskRuntimes()) {
-      if (this.options.registry.listNonTerminalRuns().some(run =>
-        run.projectNumber === runtime.projectNumber && run.taskNumber === runtime.taskNumber)) continue
+      if (activeTasks.has(`${String(runtime.projectNumber)}:${String(runtime.taskNumber)}`)) continue
       const packet = await client.showTask(runtime.taskNumber, 1, { sessionId, ...(signal === undefined ? {} : { signal }) })
       const rawTask = packet.data.task
       if (typeof rawTask !== 'object' || rawTask === null || Array.isArray(rawTask)) {
@@ -116,13 +102,14 @@ export class PluginRunMaterializer implements FleetRunMaterializer {
     )
     const plugin = new ExecutableFleetWorkPlugin(policy.plugin, pluginEnvironment)
     const mode = run.stage === 'review' ? 'review' : 'execution'
-    const input: RepositoryRevision = mode === 'review'
+    const input: RepositoryRevision = policy.definition.base
+    const candidate = mode === 'review'
       ? {
           source: policy.definition.base.source,
           ref: policy.definition.candidate!.ref,
           revision: policy.definition.candidate!.revision,
         }
-      : policy.definition.base
+      : undefined
     const taskRuntime = this.options.registry.getTaskRuntime(run.projectNumber, run.taskNumber)
     let activeWorkspace = recoveredWorkspace ?? taskRuntime?.workspace
     return {
@@ -136,6 +123,7 @@ export class PluginRunMaterializer implements FleetRunMaterializer {
         }
         activeWorkspace = await prepareWorkspace({
           input,
+          ...(candidate === undefined ? {} : { candidate }),
           mode: 'execution',
           runId: run.runId,
           branchPrefix: `fleet/${run.fleetId}/`,
@@ -236,9 +224,6 @@ export class PluginRunMaterializer implements FleetRunMaterializer {
           return delivery
         },
       }),
-      retireTask: async workspace => {
-        await this.retireRuntime(run.projectNumber, run.taskNumber, workspace)
-      },
     }
   }
 

@@ -31,6 +31,7 @@ import type {
 } from '../run/external-effect.js'
 import { preparePrivateFile } from '../service/state-directory.js'
 import type { RunRecoveryDecision, RunRecoveryFacts } from '../run/recovery.js'
+import { decodeFleetWorkspace } from '../repository/workspace.js'
 import type { FleetWorkspace } from '../repository/workspace.js'
 
 const SCHEMA_VERSION = 4
@@ -162,6 +163,8 @@ interface TaskRuntimeRow {
 }
 
 interface TaskRoleSessionRow {
+  readonly project_number: number
+  readonly task_number: number
   readonly role: TaskRole
   readonly adapter_id: string
   readonly runtime_session_id: string
@@ -784,8 +787,9 @@ export class FleetRegistry {
     now: Date = new Date(),
   ): FleetTaskRuntime {
     this.assertOpen()
+    const decodedWorkspace = decodeFleetWorkspace(workspace)
     const timestamp = now.toISOString()
-    const encoded = JSON.stringify(workspace)
+    const encoded = JSON.stringify(decodedWorkspace)
     this.database.transaction(() => {
       const current = this.database.prepare<[number, number], TaskRuntimeRow>(`
         SELECT project_number, task_number, workspace_json
@@ -797,13 +801,13 @@ export class FleetRegistry {
       }
       const owner = this.database.prepare<[string], { project_number: number; task_number: number }>(`
         SELECT project_number, task_number FROM task_runtimes WHERE workspace_root = ?
-      `).get(workspace.root)
+      `).get(decodedWorkspace.root)
       if (owner !== undefined) throw new Error('Task Workspace already belongs to another Task')
       this.database.prepare(`
         INSERT INTO task_runtimes(
           project_number, task_number, workspace_root, workspace_json, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?)
-      `).run(projectNumber, taskNumber, workspace.root, encoded, timestamp, timestamp)
+      `).run(projectNumber, taskNumber, decodedWorkspace.root, encoded, timestamp, timestamp)
     })()
     return this.getTaskRuntime(projectNumber, taskNumber)!
   }
@@ -848,10 +852,10 @@ export class FleetRegistry {
       FROM task_runtimes WHERE project_number = ? AND task_number = ?
     `).get(projectNumber, taskNumber)
     if (row === undefined) return undefined
-    const workspace = parseJSON(row.workspace_json, 'Task Workspace') as unknown as FleetWorkspace
+    const workspace = decodeFleetWorkspace(parseJSON(row.workspace_json, 'Task Workspace'))
     const sessions: Partial<Record<TaskRole, TaskRoleSessionBinding>> = {}
     for (const session of this.database.prepare<[number, number], TaskRoleSessionRow>(`
-      SELECT role, adapter_id, runtime_session_id FROM task_role_sessions
+      SELECT project_number, task_number, role, adapter_id, runtime_session_id FROM task_role_sessions
       WHERE project_number = ? AND task_number = ? ORDER BY role
     `).all(projectNumber, taskNumber)) {
       sessions[session.role] = {
@@ -869,10 +873,26 @@ export class FleetRegistry {
 
   listTaskRuntimes(): readonly FleetTaskRuntime[] {
     this.assertOpen()
-    return this.database.prepare<[], TaskRuntimeRow>(`
+    const rows = this.database.prepare<[], TaskRuntimeRow>(`
       SELECT project_number, task_number, workspace_json
       FROM task_runtimes ORDER BY project_number, task_number
-    `).all().map(row => this.getTaskRuntime(row.project_number, row.task_number)!)
+    `).all()
+    const sessions = new Map<string, Partial<Record<TaskRole, TaskRoleSessionBinding>>>()
+    for (const session of this.database.prepare<[], TaskRoleSessionRow>(`
+      SELECT project_number, task_number, role, adapter_id, runtime_session_id
+      FROM task_role_sessions ORDER BY project_number, task_number, role
+    `).all()) {
+      const key = `${String(session.project_number)}:${String(session.task_number)}`
+      const bindings = sessions.get(key) ?? {}
+      bindings[session.role] = { adapterId: session.adapter_id, runtimeSessionId: session.runtime_session_id }
+      sessions.set(key, bindings)
+    }
+    return rows.map(row => ({
+      projectNumber: row.project_number,
+      taskNumber: row.task_number,
+      workspace: decodeFleetWorkspace(parseJSON(row.workspace_json, 'Task Workspace')),
+      sessions: sessions.get(`${String(row.project_number)}:${String(row.task_number)}`) ?? {},
+    }))
   }
 
   retireTaskRuntime(projectNumber: number, taskNumber: number): void {
