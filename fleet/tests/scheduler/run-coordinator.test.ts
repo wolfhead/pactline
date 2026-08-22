@@ -169,7 +169,7 @@ describe('ClaimStageRunCoordinator', () => {
     })
 
     const second = registry.admitRun(fleet.id, {
-      taskNumber: 21, taskVersion: client.version, stage: 'execution', frozenPolicy: { definition, route: routes().execution },
+      taskNumber: 21, taskVersion: client.version, stage: 'correction', frozenPolicy: { definition, route: routes().correction },
     })
     await expect(coordinator.execute(second.runId, new AbortController().signal)).resolves.toEqual({
       kind: 'released', reason: 'verification_mismatch',
@@ -182,7 +182,7 @@ describe('ClaimStageRunCoordinator', () => {
     }))
 
     const third = registry.admitRun(fleet.id, {
-      taskNumber: 21, taskVersion: client.version, stage: 'execution', frozenPolicy: { definition, route: routes().execution },
+      taskNumber: 21, taskVersion: client.version, stage: 'correction', frozenPolicy: { definition, route: routes().correction },
     })
     await expect(coordinator.execute(third.runId, new AbortController().signal)).resolves.toEqual({ kind: 'completed' })
     expect(resumeCalls).toBe(2)

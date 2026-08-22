@@ -31,7 +31,7 @@ describe('executable Fleet work plugin', () => {
     })).toThrow('update the existing code change')
   })
 
-  it('resolves and freezes explicit work authority without forwarding model or Pactline credentials', async () => {
+  it('allows delivery-free correction while keeping review bound to a frozen candidate', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'fleet-work-plugin-test-'))
     directories.push(directory)
     const pluginPath = join(directory, 'plugin.mjs')
@@ -80,5 +80,20 @@ process.stdout.write(JSON.stringify({ ok: true, data: {
         pactlineTokenEnv: 'TEST_PACTLINE_TOKEN',
       },
     })
+
+    await expect(resolver.resolve({
+      fleetId: fleet.id, projectNumber: fleet.projectNumber, stage: 'correction',
+      task: { id: 'task-21', number: 21, title: 'Test', version: 1 },
+    }, fleet, new AbortController().signal)).resolves.toMatchObject({
+      admission: {
+        taskNumber: 21,
+        stage: 'correction',
+        frozenPolicy: { definition: expect.not.objectContaining({ candidate: expect.anything() }) },
+      },
+    })
+    await expect(resolver.resolve({
+      fleetId: fleet.id, projectNumber: fleet.projectNumber, stage: 'review',
+      task: { id: 'task-21', number: 21, title: 'Test', version: 1 },
+    }, fleet, new AbortController().signal)).rejects.toThrow('review work definition requires a frozen delivery candidate')
   })
 })

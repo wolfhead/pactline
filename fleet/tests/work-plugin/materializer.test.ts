@@ -196,6 +196,39 @@ describe('PluginRunMaterializer recovery', () => {
     registry.close()
   })
 
+  it('materializes delivery-free correction from the retained Task Workspace', async () => {
+    const { directory, plugin, log, definition, registry, run, workspace } = await setup()
+    registry.bindTaskWorkspace(5, 21, workspace)
+    registry.bindTaskRoleSession(5, 21, 'implementer', {
+      adapterId: 'codex', runtimeSessionId: 'retained-implementer-session',
+    })
+    registry.transitionRun(run.runId, 'delivering', 'releasing')
+    registry.transitionRun(run.runId, 'releasing', 'released', { disposition: 'verification_mismatch' })
+    const correctionRun = registry.admitRun('first', {
+      taskNumber: 21, taskVersion: 2, stage: 'correction',
+      frozenPolicy: {
+        definition: { ...definition, taskVersion: 2 },
+        route: { adapter: 'codex', model: 'test', promptVersion: 'm5.2', resultContractVersion: 1 },
+        plugin: { executable: plugin, args: [log], timeoutMs: 30_000 },
+        workspaceRoot: join(directory, 'work'),
+        pactlineTokenEnv: 'TEST_PACTLINE_TOKEN',
+      },
+    })
+    const materializer = new PluginRunMaterializer({
+      adapters: () => [], environment: { PATH: process.env.PATH }, registry,
+    })
+
+    const materialized = await materializer.materialize(correctionRun, new AbortController().signal)
+    await expect(materialized.prepareWorkspace(new AbortController().signal)).resolves.toMatchObject({
+      root: workspace.root,
+      branch: workspace.branch,
+    })
+    expect(registry.getTaskRuntime(5, 21)).toMatchObject({
+      sessions: { implementer: { runtimeSessionId: 'retained-implementer-session' } },
+    })
+    registry.close()
+  })
+
   it('retires persisted Task runtime only after Pactline reports done or cancelled', async () => {
     const { registry, run, workspace } = await setup()
     registry.bindTaskWorkspace(5, 21, workspace)

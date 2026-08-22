@@ -103,12 +103,12 @@ export class PluginRunMaterializer implements FleetRunMaterializer {
     const plugin = new ExecutableFleetWorkPlugin(policy.plugin, pluginEnvironment)
     const mode = run.stage === 'review' ? 'review' : 'execution'
     const input: RepositoryRevision = policy.definition.base
-    const candidate = run.stage === 'execution'
+    const candidate = run.stage === 'execution' || policy.definition.candidate === undefined
       ? undefined
       : {
           source: policy.definition.base.source,
-          ref: policy.definition.candidate!.ref,
-          revision: policy.definition.candidate!.revision,
+          ref: policy.definition.candidate.ref,
+          revision: policy.definition.candidate.revision,
         }
     const taskRuntime = this.options.registry.getTaskRuntime(run.projectNumber, run.taskNumber)
     let activeWorkspace = recoveredWorkspace ?? taskRuntime?.workspace

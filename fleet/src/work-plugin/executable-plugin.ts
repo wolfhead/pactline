@@ -112,8 +112,8 @@ function validateDefinition(value: unknown, candidate: FleetWorkCandidate): Flee
       ref: string(raw.ref, 'candidate.ref'),
     }
   }
-  if ((candidate.stage === 'review' || candidate.stage === 'correction') && deliveryCandidate === undefined) {
-    throw new Error(`${candidate.stage} work definition requires a frozen delivery candidate`)
+  if (candidate.stage === 'review' && deliveryCandidate === undefined) {
+    throw new Error('review work definition requires a frozen delivery candidate')
   }
   if (deliveryCandidate !== undefined && deliveryCandidate.ref !== `refs/heads/${deliveryCandidate.branch}`) {
     throw new Error('work definition candidate ref must match its delivery branch')
