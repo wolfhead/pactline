@@ -32,7 +32,6 @@ import AcceptanceChecklist from '@/components/projects/AcceptanceChecklist'
 import ProjectMembersPanel from '@/components/projects/ProjectMembersPanel'
 import ProjectAgentConversationsPanel from '@/components/projects/ProjectAgentConversationsPanel'
 import ProjectRepositoryAccessPanel from '@/components/projects/ProjectRepositoryAccessPanel'
-import MilestoneProgress from '@/components/projects/MilestoneProgress'
 import TaskCollection from '@/components/tasks/TaskCollection'
 import { useTaskCollection } from '@/components/tasks/useTaskCollection'
 import {
@@ -631,8 +630,11 @@ function Milestones({
     <div className="grid gap-3 lg:grid-cols-2">
       {[...items].sort((left, right) => left.position - right.position).map((milestone) => {
         const tasks = detail.tasks.filter((task) => (
-          task.milestone?.id === milestone.id
+          !task.archived_at && task.milestone?.id === milestone.id
         ))
+        const concluded = tasks.filter((task) => (
+          task.phase === 'done' || task.phase === 'cancelled'
+        )).length
         const accepted = milestone.acceptance_criteria.filter((criterion) => (
           criterion.current_check?.outcome === 'passed'
           || criterion.current_check?.outcome === 'waived'
@@ -641,7 +643,7 @@ function Milestones({
           <Link
             key={milestone.id}
             to={`/projects/${project.number}/milestones/${milestone.id}`}
-            className="relative overflow-hidden rounded-lg border border-border bg-surface-raised p-4 pb-5 transition hover:border-accent/40 hover:shadow-[0_4px_16px_rgb(23_43_61/0.06)]"
+            className="rounded-lg border border-border bg-surface-raised p-4 transition hover:border-accent/40 hover:shadow-[0_4px_16px_rgb(23_43_61/0.06)]"
           >
             <div className="flex items-start justify-between gap-3">
               <h4 className="font-semibold">{milestone.name}</h4>
@@ -653,9 +655,9 @@ function Milestones({
             <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-fg-muted">
               <span>负责人：{users.find((user) => user.id === milestone.owner_id)?.name ?? '未知'}</span>
               <span>目标：{milestone.target_date ?? '未设置'}</span>
+              <span>任务：{concluded}/{tasks.length}</span>
               <span>验收：{accepted}/{milestone.acceptance_criteria.length}</span>
             </div>
-            <MilestoneProgress tasks={tasks} />
           </Link>
         )
       })}

@@ -131,36 +131,6 @@
   }
 }
 
-/* A moving highlight distinguishes actively executing work from static
- * milestone states without changing the segment's measured width. The light
- * crosses only the blue in-progress segment and stays intentionally slow and
- * low-contrast on this dense operating surface. */
-@keyframes milestone-progress-flow {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(200%); }
-}
-
-.milestone-progress-in-progress {
-  position: relative;
-  overflow: hidden;
-}
-
-.milestone-progress-in-progress::after {
-  position: absolute;
-  inset: 0;
-  width: 50%;
-  content: "";
-  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.34), transparent);
-  animation: milestone-progress-flow 2.8s linear infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .milestone-progress-in-progress::after {
-    animation: none;
-    transform: translateX(50%);
-  }
-}
-
 /* Gantt bars keep a compact desktop profile while coarse pointers receive a
  * full-size direct-manipulation target. Edge resizing is intentionally a
  * precise-pointer interaction; touch users edit schedule endpoints through
