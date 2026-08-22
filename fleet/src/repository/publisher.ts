@@ -118,7 +118,18 @@ export async function commitDelivery(
   return { revision, branch }
 }
 
-/** Push one stable Task delivery ref without force and verify base plus delivery refs afterwards. */
+function verifyDeliveryAuthority(workspace: FleetWorkspace, commit: PublishedRevision, authority: DeliveryAuthority): void {
+  branchFromRef(authority.baseRef)
+  const branch = branchFromRef(authority.deliveryRef)
+  if (authority.remote !== workspace.source || authority.baseRevision !== workspace.baseRevision) {
+    throw new Error('Fleet delivery authority does not match the Task Workspace repository revision')
+  }
+  if (authority.baseRef === authority.deliveryRef || branch !== workspace.branch || commit.branch !== branch) {
+    throw new Error('Fleet delivery ref must be the stable non-base Task branch')
+  }
+}
+
+/** Push one stable Task delivery ref without force and verify the remote refs afterwards. */
 export async function pushDelivery(
   workspace: FleetWorkspace,
   commit: PublishedRevision,
@@ -127,17 +138,13 @@ export async function pushDelivery(
   environment: NodeJS.ProcessEnv = process.env,
 ): Promise<PublishedRevision> {
   await verifyWorkspace(workspace, environment)
-  branchFromRef(authority.baseRef)
-  const branch = branchFromRef(authority.deliveryRef)
-  if (authority.baseRef === authority.deliveryRef || branch !== workspace.branch || commit.branch !== branch) {
-    throw new Error('Fleet delivery ref must be the stable non-base Task branch')
-  }
+  verifyDeliveryAuthority(workspace, commit, authority)
   const safe = safeEnvironment(environment, credential)
   const [baseBefore, deliveryBefore] = await Promise.all([
     remoteRevision(authority.remote, authority.baseRef, workspace.repositoryPath, safe),
     remoteRevision(authority.remote, authority.deliveryRef, workspace.repositoryPath, safe),
   ])
-  if (baseBefore !== authority.baseRevision) throw new Error('Fleet base ref drifted before delivery push')
+  if (baseBefore === undefined) throw new Error('Fleet base ref is missing before delivery push')
   if (deliveryBefore !== authority.priorDeliveryRevision) {
     throw new Error('Fleet delivery ref drifted before delivery push')
   }
@@ -157,17 +164,13 @@ export async function verifyPublishedDelivery(
   environment: NodeJS.ProcessEnv = process.env,
 ): Promise<PublishedRevision> {
   await verifyWorkspace(workspace, environment)
-  branchFromRef(authority.baseRef)
-  const branch = branchFromRef(authority.deliveryRef)
-  if (authority.baseRef === authority.deliveryRef || branch !== workspace.branch || commit.branch !== branch) {
-    throw new Error('Fleet delivery ref must be the stable non-base Task branch')
-  }
+  verifyDeliveryAuthority(workspace, commit, authority)
   const safe = safeEnvironment(environment, credential)
   const [baseAfter, deliveryAfter] = await Promise.all([
     remoteRevision(authority.remote, authority.baseRef, workspace.repositoryPath, safe),
     remoteRevision(authority.remote, authority.deliveryRef, workspace.repositoryPath, safe),
   ])
-  if (baseAfter !== authority.baseRevision) throw new Error('Fleet base ref changed during delivery push')
+  if (baseAfter === undefined) throw new Error('Fleet base ref is missing after delivery push')
   if (deliveryAfter !== commit.revision) throw new Error('Fleet delivery ref does not match the committed revision')
   return commit
 }
