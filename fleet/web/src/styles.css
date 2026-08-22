@@ -180,6 +180,18 @@ button:not(:disabled), select { cursor: pointer; }
 .run-lead strong { margin-top: 5px; font-size: 1.28rem; letter-spacing: -.02em; }
 .run-lead p { margin-top: 6px; color: var(--muted); font-size: .78rem; line-height: 1.45; }
 .run-lead time { margin-top: auto; color: var(--subtle); font-size: .7rem; }
+.mismatch-list { display: grid; gap: 10px; }
+.mismatch-list article { border: 1px solid var(--border); background: var(--surface); }
+.mismatch-list header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.mismatch-list header strong { font-size: .78rem; }
+.mismatch-list header code { max-width: 100%; overflow-wrap: anywhere; color: var(--muted); font-size: .7rem; }
+.mismatch-results, .mismatch-paths { display: grid; grid-template-columns: 1fr 1fr; }
+.mismatch-results > div, .mismatch-paths > div { min-width: 0; padding: 11px 12px; }
+.mismatch-results > div + div, .mismatch-paths > div + div { border-left: 1px solid var(--border); }
+.mismatch-results span, .mismatch-paths span { display: block; margin-bottom: 5px; color: var(--subtle); font-size: .66rem; font-weight: 600; }
+.mismatch-results b { font-size: .73rem; }
+.mismatch-results p, .mismatch-results pre, .mismatch-paths code { margin-top: 6px; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); font: .68rem/1.45 var(--font-mono); }
+.mismatch-paths { border-top: 1px solid var(--border); }
 .state-lead-failed, .state-lead-quarantined { border-top-color: #e1a8ad; }
 .copy-value { display: inline-flex; max-width: 100%; align-items: center; gap: 6px; width: fit-content; padding: 0; color: var(--fg); background: none; border: 0; font-size: .77rem; }
 .copy-value code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -299,6 +311,8 @@ button:not(:disabled), select { cursor: pointer; }
   .compact-run-table a > span:nth-child(2) { display: none; }
   .run-lead { grid-template-columns: 1fr; }
   .run-lead > div { min-height: 96px; }
+  .mismatch-results, .mismatch-paths { grid-template-columns: 1fr; }
+  .mismatch-results > div + div, .mismatch-paths > div + div { border-left: 0; border-top: 1px solid var(--border); }
   .run-columns { grid-template-columns: 1fr; gap: 0; }
   .system-ledger { grid-template-columns: 1fr; }
   .system-ledger > div { border-right: 0; }

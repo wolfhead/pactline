@@ -2,6 +2,7 @@ import type { StaticRuntimeRouter } from '../core/runtime-router.js'
 import { continueClaimStageAfterHarness, runClaimStage } from '../core/claim-stage.js'
 import type { ClaimStageClient, ClaimStageOptions, ClaimWorkflowStage } from '../core/claim-stage.js'
 import type { HarnessRunResult } from '../core/harness-result.js'
+import { decodeGitObservation, VerificationMismatchError } from '../core/verification.js'
 import type { FleetWorkDefinition } from '../core/work-definition.js'
 import { PactlineClientError } from '../pactline/client.js'
 import { replaySettlement } from '../pactline/settlement.js'
@@ -10,6 +11,7 @@ import type { RepositoryDelivery } from '../repository/delivery.js'
 import type { FleetWorkspace } from '../repository/workspace.js'
 import type { FleetExternalEffectDecision, FleetRun, FleetRunDecision } from '../registry/fleet-registry.js'
 import { FleetRegistry } from '../registry/fleet-registry.js'
+import type { TaskRole } from '../registry/fleet-registry.js'
 import { hasAmbiguousExternalEffect } from '../run/external-effect.js'
 import { isTerminalRunState, requireClaimedRun, requireRun, requireSessionRun } from '../run/run.js'
 import { decideRunRecovery } from '../run/recovery.js'
@@ -25,7 +27,6 @@ export interface MaterializedFleetRun {
   readonly publishDelivery?: ClaimStageOptions['publishDelivery']
   readonly deliveryOwnsCheckpoints?: boolean
   readonly validateObservation?: ClaimStageOptions['validateObservation']
-  readonly cleanup?: (workspace: FleetWorkspace, terminal: boolean) => Promise<void>
 }
 
 export interface FleetRunMaterializer {
@@ -35,7 +36,6 @@ export interface FleetRunMaterializer {
   ): Promise<MaterializedFleetRun>
   /** Recreate only explicitly persisted authority; never select a different Adapter. */
   resume?(run: FleetRun, signal: AbortSignal): Promise<MaterializedFleetRun | undefined>
-  cleanupRecovered?(run: FleetRun): Promise<void>
 }
 
 export interface ClaimStageRunCoordinatorOptions {
@@ -96,6 +96,10 @@ function workspaceRecord(workspace: FleetWorkspace): Readonly<Record<string, unk
 
 function safeReason(error: unknown): string {
   return sanitizeHealthDiagnostic(error instanceof Error ? error.message : String(error)).slice(0, 2_000)
+}
+
+function taskRole(stage: ClaimWorkflowStage): TaskRole {
+  return stage === 'review' ? 'reviewer' : 'implementer'
 }
 
 /** Bridges one scheduled Run into the finite Claim-stage Core with durable callbacks. */
@@ -179,9 +183,7 @@ export class ClaimStageRunCoordinator implements ScheduledRunExecutor {
   }
 
   private async releaseRecoveredClaim(run: FleetRun, reason: string, signal: AbortSignal): Promise<FleetRunOutcome> {
-    const outcome = await this.releaseKnownClaim(run, reason, signal)
-    if (outcome.kind === 'released') await this.options.materializer.cleanupRecovered?.(run)
-    return outcome
+    return await this.releaseKnownClaim(run, reason, signal)
   }
 
   private async readClaimAuthority(run: FleetRun, signal: AbortSignal): Promise<RecoveryClaimAuthority> {
@@ -229,6 +231,14 @@ export class ClaimStageRunCoordinator implements ScheduledRunExecutor {
       }
       const recovered = recovery ? requireClaimedRun(run) : undefined
       const dispatchTaskVersion = recovered === undefined ? run.taskVersion : recovered.claimTaskVersion
+      const role = taskRole(stage)
+      const taskRuntime = this.options.registry.getTaskRuntime(run.projectNumber, run.taskNumber)
+      const taskSession = taskRuntime?.sessions[role]
+      const routeAdapterId = materialized.router.routeFor(stage).adapterId
+      if (taskSession !== undefined && taskSession.adapterId !== routeAdapterId) {
+        throw new Error(`Task ${role} Session belongs to a different Harness Adapter`)
+      }
+      const resumeRuntimeSessionId = run.runtimeSessionId ?? taskSession?.runtimeSessionId
       const result = await runClaimStage({
         client: this.options.client,
         router: materialized.router,
@@ -242,8 +252,8 @@ export class ClaimStageRunCoordinator implements ScheduledRunExecutor {
         signal,
         ...(recovered === undefined ? {} : {
           existingClaimId: recovered.claimId,
-          ...(run.runtimeSessionId === undefined ? {} : { resumeRuntimeSessionId: requireSessionRun(run).runtimeSessionId }),
         }),
+        ...(resumeRuntimeSessionId === undefined ? {} : { resumeRuntimeSessionId }),
         onClaimed: async (claimId, taskVersion, claimVersion) => {
           const current = this.currentRun(run.runId)
           if (!recovery) {
@@ -311,9 +321,15 @@ export class ClaimStageRunCoordinator implements ScheduledRunExecutor {
               effect: { type: 'observation', kind: 'adapter_session', observation: { runtimeSessionId } },
             })
           }
+          if (this.options.registry.getTaskRuntime(run.projectNumber, run.taskNumber) !== undefined) {
+            this.options.registry.bindTaskRoleSession(run.projectNumber, run.taskNumber, role, {
+              adapterId: routeAdapterId,
+              runtimeSessionId,
+            })
+          }
           await this.inject('after_session_persistence_before_agent', run)
         },
-        onHarnessResult: async harnessResult => {
+        onHarnessResult: async (harnessResult, _dispatch, baseline) => {
           await this.inject('after_harness_result_before_persistence', run)
           const current = this.currentRun(run.runId)
           if (current.state === 'running_harness') {
@@ -325,6 +341,7 @@ export class ClaimStageRunCoordinator implements ScheduledRunExecutor {
                   terminalState: harnessResult.terminalState,
                   runtimeSessionId: harnessResult.runtimeSessionId,
                   result: harnessResult,
+                  baseline,
                 },
               },
             })
@@ -398,7 +415,6 @@ export class ClaimStageRunCoordinator implements ScheduledRunExecutor {
           })
         },
       })
-      if (workspace !== undefined) await materialized.cleanup?.(workspace, true)
       return result.settlement.claim.status === 'released'
         ? { kind: 'released', reason: result.settlement.claim.outcome ?? 'released' }
         : { kind: 'completed' }
@@ -414,13 +430,14 @@ export class ClaimStageRunCoordinator implements ScheduledRunExecutor {
         return { kind: 'contention', reason: (error as PactlineClientError).pactlineError!.code }
       }
       const current = this.currentRun(run.runId)
+      this.recordVerificationMismatch(current, error)
       const ambiguous = hasAmbiguousExternalEffect(this.options.registry.listEffects(run.runId))
+      const reason = error instanceof VerificationMismatchError ? 'verification_mismatch' : safeReason(error)
       const outcome = ambiguous
-        ? this.quarantine(current, `ambiguous_external_effect: ${safeReason(error)}`)
+        ? this.quarantine(current, `ambiguous_external_effect: ${reason}`)
         : current.claimId === undefined
           ? this.releaseLocal(current, 'failed_before_claim')
-          : await this.releaseKnownClaim(current, safeReason(error), signal)
-      if (!ambiguous && workspace !== undefined) await materialized.cleanup?.(workspace, false).catch(() => undefined)
+          : await this.releaseKnownClaim(current, reason, signal)
       return outcome
     }
   }
@@ -567,6 +584,7 @@ export class ClaimStageRunCoordinator implements ScheduledRunExecutor {
       }
       const workspace = await materialized.prepareWorkspace(signal)
       const harnessResult = record(resultEffect.observation.result) as unknown as HarnessRunResult
+      const baseline = decodeGitObservation(resultEffect.observation.baseline)
       let settlementDelivery: RepositoryDelivery | undefined
       const result = await continueClaimStageAfterHarness({
         client: this.options.client,
@@ -583,6 +601,7 @@ export class ClaimStageRunCoordinator implements ScheduledRunExecutor {
         resumeRuntimeSessionId: sessionRun.runtimeSessionId,
         workspace,
         harnessResult,
+        baseline,
         ...(materialized.validateObservation === undefined ? {} : { validateObservation: materialized.validateObservation }),
         ...(materialized.publishDelivery === undefined ? {} : {
           publishDelivery: async (dispatch, proposal, observation): Promise<RepositoryDelivery> => {
@@ -636,13 +655,15 @@ export class ClaimStageRunCoordinator implements ScheduledRunExecutor {
           this.persistSettlement(this.currentRun(run.runId), settlement)
         },
       })
-      await materialized.cleanup?.(workspace, true)
       return result.settlement.claim.status === 'released'
         ? { kind: 'released', reason: result.settlement.claim.outcome ?? 'released' }
         : { kind: 'completed' }
     } catch (error) {
       if (error instanceof FleetInjectedCrash) throw error
-      return this.quarantine(this.currentRun(run.runId), `post_result_recovery_failed:${safeReason(error)}`)
+      const current = this.currentRun(run.runId)
+      this.recordVerificationMismatch(current, error)
+      const reason = error instanceof VerificationMismatchError ? 'verification_mismatch' : safeReason(error)
+      return this.quarantine(current, `post_result_recovery_failed:${reason}`)
     }
   }
 
@@ -709,6 +730,15 @@ export class ClaimStageRunCoordinator implements ScheduledRunExecutor {
 
   private async inject(checkpoint: FleetCrashCheckpoint, run: FleetRun): Promise<void> {
     await this.options.faultInjector?.(checkpoint, this.currentRun(run.runId))
+  }
+
+  private recordVerificationMismatch(run: FleetRun, error: unknown): void {
+    if (!(error instanceof VerificationMismatchError) || run.stage === undefined) return
+    this.options.registry.recordVerificationMismatch(run.runId, {
+      stage: run.stage,
+      role: taskRole(run.stage),
+      details: error.details,
+    })
   }
 
   private decide(runId: string, decision: Omit<FleetRunDecision, 'expected'>): FleetRun {

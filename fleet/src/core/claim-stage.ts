@@ -5,7 +5,7 @@ import type {
   ProposalValidationContext,
   ReviewProposal,
 } from './harness-result.js'
-import { proposalResultSchema, validateHarnessProposal } from './harness-result.js'
+import { assertHarnessProposalCanSettle, decodeHarnessProposal, proposalResultSchema } from './harness-result.js'
 import { HarnessEventCollector } from './events.js'
 import { promptPolicy } from './prompt-policy.js'
 import type { AdmittedRuntime, StaticRuntimeRouter } from './runtime-router.js'
@@ -18,6 +18,7 @@ import {
   runFixedVerification,
 } from './verification.js'
 import type { VerificationObservation } from './verification.js'
+import type { GitObservation } from './verification.js'
 import type { FleetWorkDefinition } from './work-definition.js'
 import type { PactlineCLI } from '../pactline/client.js'
 import { settleExecution, settleImportedDelivery, settleReview, waivedCriteriaFromAuthority } from '../pactline/settlement.js'
@@ -63,7 +64,11 @@ export interface ClaimStageOptions {
   readonly onRuntimeSession?: (runtimeSessionId: string, dispatch: ClaimStageDispatch) => Promise<void> | void
   readonly onClaimed?: (claimId: string, taskVersion: number, claimVersion?: number) => Promise<void> | void
   readonly onEvent?: (event: HarnessRunEvent) => Promise<void> | void
-  readonly onHarnessResult?: (result: HarnessRunResult, dispatch: ClaimStageDispatch) => Promise<void> | void
+  readonly onHarnessResult?: (
+    result: HarnessRunResult,
+    dispatch: ClaimStageDispatch,
+    baseline: GitObservation,
+  ) => Promise<void> | void
   /** Run coordinator-owned hidden or policy checks after Harness exit and before any settlement or publish effect. */
   readonly validateObservation?: (
     dispatch: ClaimStageDispatch,
@@ -100,6 +105,7 @@ export interface PersistedResultContinuationOptions extends Omit<
   readonly existingClaimId: string
   readonly resumeRuntimeSessionId: string
   readonly harnessResult: HarnessRunResult
+  readonly baseline: GitObservation
 }
 
 export interface CandidateImportOptions {
@@ -143,20 +149,26 @@ function assertTaskAdmission(
 }
 
 function assertInitialWorkspace(options: ClaimStageOptions, workspace: FleetWorkspace, head: string, changedPaths: readonly string[], porcelain: string): void {
-  if (head !== workspace.baseRevision) {
-    throw new Error('Harness workspace must start at the admitted clean revision')
+  const firstCorrectionSession = options.stage === 'correction' && options.resumeRuntimeSessionId === undefined
+  const expectedHead = options.stage === 'review'
+    ? options.definition.candidate?.revision ?? workspace.baseRevision
+    : firstCorrectionSession
+      ? options.definition.candidate?.revision ?? head
+    : options.resumeRuntimeSessionId === undefined ? workspace.baseRevision : head
+  if (head !== expectedHead) throw new Error('Harness workspace is not at the admitted stage revision')
+  if (workspace.mode !== 'execution' && options.stage !== 'review') {
+    throw new Error('Harness execution requires a writable Task Workspace')
   }
-  const expectedMode = options.stage === 'review' ? 'review' : 'execution'
-  if (workspace.mode !== expectedMode) throw new Error(`Harness stage requires a ${expectedMode} workspace`)
+  if (options.stage === 'review') {
+    if (porcelain !== '') throw new Error('Review requires a clean retained Task Workspace')
+    return
+  }
+  if (firstCorrectionSession) {
+    if (porcelain !== '') throw new Error('First correction Session requires a clean retained candidate')
+    assertAllowedPaths(changedPaths, options.definition.allowedPaths)
+    return
+  }
   if (options.resumeRuntimeSessionId !== undefined) {
-    if (options.existingClaimId === undefined) throw new Error('Harness resume requires an active existing Claim')
-    if (options.stage === 'review') {
-      if (changedPaths.length > 0 || porcelain !== '') throw new Error('Review resume requires its unchanged retained workspace')
-      return
-    }
-    if (changedPaths.length === 0 || porcelain === '') {
-      throw new Error('Execution resume requires its changed retained workspace')
-    }
     assertAllowedPaths(changedPaths, options.definition.allowedPaths)
     return
   }
@@ -283,22 +295,29 @@ async function finishClaimStage(
   workspace: FleetWorkspace,
   harnessResult: HarnessRunResult,
   validationContext: ProposalValidationContext,
-  baseHead: string,
+  baseline: GitObservation,
 ): Promise<ClaimStageResult> {
-  const proposal = validateHarnessProposal(harnessResult.proposal, validationContext)
+  const proposal = decodeHarnessProposal(harnessResult.proposal, validationContext)
   if (proposal.kind === 'resolution_analysis') throw new Error('Resolution analysis cannot directly settle a Pactline Claim')
 
   const afterAgent = await observeGit(workspace.repositoryPath, workspace.baseRevision)
   const requiresUnchanged = proposal.recommendation === 'request_resolution' || proposal.recommendation === 'unable_to_complete'
-  if (requiresUnchanged && (afterAgent.head !== baseHead || afterAgent.changedPaths.length > 0 || afterAgent.porcelain !== '')) {
+  if (requiresUnchanged && (afterAgent.head !== baseline.head
+    || JSON.stringify(afterAgent.changedPaths) !== JSON.stringify(baseline.changedPaths)
+    || afterAgent.porcelain !== baseline.porcelain)) {
     throw new Error('Resolution or release proposal requires unchanged workspace and HEAD')
   }
   const commands = requiresUnchanged ? [] : await runFixedVerification(workspace.repositoryPath, options.definition.verificationCommands)
   const git = await observeGit(workspace.repositoryPath, workspace.baseRevision)
   const observation = { git, commands }
   if (!requiresUnchanged) {
-    assertProposalMatchesObservation(proposal, observation, { baseHead, allowedPaths: options.definition.allowedPaths })
+    assertProposalMatchesObservation(proposal, observation, {
+      baseHead: baseline.head,
+      allowedPaths: options.definition.allowedPaths,
+      ...(proposal.kind === 'review' ? { reviewBaseline: baseline } : {}),
+    })
   }
+  assertHarnessProposalCanSettle(proposal, validationContext)
   if (proposal.kind === 'review') await assertReviewFindingsExist(workspace.repositoryPath, proposal)
   await options.validateObservation?.(dispatch, proposal, observation)
 
@@ -373,8 +392,8 @@ export async function runClaimStage(options: ClaimStageOptions): Promise<ClaimSt
   const before = await observeGit(workspace.repositoryPath, workspace.baseRevision)
   assertInitialWorkspace(options, workspace, before.head, before.changedPaths, before.porcelain)
   const run = await dispatchHarness(options, dispatch)
-  await options.onHarnessResult?.(run.result, dispatch)
-  return await finishClaimStage(options, dispatch, workspace, run.result, validationContext, before.head)
+  await options.onHarnessResult?.(run.result, dispatch, before)
+  return await finishClaimStage(options, dispatch, workspace, run.result, validationContext, before)
 }
 
 /** Continue only the post-Harness half from an observed result; never runs or resumes an Adapter. */
@@ -405,7 +424,7 @@ export async function continueClaimStageAfterHarness(
     options.workspace,
     options.harnessResult,
     validationContext,
-    options.workspace.baseRevision,
+    options.baseline,
   )
 }
 

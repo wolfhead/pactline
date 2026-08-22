@@ -57,12 +57,24 @@ func TestTaskCodeChangeLinkAndUnlinkPreserveExecutionClaim(t *testing.T) {
 	require.Equal(t, claim.Version, int64(1), "fixture Claim version must remain stable")
 	require.Equal(t, domain.TaskPhaseInProgress, linked.Task.Lifecycle.Phase)
 	require.Equal(t, domain.TaskActivityWorking, linked.Task.Lifecycle.Activity)
-	_, err = codeChanges.Link(
+	var activityCountBefore int
+	require.NoError(t, db.Pool.QueryRow(ctx,
+		`SELECT count(*) FROM task_activity WHERE task_id=$1 AND field='code_changes'`, task.Task.ID,
+	).Scan(&activityCountBefore))
+	duplicate, err := codeChanges.Link(
 		ctx, task.Task.Number, claim.ID, linked.Task.Version, claim.Version,
 		bound.Repository.ID, testCodeChangeReference(42), actor,
 		domain.SessionOperation(userA, "link-duplicate-code-change"), now.Add(4*time.Minute),
 	)
-	require.ErrorIs(t, err, domain.ErrConflict)
+	require.NoError(t, err)
+	require.False(t, duplicate.Changed)
+	require.Equal(t, linked.Task.Version, duplicate.Task.Version)
+	require.Equal(t, linked.CodeChange.CodeChange.ID, duplicate.CodeChange.CodeChange.ID)
+	var activityCountAfter int
+	require.NoError(t, db.Pool.QueryRow(ctx,
+		`SELECT count(*) FROM task_activity WHERE task_id=$1 AND field='code_changes'`, task.Task.ID,
+	).Scan(&activityCountAfter))
+	require.Equal(t, activityCountBefore, activityCountAfter)
 
 	activeClaim, err := store.NewTaskStageClaimStore(db).GetActiveForTaskNumber(ctx, task.Task.Number)
 	require.NoError(t, err)

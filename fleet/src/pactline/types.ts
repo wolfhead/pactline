@@ -98,4 +98,5 @@ export interface PactlineClaimMutationResult {
 export interface PactlineCodeChangeMutationResult {
   readonly task: PactlineWorkflowSummary
   readonly code_change: Record<string, unknown>
+  readonly changed: boolean
 }

@@ -1,7 +1,7 @@
 import { PactlineClientError } from './client.js'
 import type { PactlineCLI, PactlineCallOptions } from './client.js'
 import type { ExecutionProposal, ReviewProposal } from '../core/harness-result.js'
-import type { PactlineClaimMutationResult, PactlineOperation } from './types.js'
+import type { PactlineClaimMutationResult, PactlineCodeChangeMutationResult, PactlineOperation } from './types.js'
 import type { RepositoryDelivery } from '../repository/delivery.js'
 import { validateRepositoryDelivery } from '../repository/delivery.js'
 import type { PactlineSettlementIntent } from '../run/external-effect.js'
@@ -173,6 +173,75 @@ function terminalExpected(status: string, outcome?: string): (packet: Record<str
   }
 }
 
+function activeSettlementVersion(packet: Record<string, unknown>, context: SettlementContext): number {
+  const claim = record(packet.claim, 'reconciled Claim')
+  const task = record(packet.task, 'reconciled Task')
+  if (claim.id !== context.claimId || claim.status !== 'active' || claim.stage !== context.stage
+    || context.stage !== 'execution' || task.number !== context.taskNumber || typeof task.version !== 'number'
+    || task.phase !== 'in_progress' || task.activity !== 'working') {
+    throw new Error('Uncertain Pactline settlement could not be reconciled safely')
+  }
+  return task.version
+}
+
+async function linkExecutionDelivery(
+  client: SettlementClient,
+  delivery: RepositoryDelivery,
+  context: SettlementContext,
+): Promise<PactlineCodeChangeMutationResult> {
+  const options = key(context, 'link')
+  try {
+    return (await client.linkCodeChange(
+      context.claimId, context.taskVersion, delivery.codeChangeUrl, options,
+    )).data
+  } catch (error: unknown) {
+    if (!isUncertain(error)) throw error
+    const packet = await client.showClaim(context.claimId, 100, context)
+    const taskVersion = activeSettlementVersion(packet.data, context)
+    if (taskVersion !== context.taskVersion && taskVersion !== context.taskVersion + 1) {
+      throw new Error('Uncertain code-change link advanced the Task unexpectedly', { cause: error })
+    }
+    return (await client.linkCodeChange(
+      context.claimId, taskVersion, delivery.codeChangeUrl, options,
+    )).data
+  }
+}
+
+function hasSubmission(packet: Record<string, unknown>, claimId: string, body: string): boolean {
+  const thread = record(packet.main_thread, 'Main Thread')
+  if (!Array.isArray(thread.items)) throw new Error('Main Thread items are invalid')
+  return thread.items.some(value => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+    const item = value as Record<string, unknown>
+    return item.kind === 'work_submission' && item.body === body && item.task_stage_claim_id === claimId
+  })
+}
+
+async function ensureWorkSubmission(
+  client: SettlementClient,
+  taskVersion: number,
+  body: string,
+  context: SettlementContext,
+): Promise<void> {
+  const current = await client.showClaim(context.claimId, 100, context)
+  if (activeSettlementVersion(current.data, context) !== taskVersion) {
+    throw new Error('Pactline Task changed before work submission')
+  }
+  if (hasSubmission(current.data, context.claimId, body)) return
+  const options = key(context, 'submit')
+  try {
+    await client.submitClaim(context.claimId, taskVersion, body, options)
+  } catch (error: unknown) {
+    if (!isUncertain(error)) throw error
+    const reconciled = await client.showClaim(context.claimId, 100, context)
+    if (activeSettlementVersion(reconciled.data, context) !== taskVersion) {
+      throw new Error('Uncertain work submission changed the Task unexpectedly', { cause: error })
+    }
+    if (hasSubmission(reconciled.data, context.claimId, body)) return
+    await client.submitClaim(context.claimId, taskVersion, body, options)
+  }
+}
+
 async function recordCriteria(
   client: SettlementClient,
   criteria: readonly ImportedCriterion[],
@@ -195,10 +264,10 @@ async function publishExecution(
 ): Promise<PactlineClaimMutationResult> {
   validateRepositoryDelivery(delivery)
   await recordCriteria(client, criteria, context)
-  const linked = await client.linkCodeChange(context.claimId, context.taskVersion, delivery.codeChangeUrl, key(context, 'link'))
-  const linkedVersion = linked.data.task.version
+  const linked = await linkExecutionDelivery(client, delivery, context)
+  const linkedVersion = linked.task.version
   const submission = [summary, `Revision: ${delivery.revision}`, `Branch: ${delivery.branch}`, `Code change: ${delivery.codeChangeUrl}`].join('\n')
-  await client.submitClaim(context.claimId, linkedVersion, submission, key(context, 'submit'))
+  await ensureWorkSubmission(client, linkedVersion, submission, context)
   const terminalContext = { ...context, taskVersion: linkedVersion }
   return terminalMutation(client, terminalContext, terminalExpected('completed'), () => (
     client.completeClaim(context.claimId, linkedVersion, summary, key(context, 'complete'))
@@ -285,7 +354,18 @@ export async function replaySettlement(
   if (intent.stage !== context.stage || intent.taskVersion !== context.taskVersion) {
     throw new Error('Persisted settlement intent does not match the active Claim context')
   }
-  return intent.stage === 'execution'
-    ? settleExecution(client, intent.proposal as ExecutionProposal, context, intent.delivery)
-    : settleReview(client, intent.proposal as ReviewProposal, context)
+  if (intent.stage === 'review') {
+    return settleReview(client, intent.proposal as ReviewProposal, context)
+  }
+  const packet = await client.showClaim(context.claimId, 100, context)
+  const currentVersion = activeSettlementVersion(packet.data, context)
+  if (currentVersion !== context.taskVersion && currentVersion !== context.taskVersion + 1) {
+    throw new Error('Persisted execution settlement advanced the Task unexpectedly')
+  }
+  return settleExecution(
+    client,
+    intent.proposal as ExecutionProposal,
+    { ...context, taskVersion: currentVersion },
+    intent.delivery,
+  )
 }

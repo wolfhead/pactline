@@ -74,6 +74,7 @@ describe('Run domain model', () => {
       observation: {
         terminalState: 'completed', runtimeSessionId: 'session-1',
         result: { proposal: { kind: 'execution', recommendation: 'complete' } },
+        baseline: { head: 'a'.repeat(40), changedPaths: [], porcelain: '' },
       },
       createdAt: '2026-08-17T09:01:00.000Z', updatedAt: '2026-08-17T09:02:00.000Z',
     })

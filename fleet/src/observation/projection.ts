@@ -24,6 +24,7 @@ import type {
   ObservationRunDetail,
   ObservationRunSummary,
   ObservationTimelineItem,
+  ObservationVerificationMismatch,
 } from './model.js'
 import { OBSERVATION_EFFECT_PROJECTION } from './model.js'
 
@@ -125,7 +126,76 @@ function timeline(event: FleetRunEventRecord): ObservationTimelineItem {
       ...(state === undefined ? {} : { state }),
     }
   }
+  if (event.eventType === 'run.verification_mismatch') {
+    const count = Array.isArray(event.payload.details) ? event.payload.details.length : 0
+    return {
+      sequence: event.sequence, at: event.createdAt, kind: event.eventType,
+      title: 'Verification mismatch recorded',
+      detail: `${String(count)} structured difference${count === 1 ? '' : 's'} retained`,
+    }
+  }
   return { sequence: event.sequence, at: event.createdAt, kind: event.eventType, title: 'Run event recorded' }
+}
+
+const MISMATCH_CATEGORIES = new Set([
+  'test_failure', 'command_unavailable', 'timeout', 'missing_prerequisite',
+  'output_limit', 'parse_mismatch', 'result_mismatch', 'changed_paths_mismatch',
+])
+
+function safeStringList(value: unknown): readonly string[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  return value.slice(0, 64).flatMap(item => {
+    const selected = text(item)
+    return selected === undefined ? [] : [selected]
+  })
+}
+
+function verificationMismatch(event: FleetRunEventRecord | undefined): ObservationVerificationMismatch | undefined {
+  if (event === undefined) return undefined
+  const stage = text(event.payload.stage)
+  const role = text(event.payload.role)
+  if (!['execution', 'review', 'correction'].includes(stage ?? '')
+    || !['implementer', 'reviewer'].includes(role ?? '')
+    || !Array.isArray(event.payload.details)) return undefined
+  const details = event.payload.details.slice(0, 64).flatMap(value => {
+    const item = object(value)
+    const category = text(item?.category)
+    if (item === undefined || category === undefined || !MISMATCH_CATEGORIES.has(category)) return []
+    const harness = object(item.harness)
+    const fleet = object(item.fleet)
+    const command = text(item.command)
+    const harnessOutcome = text(harness?.outcome)
+    const harnessSummary = text(harness?.summary)
+    const fleetOutcome = text(fleet?.outcome)
+    const fleetSummary = text(fleet?.summary)
+    const exitCode = fleet?.exitCode
+    const harnessChangedPaths = safeStringList(item.harnessChangedPaths)
+    const fleetChangedPaths = safeStringList(item.fleetChangedPaths)
+    const harnessChangedPathsOmitted = item.harnessChangedPathsOmitted
+    const fleetChangedPathsOmitted = item.fleetChangedPathsOmitted
+    return [{
+      category,
+      ...(command === undefined ? {} : { command }),
+      ...(harnessOutcome === undefined || harnessSummary === undefined ? {} : {
+        harness: { outcome: harnessOutcome, summary: harnessSummary },
+      }),
+      ...(fleetOutcome === undefined || fleetSummary === undefined ? {} : {
+        fleet: { outcome: fleetOutcome, exitCode: typeof exitCode === 'number' ? exitCode : null, summary: fleetSummary },
+      }),
+      ...(harnessChangedPaths === undefined ? {} : { harnessChangedPaths }),
+      ...(fleetChangedPaths === undefined ? {} : { fleetChangedPaths }),
+      ...(typeof harnessChangedPathsOmitted !== 'number' ? {} : { harnessChangedPathsOmitted }),
+      ...(typeof fleetChangedPathsOmitted !== 'number' ? {} : { fleetChangedPathsOmitted }),
+    }]
+  })
+  if (details.length === 0) return undefined
+  return {
+    at: event.createdAt,
+    stage: stage as 'execution' | 'review' | 'correction',
+    role: role as 'implementer' | 'reviewer',
+    details,
+    ...(typeof event.payload.detailsOmitted !== 'number' ? {} : { detailsOmitted: event.payload.detailsOmitted }),
+  }
 }
 
 function safeEffectDetail(effect: FleetExternalEffectRecord): Readonly<Record<string, string | number | boolean>> | undefined {
@@ -234,6 +304,8 @@ export class FleetObservationProjector implements FleetObservationSource {
   run(id: string): ObservationEnvelope<ObservationRunDetail> | undefined {
     const value = this.registry.getRun(id)
     if (value === undefined) return undefined
+    const events = this.registry.listRunEvents(id, 200)
+    const mismatch = verificationMismatch(events.findLast(event => event.eventType === 'run.verification_mismatch'))
     return this.envelope({
       ...runSummary(value),
       serviceId: value.serviceId,
@@ -244,8 +316,9 @@ export class FleetObservationProjector implements FleetObservationSource {
       ...(value.claimTaskVersion === undefined ? {} : { claimTaskVersion: value.claimTaskVersion }),
       ...(value.runtimeSessionId === undefined ? {} : { runtimeSessionId: value.runtimeSessionId }),
       ...(safeWorkspace(value.workspace) === undefined ? {} : { workspace: safeWorkspace(value.workspace)! }),
-      timeline: this.registry.listRunEvents(id, 200)
-        .filter(event => ['run.admitted', 'run.transitioned', 'run.recovery_decided'].includes(event.eventType))
+      ...(mismatch === undefined ? {} : { verificationMismatch: mismatch }),
+      timeline: events
+        .filter(event => ['run.admitted', 'run.transitioned', 'run.recovery_decided', 'run.verification_mismatch'].includes(event.eventType))
         .map(timeline),
       effects: this.registry.listEffects(id).map(effect),
     })

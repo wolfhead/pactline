@@ -31,7 +31,7 @@ describe('Fleet service configuration', () => {
       projectNumber: 5,
       enabled: true,
       maxConcurrentRuns: 1,
-      credentials: { git: 'local-test-git' },
+      credentials: { git: 'LOCAL_TEST_GIT', codeChange: 'LOCAL_TEST_CODE_CHANGE' },
     })
     expect(snapshot.config.fleets.second?.projectNumber).toBe(12)
     expect(snapshot.config.fleets.first?.routing.execution).toMatchObject({

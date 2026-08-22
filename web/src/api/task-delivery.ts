@@ -68,6 +68,7 @@ export interface TaskDelivery {
 export interface TaskCodeChangeMutation {
   task: TaskWorkflow;
   code_change: TaskCodeChange;
+  changed: boolean;
 }
 
 export function getTaskDelivery(taskNumber: number): Promise<TaskDelivery> {

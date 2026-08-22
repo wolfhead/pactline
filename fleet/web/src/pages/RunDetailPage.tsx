@@ -1,4 +1,4 @@
-import { ArrowLeft, CheckCircle2, ExternalLink, GitBranch, History, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, CheckCircle2, ExternalLink, GitBranch, History, ShieldCheck } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import { useAPI } from '../data'
 import type { RunDetail } from '../types'
@@ -20,6 +20,16 @@ export function RunDetailPage(): JSX.Element {
       <div><span>Run</span><CopyValue value={value.runId} /></div><div><span>Claim</span>{value.claimId === undefined ? <strong>Not created</strong> : <CopyValue value={value.claimId} />}</div><div><span>Adapter Session</span>{value.runtimeSessionId === undefined ? <strong>Not started</strong> : <CopyValue value={value.runtimeSessionId} />}</div><div><span>Configuration</span><CopyValue value={value.configRevision} /></div>
       <div><span>Task versions</span><strong>{value.taskVersion ?? '—'} → {value.claimTaskVersion ?? '—'}</strong></div><div><span>Claim version</span><strong>{value.claimVersion ?? '—'}</strong></div><div><span>Adapter route</span><strong>{value.adapter ?? 'Pending'} / {value.model ?? 'Pending'}{value.reasoning === undefined ? '' : ` / ${value.reasoning}`}</strong></div><div><span>Updated</span><strong>{relativeTime(value.updatedAt)}</strong></div>
     </div>
+    {value.verificationMismatch === undefined ? null : <Section title="Verification mismatch" description={`${label(value.verificationMismatch.stage)} · ${label(value.verificationMismatch.role)} · retained ${relativeTime(value.verificationMismatch.at)}${value.verificationMismatch.detailsOmitted === undefined ? '' : ` · ${String(value.verificationMismatch.detailsOmitted)} additional differences omitted`}`} aside={<AlertTriangle size={18} />}>
+      <div className="mismatch-list">{value.verificationMismatch.details.map((item, index) => <article key={`${item.category}-${String(index)}`}>
+        <header><strong>{label(item.category)}</strong>{item.command === undefined ? null : <code>{item.command}</code>}</header>
+        <div className="mismatch-results">
+          <div><span>Harness result</span>{item.harness === undefined ? <p>Not reported</p> : <><b>{label(item.harness.outcome)}</b><pre>{item.harness.summary}</pre></>}</div>
+          <div><span>Fleet result</span>{item.fleet === undefined ? <p>Not observed</p> : <><b>{label(item.fleet.outcome)} · exit {item.fleet.exitCode ?? 'none'}</b><pre>{item.fleet.summary}</pre></>}</div>
+        </div>
+        {item.harnessChangedPaths === undefined && item.fleetChangedPaths === undefined ? null : <div className="mismatch-paths"><div><span>Harness paths{item.harnessChangedPathsOmitted === undefined ? '' : ` · ${String(item.harnessChangedPathsOmitted)} omitted`}</span><code>{item.harnessChangedPaths?.join('\n') || 'None'}</code></div><div><span>Fleet paths{item.fleetChangedPathsOmitted === undefined ? '' : ` · ${String(item.fleetChangedPathsOmitted)} omitted`}</span><code>{item.fleetChangedPaths?.join('\n') || 'None'}</code></div></div>}
+      </article>)}</div>
+    </Section>}
     <div className="run-columns">
       <Section title="Timeline" description="Durable state transitions in causal order." aside={<History size={18} />}>
         <ol className="timeline">{value.timeline.map(item => <li className={item.sequence === currentTimeline ? 'current' : ''} key={item.sequence}><span className="timeline-marker">{item.sequence === currentTimeline ? <CheckCircle2 size={14} /> : null}</span><div><div><strong>{item.title}</strong><time>{relativeTime(item.at)}</time></div>{item.detail === undefined ? null : <p>{item.detail}</p>}{item.checkpoint === undefined ? null : <code>{item.checkpoint}</code>}</div></li>)}</ol>

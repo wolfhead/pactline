@@ -236,7 +236,8 @@ function claimMutation(value: unknown): PactlineClaimMutationResult {
 function codeChangeMutation(value: unknown): PactlineCodeChangeMutationResult {
   if (!isRecord(value) || !isRecord(value.task) || typeof value.task.task_number !== 'number'
     || typeof value.task.version !== 'number' || typeof value.task.phase !== 'string'
-    || (value.task.activity !== undefined && typeof value.task.activity !== 'string') || !isRecord(value.code_change)) {
+    || (value.task.activity !== undefined && typeof value.task.activity !== 'string') || !isRecord(value.code_change)
+    || typeof value.changed !== 'boolean') {
     throw new PactlineClientError('INVALID_RESPONSE', 'Pactline code-change mutation result is invalid')
   }
   positiveInteger(value.task.task_number, 'Task number')
@@ -247,6 +248,7 @@ function codeChangeMutation(value: unknown): PactlineCodeChangeMutationResult {
       activity: typeof value.task.activity === 'string' ? value.task.activity : '',
     } as unknown as PactlineCodeChangeMutationResult['task'],
     code_change: value.code_change,
+    changed: value.changed,
   }
 }
 

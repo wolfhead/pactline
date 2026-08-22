@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -87,6 +87,251 @@ function unableProposal(runId: string, claimId: string): ExecutionProposal {
 }
 
 describe('ClaimStageRunCoordinator', () => {
+  it('retains structured mismatch evidence and resumes the same Task runtime on the next Run', async () => {
+    const { directory, origin, revision, registry, fleet } = await fixture()
+    const criterion = { id: 'criterion-1', revision: 1 }
+    const client = new InMemoryPactlineClient(21, [criterion])
+    const definition: FleetWorkDefinition = {
+      caseId: 'verification-mismatch-recovery', taskNumber: 21, taskVersion: 1,
+      base: { source: origin, ref: 'refs/heads/main', revision },
+      repository: { provider: 'github', host: 'github.com', owner: 'wolfhead', name: 'pactline' },
+      allowedPaths: ['README.md'], verificationCommands: ['grep -q good README.md'], criteria: [criterion],
+    }
+    const workspace = await prepareWorkspace({
+      input: definition.base, mode: 'execution', runId: 'task-21-mismatch', temporaryDirectory: directory,
+      taskIdentity: { projectNumber: 5, taskNumber: 21 },
+    })
+    registry.bindTaskWorkspace(5, 21, workspace)
+    const capabilities: HarnessCapabilities = {
+      nativeTools: true, structuredResult: true, eventStream: true, cancellation: true, sessionResume: true,
+      sandboxModes: ['workspace_write'], supportedStages: ['execution', 'correction'],
+    }
+    let resumeCalls = 0
+    const result = (request: HarnessRunRequest, outcome: 'passed' | 'failed' | 'missing'): HarnessRunResult => ({
+      adapterId: 'replay', adapterVersion: 'mismatch-test', runtimeSessionId: 'retained-session',
+      model: { provider: 'replay', model: 'quality', reasoning: 'max' }, terminalState: 'completed',
+      proposal: {
+        schemaVersion: 1, kind: 'execution', runId: request.runId, claimId: request.claimId,
+        taskNumber: 21, recommendation: 'complete', summary: 'Verification result.',
+        changedPaths: ['README.md'],
+        verification: outcome === 'missing' ? [] : [{ command: 'grep -q good README.md', outcome, summary: outcome }],
+        criteria: [{ criterionId: criterion.id, criterionRevision: 1, outcome: 'passed', evidence: 'verified' }],
+        limitations: [],
+      },
+      usage: {}, eventSummary: { total: 0, byType: {}, toolCalls: {}, toolErrors: {} },
+    })
+    const adapter: HarnessAdapter = {
+      id: 'replay', version: 'mismatch-test', probe: async () => capabilities,
+      async run(request, observer) {
+        await observer.onSessionStarted({ runtimeSessionId: 'retained-session' })
+        await writeFile(join(request.workspace, 'README.md'), 'good from first Run\n')
+        return result(request, 'missing')
+      },
+      async resume(runtimeSessionId, request, observer) {
+        resumeCalls += 1
+        expect(runtimeSessionId).toBe('retained-session')
+        await observer.onSessionStarted({ runtimeSessionId })
+        await writeFile(join(request.workspace, 'README.md'), 'good after mismatch\n')
+        return result(request, resumeCalls === 1 ? 'failed' : 'passed')
+      },
+    }
+    const coordinator = new ClaimStageRunCoordinator({
+      registry, client, clientSessionId: 'fleet-service-test',
+      materializer: {
+        materialize: async () => ({
+          definition, router: new StaticRuntimeRouter([adapter], routes()),
+          deadline: '2099-08-17T00:00:00Z', prepareWorkspace: async () => workspace,
+          publishDelivery: async () => ({
+            repository: definition.repository, codeChangeUrl: 'https://github.com/wolfhead/pactline/pull/90',
+            revision: 'b'.repeat(40), branch: workspace.branch!,
+          }),
+        }),
+      },
+    })
+    const first = registry.admitRun(fleet.id, {
+      taskNumber: 21, taskVersion: client.version, stage: 'execution', frozenPolicy: { definition, route: routes().execution },
+    })
+
+    await expect(coordinator.execute(first.runId, new AbortController().signal)).resolves.toEqual({
+      kind: 'released', reason: 'verification_mismatch',
+    })
+    expect(registry.getRun(first.runId)).toMatchObject({ state: 'released', disposition: 'verification_mismatch' })
+    expect(registry.listRunEvents(first.runId)).toContainEqual(expect.objectContaining({
+      eventType: 'run.verification_mismatch',
+      payload: expect.objectContaining({
+        stage: 'execution', role: 'implementer',
+        details: [expect.objectContaining({ category: 'parse_mismatch', command: 'grep -q good README.md' })],
+      }),
+    }))
+    expect(registry.getTaskRuntime(5, 21)).toMatchObject({
+      workspace: { root: workspace.root },
+      sessions: { implementer: { runtimeSessionId: 'retained-session' } },
+    })
+
+    const second = registry.admitRun(fleet.id, {
+      taskNumber: 21, taskVersion: client.version, stage: 'correction', frozenPolicy: { definition, route: routes().correction },
+    })
+    await expect(coordinator.execute(second.runId, new AbortController().signal)).resolves.toEqual({
+      kind: 'released', reason: 'verification_mismatch',
+    })
+    expect(registry.listRunEvents(second.runId)).toContainEqual(expect.objectContaining({
+      eventType: 'run.verification_mismatch',
+      payload: expect.objectContaining({
+        details: [expect.objectContaining({ category: 'result_mismatch', command: 'grep -q good README.md' })],
+      }),
+    }))
+
+    const third = registry.admitRun(fleet.id, {
+      taskNumber: 21, taskVersion: client.version, stage: 'correction', frozenPolicy: { definition, route: routes().correction },
+    })
+    await expect(coordinator.execute(third.runId, new AbortController().signal)).resolves.toEqual({ kind: 'completed' })
+    expect(resumeCalls).toBe(2)
+    expect(client.phase).toBe('in_review')
+    registry.close()
+  })
+
+  it('resumes the Task implementer Session across a new Run and Claim without replacing the Workspace', async () => {
+    const { directory, origin, revision, registry, fleet } = await fixture()
+    const criterion = { id: 'criterion-1', revision: 1 }
+    const client = new InMemoryPactlineClient(21, [criterion])
+    const definition: FleetWorkDefinition = {
+      caseId: 'task-runtime-continuity', taskNumber: 21, taskVersion: 1,
+      base: { source: origin, ref: 'refs/heads/main', revision },
+      repository: { provider: 'github', host: 'github.com', owner: 'wolfhead', name: 'pactline' },
+      allowedPaths: ['README.md'], verificationCommands: ['true'], criteria: [criterion],
+    }
+    const workspace = await prepareWorkspace({
+      input: definition.base, mode: 'execution', runId: 'task-21-original', temporaryDirectory: directory,
+      taskIdentity: { projectNumber: 5, taskNumber: 21 },
+    })
+    registry.bindTaskWorkspace(5, 21, workspace)
+    registry.bindTaskRoleSession(5, 21, 'implementer', {
+      adapterId: 'replay', runtimeSessionId: 'implementer-task-21',
+    })
+    let resumedSession: string | undefined
+    const capabilities: HarnessCapabilities = {
+      nativeTools: true, structuredResult: true, eventStream: true, cancellation: true, sessionResume: true,
+      sandboxModes: ['workspace_write'], supportedStages: ['execution', 'correction'],
+    }
+    const adapter: HarnessAdapter = {
+      id: 'replay', version: 'task-runtime-test', probe: async () => capabilities,
+      run: () => Promise.reject(new Error('Task role Session must be resumed')),
+      async resume(runtimeSessionId, request, observer) {
+        resumedSession = runtimeSessionId
+        await observer.onSessionStarted({ runtimeSessionId })
+        await writeFile(join(request.workspace, 'README.md'), 'retained implementation\n')
+        return {
+          adapterId: 'replay', adapterVersion: 'task-runtime-test', runtimeSessionId,
+          model: { provider: 'replay', model: 'quality', reasoning: 'max' }, terminalState: 'completed',
+          proposal: {
+            schemaVersion: 1, kind: 'execution', runId: request.runId, claimId: request.claimId,
+            taskNumber: 21, recommendation: 'complete', summary: 'Continued retained work.',
+            changedPaths: ['README.md'],
+            verification: [{ command: 'true', outcome: 'passed', summary: 'passed' }],
+            criteria: [{ criterionId: criterion.id, criterionRevision: 1, outcome: 'passed', evidence: 'continued' }],
+            limitations: [],
+          },
+          usage: {}, eventSummary: { total: 0, byType: {}, toolCalls: {}, toolErrors: {} },
+        }
+      },
+    }
+    const run = registry.admitRun(fleet.id, {
+      taskNumber: 21, taskVersion: 1, stage: 'execution', frozenPolicy: { definition, route: routes().execution },
+    })
+    const coordinator = new ClaimStageRunCoordinator({
+      registry, client, clientSessionId: 'fleet-service-test',
+      materializer: {
+        materialize: async () => ({
+          definition, router: new StaticRuntimeRouter([adapter], routes()),
+          deadline: '2099-08-17T00:00:00Z', prepareWorkspace: async () => workspace,
+          publishDelivery: async () => ({
+            repository: definition.repository, codeChangeUrl: 'https://github.com/wolfhead/pactline/pull/81',
+            revision: 'b'.repeat(40), branch: workspace.branch!,
+          }),
+        }),
+      },
+    })
+
+    await expect(coordinator.execute(run.runId, new AbortController().signal)).resolves.toEqual({ kind: 'completed' })
+    expect(resumedSession).toBe('implementer-task-21')
+    expect(registry.getTaskRuntime(5, 21)).toMatchObject({
+      workspace: { root: workspace.root },
+      sessions: { implementer: { runtimeSessionId: 'implementer-task-21' } },
+    })
+    expect(client.phase).toBe('in_review')
+    registry.close()
+  })
+
+  it('uses a separate reviewer Session and leaves terminal retirement to maintenance', async () => {
+    const { directory, origin, revision, registry, fleet } = await fixture()
+    const criterion = { id: 'criterion-1', revision: 1 }
+    const client = new InMemoryPactlineClient(21, [criterion], { phase: 'in_review' })
+    const workspace = await prepareWorkspace({
+      input: { source: origin, ref: 'refs/heads/main', revision },
+      mode: 'execution', runId: 'task-21-review', temporaryDirectory: directory,
+      taskIdentity: { projectNumber: 5, taskNumber: 21 },
+    })
+    await writeFile(join(workspace.repositoryPath, 'README.md'), 'review candidate\n')
+    await exec('git', ['-C', workspace.repositoryPath, 'add', 'README.md'])
+    await exec('git', ['-C', workspace.repositoryPath, '-c', 'user.name=Fleet Test', '-c', 'user.email=fleet@example.invalid', 'commit', '--quiet', '-m', 'candidate'])
+    const candidateRevision = (await exec('git', ['-C', workspace.repositoryPath, 'rev-parse', 'HEAD'])).stdout.trim()
+    const repository = { provider: 'github' as const, host: 'github.com', owner: 'wolfhead', name: 'pactline' }
+    const definition: FleetWorkDefinition = {
+      caseId: 'task-review-continuity', taskNumber: 21, taskVersion: 1,
+      base: { source: origin, ref: 'refs/heads/main', revision }, repository,
+      candidate: {
+        repository, codeChangeUrl: 'https://github.com/wolfhead/pactline/pull/82',
+        revision: candidateRevision, branch: workspace.branch!, ref: `refs/heads/${workspace.branch!}`,
+      },
+      allowedPaths: ['README.md'], verificationCommands: ['true'], criteria: [criterion],
+    }
+    registry.bindTaskWorkspace(5, 21, workspace)
+    registry.bindTaskRoleSession(5, 21, 'implementer', {
+      adapterId: 'replay', runtimeSessionId: 'implementer-task-21',
+    })
+    const capabilities: HarnessCapabilities = {
+      nativeTools: true, structuredResult: true, eventStream: true, cancellation: true, sessionResume: true,
+      sandboxModes: ['workspace_write'], supportedStages: ['review'],
+    }
+    const adapter: HarnessAdapter = {
+      id: 'replay', version: 'task-review-test', probe: async () => capabilities,
+      async run(request, observer) {
+        await observer.onSessionStarted({ runtimeSessionId: 'reviewer-task-21' })
+        return {
+          adapterId: 'replay', adapterVersion: 'task-review-test', runtimeSessionId: 'reviewer-task-21',
+          model: { provider: 'replay', model: 'quality', reasoning: 'max' }, terminalState: 'completed',
+          proposal: {
+            schemaVersion: 1, kind: 'review', runId: request.runId, claimId: request.claimId,
+            taskNumber: 21, recommendation: 'accept', summary: 'Reviewed retained delivery.', findings: [],
+            verification: [{ command: 'true', outcome: 'passed', summary: 'passed' }],
+            criteria: [{ criterionId: criterion.id, criterionRevision: 1, outcome: 'passed', evidence: 'reviewed' }],
+            limitations: [],
+          },
+          usage: {}, eventSummary: { total: 0, byType: {}, toolCalls: {}, toolErrors: {} },
+        }
+      },
+    }
+    const run = registry.admitRun(fleet.id, {
+      taskNumber: 21, taskVersion: 1, stage: 'review', frozenPolicy: { definition, route: routes().review },
+    })
+    const coordinator = new ClaimStageRunCoordinator({
+      registry, client, clientSessionId: 'fleet-service-test',
+      materializer: {
+        materialize: async () => ({
+          definition, router: new StaticRuntimeRouter([adapter], routes()),
+          deadline: '2099-08-17T00:00:00Z', prepareWorkspace: async () => workspace,
+        }),
+      },
+    })
+
+    await expect(coordinator.execute(run.runId, new AbortController().signal)).resolves.toEqual({ kind: 'completed' })
+    expect(client.phase).toBe('done')
+    expect(registry.getTaskRuntime(5, 21)).toBeDefined()
+    await expect(readFile(join(workspace.repositoryPath, 'README.md'), 'utf8')).resolves.toBe('review candidate\n')
+    await removeWorkspace(workspace)
+    registry.close()
+  })
+
   it('checkpoints Claim, workspace, Session, result, delivery, and settlement', async () => {
     const { directory, origin, revision, registry, fleet } = await fixture()
     const criterion = { id: 'criterion-1', revision: 1 }
@@ -532,6 +777,7 @@ describe('ClaimStageRunCoordinator', () => {
       registry.observeEffect(run.runId, 'harness_result', {
         terminalState: 'completed', runtimeSessionId: 'completed-codex-session',
         result: harnessResult,
+        baseline: { head: revision, changedPaths: [], porcelain: '' },
       })
       registry.transitionRun(run.runId, 'running_harness', 'validating', {
         checkpoint: 'harness_result_observed',
@@ -620,6 +866,7 @@ describe('ClaimStageRunCoordinator', () => {
     registry.observeEffect(run.runId, 'harness_result', {
       terminalState: 'completed', runtimeSessionId: 'completed-codex-session',
       result: { proposal },
+      baseline: { head: 'a'.repeat(40), changedPaths: [], porcelain: '' },
     })
     registry.transitionRun(run.runId, 'running_harness', 'validating')
     registry.transitionRun(run.runId, 'validating', 'settling', { checkpoint: 'settlement_intent' })
@@ -678,6 +925,7 @@ describe('ClaimStageRunCoordinator', () => {
     registry.observeEffect(run.runId, 'harness_result', {
       terminalState: 'completed', runtimeSessionId: 'deepseek-session',
       result: { proposal },
+      baseline: { head: 'a'.repeat(40), changedPaths: [], porcelain: '' },
     })
     registry.transitionRun(run.runId, 'running_harness', 'validating')
     registry.transitionRun(run.runId, 'validating', 'settling')

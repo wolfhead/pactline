@@ -9170,6 +9170,8 @@ func (s *TaskCodeChangeLink) SetCodeChangeURL(val url.URL) {
 type TaskCodeChangeMutation struct {
 	Task       TaskWorkflow   `json:"task"`
 	CodeChange TaskCodeChange `json:"code_change"`
+	// True when the active delivery set changed; false for an existing identical link.
+	Changed bool `json:"changed"`
 }
 
 // GetTask returns the value of Task.
@@ -9182,6 +9184,11 @@ func (s *TaskCodeChangeMutation) GetCodeChange() TaskCodeChange {
 	return s.CodeChange
 }
 
+// GetChanged returns the value of Changed.
+func (s *TaskCodeChangeMutation) GetChanged() bool {
+	return s.Changed
+}
+
 // SetTask sets the value of Task.
 func (s *TaskCodeChangeMutation) SetTask(val TaskWorkflow) {
 	s.Task = val
@@ -9190,6 +9197,11 @@ func (s *TaskCodeChangeMutation) SetTask(val TaskWorkflow) {
 // SetCodeChange sets the value of CodeChange.
 func (s *TaskCodeChangeMutation) SetCodeChange(val TaskCodeChange) {
 	s.CodeChange = val
+}
+
+// SetChanged sets the value of Changed.
+func (s *TaskCodeChangeMutation) SetChanged(val bool) {
+	s.Changed = val
 }
 
 // Ref: #/components/schemas/TaskCreate

@@ -12031,11 +12031,16 @@ func (s *TaskCodeChangeMutation) encodeFields(e *jx.Encoder) {
 		e.FieldStart("code_change")
 		s.CodeChange.Encode(e)
 	}
+	{
+		e.FieldStart("changed")
+		e.Bool(s.Changed)
+	}
 }
 
-var jsonFieldsNameOfTaskCodeChangeMutation = [2]string{
+var jsonFieldsNameOfTaskCodeChangeMutation = [3]string{
 	0: "task",
 	1: "code_change",
+	2: "changed",
 }
 
 // Decode decodes TaskCodeChangeMutation from json.
@@ -12067,6 +12072,18 @@ func (s *TaskCodeChangeMutation) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"code_change\"")
 			}
+		case "changed":
+			requiredBitSet[0] |= 1 << 2
+			if err := func() error {
+				v, err := d.Bool()
+				s.Changed = bool(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"changed\"")
+			}
 		default:
 			return errors.Errorf("unexpected field %q", k)
 		}
@@ -12077,7 +12094,7 @@ func (s *TaskCodeChangeMutation) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [1]uint8{
-		0b00000011,
+		0b00000111,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.

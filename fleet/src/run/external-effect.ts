@@ -1,5 +1,7 @@
 import type { FleetRunStage } from './run.js'
 import type { ExecutionProposal, ReviewProposal } from '../core/harness-result.js'
+import { decodeGitObservation } from '../core/verification.js'
+import type { GitObservation } from '../core/verification.js'
 import type { RepositoryDelivery } from '../repository/delivery.js'
 import { validateRepositoryDelivery } from '../repository/delivery.js'
 
@@ -51,6 +53,7 @@ interface EffectDetails {
       readonly terminalState: string
       readonly runtimeSessionId: string
       readonly result: unknown
+      readonly baseline: GitObservation
     }
   }
   readonly git_commit: {
@@ -127,6 +130,15 @@ function revisionBranch(value: Readonly<Record<string, unknown>>): boolean {
   return typeof value.revision === 'string' && /^[a-f0-9]{40}$/.test(value.revision) && nonEmpty(value.branch)
 }
 
+function gitObservation(value: unknown): boolean {
+  try {
+    decodeGitObservation(value)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function validSettlementIntent(value: Readonly<Record<string, unknown>>): boolean {
   if (!positive(value.taskVersion) || (value.stage !== 'execution' && value.stage !== 'review')) return false
   if (typeof value.proposal !== 'object' || value.proposal === null || Array.isArray(value.proposal)) return false
@@ -172,6 +184,7 @@ function validObservation(kind: FleetExternalEffectKind, value: Readonly<Record<
     case 'adapter_session': return nonEmpty(value.runtimeSessionId)
     case 'harness_result':
       return nonEmpty(value.terminalState) && nonEmpty(value.runtimeSessionId) && value.result !== undefined
+        && gitObservation(value.baseline)
     case 'git_commit':
     case 'git_push': return revisionBranch(value)
     case 'code_change_creation':

@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ReplayHarnessAdapter } from '../../src/adapters/replay/replay-adapter.js'
-import { runCandidateImport, runClaimStage } from '../../src/core/claim-stage.js'
+import { continueClaimStageAfterHarness, runCandidateImport, runClaimStage } from '../../src/core/claim-stage.js'
 import type { ExecutionProposal, HarnessRunResult, ReviewProposal } from '../../src/core/harness-result.js'
 import { StaticRuntimeRouter } from '../../src/core/runtime-router.js'
 import type { RuntimeRoutes } from '../../src/core/runtime-router.js'
@@ -213,6 +213,37 @@ describe('Harness-neutral Claim-stage workflows', () => {
     expect(client.phase).toBe('done')
   })
 
+  it('starts the first implementer Session from a retained review-first candidate', async () => {
+    const client = new InMemoryPactlineClient(21, [criterion], { phase: 'in_progress' })
+    const retained = await workspace('execution', 'review-first-correction')
+    await writeFile(join(retained.repositoryPath, 'README.md'), 'reviewed candidate\n')
+    await exec('git', ['-C', retained.repositoryPath, 'add', 'README.md'])
+    await exec('git', ['-C', retained.repositoryPath, '-c', 'user.name=Fleet Test', '-c', 'user.email=fleet@example.invalid', 'commit', '--quiet', '-m', 'candidate'])
+    const candidateRevision = (await exec('git', ['-C', retained.repositoryPath, 'rev-parse', 'HEAD'])).stdout.trim()
+    const correctionDefinition: FleetWorkDefinition = {
+      ...definition,
+      candidate: {
+        ...delivery,
+        revision: candidateRevision,
+        branch: retained.branch!,
+        ref: `refs/heads/${retained.branch!}`,
+      },
+    }
+    const adapter = new ReplayHarnessAdapter([{
+      sessionId: 'review-first-implementer',
+      effect: async request => { await writeFile(join(request.workspace, 'README.md'), 'corrected candidate\n') },
+      result: request => result(executionProposal(request), 'review-first-implementer'),
+    }])
+
+    await expect(runClaimStage({
+      client, router: new StaticRuntimeRouter([adapter], routes()), definition: correctionDefinition,
+      stage: 'correction', taskVersion: client.version, runId: 'review-first-correction',
+      clientSessionId: 'fleet-test', idempotencyKey: 'review-first-correction', workspace: retained,
+      deadline: '2026-08-16T00:00:00Z', publishDelivery: async () => ({ ...delivery, revision: candidateRevision }),
+    })).resolves.toMatchObject({ runtimeSessionId: 'review-first-implementer' })
+    expect(client.phase).toBe('in_review')
+  })
+
   it('requires unchanged state for typed resolution, then permits only the explicitly waived criterion', async () => {
     const client = new InMemoryPactlineClient(21, [criterion])
     const adapter = new ReplayHarnessAdapter([{
@@ -272,6 +303,28 @@ describe('Harness-neutral Claim-stage workflows', () => {
       client, router: new StaticRuntimeRouter([adapter], routes()), definition, stage: 'execution', taskVersion: client.version,
       runId: 'bad-resolution', clientSessionId: 'fleet-test', idempotencyKey: 'bad-resolution',
       workspace: await workspace('execution', 'bad-resolution'), deadline: '2026-08-16T00:00:00Z',
+    })).rejects.toThrow('requires unchanged workspace and HEAD')
+    expect(client.mutations.map(item => item.operation)).toEqual(['claim'])
+  })
+
+  it('blocks a persisted resolution result when the Harness mutated its pre-run workspace', async () => {
+    const client = new InMemoryPactlineClient(21, [criterion])
+    const claimed = await client.claimTask(21, client.version, 'execution', {
+      sessionId: 'fleet-test', idempotencyKey: 'persisted-resolution-claim',
+    })
+    const retained = await workspace('execution', 'persisted-resolution')
+    const baseline = { head: revision, changedPaths: [], porcelain: '' }
+    await writeFile(join(retained.repositoryPath, 'README.md'), 'mutated before crash\n')
+    const proposal = executionProposal({ runId: 'persisted-resolution', claimId: claimed.data.claim.id }, 'request_resolution')
+
+    await expect(continueClaimStageAfterHarness({
+      client, router: new StaticRuntimeRouter([new ReplayHarnessAdapter([])], routes()), definition,
+      stage: 'execution', taskVersion: claimed.data.task.version, runId: 'persisted-resolution',
+      clientSessionId: 'fleet-test', idempotencyKey: 'persisted-resolution', workspace: retained,
+      deadline: '2026-08-16T00:00:00Z', existingClaimId: claimed.data.claim.id,
+      resumeRuntimeSessionId: 'persisted-resolution-session',
+      harnessResult: result(proposal, 'persisted-resolution-session'),
+      baseline,
     })).rejects.toThrow('requires unchanged workspace and HEAD')
     expect(client.mutations.map(item => item.operation)).toEqual(['claim'])
   })

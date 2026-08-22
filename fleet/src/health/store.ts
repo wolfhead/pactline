@@ -14,10 +14,10 @@ const MAX_DIAGNOSTIC_LENGTH = 2_048
 
 export function sanitizeHealthDiagnostic(value: string): string {
   return value
-    .slice(0, MAX_DIAGNOSTIC_LENGTH)
     .replace(/\bBearer\s+\S+/gi, 'Bearer [REDACTED]')
     .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, '[REDACTED]')
     .replace(/\b(token|api[_-]?key|secret|password|credential)(\s*[=:]\s*)\S+/gi, '$1$2[REDACTED]')
+    .slice(0, MAX_DIAGNOSTIC_LENGTH)
 }
 
 export class FleetHealthStore {

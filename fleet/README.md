@@ -151,28 +151,29 @@ fleets:
       resolutionAnalysis: { adapter: deepseek, model: deepseek-v4-pro, reasoning: max }
 ```
 
-The service invokes the plugin as `<executable> [args...] resolve`, `commit`,
-`push`, or `open-code-change`, sends one JSON document on stdin, and expects
-one `{"ok":true,"data":...}` document on stdout. `resolve` receives the
+The service invokes the plugin as `<executable> [args...] resolve` or
+`open-code-change`, sends one JSON document on stdin, and expects one
+`{"ok":true,"data":...}` document on stdout. `resolve` receives the
 discovered candidate and bounded Pactline Task packet. It must return a complete
 `FleetWorkDefinition`: exact Task identity, credential-free repository source,
 base ref and 40-character revision, provider identity, allowed paths, fixed
 verification commands, and criterion IDs/revisions. Review definitions also
-return the frozen delivery candidate. The three delivery operations receive the
-verified proposal, Git observation, disposable workspace, and preceding
-observed facts. `commit` and `push` return the exact revision and branch;
-`open-code-change` returns a validated `RepositoryDelivery` containing the
-actual PR/MR URL, revision, and branch. Fleet persists intent and observation
-around every operation.
+return the frozen delivery candidate. Fleet Core commits the verified Workspace
+changes, pushes the stable non-base Task branch without force, and verifies both
+the base and delivery refs from the remote. `open-code-change` receives only
+sanitized repository identity, base/candidate facts, the verified proposal, and
+the Fleet-owned commit/push facts. It returns the actual PR/MR URL, revision,
+branch, and base ref. A correction must reuse its candidate branch and PR/MR URL.
+Fleet persists intent and observation around every external effect.
 
-The plugin is a trusted coordinator extension and owns provider-specific Git
-and PR/MR behavior. Fleet supplies an allowlisted process environment and
-removes Pactline and model API credentials. The plugin receives the configured
-Git credential reference in its request; when that reference is an environment
-variable name, only that referenced value is additionally forwarded. Secret
-values remain outside the YAML and SQLite registry. Plugin
-implementations must use the Run ID as their idempotency namespace and reconcile
-an uncertain publish before creating another branch or PR/MR.
+The plugin is a provider-specific code-change extension, not Git delivery
+authority. It never receives the Task Workspace, repository source, or Git
+credential. `credentials.git` and `credentials.codeChange` are environment
+variable names. Fleet Core alone reads the Git value. The plugin receives only
+the code-change value, whose provider token must be scoped to PR/MR metadata and
+must not grant repository-contents writes. Harness and plugin processes do not
+inherit SSH agent access or global Git configuration. Secret values remain
+outside YAML and SQLite.
 
 Run one finite discovery and drain cycle with:
 

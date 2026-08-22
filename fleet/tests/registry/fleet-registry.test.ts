@@ -15,6 +15,95 @@ afterEach(async () => {
 })
 
 describe('FleetRegistry', () => {
+  it('bounds persisted verification differences and records the omitted count', async () => {
+    const parent = await mkdtemp(join(tmpdir(), 'fleet-registry-verification-'))
+    directories.push(parent)
+    const state = await ensurePrivateDirectory(join(parent, 'state'))
+    const configPath = join(parent, 'fleet.yml')
+    const source = serviceConfigYAML({ stateDirectory: state, firstWorkspace: join(parent, 'work') })
+    const registry = await FleetRegistry.open(join(state, 'fleet.sqlite3'))
+    registry.recordConfiguration(parseFleetConfig(source, configPath, { knownAdapterIds: ['codex'] }))
+    const run = registry.admitRun('first', {
+      taskNumber: 22, taskVersion: 1, stage: 'execution', frozenPolicy: {},
+    })
+    registry.recordVerificationMismatch(run.runId, {
+      stage: 'execution', role: 'implementer',
+      details: Array.from({ length: 70 }, (_, index) => ({
+        category: 'parse_mismatch' as const, command: `command-${String(index)}`,
+      })),
+    })
+
+    const event = registry.listRunEvents(run.runId).find(item => item.eventType === 'run.verification_mismatch')
+    expect(event?.payload.details).toHaveLength(64)
+    expect(event?.payload.detailsOmitted).toBe(6)
+    registry.close()
+  })
+
+  it('persists one isolated Workspace and native Session per Task role', async () => {
+    const parent = await mkdtemp(join(tmpdir(), 'fleet-registry-task-runtime-'))
+    directories.push(parent)
+    const state = await ensurePrivateDirectory(join(parent, 'state'))
+    const path = join(state, 'fleet.sqlite3')
+    const registry = await FleetRegistry.open(path)
+    const workspace = {
+      mode: 'execution' as const,
+      root: join(parent, 'project-5-task-19'),
+      temporaryParent: parent,
+      repositoryPath: join(parent, 'project-5-task-19', 'repository'),
+      source: 'https://github.com/wolfhead/pactline',
+      baseRevision: 'a'.repeat(40),
+      branch: 'fleet/task/19',
+    }
+
+    registry.bindTaskWorkspace(5, 19, workspace)
+    registry.bindTaskRoleSession(5, 19, 'implementer', {
+      adapterId: 'codex', runtimeSessionId: 'codex-task-19',
+    })
+    registry.bindTaskRoleSession(5, 19, 'reviewer', {
+      adapterId: 'deepseek', runtimeSessionId: 'deepseek-task-19',
+    })
+    expect(() => registry.bindTaskWorkspace(5, 20, workspace)).toThrow('already belongs to another Task')
+    registry.close()
+
+    const reopened = await FleetRegistry.open(path)
+    expect(reopened.getTaskRuntime(5, 19)).toEqual({
+      projectNumber: 5,
+      taskNumber: 19,
+      workspace,
+      sessions: {
+        implementer: { adapterId: 'codex', runtimeSessionId: 'codex-task-19' },
+        reviewer: { adapterId: 'deepseek', runtimeSessionId: 'deepseek-task-19' },
+      },
+    })
+    expect(reopened.getTaskRuntime(5, 20)).toBeUndefined()
+    reopened.retireTaskRuntime(5, 19)
+    expect(reopened.getTaskRuntime(5, 19)).toBeUndefined()
+    reopened.close()
+  })
+
+  it('rejects an invalid Task Workspace before it reaches persisted runtime state', async () => {
+    const parent = await mkdtemp(join(tmpdir(), 'fleet-registry-invalid-runtime-'))
+    directories.push(parent)
+    const state = await ensurePrivateDirectory(join(parent, 'state'))
+    const registry = await FleetRegistry.open(join(state, 'fleet.sqlite3'))
+    expect(() => registry.bindTaskWorkspace(5, 19, {
+      mode: 'execution', root: '', temporaryParent: '/tmp', repositoryPath: '/tmp/repository',
+      source: '/tmp/origin.git', baseRevision: 'not-a-revision', branch: '',
+    })).toThrow('Task Workspace')
+    expect(registry.getTaskRuntime(5, 19)).toBeUndefined()
+    registry.bindTaskWorkspace(5, 19, {
+      mode: 'execution', root: join(parent, 'pactline-fleet-project-5-task-19'),
+      temporaryParent: parent, repositoryPath: join(parent, 'pactline-fleet-project-5-task-19', 'repository'),
+      source: '/tmp/origin.git', baseRevision: 'a'.repeat(40), branch: 'fleet/project-5/task-19',
+    })
+    const database = new Database(registry.path)
+    database.prepare('UPDATE task_runtimes SET workspace_json = ? WHERE project_number = 5 AND task_number = 19')
+      .run('{"mode":"execution"}')
+    database.close()
+    expect(() => registry.getTaskRuntime(5, 19)).toThrow('Task Workspace')
+    registry.close()
+  })
+
   it('persists a stable service identity with private file permissions', async () => {
     const parent = await mkdtemp(join(tmpdir(), 'fleet-registry-id-'))
     directories.push(parent)
@@ -89,7 +178,7 @@ describe('FleetRegistry', () => {
     }
 
     expect((await readFile(path)).includes(Buffer.from(secret))).toBe(false)
-    expect((await readFile(path)).includes(Buffer.from('local-test-git'))).toBe(true)
+    expect((await readFile(path)).includes(Buffer.from('LOCAL_TEST_GIT'))).toBe(true)
   })
 
   it('atomically replaces the local Fleet ID for one Project', async () => {
@@ -412,6 +501,7 @@ describe('FleetRegistry', () => {
     registry.observeEffect(run.runId, 'harness_result', {
       terminalState: 'completed', runtimeSessionId: 'session-61',
       result: { proposal: { kind: 'execution', recommendation: 'complete' } },
+      baseline: { head: 'a'.repeat(40), changedPaths: [], porcelain: '' },
     })
     registry.transitionRun(run.runId, 'running_harness', 'validating')
     await reopenAt(run.runId, 'validating')

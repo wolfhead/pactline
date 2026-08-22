@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { HarnessRunEvent, HarnessRunRequest } from '../../src/core/harness-adapter.js'
 import { DeepSeekHarnessAdapter, deepSeekAdapterPolicy, deepSeekChildEnvironment } from '../../src/adapters/deepseek/deepseek-adapter.js'
 import type { DeepSeekWireNotification } from '../../src/adapters/deepseek/wire.js'
@@ -17,10 +20,10 @@ const reviewProposal = {
   criteria: [], limitations: [],
 }
 
-function request(stage: 'execution' | 'review', proposal: unknown): HarnessRunRequest {
+function request(stage: 'execution' | 'review', proposal: unknown, workspace = '/tmp/fleet-deepseek-test'): HarnessRunRequest {
   return {
     runId: 'run-1', claimId: 'claim-1', stage,
-    workspace: '/tmp/fleet-deepseek-test', repositoryRevision: 'a'.repeat(40),
+    workspace, repositoryRevision: 'a'.repeat(40),
     taskPacket: { task: { number: 7 }, expectedProposal: proposal },
     allowedPaths: ['README.md'], verificationCommands: ['true'], resultSchema: { type: 'object' },
     sandbox: stage === 'review' ? 'read_only' : 'workspace_write',
@@ -127,6 +130,41 @@ describe('DeepSeekHarnessAdapter', () => {
     expect(runtime?.closed).toBe(true)
   })
 
+  it('resumes the same native Session from Task-owned durable storage', async () => {
+    const taskRoot = await mkdtemp(join(tmpdir(), 'pactline-fleet-deepseek-resume-'))
+    const workspace = join(taskRoot, 'repository')
+    const launches: Array<{ env: NodeJS.ProcessEnv }> = []
+    const adapter = new DeepSeekHarnessAdapter({
+      runtimeFactory: launch => {
+        launches.push({ env: launch.env })
+        return new ScriptedRuntime(executionProposal)
+      },
+    })
+    const observer = { onSessionStarted: () => {}, onEvent: () => {} }
+    try {
+      const first = await adapter.run(
+        request('execution', executionProposal, workspace), observer, new AbortController().signal,
+      )
+      const resumed = await adapter.resume!(
+        first.runtimeSessionId,
+        request('execution', executionProposal, workspace),
+        observer,
+        new AbortController().signal,
+      )
+
+      expect(resumed.runtimeSessionId).toBe(first.runtimeSessionId)
+      expect(launches[0]?.env.DSH_SESSION_ROOT).toBe(join(taskRoot, '.deepseek-sessions'))
+      expect(launches[1]?.env.DSH_SESSION_ROOT).toBe(launches[0]?.env.DSH_SESSION_ROOT)
+      await expect(adapter.probe({
+        requiredStages: ['execution'], requiredSandbox: 'workspace_write', requireNativeTools: true,
+        requireStructuredResult: true, requireEventStream: true, requireCancellation: true,
+        requireSessionResume: true,
+      })).resolves.toMatchObject({ sessionResume: true })
+    } finally {
+      await rm(taskRoot, { recursive: true, force: true })
+    }
+  })
+
   it('refuses a weaker model route during the Pro/max evaluation phase', async () => {
     const adapter = new DeepSeekHarnessAdapter({ runtimeFactory: () => new ScriptedRuntime(executionProposal) })
     const weak = request('execution', executionProposal)
@@ -138,11 +176,19 @@ describe('DeepSeekHarnessAdapter', () => {
   it('scrubs ambient service credentials while forwarding only the DeepSeek credential', () => {
     const env = deepSeekChildEnvironment({
       PATH: '/bin', GITHUB_TOKEN: 'github-secret', PACTLINE_TOKEN: 'pactline-secret',
-      DEEPSEEK_API_KEY: 'deepseek-secret', DSH_HOME: '/private/harness-home', BUILD_FLAG: '1',
+      DEEPSEEK_API_KEY: 'deepseek-secret', DSH_HOME: '/private/harness-home',
+      SSH_AUTH_SOCK: '/tmp/agent.sock', GIT_SSH_COMMAND: '/tmp/credential-wrapper',
+      GIT_CONFIG_PARAMETERS: 'credential.helper=evil', BUILD_FLAG: '1',
     }, { DSH_CWD: '/tmp/work' })
-    expect(env).toMatchObject({ PATH: '/bin', BUILD_FLAG: '1', DEEPSEEK_API_KEY: 'deepseek-secret', DSH_CWD: '/tmp/work' })
+    expect(env).toMatchObject({
+      PATH: '/bin', BUILD_FLAG: '1', DEEPSEEK_API_KEY: 'deepseek-secret', DSH_CWD: '/tmp/work',
+      GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0',
+    })
     expect(env).not.toHaveProperty('GITHUB_TOKEN')
     expect(env).not.toHaveProperty('PACTLINE_TOKEN')
     expect(env).not.toHaveProperty('DSH_HOME')
+    expect(env).not.toHaveProperty('SSH_AUTH_SOCK')
+    expect(env.GIT_SSH_COMMAND).toBeUndefined()
+    expect(env.GIT_CONFIG_PARAMETERS).toBeUndefined()
   })
 })

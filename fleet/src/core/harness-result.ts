@@ -226,7 +226,8 @@ function body(root: Record<string, unknown>, context: ProposalValidationContext,
   }
 }
 
-export function validateHarnessProposal(value: unknown, context: ProposalValidationContext): HarnessProposal {
+/** Decode and validate proposal shape and Task/Claim identity before repository observation. */
+export function decodeHarnessProposal(value: unknown, context: ProposalValidationContext): HarnessProposal {
   const root = record(value, 'Harness proposal')
   validateIdentity(root, context)
   const expectedKind = context.stage === 'correction' ? 'execution' : context.stage
@@ -239,13 +240,6 @@ export function validateHarnessProposal(value: unknown, context: ProposalValidat
       schemaVersion: 1, kind: 'execution', runId: context.runId, claimId: context.claimId, taskNumber: context.taskNumber,
       recommendation, changedPaths: stringList(root.changedPaths, 'changedPaths').map((item, index) => repositoryPath(item, `changedPaths[${String(index)}]`)),
       ...body(root, context, recommendation === 'request_resolution'),
-    }
-    if (recommendation === 'complete') {
-      if (result.changedPaths.length === 0 || result.verification.some(item => item.outcome !== 'passed')
-        || result.criteria.some(item => !['passed', 'waived'].includes(item.outcome))) {
-        throw new Error('complete requires changed paths and passing verification for every criterion')
-      }
-      requireFixedVerification(result.verification, context)
     }
     return result
   }
@@ -272,13 +266,6 @@ export function validateHarnessProposal(value: unknown, context: ProposalValidat
       schemaVersion: 1, kind: 'review', runId: context.runId, claimId: context.claimId, taskNumber: context.taskNumber,
       recommendation, findings, ...body(root, context, recommendation === 'request_resolution'),
     }
-    if (recommendation === 'accept') {
-      if (findings.some(item => item.severity === 'high') || result.verification.some(item => item.outcome !== 'passed')
-        || result.criteria.some(item => !['passed', 'waived'].includes(item.outcome))) {
-        throw new Error('accept requires passing verification and criteria with no high-severity finding')
-      }
-      requireFixedVerification(result.verification, context)
-    }
     if (recommendation === 'request_changes' && findings.length === 0) throw new Error('request_changes requires at least one finding')
     return result
   }
@@ -289,6 +276,30 @@ export function validateHarnessProposal(value: unknown, context: ProposalValidat
     schemaVersion: 1, kind: 'resolution_analysis', runId: context.runId, claimId: context.claimId, taskNumber: context.taskNumber,
     recommendation, ...body(root, context, recommendation === 'request_resolution'),
   }
+}
+
+/** Enforce recommendation semantics after Fleet has compared observable facts. */
+export function assertHarnessProposalCanSettle(proposal: HarnessProposal, context: ProposalValidationContext): void {
+  if (proposal.kind === 'execution' && proposal.recommendation === 'complete') {
+    if (proposal.changedPaths.length === 0 || proposal.verification.some(item => item.outcome !== 'passed')
+      || proposal.criteria.some(item => !['passed', 'waived'].includes(item.outcome))) {
+      throw new Error('complete requires changed paths and passing verification for every criterion')
+    }
+    requireFixedVerification(proposal.verification, context)
+  }
+  if (proposal.kind === 'review' && proposal.recommendation === 'accept') {
+    if (proposal.findings.some(item => item.severity === 'high') || proposal.verification.some(item => item.outcome !== 'passed')
+      || proposal.criteria.some(item => !['passed', 'waived'].includes(item.outcome))) {
+      throw new Error('accept requires passing verification and criteria with no high-severity finding')
+    }
+    requireFixedVerification(proposal.verification, context)
+  }
+}
+
+export function validateHarnessProposal(value: unknown, context: ProposalValidationContext): HarnessProposal {
+  const proposal = decodeHarnessProposal(value, context)
+  assertHarnessProposalCanSettle(proposal, context)
+  return proposal
 }
 
 export function proposalResultSchema(context: ProposalValidationContext): Readonly<Record<string, unknown>> {

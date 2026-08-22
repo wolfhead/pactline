@@ -84,6 +84,25 @@ export interface ObservationEffect {
   readonly updatedAt: string
 }
 
+export interface ObservationVerificationMismatchDetail {
+  readonly category: string
+  readonly command?: string
+  readonly harness?: { readonly outcome: string; readonly summary: string }
+  readonly fleet?: { readonly outcome: string; readonly exitCode: number | null; readonly summary: string }
+  readonly harnessChangedPaths?: readonly string[]
+  readonly fleetChangedPaths?: readonly string[]
+  readonly harnessChangedPathsOmitted?: number
+  readonly fleetChangedPathsOmitted?: number
+}
+
+export interface ObservationVerificationMismatch {
+  readonly at: string
+  readonly stage: FleetRunStage
+  readonly role: 'implementer' | 'reviewer'
+  readonly details: readonly ObservationVerificationMismatchDetail[]
+  readonly detailsOmitted?: number
+}
+
 export interface ObservationRunDetail extends ObservationRunSummary {
   readonly serviceId: string
   readonly configRevision: string
@@ -93,6 +112,7 @@ export interface ObservationRunDetail extends ObservationRunSummary {
   readonly claimTaskVersion?: number
   readonly runtimeSessionId?: string
   readonly workspace?: Readonly<Record<string, string>>
+  readonly verificationMismatch?: ObservationVerificationMismatch
   readonly timeline: readonly ObservationTimelineItem[]
   readonly effects: readonly ObservationEffect[]
 }

@@ -60,6 +60,15 @@ describe('Fleet Operations Console', () => {
       claimTaskVersion: 8, runtimeSessionId: 'session-41', stage: 'execution', state: 'validating',
       adapter: 'deepseek', model: 'deepseek-v4-pro', reasoning: 'max', checkpoint: 'harness_result_observed',
       createdAt: '2026-08-16T10:00:00.000Z', updatedAt: '2026-08-16T10:03:00.000Z',
+      verificationMismatch: {
+        at: '2026-08-16T10:02:30.000Z', stage: 'execution', role: 'implementer',
+        detailsOmitted: 6,
+        details: [{
+          category: 'test_failure', command: 'npm test',
+          harness: { outcome: 'passed', summary: 'All passed.' },
+          fleet: { outcome: 'failed', exitCode: 1, summary: 'One test failed.' },
+        }],
+      },
       timeline: [{ sequence: 1, at: '2026-08-16T10:00:00.000Z', kind: 'run.admitted', title: 'Run admitted', state: 'admitted' }, { sequence: 2, at: '2026-08-16T10:03:00.000Z', kind: 'run.transitioned', title: 'Run entered validating', state: 'validating', checkpoint: 'harness_result_observed' }],
       effects: [{ kind: 'harness_result', status: 'observed', title: 'Harness result', detail: { terminalState: 'success' }, updatedAt: '2026-08-16T10:03:00.000Z' }],
     }
@@ -68,7 +77,11 @@ describe('Fleet Operations Console', () => {
     expect(await screen.findByText('Last safe checkpoint')).toBeInTheDocument()
     expect(screen.getAllByText('Harness Result Observed').length).toBeGreaterThan(0)
     expect(screen.getByText('Run entered validating')).toBeInTheDocument()
-    expect(screen.getByText('Harness result')).toBeInTheDocument()
+    expect(screen.getAllByText('Harness result').length).toBeGreaterThan(0)
+    expect(screen.getByText('Verification mismatch')).toBeInTheDocument()
+    expect(screen.getByText('Test Failure')).toBeInTheDocument()
+    expect(screen.getByText('Failed · exit 1')).toBeInTheDocument()
+    expect(screen.getByText(/6 additional differences omitted/)).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByText('Loading Run evidence')).not.toBeInTheDocument())
   })
 

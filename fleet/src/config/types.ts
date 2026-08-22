@@ -26,6 +26,7 @@ export interface FleetDefinitionConfig {
   readonly routing: FleetRoutingConfig
   readonly credentials: {
     readonly git?: string
+    readonly codeChange?: string
   }
   readonly workPlugin?: {
     readonly executable: string

@@ -7,7 +7,7 @@ export interface PromptPolicy {
 }
 
 const OWNERSHIP = [
-  'Work only inside the supplied disposable repository workspace.',
+  'Work only inside the supplied Task-scoped repository workspace; Fleet retains it across Runs and roles.',
   'Do not invoke Pactline, GitHub, GitLab, or any remote-write operation.',
   'Do not read credentials or files outside the supplied workspace.',
   'Return one result matching the supplied schema; the result is a proposal, not a lifecycle decision.',
