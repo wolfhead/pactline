@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -19,6 +19,7 @@ import { ensurePrivateDirectory } from '../../src/service/state-directory.js'
 import { InMemoryPactlineClient } from '../contract/in-memory-pactline.js'
 import { serviceConfigYAML } from '../fixtures/service-config.js'
 import { frozenPluginPolicy } from '../../src/work-plugin/executable-plugin.js'
+import { PluginRunMaterializer } from '../../src/work-plugin/materializer.js'
 
 const exec = promisify(execFile)
 const directories: string[] = []
@@ -435,6 +436,91 @@ describe('ClaimStageRunCoordinator', () => {
       'claiming', 'claimed', 'preparing_workspace', 'starting_harness', 'running_harness',
       'validating', 'delivering', 'settling', 'completed',
     ])
+    registry.close()
+  })
+
+  it('reuses a clean correction candidate through execution settlement', async () => {
+    const { directory, origin, revision, registry, fleet } = await fixture()
+    const plugin = join(directory, 'plugin.mjs')
+    const pluginLog = join(directory, 'plugin.log')
+    await writeFile(plugin, `#!/usr/bin/env node
+import { appendFileSync } from 'node:fs'
+let input = ''; for await (const chunk of process.stdin) input += chunk
+const request = JSON.parse(input)
+appendFileSync(process.argv[2], process.argv.at(-1) + '\\n')
+process.stdout.write(JSON.stringify({ ok: true, data: {
+  repository: request.definition.repository,
+  codeChangeUrl: request.definition.candidate.codeChangeUrl,
+  revision: request.push.revision,
+  branch: request.push.branch,
+  baseRef: request.definition.base.ref
+} }))
+`)
+    await chmod(plugin, 0o700)
+    const criterion = { id: 'criterion-1', revision: 1 }
+    const client = new InMemoryPactlineClient(21, [criterion], { phase: 'in_progress' })
+    const repository = { provider: 'github' as const, host: 'github.com', owner: 'wolfhead', name: 'pactline' }
+    const workspace = await prepareWorkspace({
+      input: { source: origin, ref: 'refs/heads/main', revision }, mode: 'execution',
+      runId: 'candidate-settlement', temporaryDirectory: directory,
+      taskIdentity: { projectNumber: 5, taskNumber: 21 },
+    })
+    await writeFile(join(workspace.repositoryPath, 'README.md'), 'candidate delivery\n')
+    await exec('git', ['-C', workspace.repositoryPath, 'add', 'README.md'])
+    await exec('git', ['-C', workspace.repositoryPath, '-c', 'user.name=Fleet Test', '-c', 'user.email=fleet@example.invalid', 'commit', '--quiet', '-m', 'candidate'])
+    const candidateRevision = (await exec('git', ['-C', workspace.repositoryPath, 'rev-parse', 'HEAD'])).stdout.trim()
+    await exec('git', ['-C', workspace.repositoryPath, 'push', '--quiet', 'origin', `HEAD:refs/heads/${workspace.branch!}`])
+    registry.bindTaskWorkspace(5, 21, workspace)
+    const definition: FleetWorkDefinition = {
+      caseId: 'candidate-settlement', taskNumber: 21, taskVersion: client.version,
+      base: { source: origin, ref: 'refs/heads/main', revision }, repository,
+      candidate: {
+        repository, codeChangeUrl: 'https://github.com/wolfhead/pactline/pull/91',
+        revision: candidateRevision, branch: workspace.branch!, ref: `refs/heads/${workspace.branch!}`,
+      },
+      allowedPaths: ['README.md'], verificationCommands: ['true'], criteria: [criterion],
+    }
+    const adapter = new ReplayHarnessAdapter([{
+      sessionId: 'candidate-settlement-session',
+      result: request => ({
+        adapterId: 'replay', adapterVersion: '1.0.0', runtimeSessionId: 'candidate-settlement-session',
+        model: { provider: 'replay', model: 'quality', reasoning: 'max' }, terminalState: 'completed',
+        proposal: {
+          schemaVersion: 1, kind: 'execution', runId: request.runId, claimId: request.claimId,
+          taskNumber: 21, recommendation: 'complete', summary: 'Reused retained candidate.',
+          changedPaths: ['README.md'],
+          verification: [{ command: 'true', outcome: 'passed', summary: 'passed' }],
+          criteria: [{ criterionId: criterion.id, criterionRevision: 1, outcome: 'passed', evidence: 'verified' }],
+          limitations: [],
+        },
+        usage: {}, eventSummary: { total: 0, byType: {}, toolCalls: {}, toolErrors: {} },
+      }),
+    }])
+    const run = registry.admitRun(fleet.id, {
+      taskNumber: 21, taskVersion: client.version, stage: 'correction',
+      frozenPolicy: {
+        definition,
+        route: { adapter: 'replay', model: 'quality', reasoning: 'max', promptVersion: 'm5.2', resultContractVersion: 1 },
+        plugin: { executable: plugin, args: [pluginLog], timeoutMs: 30_000 },
+        workspaceRoot: directory,
+        pactlineTokenEnv: 'TEST_PACTLINE_TOKEN',
+      },
+    })
+    const materializer = new PluginRunMaterializer({
+      adapters: () => [adapter], environment: { PATH: process.env.PATH }, registry,
+    })
+    const coordinator = new ClaimStageRunCoordinator({
+      registry, client, clientSessionId: 'fleet-service-test', materializer,
+    })
+
+    await expect(coordinator.execute(run.runId, new AbortController().signal)).resolves.toEqual({ kind: 'completed' })
+    expect(client.phase).toBe('in_review')
+    expect(registry.getRun(run.runId)).toMatchObject({ state: 'completed', checkpoint: 'settlement_observed' })
+    expect(registry.getEffect(run.runId, 'git_commit')).toMatchObject({
+      status: 'observed', observation: { revision: candidateRevision, branch: workspace.branch },
+    })
+    expect((await exec('git', ['-C', workspace.repositoryPath, 'rev-parse', 'HEAD'])).stdout.trim()).toBe(candidateRevision)
+    expect((await readFile(pluginLog, 'utf8')).trim().split('\n')).toEqual(['open-code-change'])
     registry.close()
   })
 

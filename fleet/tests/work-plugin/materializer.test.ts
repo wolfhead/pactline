@@ -11,6 +11,7 @@ import { FleetRegistry } from '../../src/registry/fleet-registry.js'
 import { prepareWorkspace } from '../../src/repository/workspace.js'
 import { ensurePrivateDirectory } from '../../src/service/state-directory.js'
 import { PluginRunMaterializer } from '../../src/work-plugin/materializer.js'
+import type { PluginRunMaterializerOptions } from '../../src/work-plugin/materializer.js'
 import { serviceConfigYAML } from '../fixtures/service-config.js'
 
 const exec = promisify(execFile)
@@ -140,6 +141,64 @@ if (operation === 'commit') {
   return { directory, origin, plugin, log, definition, registry, run, workspace, revision, reopen, operations }
 }
 
+async function setupCorrection(options: {
+  readonly candidate?: (candidate: NonNullable<FleetWorkDefinition['candidate']>) => NonNullable<FleetWorkDefinition['candidate']>
+  readonly afterCandidate?: (workspacePath: string) => Promise<void>
+  readonly faultInjector?: PluginRunMaterializerOptions['faultInjector']
+} = {}) {
+  const fixture = await setup()
+  const { directory, plugin, log, definition, registry, run, workspace } = fixture
+  await exec('git', ['-C', workspace.repositoryPath, 'add', 'README.md'])
+  await exec('git', ['-C', workspace.repositoryPath, '-c', 'user.name=Fleet Test', '-c', 'user.email=fleet@example.invalid', 'commit', '--quiet', '-m', 'candidate'])
+  const candidateRevision = (await exec('git', ['-C', workspace.repositoryPath, 'rev-parse', 'HEAD'])).stdout.trim()
+  await exec('git', ['-C', workspace.repositoryPath, 'push', '--quiet', 'origin', `HEAD:refs/heads/${workspace.branch!}`])
+  registry.bindTaskWorkspace(5, 21, workspace)
+  registry.transitionRun(run.runId, 'delivering', 'quarantined', { disposition: 'ambiguous code-change confirmation' })
+  const admittedCandidate = {
+    repository: definition.repository,
+    codeChangeUrl: 'https://github.com/wolfhead/pactline/pull/77',
+    revision: candidateRevision,
+    branch: workspace.branch!,
+    ref: `refs/heads/${workspace.branch!}`,
+  }
+  const candidate = options.candidate?.(admittedCandidate) ?? admittedCandidate
+  await options.afterCandidate?.(workspace.repositoryPath)
+  const correctionRun = registry.admitRun('first', {
+    taskNumber: 21, taskVersion: 2, stage: 'correction',
+    frozenPolicy: {
+      definition: { ...definition, taskVersion: 2, candidate },
+      route: { adapter: 'codex', model: 'test', promptVersion: 'm5.2', resultContractVersion: 1 },
+      plugin: { executable: plugin, args: [log], timeoutMs: 30_000 },
+      workspaceRoot: join(directory, 'work'),
+      pactlineTokenEnv: 'TEST_PACTLINE_TOKEN',
+    },
+  })
+  const materializer = new PluginRunMaterializer({
+    adapters: () => [], environment: { PATH: process.env.PATH }, registry,
+    ...(options.faultInjector === undefined ? {} : { faultInjector: options.faultInjector }),
+  })
+  const invoke = async () => {
+    const materialized = await materializer.materialize(correctionRun, new AbortController().signal)
+    await materialized.prepareWorkspace(new AbortController().signal)
+    const publish = materialized.publishDelivery
+    if (publish === undefined) throw new Error('Correction delivery is unavailable')
+    return await publish({
+      claimId: 'claim-21-correction', taskVersion: 2,
+      request: { workspace: workspace.repositoryPath },
+    } as never, {
+      schemaVersion: 1, kind: 'execution', runId: correctionRun.runId,
+      claimId: 'claim-21-correction', taskNumber: 21, recommendation: 'complete',
+      summary: 'Recovered prior delivery.', changedPaths: [],
+      verification: [{ command: 'true', outcome: 'passed', summary: 'passed' }],
+      criteria: [{ criterionId: 'criterion-1', criterionRevision: 1, outcome: 'passed', evidence: 'verified' }],
+      limitations: [],
+    }, {
+      git: { head: candidateRevision, changedPaths: [], porcelain: '' }, commands: [],
+    })
+  }
+  return { ...fixture, candidate, candidateRevision, correctionRun, materializer, invoke }
+}
+
 describe('PluginRunMaterializer recovery', () => {
   it('owns commit and push while keeping the base ref unchanged', async () => {
     const { origin, revision: baseRevision, workspace, reopen, operations } = await setup()
@@ -226,6 +285,101 @@ describe('PluginRunMaterializer recovery', () => {
     expect(registry.getTaskRuntime(5, 21)).toMatchObject({
       sessions: { implementer: { runtimeSessionId: 'retained-implementer-session' } },
     })
+    registry.close()
+  })
+
+  it('reuses a clean matching correction candidate and still reconciles its code change', async () => {
+    const { origin, registry, workspace, candidate, candidateRevision, invoke, operations } = await setupCorrection()
+
+    await expect(invoke()).resolves.toMatchObject({
+      repository: candidate.repository, codeChangeUrl: candidate.codeChangeUrl,
+      revision: candidate.revision, branch: candidate.branch,
+    })
+    expect((await exec('git', ['-C', workspace.repositoryPath, 'rev-parse', 'HEAD'])).stdout.trim()).toBe(candidateRevision)
+    expect((await exec('git', ['ls-remote', '--refs', origin, candidate.ref])).stdout.split(/\s+/)[0]).toBe(candidateRevision)
+    expect(await operations()).toEqual(['open-code-change'])
+    registry.close()
+  })
+
+  it('commits and fast-forwards allowed changes on top of the correction candidate', async () => {
+    const { origin, revision: baseRevision, registry, workspace, candidateRevision, invoke, operations } = await setupCorrection({
+      afterCandidate: async workspacePath => { await writeFile(join(workspacePath, 'README.md'), 'corrected\n') },
+    })
+
+    const delivery = await invoke()
+
+    expect(delivery.revision).not.toBe(candidateRevision)
+    await expect(exec('git', ['-C', workspace.repositoryPath, 'merge-base', '--is-ancestor', candidateRevision, delivery.revision])).resolves.toBeDefined()
+    expect((await exec('git', ['ls-remote', '--refs', origin, `refs/heads/${workspace.branch!}`])).stdout.split(/\s+/)[0]).toBe(delivery.revision)
+    expect((await exec('git', ['ls-remote', '--refs', origin, 'refs/heads/main'])).stdout.split(/\s+/)[0]).toBe(baseRevision)
+    expect(await operations()).toEqual(['open-code-change'])
+    registry.close()
+  })
+
+  it('rejects a correction candidate that does not match the clean Workspace HEAD', async () => {
+    const { registry, invoke, operations } = await setupCorrection({
+      afterCandidate: async workspacePath => {
+        await writeFile(join(workspacePath, 'unexpected.txt'), 'unexpected\n')
+        await exec('git', ['-C', workspacePath, 'add', 'unexpected.txt'])
+        await exec('git', ['-C', workspacePath, '-c', 'user.name=Fleet Test', '-c', 'user.email=fleet@example.invalid', 'commit', '--quiet', '-m', 'unexpected'])
+      },
+    })
+
+    await expect(invoke()).rejects.toThrow('candidate does not match the Task Workspace HEAD')
+    expect(await operations()).toEqual([])
+    registry.close()
+  })
+
+  it.each([
+    ['dirty Workspace', async (workspacePath: string) => {
+      await writeFile(join(workspacePath, 'unexpected.txt'), 'unexpected\n')
+    }, 'requires a clean Task Workspace'],
+    ['different Workspace HEAD', async (workspacePath: string) => {
+      await writeFile(join(workspacePath, 'unexpected.txt'), 'unexpected\n')
+      await exec('git', ['-C', workspacePath, 'add', 'unexpected.txt'])
+      await exec('git', ['-C', workspacePath, '-c', 'user.name=Fleet Test', '-c', 'user.email=fleet@example.invalid', 'commit', '--quiet', '-m', 'unexpected'])
+    }, 'does not match the Task Workspace HEAD'],
+  ])('rejects a reused candidate commit checkpoint with a %s', async (_case, mutate, message) => {
+    let injectCrash = true
+    const { registry, correctionRun, workspace, candidateRevision, invoke, operations } = await setupCorrection({
+      faultInjector: checkpoint => {
+        if (checkpoint !== 'after_commit_persistence_before_push' || !injectCrash) return
+        injectCrash = false
+        throw new Error('injected checkpoint crash')
+      },
+    })
+    await expect(invoke()).rejects.toThrow('injected checkpoint crash')
+    expect(registry.getEffect(correctionRun.runId, 'git_commit')).toMatchObject({
+      status: 'observed', observation: { revision: candidateRevision, branch: workspace.branch },
+    })
+    await mutate(workspace.repositoryPath)
+
+    await expect(invoke()).rejects.toThrow(message)
+    expect(await operations()).toEqual([])
+    registry.close()
+  })
+
+  it('rejects a correction candidate outside the stable Task branch', async () => {
+    const { registry, invoke, operations } = await setupCorrection({
+      candidate: candidate => ({ ...candidate, branch: 'fleet/project-5/task-999', ref: 'refs/heads/fleet/project-5/task-999' }),
+    })
+
+    await expect(invoke()).rejects.toThrow('candidate does not use the stable Task delivery ref')
+    expect(await operations()).toEqual([])
+    registry.close()
+  })
+
+  it('rejects a correction candidate from another repository', async () => {
+    const { registry, invoke, operations } = await setupCorrection({
+      candidate: candidate => ({
+        ...candidate,
+        repository: { ...candidate.repository, name: 'other' },
+        codeChangeUrl: 'https://github.com/wolfhead/other/pull/77',
+      }),
+    })
+
+    await expect(invoke()).rejects.toThrow('candidate must belong to the one admitted repository')
+    expect(await operations()).toEqual([])
     registry.close()
   })
 
