@@ -401,7 +401,6 @@ describe('ClaimStageRunCoordinator', () => {
                 codeChangeUrl: 'https://github.com/wolfhead/pactline/pull/52', revision: 'b'.repeat(40), branch: 'fleet/run/21',
               })
             },
-            cleanup: workspace => removeWorkspace(workspace),
           })
         },
       },
@@ -490,7 +489,6 @@ describe('ClaimStageRunCoordinator', () => {
               deliveryCalls += 1
               throw new Error('non-delivery settlement must not publish')
             },
-            cleanup: workspace => removeWorkspace(workspace),
           }),
         },
       })

@@ -16,7 +16,7 @@ import type { FleetWorkspace } from '../../src/repository/workspace.js'
 
 const run = promisify(execFile)
 
-describe('disposable workspace and coordinator verification', () => {
+describe('Task Workspace and coordinator verification', () => {
   let directory: string
   let origin: string
   let revision: string
