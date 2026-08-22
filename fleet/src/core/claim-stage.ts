@@ -149,8 +149,11 @@ function assertTaskAdmission(
 }
 
 function assertInitialWorkspace(options: ClaimStageOptions, workspace: FleetWorkspace, head: string, changedPaths: readonly string[], porcelain: string): void {
+  const firstCorrectionSession = options.stage === 'correction' && options.resumeRuntimeSessionId === undefined
   const expectedHead = options.stage === 'review'
     ? options.definition.candidate?.revision ?? workspace.baseRevision
+    : firstCorrectionSession
+      ? options.definition.candidate?.revision ?? head
     : options.resumeRuntimeSessionId === undefined ? workspace.baseRevision : head
   if (head !== expectedHead) throw new Error('Harness workspace is not at the admitted stage revision')
   if (workspace.mode !== 'execution' && options.stage !== 'review') {
@@ -158,6 +161,11 @@ function assertInitialWorkspace(options: ClaimStageOptions, workspace: FleetWork
   }
   if (options.stage === 'review') {
     if (porcelain !== '') throw new Error('Review requires a clean retained Task Workspace')
+    return
+  }
+  if (firstCorrectionSession) {
+    if (porcelain !== '') throw new Error('First correction Session requires a clean retained candidate')
+    assertAllowedPaths(changedPaths, options.definition.allowedPaths)
     return
   }
   if (options.resumeRuntimeSessionId !== undefined) {

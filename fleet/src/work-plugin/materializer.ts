@@ -75,7 +75,7 @@ export class PluginRunMaterializer implements FleetRunMaterializer {
       const packet = await client.showTask(runtime.taskNumber, 1, { sessionId, ...(signal === undefined ? {} : { signal }) })
       const rawTask = packet.data.task
       if (typeof rawTask !== 'object' || rawTask === null || Array.isArray(rawTask)) {
-        throw new Error('Pactline Task cleanup packet is invalid')
+        throw new Error(`Pactline cleanup packet is invalid for Project ${String(runtime.projectNumber)} Task ${String(runtime.taskNumber)}`)
       }
       const phase = String((rawTask as Record<string, unknown>).phase ?? '')
       if (phase !== 'done' && phase !== 'cancelled') continue

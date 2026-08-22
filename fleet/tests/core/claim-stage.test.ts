@@ -213,6 +213,37 @@ describe('Harness-neutral Claim-stage workflows', () => {
     expect(client.phase).toBe('done')
   })
 
+  it('starts the first implementer Session from a retained review-first candidate', async () => {
+    const client = new InMemoryPactlineClient(21, [criterion], { phase: 'in_progress' })
+    const retained = await workspace('execution', 'review-first-correction')
+    await writeFile(join(retained.repositoryPath, 'README.md'), 'reviewed candidate\n')
+    await exec('git', ['-C', retained.repositoryPath, 'add', 'README.md'])
+    await exec('git', ['-C', retained.repositoryPath, '-c', 'user.name=Fleet Test', '-c', 'user.email=fleet@example.invalid', 'commit', '--quiet', '-m', 'candidate'])
+    const candidateRevision = (await exec('git', ['-C', retained.repositoryPath, 'rev-parse', 'HEAD'])).stdout.trim()
+    const correctionDefinition: FleetWorkDefinition = {
+      ...definition,
+      candidate: {
+        ...delivery,
+        revision: candidateRevision,
+        branch: retained.branch!,
+        ref: `refs/heads/${retained.branch!}`,
+      },
+    }
+    const adapter = new ReplayHarnessAdapter([{
+      sessionId: 'review-first-implementer',
+      effect: async request => { await writeFile(join(request.workspace, 'README.md'), 'corrected candidate\n') },
+      result: request => result(executionProposal(request), 'review-first-implementer'),
+    }])
+
+    await expect(runClaimStage({
+      client, router: new StaticRuntimeRouter([adapter], routes()), definition: correctionDefinition,
+      stage: 'correction', taskVersion: client.version, runId: 'review-first-correction',
+      clientSessionId: 'fleet-test', idempotencyKey: 'review-first-correction', workspace: retained,
+      deadline: '2026-08-16T00:00:00Z', publishDelivery: async () => ({ ...delivery, revision: candidateRevision }),
+    })).resolves.toMatchObject({ runtimeSessionId: 'review-first-implementer' })
+    expect(client.phase).toBe('in_review')
+  })
+
   it('requires unchanged state for typed resolution, then permits only the explicitly waived criterion', async () => {
     const client = new InMemoryPactlineClient(21, [criterion])
     const adapter = new ReplayHarnessAdapter([{
