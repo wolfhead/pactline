@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { Link, MemoryRouter, Route, Routes } from 'react-router-dom'
 import ProjectDetailPage from './ProjectDetailPage'
 import * as acceptanceApi from '@/api/acceptance'
@@ -111,6 +111,23 @@ function milestone(
     created_at: '',
     updated_at: '',
     acceptance_criteria: [],
+  }
+}
+
+function milestoneTask(
+  number: number,
+  milestoneID: string,
+  phase: Task['phase'],
+  archived = false,
+): Task {
+  return {
+    ...TASK,
+    id: `task-${number}`,
+    number,
+    title: `Task ${number}`,
+    phase,
+    milestone: { id: milestoneID, name: milestoneID },
+    archived_at: archived ? '2026-08-20T00:00:00Z' : null,
   }
 }
 
@@ -265,6 +282,64 @@ describe('ProjectDetailPage', () => {
     expect(projectsApi.getProject).toHaveBeenCalledTimes(1)
     expect(projectsApi.listProjectMembers).toHaveBeenCalledTimes(1)
     expect(tasksApi.listTasks).not.toHaveBeenCalled()
+  })
+
+  it('renders accessible bottom-border progress for empty, waiting, done, and mixed milestones', async () => {
+    vi.mocked(projectsApi.getProject).mockResolvedValue({
+      ...DETAIL,
+      milestones: [
+        milestone('m-empty', 'Empty progress', 'active', 0),
+        milestone('m-waiting', 'Waiting progress', 'active', 1),
+        milestone('m-done', 'Done progress', 'active', 2),
+        milestone('m-mixed', 'Mixed progress', 'active', 3),
+      ],
+      tasks: [
+        milestoneTask(601, 'm-empty', 'cancelled'),
+        milestoneTask(602, 'm-empty', 'backlog', true),
+        milestoneTask(603, 'm-waiting', 'backlog'),
+        milestoneTask(604, 'm-waiting', 'ready'),
+        milestoneTask(605, 'm-done', 'done'),
+        milestoneTask(606, 'm-done', 'done'),
+        milestoneTask(607, 'm-mixed', 'done'),
+        milestoneTask(608, 'm-mixed', 'in_progress'),
+        milestoneTask(609, 'm-mixed', 'in_review'),
+        milestoneTask(610, 'm-mixed', 'ready'),
+      ],
+    })
+    render(
+      <MemoryRouter initialEntries={['/projects/12']}>
+        <Routes>
+          <Route path="/projects/:number" element={<ProjectDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('img', { name: '任务进度：0 个任务。' })).toBeVisible()
+    expect(screen.getByRole('img', {
+      name: '任务进度：共 2 个任务；已完成 0 个，执行中 0 个，验收中 0 个，等待中 2 个；完成 0%。',
+    })).toBeVisible()
+    expect(screen.getByRole('img', {
+      name: '任务进度：共 2 个任务；已完成 2 个，执行中 0 个，验收中 0 个，等待中 0 个；完成 100%。',
+    })).toBeVisible()
+
+    const mixedProgress = screen.getByRole('img', {
+      name: '任务进度：共 4 个任务；已完成 1 个，执行中 1 个，验收中 1 个，等待中 1 个；完成 25%。',
+    })
+    expect(mixedProgress).toHaveClass('absolute', 'inset-x-0', 'bottom-0', 'h-1.5')
+    expect(mixedProgress.querySelectorAll('[data-progress-phase]')).toHaveLength(4)
+    for (const segment of mixedProgress.querySelectorAll<HTMLElement>('[data-progress-phase]')) {
+      expect(segment).toHaveStyle({ width: '25%' })
+    }
+    expect(mixedProgress.querySelector('[data-progress-phase="in_progress"]'))
+      .toHaveClass('milestone-progress-in-progress')
+
+    const mixedCard = screen.getByRole('link', { name: /Mixed progress/ })
+    expect(within(mixedCard).getByText('1/4 完成 · 25%')).toBeVisible()
+    expect(within(mixedCard).getByText('已完成 1')).toBeVisible()
+    expect(within(mixedCard).getByText('执行中 1')).toBeVisible()
+    expect(within(mixedCard).getByText('验收中 1')).toBeVisible()
+    expect(within(mixedCard).getByText('等待中 1')).toBeVisible()
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
   })
 
   it('explains the next step when milestones and Backlog are empty', async () => {

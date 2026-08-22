@@ -8,7 +8,7 @@ test('a long-lived Project plans and completes an evidence-backed Milestone', as
   uniqueTitle,
   trackProject,
   tasksApi,
-}) => {
+}, testInfo) => {
   const projectName = uniqueTitle('Project workspace')
   const taskTitle = uniqueTitle('Milestone task')
 
@@ -97,8 +97,61 @@ test('a long-lived Project plans and completes an evidence-backed Milestone', as
     .fill('The task completes inside the selected milestone.')
   await taskComposer.getByRole('button', { name: '创建任务', exact: true }).click()
   const task = await (await taskResponse).json() as { id: string; number: number }
-  await tasksApi.completeTask(USERS.sponsorA.id, task.number)
+  await tasksApi.markTaskReady(USERS.sponsorA.id, task.number)
+  const execution = await tasksApi.claimTaskStage(USERS.sponsorA.id, task.number)
+
+  await page.getByRole('link', { name: '← 项目交付' }).click()
   await page.reload()
+  const milestoneCard = page.getByRole('link', { name: /API ready/ })
+  const progress = milestoneCard.getByRole('img', {
+    name: '任务进度：共 1 个任务；已完成 0 个，执行中 1 个，验收中 0 个，等待中 0 个；完成 0%。',
+  })
+  const inProgressSegment = progress.locator('[data-progress-phase="in_progress"]')
+
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await expect(progress).toBeVisible()
+  await expect(inProgressSegment).toHaveCSS('animation-name', 'none')
+  expect(await inProgressSegment.evaluate((element) => (
+    getComputedStyle(element, '::after').animationName
+  ))).toBe('milestone-progress-flow')
+  await milestoneCard.screenshot({
+    path: testInfo.outputPath('milestone-progress-1440.png'),
+    animations: 'disabled',
+  })
+
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  expect(await inProgressSegment.evaluate((element) => (
+    getComputedStyle(element, '::after').animationName
+  ))).toBe('none')
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  const cardBounds = await milestoneCard.boundingBox()
+  const trackBounds = await progress.boundingBox()
+  expect(cardBounds).not.toBeNull()
+  expect(trackBounds).not.toBeNull()
+  expect(Math.abs(trackBounds!.x - cardBounds!.x)).toBeLessThanOrEqual(2)
+  expect(Math.abs(trackBounds!.width - cardBounds!.width)).toBeLessThanOrEqual(2)
+  await milestoneCard.screenshot({
+    path: testInfo.outputPath('milestone-progress-390.png'),
+    animations: 'disabled',
+  })
+
+  await tasksApi.completeTaskExecution(USERS.sponsorA.id, task.number, execution.claim)
+  const review = await tasksApi.claimTaskStage(USERS.sponsorA.id, task.number)
+  await tasksApi.acceptTask(USERS.sponsorA.id, task.number, review.claim)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await page.reload()
+  const doneProgress = milestoneCard.getByRole('img', {
+    name: '任务进度：共 1 个任务；已完成 1 个，执行中 0 个，验收中 0 个，等待中 0 个；完成 100%。',
+  })
+  await expect(doneProgress).toBeVisible()
+  expect(await doneProgress.locator('[data-progress-phase="done"]').evaluate((element) => (
+    getComputedStyle(element, '::after').animationName
+  ))).toBe('none')
+
+  await milestoneCard.click()
   await expect(page.getByRole('link', { name: taskTitle })).toBeVisible()
 
   await checklist.getByRole('button', { name: '检查' }).click()
