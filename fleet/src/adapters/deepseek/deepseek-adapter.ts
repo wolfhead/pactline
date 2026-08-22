@@ -107,7 +107,7 @@ export function deepSeekChildEnvironment(
 ): NodeJS.ProcessEnv {
   const result: NodeJS.ProcessEnv = {}
   for (const [name, value] of Object.entries(source)) {
-    if (value === undefined || SENSITIVE_ENV.test(name) || name.startsWith('DSH_')) continue
+    if (value === undefined || SENSITIVE_ENV.test(name) || name.startsWith('DSH_') || name.startsWith('GIT_')) continue
     result[name] = value
   }
   for (const name of ['DEEPSEEK_API_KEY', 'DEEPSEEK_BASE_URL']) {

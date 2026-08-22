@@ -76,7 +76,7 @@ function integer(value: unknown): number | undefined {
 export function codexChildEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const result: NodeJS.ProcessEnv = {}
   for (const [name, value] of Object.entries(source)) {
-    if (value === undefined || SENSITIVE_ENV.test(name)) continue
+    if (value === undefined || SENSITIVE_ENV.test(name) || name.startsWith('GIT_')) continue
     result[name] = value
   }
   for (const name of ['OPENAI_API_KEY', 'CODEX_API_KEY']) {

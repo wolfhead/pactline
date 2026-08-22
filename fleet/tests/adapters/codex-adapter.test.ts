@@ -207,7 +207,8 @@ describe('CodexHarnessAdapter', () => {
   it('scrubs control-plane credentials while preserving provider authentication', () => {
     const env = codexChildEnvironment({
       PATH: '/bin', HOME: '/home/test', GITHUB_TOKEN: 'github-secret', PACTLINE_TOKEN: 'pactline-secret',
-      OPENAI_API_KEY: 'openai-secret', SSH_AUTH_SOCK: '/tmp/agent.sock', BUILD_FLAG: '1',
+      OPENAI_API_KEY: 'openai-secret', SSH_AUTH_SOCK: '/tmp/agent.sock',
+      GIT_SSH_COMMAND: '/tmp/credential-wrapper', GIT_CONFIG_PARAMETERS: 'credential.helper=evil', BUILD_FLAG: '1',
     })
     expect(env).toMatchObject({
       PATH: '/bin', HOME: '/home/test', BUILD_FLAG: '1', OPENAI_API_KEY: 'openai-secret',
@@ -216,6 +217,8 @@ describe('CodexHarnessAdapter', () => {
     expect(env).not.toHaveProperty('GITHUB_TOKEN')
     expect(env).not.toHaveProperty('PACTLINE_TOKEN')
     expect(env).not.toHaveProperty('SSH_AUTH_SOCK')
+    expect(env.GIT_SSH_COMMAND).toBeUndefined()
+    expect(env.GIT_CONFIG_PARAMETERS).toBeUndefined()
   })
 })
 
