@@ -222,7 +222,7 @@ describe('disposable workspace and coordinator verification', () => {
     const workspace = await prepare('execution')
     await writeFile(join(workspace.repositoryPath, 'README.md'), 'committed by harness\n')
     await run('git', ['-C', workspace.repositoryPath, 'add', 'README.md'])
-    await run('git', ['-C', workspace.repositoryPath, '-c', 'user.name=Harness', '-c', 'user.email=harness@example.invalid', 'commit', '--quiet', '-m', 'unauthorized'])
+    await run('git', ['-C', workspace.repositoryPath, '-c', 'user.name=Harness', '-c', 'user.email=harness@example.test', 'commit', '--quiet', '-m', 'unauthorized'])
     const git = await observeGit(workspace.repositoryPath, workspace.baseRevision)
     const commands = await runFixedVerification(workspace.repositoryPath, ['true'])
     const proposal: ExecutionProposal = {
